@@ -3,7 +3,7 @@ module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
@@ -72,7 +72,6 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
-use supercritical_initialization, only : supercritical_initialize_velocity
 use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
 use soliton_initialization, only : soliton_initialize_thickness
@@ -342,7 +341,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
        case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -469,7 +467,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
   endif
-  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
+  if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
     call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then

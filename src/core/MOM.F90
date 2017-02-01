@@ -23,7 +23,7 @@ use MOM_variables, only : surface
 use MOM_variables, only: thermo_var_ptrs
 
 ! Infrastructure modules
-use MOM_checksums,            only : MOM_checksums_init, hchksum, uchksum, vchksum
+use MOM_debugging,            only : MOM_debugging_init, hchksum, uchksum, vchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -90,7 +90,7 @@ use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, dest
 use MOM_EOS,                   only : EOS_init
 use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_EOS,                   only : calculate_density
-use MOM_error_checking,        only : check_redundant
+use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
 use MOM_hor_index,             only : hor_index_type, hor_index_init
@@ -2065,7 +2065,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 #endif
   call callTree_waypoint("domains initialized (initialize_MOM)")
 
-  call MOM_checksums_init(param_file)
+  call MOM_debugging_init(param_file)
   call diag_mediator_infrastructure_init()
   call MOM_io_init(param_file)
 
@@ -3379,10 +3379,10 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       nullify(state%SST) ; nullify(state%SSS)
     endif
     if (.not.associated(state%u)) then
-       allocate(state%u(isdB:iedB,jsd:jed)) ; state%u(:,:) = 0.0
+       allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
     endif
     if (.not.associated(state%v)) then
-       allocate(state%v(isd:ied,jsdB:jedB)) ; state%v(:,:) = 0.0
+       allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
     endif
 
     if (.not.associated(state%Hml)) allocate(state%Hml(isd:ied,jsd:jed))
@@ -3455,7 +3455,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         do i=is,ie
           if (depth(i) < GV%H_subroundoff*GV%H_to_m) &
               depth(i) = GV%H_subroundoff*GV%H_to_m
-          state%v(i,j) = state%v(i,j) / depth(i)
+          state%v(i,J) = state%v(i,J) / depth(i)
         enddo
       enddo ! end of j loop
 
@@ -3595,20 +3595,20 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                 'SSH=',state%sea_lev(i,j),               &
                 'SST=',state%SST(i,j),                   &
                 'SSS=',state%SSS(i,j),                   &
-                'U-=',state%u(i-1,j),                    &
-                'U+=',state%u(i,j),                      &
-                'V-=',state%v(i,j-1),                    &
-                'V+=',state%v(i,j)
+                'U-=',state%u(I-1,j),                    &
+                'U+=',state%u(I,j),                      &
+                'V-=',state%v(i,J-1),                    &
+                'V+=',state%v(i,J)
             else
               write(msg(1:240),'(2(a,i4,x),2(a,f8.3,x),6(a,es11.4))') &
                 'Extreme surface state detected: i=',i,'j=',j, &
                 'x=',G%geoLonT(i,j),'y=',G%geoLatT(i,j), &
                 'D=',G%bathyT(i,j),                      &
                 'SSH=',state%sea_lev(i,j),               &
-                'U-=',state%u(i-1,j),                    &
-                'U+=',state%u(i,j),                      &
-                'V-=',state%v(i,j-1),                    &
-                'V+=',state%v(i,j)
+                'U-=',state%u(I-1,j),                    &
+                'U+=',state%u(I,j),                      &
+                'V-=',state%v(i,J-1),                    &
+                'V+=',state%v(i,J)
             endif
             call MOM_error(WARNING, trim(msg), all_print=.true.)
           elseif (numberOfErrors==9) then ! Indicate once that there are more errors

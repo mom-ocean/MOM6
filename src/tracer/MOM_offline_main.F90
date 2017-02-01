@@ -3,7 +3,7 @@ module MOM_offline_main
 use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_tracer_final
-use MOM_checksums,            only : hchksum, uchksum, vchksum
+use MOM_debugging,            only : hchksum, uchksum, vchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_diabatic_aux,         only : diabatic_aux_CS
 use MOM_diabatic_driver,      only : diabatic_CS
@@ -30,12 +30,10 @@ use MOM_tracer_registry,      only : tracer_registry_type
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
-implicit none
-
+implicit none ; private
 
 #include "MOM_memory.h"
 #include "version_variable.h"
-
 
 type, public :: offline_transport_CS
 
@@ -118,6 +116,8 @@ public offline_redistribute_residual
 public offline_diabatic_ale
 public offline_advection_layer
 public transport_by_files
+public offline_transport_init
+public register_diags_offline_transport
 
 contains
 
@@ -818,15 +818,15 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
 
   enddo; enddo ; enddo
 
-  do k=1,nz ; do j=js-1,je ; do i=is,ie
-    if(G%mask2dCv(i,j)<1.0) then
-      vhtr(i,j,k) = 0.0
+  do k=1,nz ; do J=js-1,je ; do i=is,ie
+    if(G%mask2dCv(i,J)<1.0) then
+      vhtr(i,J,k) = 0.0
     endif
   enddo; enddo ; enddo
 
-  do k=1,nz ; do j=js,je ; do i=is-1,ie
-    if(G%mask2dCu(i,j)<1.0) then
-      uhtr(i,j,k) = 0.0
+  do k=1,nz ; do j=js,je ; do I=is-1,ie
+    if(G%mask2dCu(I,j)<1.0) then
+      uhtr(I,j,k) = 0.0
     endif
   enddo; enddo ; enddo
 

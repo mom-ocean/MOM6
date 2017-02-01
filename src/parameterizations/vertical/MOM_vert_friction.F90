@@ -5,7 +5,7 @@ module MOM_vert_friction
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums, only : uchksum, vchksum, hchksum
+use MOM_debugging, only : uchksum, vchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -390,15 +390,15 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
     do n=1,OBC%number_of_segments
-      if (OBC%OBC_segment_number(n)%specified) then
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          J = OBC%OBC_segment_number(n)%HI%JsdB
-          do k=1,nz ; do i=OBC%OBC_segment_number(n)%HI%isd,OBC%OBC_segment_number(n)%HI%ied
+      if (OBC%segment(n)%specified) then
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do k=1,nz ; do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
             v(i,J,k) = OBC%v(i,J,k)
           enddo ; enddo
-        elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-          I = OBC%OBC_segment_number(n)%HI%IsdB
-          do k=1,nz ; do j=OBC%OBC_segment_number(n)%HI%jsd,OBC%OBC_segment_number(n)%HI%jed
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do k=1,nz ; do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
             u(I,j,k) = OBC%u(I,j,k)
           enddo ; enddo
         endif
@@ -1226,8 +1226,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
       endif
 
       do I=Isq,Ieq ; if (dowrite(I,j)) then
-         u_old(i,j,:) = u(i,j,:)
-      endif; enddo
+        u_old(I,j,:) = u(I,j,:)
+      endif ; enddo
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq

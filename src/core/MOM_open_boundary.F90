@@ -134,7 +134,7 @@ type, public :: ocean_OBC_type
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
-    OBC_segment_number => NULL()   !< List of segment objects.
+    segment => NULL()   !< List of segment objects.
   ! Which segment object describes the current point.
   integer, pointer, dimension(:,:) :: &
     OBC_segment_u => NULL(), &   !< Segment number of u-points.
@@ -254,21 +254,21 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "viscosity term.", default=.false.)
     ! Allocate everything
     ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
-    allocate(OBC%OBC_segment_number(0:OBC%number_of_segments))
+    allocate(OBC%segment(0:OBC%number_of_segments))
     do l=0,OBC%number_of_segments
-      OBC%OBC_segment_number(l)%Flather = .false.
-      OBC%OBC_segment_number(l)%radiation = .false.
-      OBC%OBC_segment_number(l)%oblique = .false.
-      OBC%OBC_segment_number(l)%nudged = .false.
-      OBC%OBC_segment_number(l)%specified = .false.
-      OBC%OBC_segment_number(l)%gradient = .false.
-      OBC%OBC_segment_number(l)%values_needed = .false.
-      OBC%OBC_segment_number(l)%legacy = .false.
-      OBC%OBC_segment_number(l)%direction = OBC_NONE
-      OBC%OBC_segment_number(l)%is_N_or_S = .false.
-      OBC%OBC_segment_number(l)%is_E_or_W = .false.
-      OBC%OBC_segment_number(l)%Tnudge_in = 0.0
-      OBC%OBC_segment_number(l)%Tnudge_out = 0.0
+      OBC%segment(l)%Flather = .false.
+      OBC%segment(l)%radiation = .false.
+      OBC%segment(l)%oblique = .false.
+      OBC%segment(l)%nudged = .false.
+      OBC%segment(l)%specified = .false.
+      OBC%segment(l)%gradient = .false.
+      OBC%segment(l)%values_needed = .false.
+      OBC%segment(l)%legacy = .false.
+      OBC%segment(l)%direction = OBC_NONE
+      OBC%segment(l)%is_N_or_S = .false.
+      OBC%segment(l)%is_E_or_W = .false.
+      OBC%segment(l)%Tnudge_in = 0.0
+      OBC%segment(l)%Tnudge_out = 0.0
     enddo
     allocate(OBC%OBC_segment_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_segment_u(:,:) = OBC_NONE
     allocate(OBC%OBC_segment_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_segment_v(:,:) = OBC_NONE
@@ -309,7 +309,7 @@ subroutine open_boundary_config(G, param_file, OBC)
 end subroutine open_boundary_config
 
 subroutine initialize_segment_data(G, OBC, PF)
-  type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(in) :: G   !< Ocean grid structure
   type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
   type(param_file_type), intent(in)   :: PF  !< Parameter file handle
 
@@ -325,7 +325,9 @@ subroutine initialize_segment_data(G, OBC, PF)
   character(len=32)  :: remappingScheme
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   integer, dimension(4) :: siz,siz2
+  integer :: is, ie, js, je
   integer :: is_obc,ie_obc,js_obc,je_obc
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   num_segs = OBC%number_of_segments
 
@@ -360,42 +362,49 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_reconstruction=check_reconstruction, &
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
-  OBC_segments => OBC%OBC_segment_number(1:num_segs)
+  OBC_segments => OBC%segment(1:num_segs)
 
   do n=1, num_segs
-     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
-     write(suffix,"('_segment_',i3.3)") n
-     call get_param(PF, mod, segnam, segstr)
+    write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
+    write(suffix,"('_segment_',i3.3)") n
+    call get_param(PF, mod, segnam, segstr)
 
-     call parse_segment_data_str(trim(segstr),fields=fields, num_fields=num_fields)
-     if (num_fields == 0) cycle ! cycle to next segment
-     allocate(OBC_segments(n)%field(num_fields))
+    call parse_segment_data_str(trim(segstr),fields=fields, num_fields=num_fields)
+    if (num_fields == 0) cycle ! cycle to next segment
+    allocate(OBC_segments(n)%field(num_fields))
 
-     if (OBC_segments(n)%Flather) then
-        if (num_fields /= 3) call MOM_error(FATAL, &
+    if (OBC_segments(n)%Flather) then
+      if (num_fields /= 3) call MOM_error(FATAL, &
                    "MOM_open_boundary, initialize_segment_data: "//&
                    "Need three inputs for Flather")
-        OBC_segments(n)%num_fields = 3 ! these are the input fields required for the Flather option
+      OBC_segments(n)%num_fields = 3 ! these are the input fields required for the Flather option
                                        ! note that this is assuming that the inputs are coming in this order
                                        ! and independent of the input param string . Needs cleanup - mjh
-        allocate(OBC_segments(n)%field_names(OBC_segments(n)%num_fields))
-        OBC_segments(n)%field_names(:)='None'
-        OBC_segments(n)%field_names(1)='UO'
-        OBC_segments(n)%field_names(2)='VO'
-        OBC_segments(n)%field_names(3)='ZOS'
-     endif
+      allocate(OBC_segments(n)%field_names(OBC_segments(n)%num_fields))
+      OBC_segments(n)%field_names(:)='None'
+      OBC_segments(n)%field_names(1)='UO'
+      OBC_segments(n)%field_names(2)='VO'
+      OBC_segments(n)%field_names(3)='ZOS'
+    endif
 
 !!
 ! CODE HERE FOR OTHER OPTIONS (CLAMPED, NUDGED,..)
 !!
 
-     do m=1,num_fields
-        call parse_segment_data_str(segstr,var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
-        OBC_segments(n)%field(m)%name = trim(fields(m))
-        if (trim(filename) /= 'none') then
-          filename = trim(inputdir)//trim(filename)
-          fieldname = trim(fieldname)//trim(suffix)
-          call field_size(filename,fieldname,siz,no_domain=.true.)
+    if (OBC_segments(n)%is_E_or_W) then
+      is_obc = max(OBC_segments(n)%is_obc,is-1)
+      ie_obc = min(OBC_segments(n)%ie_obc,ie)
+      js_obc = max(OBC_segments(n)%js_obc,js-1)
+      je_obc = min(OBC_segments(n)%je_obc,je)
+    else
+    endif
+    do m=1,num_fields
+      call parse_segment_data_str(segstr,var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
+      OBC_segments(n)%field(m)%name = trim(fields(m))
+      if (trim(filename) /= 'none') then
+         filename = trim(inputdir)//trim(filename)
+         fieldname = trim(fieldname)//trim(suffix)
+         call field_size(filename,fieldname,siz,no_domain=.true.)
          if (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0) then
             call MOM_error(FATAL,'segment data are not on the supergrid')
          endif
@@ -431,7 +440,7 @@ subroutine initialize_segment_data(G, OBC, PF)
           OBC_segments(n)%field(m)%fid = -1
           OBC_segments(n)%field(m)%value = value
        endif
-     enddo
+    enddo
 
   enddo
 
@@ -516,8 +525,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
-  call setup_segment_indices(G, OBC%OBC_segment_number(l_seg),I_obc,I_obc,Js_obc,Je_obc)
-  call allocate_OBC_segment_data(OBC, OBC%OBC_segment_number(l_seg))
+  call setup_segment_indices(G, OBC%segment(l_seg),I_obc,I_obc,Js_obc,Je_obc)
 
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
@@ -533,55 +541,55 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   endif
 
   if (Je_obc>Js_obc) then
-     OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_E
+     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
   else if (Je_obc<Js_obc) then
-     OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_W
+     OBC%segment(l_seg)%direction = OBC_DIRECTION_W
      j=js_obc;js_obc=je_obc;je_obc=j
   endif
 
-  OBC%OBC_segment_number(l_seg)%on_pe = .false.
+  OBC%segment(l_seg)%on_pe = .false.
 
   do a_loop = 1,5 ! up to 5 options available
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
-      OBC%OBC_segment_number(l_seg)%Flather = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%oblique = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
-      OBC%OBC_segment_number(l_seg)%nudged = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%nudged = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
-      OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
-      OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
+      OBC%segment(l_seg)%Tnudge_in = 1.0/(3*86400)
+      OBC%segment(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%gradient = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
-      OBC%OBC_segment_number(l_seg)%legacy = .true.
-      OBC%OBC_segment_number(l_seg)%Flather = .true.
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%legacy = .true.
+      OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%gradient = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
-      OBC%OBC_segment_number(l_seg)%specified = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%specified = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
@@ -596,18 +604,19 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     if (Js_obc>G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
 
-  OBC%OBC_segment_number(l_seg)%on_pe = .true.
-  OBC%OBC_segment_number(l_seg)%is_E_or_W = .true.
+  OBC%segment(l_seg)%on_pe = .true.
+  OBC%segment(l_seg)%is_E_or_W = .true.
 
   do j=G%HI%jsd, G%HI%jed
     if (j>Js_obc .and. j<=Je_obc) then
       OBC%OBC_segment_u(I_obc,j) = l_seg
     endif
   enddo
-  OBC%OBC_segment_number(l_seg)%Is_obc = I_obc
-  OBC%OBC_segment_number(l_seg)%Ie_obc = I_obc
-  OBC%OBC_segment_number(l_seg)%Js_obc = Js_obc
-  OBC%OBC_segment_number(l_seg)%Je_obc = Je_obc
+  OBC%segment(l_seg)%Is_obc = I_obc
+  OBC%segment(l_seg)%Ie_obc = I_obc
+  OBC%segment(l_seg)%Js_obc = Js_obc
+  OBC%segment(l_seg)%Je_obc = Je_obc
+  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
 end subroutine setup_u_point_obc
 
@@ -625,8 +634,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, J_obc, Is_obc, Ie_obc, action_str )
 
-  call setup_segment_indices(G, OBC%OBC_segment_number(l_seg),Is_obc,Ie_obc,J_obc,J_obc)
-  call allocate_OBC_segment_data(OBC, OBC%OBC_segment_number(l_seg))
+  call setup_segment_indices(G, OBC%segment(l_seg),Is_obc,Ie_obc,J_obc,J_obc)
 
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
@@ -641,57 +649,55 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   endif
 
   if (Ie_obc>Is_obc) then
-     OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_S
+     OBC%segment(l_seg)%direction = OBC_DIRECTION_S
   else if (Ie_obc<Is_obc) then
-     OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_N
-     i=is_obc;is_obc=ie_obc;ie_obc=i
+     OBC%segment(l_seg)%direction = OBC_DIRECTION_N
+     i=Is_obc;Is_obc=Ie_obc;Ie_obc=i
   endif
 
-  OBC%OBC_segment_number(l_seg)%on_pe = .false.
+  OBC%segment(l_seg)%on_pe = .false.
 
-!  if (Ie_obc>Is_obc) OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_S
-!  if (Ie_obc<Is_obc) OBC%OBC_segment_number(l_seg)%direction = OBC_DIRECTION_N
   do a_loop = 1,5
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
-      OBC%OBC_segment_number(l_seg)%Flather = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%radiation = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%oblique = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
-      OBC%OBC_segment_number(l_seg)%nudged = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%nudged = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
-      OBC%OBC_segment_number(l_seg)%Tnudge_in = 1.0/(3*86400)
-      OBC%OBC_segment_number(l_seg)%Tnudge_out = 1.0/(360*86400)
+      OBC%segment(l_seg)%Tnudge_in = 1.0/(3*86400)
+      OBC%segment(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%gradient = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
-      OBC%OBC_segment_number(l_seg)%legacy = .true.
-      OBC%OBC_segment_number(l_seg)%gradient = .true.
-      OBC%OBC_segment_number(l_seg)%radiation = .true.
-      OBC%OBC_segment_number(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%legacy = .true.
+      OBC%segment(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%Flather = .true.
       OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
-      OBC%OBC_segment_number(l_seg)%specified = .true.
-      OBC%OBC_segment_number(l_seg)%values_needed = .true.
+      OBC%segment(l_seg)%specified = .true.
+      OBC%segment(l_seg)%values_needed = .true.
       OBC%update_OBC = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
@@ -706,18 +712,19 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     if (Is_obc>G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
 
-  OBC%OBC_segment_number(l_seg)%on_pe = .true.
-  OBC%OBC_segment_number(l_seg)%is_N_or_S = .true.
+  OBC%segment(l_seg)%on_pe = .true.
+  OBC%segment(l_seg)%is_N_or_S = .true.
 
   do i=G%HI%isd, G%HI%ied
     if (i>Is_obc .and. i<=Ie_obc) then
       OBC%OBC_segment_v(i,J_obc) = l_seg
     endif
   enddo
-  OBC%OBC_segment_number(l_seg)%Is_obc = Is_obc
-  OBC%OBC_segment_number(l_seg)%Ie_obc = Ie_obc
-  OBC%OBC_segment_number(l_seg)%Js_obc = J_obc
-  OBC%OBC_segment_number(l_seg)%Je_obc = J_obc
+  OBC%segment(l_seg)%Is_obc = Is_obc
+  OBC%segment(l_seg)%Ie_obc = Ie_obc
+  OBC%segment(l_seg)%Js_obc = J_obc
+  OBC%segment(l_seg)%Je_obc = J_obc
+  call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
 
 end subroutine setup_v_point_obc
 
@@ -957,7 +964,7 @@ end function open_boundary_query
 subroutine open_boundary_dealloc(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
   if (.not. associated(OBC)) return
-  if (associated(OBC%OBC_segment_number)) deallocate(OBC%OBC_segment_number)
+  if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%OBC_segment_u)) deallocate(OBC%OBC_segment_u)
   if (associated(OBC%OBC_segment_v)) deallocate(OBC%OBC_segment_v)
   if (associated(OBC%rx_old_u)) deallocate(OBC%rx_old_u)
@@ -995,16 +1002,16 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
     bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
     if (associated(OBC%OBC_segment_u)) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
-          .and. .not. OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
-          .and. .not. OBC%OBC_segment_number(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
+          .and. .not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
+      if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
+          .and. .not. OBC%segment(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
     endif
     if (associated(OBC%OBC_segment_v)) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
-          .and. .not. OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
-          .and. .not. OBC%OBC_segment_number(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
+          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
+      if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
+          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
     endif
     if (bc_north) depth(i,j+1) = depth(i,j)
     if (bc_south) depth(i,j-1) = depth(i,j)
@@ -1036,7 +1043,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
-        if (.not. OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
+        if (.not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
           OBC%OBC_segment_u(I,j) = OBC_NONE
         endif
       endif
@@ -1047,7 +1054,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   if (associated(OBC%OBC_segment_v)) then
     do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
-        if (.not. OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) then
+        if (.not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
           OBC%OBC_segment_v(I,j) = OBC_NONE
         endif
       endif
@@ -1058,11 +1065,11 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   if (associated(OBC%OBC_segment_u)) then
     do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
       if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+        if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
             areaCu(I,j) = G%areaT(i+1,j)
            !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+          elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             areaCu(I,j) = G%areaT(i,j)
            !G%IareaCu(I,j) = G%IareaT(i,j) ?
           endif
@@ -1075,11 +1082,11 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   if (associated(OBC%OBC_segment_v)) then
     do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
       if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+        if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
             areaCv(i,J) = G%areaT(i,j+1)
            !G%IareaCv(i,J) = G%IareaT(i,j+1) ?
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+          elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             areaCu(i,J) = G%areaT(i,j)
            !G%IareaCu(i,J) = G%IareaT(i,j) ?
           endif
@@ -1132,7 +1139,6 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   real, parameter :: eps = 1.0e-20
   type(OBC_segment_type), pointer :: segment
   integer :: i, j, k, is, ie, js, je, nz, n
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.not.associated(OBC)) return
@@ -1143,7 +1149,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
   gamma_u = OBC%gamma_uv ; gamma_v = OBC%gamma_uv ; gamma_h = OBC%gamma_h
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
   do n=1,OBC%number_of_segments
-     segment=>OBC%OBC_segment_number(n)
+     segment=>OBC%segment(n)
      if (.not. segment%on_pe) cycle
      if (segment%radiation) call gradient_at_q_points(G,segment,u_old,v_old)
      if (segment%direction == OBC_DIRECTION_E) then
@@ -1503,38 +1509,40 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
   endif
 
-  if (.not.associated(OBC%vbt_outer)) then
-    allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-  endif
+  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
+    if (.not.associated(OBC%vbt_outer)) then
+      allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%ubt_outer)) then
-    allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%ubt_outer)) then
+      allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%eta_outer_u)) then
-    allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%eta_outer_u)) then
+      allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
+    endif
 
-  if (.not.associated(OBC%eta_outer_v)) then
-    allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-  endif
+    if (.not.associated(OBC%eta_outer_v)) then
+      allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
+    endif
 
-  if (read_OBC_uv) then
-    call read_data(filename, 'ubt', OBC%ubt_outer, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'vbt', OBC%vbt_outer, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
+    if (read_OBC_uv) then
+      call read_data(filename, 'ubt', OBC%ubt_outer, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'vbt', OBC%vbt_outer, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    endif
 
-  if (read_OBC_eta) then
-    call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                   domain=G%Domain%mpp_domain, position=EAST_FACE)
-    call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                   domain=G%Domain%mpp_domain, position=NORTH_FACE)
-  endif
+    if (read_OBC_eta) then
+      call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
+                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+      call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
+                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
+    endif
 
-  call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-  call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+    call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+    call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
+  endif
 
   ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
   ! no radiation conditions applied to the thicknesses, since the thicknesses
@@ -1547,6 +1555,14 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   if (OBC%Flather_v_BCs_exist_globally) then
     allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
  !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
+  endif
+  if (OBC%nudged_u_BCs_exist_globally) then
+    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
+    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
+  endif
+  if (OBC%nudged_v_BCs_exist_globally) then
+    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
+    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
   endif
 
   if (associated(tv%T)) then
@@ -1570,10 +1586,10 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
       call pass_var(tv%S, G%Domain)
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             OBC_T_u(I,j,k) = tv%T(i,j,k)
             OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+          elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
             OBC_T_u(I,j,k) = tv%T(i+1,j,k)
             OBC_S_u(I,j,k) = tv%S(i+1,j,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
@@ -1593,10 +1609,10 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             OBC_T_v(i,J,k) = tv%T(i,j,k)
             OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+          elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
             OBC_T_v(i,J,k) = tv%T(i,j+1,k)
             OBC_S_v(i,J,k) = tv%S(i,j+1,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
@@ -1623,31 +1639,31 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
                                                 OBC_in_v=OBC_S_v)
     do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
         tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+      elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
         tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
       endif
     enddo ; enddo ; enddo
     do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
         tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+      elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
         tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
       endif
     enddo ; enddo ; enddo
   endif
 
   do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-    if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) &
+    if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) &
                         h(i+1,j,k) = h(i,j,k)
-    if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) &
+    if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) &
                         h(i,j,k) = h(i+1,j,k)
   enddo ; enddo ; enddo
   do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-    if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) &
+    if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) &
                        h(i,j+1,k) = h(i,j,k)
-    if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) &
+    if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) &
                        h(i,j,k) = h(i,j+1,k)
   enddo ; enddo ; enddo
 ! When we do not extend segments, this commented block was needed to
@@ -1733,7 +1749,7 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
   call pass_var(tv%S,G%Domain)
 
   do n = 1, OBC%number_of_segments
-    segment => OBC%OBC_segment_number(n)
+    segment => OBC%segment(n)
 
     if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
 
@@ -1780,10 +1796,10 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
      endif
      do k=1,nz ; do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
         if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
             OBC_T_u(I,j,k) = tv%T(i,j,k)
             OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+          elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
             OBC_T_u(I,j,k) = tv%T(i+1,j,k)
             OBC_S_u(I,j,k) = tv%S(i+1,j,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
@@ -1803,10 +1819,10 @@ subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
 
      do k=1,nz ; do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
         if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-          if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
             OBC_T_v(i,J,k) = tv%T(i,j,k)
             OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+          elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
             OBC_T_v(i,J,k) = tv%T(i,j+1,k)
             OBC_S_v(i,J,k) = tv%S(i,j+1,k)
           elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
@@ -1850,7 +1866,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
 
   if (.not. segment%on_pe) return
 
-  if (segment%direction == OBC_DIRECTION_E .or. segment%direction == OBC_DIRECTION_W) then
+  if (segment%is_E_or_W) then
     allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
@@ -1891,25 +1907,25 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
 
   do n = 1, OBC%number_of_segments
     do k = 1, G%ke
-      if (OBC%OBC_segment_number(n)%is_N_or_S) then
-        J = OBC%OBC_segment_number(n)%HI%JsdB
-        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_N) then
-          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+      if (OBC%segment(n)%is_N_or_S) then
+        J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
             u(I,j+1,k) = silly_value
           enddo
         else
-          do I = OBC%OBC_segment_number(n)%HI%IsdB, OBC%OBC_segment_number(n)%HI%IedB
+          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
             u(I,j,k) = silly_value
           enddo
         endif
-      elseif (OBC%OBC_segment_number(n)%is_E_or_W) then
-        I = OBC%OBC_segment_number(n)%HI%IsdB
-        if (OBC%OBC_segment_number(n)%direction == OBC_DIRECTION_E) then
-          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+      elseif (OBC%segment(n)%is_E_or_W) then
+        I = OBC%segment(n)%HI%IsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
             v(i+1,J,k) = silly_value
           enddo
         else
-          do J = OBC%OBC_segment_number(n)%HI%JsdB, OBC%OBC_segment_number(n)%HI%JedB
+          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
             v(i,J,k) = silly_value
           enddo
         endif
@@ -1952,7 +1968,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   if (.not. associated(OBC)) return
 
   do n = 1, OBC%number_of_segments
-    segment => OBC%OBC_segment_number(n)
+    segment => OBC%segment(n)
 
     if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
 
