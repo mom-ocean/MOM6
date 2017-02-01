@@ -10,13 +10,12 @@ use MOM_diag_mediator,   only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,   only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_domains,         only : sum_across_PEs, max_across_PEs
 use MOM_domains,         only : create_group_pass, do_group_pass, group_pass_type, pass_var
-use MOM_checksums,       only : hchksum
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_grid,            only : ocean_grid_type
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
-use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chksum
+use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_verticalGrid,    only : verticalGrid_type
 implicit none ; private
 
@@ -397,8 +396,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       elseif (uhr(I,j,k) < 0.0) then
         hup = hprev(i+1,j,k) - G%areaT(i+1,j)*min_h
         hlos = MAX(0.0,uhr(I+1,j,k))
-        if (((hup + uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup + uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) + uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup + uhr(I,j,k)) < 0.0)) then
           uhh(I) = MIN(-0.5*hup,-hup+hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -409,8 +408,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       else
         hup = hprev(i,j,k) - G%areaT(i,j)*min_h
         hlos = MAX(0.0,-uhr(I-1,j,k))
-        if (((hup - uhr(I,j,k) - hlos) < 0.0) .and. &
-            ((0.5*hup - uhr(I,j,k)) < 0.0)) then !### Add parentheses.
+        if ((((hup - hlos) - uhr(I,j,k)) < 0.0) .and. &
+            ((0.5*hup - uhr(I,j,k)) < 0.0)) then
           uhh(I) = MAX(0.5*hup,hup-hlos,0.0)
           domore_u(j,k) = .true.
         else
@@ -498,9 +497,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_u_BCs_exist_globally) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_E_or_W) then
-          if (j >= OBC%OBC_segment_number(n)%HI%jsd .and. j<= OBC%OBC_segment_number(n)%HI%jed) then
-            I = OBC%OBC_segment_number(n)%HI%IsdB
+        if (OBC%segment(n)%is_E_or_W) then
+          if (j >= OBC%segment(n)%HI%jsd .and. j<= OBC%segment(n)%HI%jed) then
+            I = OBC%segment(n)%HI%IsdB
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                 (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
@@ -757,9 +756,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_v_BCs_exist_globally) then
       do n=1,OBC%number_of_segments
-        if (OBC%OBC_segment_number(n)%is_N_or_S) then
-          if (J >= OBC%OBC_segment_number(n)%HI%JsdB .and. J<= OBC%OBC_segment_number(n)%HI%JedB) then
-            i = OBC%OBC_segment_number(n)%HI%isd
+        if (OBC%segment(n)%is_N_or_S) then
+          if (J >= OBC%segment(n)%HI%JsdB .and. J<= OBC%segment(n)%HI%JedB) then
+            i = OBC%segment(n)%HI%isd
             ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
             if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                 (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then

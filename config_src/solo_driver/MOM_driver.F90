@@ -191,7 +191,12 @@ program MOM_main
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
+  integer :: ocean_nthreads = 1
+  integer :: ncores_per_node = 36
+  logical :: use_hyper_thread = .false.
+  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
+                            ocean_nthreads, ncores_per_node, use_hyper_thread
 
   !#######################################################################
 
@@ -231,6 +236,23 @@ program MOM_main
       if (is_root_pe()) write(*,ocean_solo_nml)
     endif
   endif
+
+!$  call omp_set_num_threads(ocean_nthreads)
+!$OMP PARALLEL private(adder)
+!$  base_cpu = get_cpu_affinity()
+!$  if (use_hyper_thread) then
+!$     if (imod(omp_get_thread_num(),2) == 0) then
+!$        adder = omp_get_thread_num()/2
+!$     else
+!$        adder = ncores_per_node + omp_get_thread_num()/2
+!$     endif
+!$  else
+!$     adder = omp_get_thread_num()
+!$  endif
+!$  call set_cpu_affinity (base_cpu + adder)
+!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  call flush(6)
+!$OMP END PARALLEL
 
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
