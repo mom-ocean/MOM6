@@ -7,7 +7,7 @@ module MOM_tracer_registry
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums,     only : hchksum
+use MOM_debugging,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type

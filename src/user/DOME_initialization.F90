@@ -294,7 +294,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     print *, 'Error in DOME OBC segment setup'
     return   !!! Need a better error message here
   endif
-  segment => OBC%OBC_segment_number(1)
+  segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
   do k=1,nz

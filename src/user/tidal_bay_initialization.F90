@@ -78,10 +78,17 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
   ! Old way
+  segment => OBC%segment(1)
   do j=jsd,jed ; do I=IsdB,IedB
     if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
       OBC%ubt_outer(I,j) = my_flux/my_area
+      if (segment%nudged) then
+        do k=1,nz
+          OBC%u(I,j,k) = my_flux/my_area
+          OBC%uh(I,j,k) = 0.5*OBC%u(I,j,k)*(h(i,j,k) + h(i+1,j,k))
+        enddo
+      endif
     endif
   enddo ; enddo
   do J=JsdB,JedB ; do i=isd,ied
@@ -93,7 +100,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
 
   ! New way
   do n = 1, OBC%number_of_segments
-    segment => OBC%OBC_segment_number(n)
+    segment => OBC%segment(n)
 
 !   print *, "Tidal_bay init", segment%on_pe, my_area, my_flux, cff
     if (.not. segment%on_pe) cycle

@@ -83,7 +83,7 @@ use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
-use MOM_checksums, only : MOM_checksums_init, hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, uchksum, vchksum
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -102,7 +102,7 @@ use MOM_legacy_barotropic, only : legacy_set_dtbt, legacy_barotropic_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver, only : diabatic, diabatic_driver_init, diabatic_CS
-use MOM_error_checking, only : check_redundant
+use MOM_debugging, only : check_redundant
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
@@ -548,10 +548,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   call cpu_clock_begin(id_clock_vertvisc)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt * u_bc_accel(I,j,k))
+    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * u_bc_accel(I,j,k))
   enddo ; enddo ;  enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * v_bc_accel(i,J,k))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * v_bc_accel(i,J,k))
   enddo ; enddo ;  enddo
   call enable_averaging(dt, Time_local, CS%diag)
   call set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, &
@@ -678,7 +678,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   enddo ; enddo ;  enddo
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt_pred  * &
+    up(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt_pred  * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ;  enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -876,12 +876,12 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! u = u + dt*( u_bc_accel + u_accel_bt )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(i,j,k) = G%mask2dCu(i,j) * (u_init(i,j,k) + dt * &
+    u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt * &
                     (u_bc_accel(I,j,k) + CS%u_accel_bt(I,j,k)))
   enddo ; enddo ; enddo
 
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,j,k) = G%mask2dCv(i,j) * (v_init(i,j,k) + dt * &
+    v(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt * &
                     (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
