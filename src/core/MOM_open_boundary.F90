@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_io, only : EAST_FACE, NORTH_FACE,CORNER
+use MOM_io, only : EAST_FACE, NORTH_FACE, CORNER
 use MOM_io, only : slasher, read_data, field_size
 use MOM_obsolete_params, only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions, only : extract_word, remove_spaces
@@ -1172,17 +1172,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              dhdy = segment%grad_normal(J,3,k)
            endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           Cx=min(dhdt*dhdx,rx_max) ! default to normal radiation
-           Cy=0.0
-           cff=max(dhdx*dhdx,eps)
+           if (dhdx == 0.0) dhdx=eps  ! avoid segv
+           Cx = min(dhdt/dhdx,rx_max) ! default to normal radiation
+           Cy = 0.0
+           cff = max(dhdx*dhdx,eps)
            if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             Cy = min(rx_max,max(dhdt*dhdy,-rx_max))
+             if (dhdy==0.) dhdy=eps ! avoid segv
+             Cy = min(cff,max(dhdt/dhdy,-cff))
            endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
               (max(Cy,0.0)*segment%grad_normal(J,2,k) - min(Cy,0.0)*segment%grad_normal(J,1,k))) / (cff + Cx)
          endif
-         if (segment%radiation .and. segment%nudged) then
+         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
              tau = segment%Tnudge_in
            else
@@ -1213,17 +1215,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              dhdy = segment%grad_normal(J,4,k)
            endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
+           if (dhdx == 0.0) dhdx=eps  ! avoid segv
+           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
            Cy = 0.
            cff = max(dhdx*dhdx, eps)
            if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             Cy = min(rx_max,max(dhdt*dhdy,-rx_max))
+             if (dhdy==0.) dhdy=eps ! avoid segv
+             Cy = min(cff,max(dhdt/dhdy,-cff))
            endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
              (max(Cy,0.0)*segment%grad_normal(J,2,k) - min(Cy,0.0)*segment%grad_normal(J,1,k))) / (cff + Cx)
          endif
-         if (segment%radiation .and. segment%nudged) then
+         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
              tau = segment%Tnudge_in
            else
@@ -1254,17 +1258,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              dhdx = segment%grad_normal(I,4,k)
            endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
+           if (dhdy == 0.0) dhdy=eps  ! avoid segv
+           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
            Cx = 0
            cff = max(dhdy*dhdy, eps)
            if (segment%oblique) then
               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-              Cx = min(cff,max(dhdt*dhdx,-cff))
+              if (dhdx==0.) dhdx=eps ! avoid segv
+              Cx = min(cff,max(dhdt/dhdx,-cff))
            endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
             (max(Cx,0.0)*segment%grad_normal(I,1,k) - min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
          endif
-         if (segment%radiation .and. segment%nudged) then
+         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
              tau = segment%Tnudge_in
            else
@@ -1296,17 +1302,19 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              dhdx = segment%grad_normal(I,3,k)
            endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
+           if (dhdy == 0.0) dhdy=eps  ! avoid segv
+           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
            Cx = 0
            cff = max(dhdy*dhdy, eps)
            if (segment%oblique) then
               cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-              Cx = min(cff,max(dhdt*dhdx,-cff))
+              if (dhdx==0.) dhdx=eps ! avoid segv
+              Cx = min(cff,max(dhdt/dhdx,-cff))
            endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
             (max(Cx,0.0)*segment%grad_normal(I,1,k) - min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
          endif
-         if (segment%radiation .and. segment%nudged) then
+         if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
              tau = segment%Tnudge_in
            else
