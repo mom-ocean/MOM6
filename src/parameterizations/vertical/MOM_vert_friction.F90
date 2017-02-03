@@ -5,7 +5,7 @@ module MOM_vert_friction
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums, only : uchksum, vchksum, hchksum
+use MOM_debugging, only : uchksum, vchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -130,7 +130,7 @@ contains
 !! is the <em>interfacial coupling thickness per time step</em>,
 !! encompassing background viscosity as well as contributions from
 !! enhanced mixed and bottom layer viscosities.
-!! $r_k$ is a Rayleight drag term due to channel drag. 
+!! $r_k$ is a Rayleight drag term due to channel drag.
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
@@ -155,7 +155,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   !> Zonal bottom stress from ocean to rock in Pa
   real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
   !> Meridional bottom stress from ocean to rock in Pa
-  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot 
+  real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
 
   ! Fields from fluxes used in this subroutine:
   !   taux: Zonal wind stress in Pa.
@@ -1222,8 +1222,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
       endif
 
       do I=Isq,Ieq ; if (dowrite(I,j)) then
-         u_old(i,j,:) = u(i,j,:)
-      endif; enddo
+        u_old(I,j,:) = u(I,j,:)
+      endif ; enddo
 
       if (trunc_any) then ; if (CS%CFL_based_trunc) then
         do k=1,nz ; do I=Isq,Ieq

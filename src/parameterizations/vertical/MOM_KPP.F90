@@ -4,7 +4,7 @@ module MOM_KPP
 ! License goes here?
 
 use MOM_coms,          only : max_across_PEs
-use MOM_checksums,     only : hchksum, is_NaN
+use MOM_debugging,     only : hchksum, is_NaN
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_PE
@@ -757,7 +757,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       elseif (CS%SW_METHOD .eq. SW_METHOD_MXL_SW) then
          surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,int(kOBL)+1) ! We know the actual buoyancy flux into the OBL
       elseif (CS%SW_METHOD .eq. SW_METHOD_LV1_SW) then
-         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2) 
+         surfBuoyFlux  = buoyFlux(i,j,1) - buoyFlux(i,j,2)
       endif
 
       ! If option "MatchBoth" is selected in CVMix, MOM should be capable of matching.

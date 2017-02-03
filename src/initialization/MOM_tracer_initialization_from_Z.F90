@@ -2,7 +2,7 @@ module MOM_tracer_initialization_from_Z
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_debugging, only : hchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
@@ -58,7 +58,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
                                 src_var_unit_conversion, src_var_record, &
                                 homogenize, useALEremapping, remappingScheme, src_var_gridspec )
 
-! Arguments: 
+! Arguments:
 !  (in)     h  - Layer thickness, in m.
 !  (inout)  tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
@@ -66,9 +66,9 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 !  (in)      G  - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 
-  type(ocean_grid_type),                 intent(inout) :: G   !< Ocean grid structure 
+  type(ocean_grid_type),                 intent(inout) :: G   !< Ocean grid structure
   type(verticalGrid_type),               intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   real, dimension(:,:,:),                pointer       :: tr
   type(param_file_type),                 intent(in)    :: PF
   character(len=*),                      intent(in)    :: src_file, src_var_nam
@@ -151,7 +151,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   if (PRESENT(src_var_record)) recnum = src_var_record
   convert=1.0
   if (PRESENT(src_var_unit_conversion)) convert = src_var_unit_conversion
-  
+
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
        G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, homog)
@@ -160,7 +160,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   call pass_var(tr_z,G%Domain)
   call pass_var(mask_z,G%Domain)
 
-! Done with horizontal interpolation.    
+! Done with horizontal interpolation.
 ! Now remap to model coordinates
   if (useALE) then
     call cpu_clock_begin(id_clock_ALE)
@@ -184,7 +184,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
             zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
             tmpT1dIn(k) = tr_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j) 
+            zBottomOfCell = -G%bathyT(i,j)
             tmpT1dIn(k) = tmpT1dIn(k-1)
           else ! This next block should only ever be reached over land
             tmpT1dIn(k) = -99.9
@@ -268,14 +268,14 @@ end subroutine myStats
 
 subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug,debug)
   !
-  !# Use ICE-9 algorithm to populate points (fill=1) with 
+  !# Use ICE-9 algorithm to populate points (fill=1) with
   !# valid data (good=1). If no information is available,
-  !# Then use a previous guess (prev). Optionally (smooth) 
+  !# Then use a previous guess (prev). Optionally (smooth)
   !# blend the filled points to achieve a more desirable result.
   !
-  !  (in)        a   : input 2-d array with missing values 
+  !  (in)        a   : input 2-d array with missing values
   !  (in)     good   : valid data mask for incoming array (1==good data; 0==missing data)
-  !  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)   
+  !  (in)     fill   : same shape array of points which need filling (1==please fill;0==leave it alone)
   !  (in)     prev   : first guess where isolated holes exist,
   !
   use MOM_coms, only : sum_across_PEs
@@ -291,7 +291,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
-  real, dimension(SZI_(G),SZJ_(G)) :: fill_pts,good_,good_new   
+  real, dimension(SZI_(G),SZJ_(G)) :: fill_pts,good_,good_new
 
   integer :: i,j,k
   real    :: east,west,north,south,sor
@@ -354,7 +354,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
            if (ge.eq.1.0) east=aout(i+1,j)*ge
            if (gw.eq.1.0) west=aout(i-1,j)*gw
            if (gn.eq.1.0) north=aout(i,j+1)*gn
-           if (gs.eq.1.0) south=aout(i,j-1)*gs     
+           if (gs.eq.1.0) south=aout(i,j-1)*gs
 
            ngood = ge+gw+gn+gs
            if (ngood > 0.) then
@@ -434,20 +434,20 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   character(len=*), intent(in) :: varnam     ! name of tracer in filee
   real,             intent(in) :: conversion ! conversion factor for tracer
   integer,          intent(in) :: recnum     ! record number of tracer to be read
-  type(ocean_grid_type), intent(inout) :: G     ! Grid object 
-  real, allocatable, dimension(:,:,:) :: tr_z    ! pointer to allocatable tracer array on local model grid 
+  type(ocean_grid_type), intent(inout) :: G     ! Grid object
+  real, allocatable, dimension(:,:,:) :: tr_z    ! pointer to allocatable tracer array on local model grid
                                               ! and native vertical levels
-  real, allocatable, dimension(:,:,:) :: mask_z   ! pointer to allocatable tracer mask array on local model grid 
+  real, allocatable, dimension(:,:,:) :: mask_z   ! pointer to allocatable tracer mask array on local model grid
                                               ! and native vertical levels
-  real, allocatable, dimension(:)     :: z_in  ! Cell grid values for input data 
-  real, allocatable, dimension(:)     :: z_edges_in  ! Cell grid edge values for input data 
+  real, allocatable, dimension(:)     :: z_in  ! Cell grid values for input data
+  real, allocatable, dimension(:)     :: z_edges_in  ! Cell grid edge values for input data
   real,                intent(out)  :: missing_value
   logical,          intent(in) :: reentrant_x, tripolar_n
   logical, intent(in), optional     :: homogenize
-  
+
   real, dimension(:,:), allocatable :: tr_in,tr_inp ! A 2-d array for holding input data on native horizontal
                                                     ! grid and extended grid with poles
-  real, dimension(:,:), allocatable :: mask_in      ! A 2-d mask for extended input grid 
+  real, dimension(:,:), allocatable :: mask_in      ! A 2-d mask for extended input grid
 
   real :: PI_180
   integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
@@ -482,7 +482,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
   id_clock_read = cpu_clock_id('(Initialize tracer from Z) read', grain=CLOCK_LOOP)
 
-  
+
   if (ALLOCATED(tr_z)) deallocate(tr_z)
   if (ALLOCATED(mask_z)) deallocate(mask_z)
   if (ALLOCATED(z_edges_in)) deallocate(z_edges_in)
@@ -494,7 +494,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
   call cpu_clock_begin(id_clock_read)
 
-  
+
   rcode = NF90_OPEN(filename, NF90_NOWRITE, ncid)
   if (rcode .ne. 0) call MOM_error(FATAL,"error opening file "//trim(filename)//&
                            " in hinterp_extrap")
@@ -505,8 +505,8 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   rcode = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndims, dimids=dims)
   if (rcode .ne. 0) call MOM_error(FATAL,'error inquiring dimensions hinterp_extrap')
   if (ndims < 3) call MOM_error(FATAL,"Variable "//trim(varnam)//" in file "// &
-              trim(filename)//" has too few dimensions.")   
-         
+              trim(filename)//" has too few dimensions.")
+
   rcode = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
   if (rcode .ne. 0) call MOM_error(FATAL,"error reading dimension 1 data for "// &
                 trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
@@ -530,7 +530,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
   missing_value=0.0
   rcode = NF90_GET_ATT(ncid, varid, "_FillValue", missing_value)
   if (rcode .ne. 0) call MOM_error(FATAL,"error finding missing value for "//&
-       trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")    
+       trim(varnam)//" in file "// trim(filename)//" in hinterp_extrap")
 
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
@@ -586,7 +586,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
   lon_in = lon_in*PI_180
   lat_in = lat_in*PI_180
-  allocate(x_in(id,jdp),y_in(id,jdp))        
+  allocate(x_in(id,jdp),y_in(id,jdp))
   call meshgrid(lon_in,lat_in, x_in, y_in)
 
   lon_out(:,:) = G%geoLonT(:,:)*PI_180
@@ -638,7 +638,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
       else
          tr_inp(:,:) = tr_in(:,:)
       endif
-      
+
     endif
 
     call mpp_sync()
@@ -655,7 +655,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
          else
            tr_inp(i,j)=missing_value
          endif
-      enddo 
+      enddo
     enddo
 
 
@@ -684,7 +684,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
 
     fill = 0.0; good = 0.0
 
-    nPoints = 0 ; varAvg = 0. 
+    nPoints = 0 ; varAvg = 0.
     do j=js,je
       do i=is,ie
         if (mask_out(i,j) .lt. 1.0) then
@@ -717,7 +717,7 @@ subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum,
     endif
 
 ! tr_out contains input z-space data on the model grid with missing values
-! now fill in missing values using "ICE-nine" algorithm. 
+! now fill in missing values using "ICE-nine" algorithm.
 
     tr_outf(:,:)=tr_out(:,:)
     if (k==1) tr_prev(:,:)=tr_outf(:,:)
@@ -742,8 +742,8 @@ end subroutine horiz_interp_and_extrap_tracer
 
 function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,i_debug,j_debug) result(tr)
 !
-! Adopted from R. Hallberg    
-! Arguments: 
+! Adopted from R. Hallberg
+! Arguments:
 !  (in)     tr_in  - The z-space array of tracer concentrations that is read in.
 !  (in)   z_edges  - The depths of the cell edges in the input z* data (m)
 !  (in)         e  - The depths of the layer interfaces (m)
@@ -752,7 +752,7 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,
 !  (in)  land_fill - fill in data over land
 !  (in)        wet - wet mask (1=ocean)
 !  (in)       nlay - number of layers
-!  (in)      nlevs - number of levels    
+!  (in)      nlevs - number of levels
 
 !  (out)        tr - tracers on layers
 
@@ -774,20 +774,20 @@ real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet
 real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs
 logical, intent(in), optional                :: debug
 integer, intent(in), optional                :: i_debug, j_debug
-    
+
 real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr
 real, dimension(size(tr_in,3)) :: tr_1d
 real, dimension(nlay+1) :: e_1d
 real, dimension(nlay) :: tr_
 integer, dimension(size(tr_in,1),size(tr_in,2)) :: nlevs_data
-    
+
 integer :: n,i,j,k,l,nx,ny,nz,nt,kz
 integer :: k_top,k_bot,k_bot_prev,kk,kstart
 real    :: sl_tr
 real, dimension(size(tr_in,3)) :: wt,z1,z2
 logical :: debug_msg, debug_
-    
-nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3) 
+
+nx = size(tr_in,1); ny=size(tr_in,2); nz = size(tr_in,3)
 
 nlevs_data = size(tr_in,3)
 if (PRESENT(nlevs)) then
@@ -811,11 +811,11 @@ do j=1,ny
       tr(i,j,:) = land_fill
       cycle i_loop
     endif
-             
+
     do k=1,nz
       tr_1d(k) = tr_in(i,j,k)
     enddo
-   
+
     do k=1,nlay+1
       e_1d(k) = e(i,j,k)
     enddo
@@ -914,7 +914,7 @@ do j=1,ny
 
       endif
     enddo ! k-loop
-    
+
     do k=2,nlay  ! simply fill vanished layers with adjacent value
       if (e_1d(k)-e_1d(k+1) .le. epsln) tr(i,j,k)=tr(i,j,k-1)
     enddo
@@ -925,20 +925,20 @@ enddo
 return
 
 end function tracer_z_init
-  
-  
+
+
 function bisect_fast(a, x, lo, hi) result(bi_r)
 !
 !  Return the index where to insert item x in list a, assuming a is sorted.
 !  The return values [i] is such that all e in a[:i-1] have e <= x, and all e in
-!  a[i:] have e > x. So if x already appears in the list, will    
+!  a[i:] have e > x. So if x already appears in the list, will
 !  insert just after the rightmost x already there.
 !  Optional args lo (default 1) and hi (default len(a)) bound the
 !  slice of a to be searched.
 !
 !  (in)  a - sorted list
 !  (in)  x - item to be inserted
-!  (in)  lo, hi - optional range to search    
+!  (in)  lo, hi - optional range to search
 
 real, dimension(:,:), intent(in) :: a
 real, dimension(:), intent(in) :: x
@@ -948,7 +948,7 @@ integer, dimension(size(a,1),size(x,1))  :: bi_r
 integer :: mid,num_x,num_a,i
 integer, dimension(size(a,1))  :: lo_,hi_,lo0,hi0
 integer :: nprofs,j
-    
+
 lo_=1;hi_=size(a,2);num_x=size(x,1);bi_r=-1;nprofs=size(a,1)
 
 if (PRESENT(lo)) then
@@ -975,7 +975,7 @@ do j=1,nprofs
   enddo
 enddo
 
-    
+
 return
 
 end function bisect_fast
@@ -988,14 +988,14 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
 ! # salinity that is consistent with the target density
 ! # using provided initial guess
 ! #   (inout)     temp - potential temperature (degC)
-! #   (inout)     salt - salinity (PSU)   
-! #   (in)           R - Desired potential density, in kg m-3.            
-! #   (in)       p_ref - Reference pressure, in Pa.                     
-! #   (in)       niter - maximum number of iterations  
+! #   (inout)     salt - salinity (PSU)
+! #   (in)           R - Desired potential density, in kg m-3.
+! #   (in)       p_ref - Reference pressure, in Pa.
+! #   (in)       niter - maximum number of iterations
 ! #   (in)           h - layer thickness . Do not iterate for massless layers
 ! #   (in)     k_start - starting index (i.e. below the buffer layer)
 ! #   (in)   land_fill - land fill value
-   
+
 real(kind=8), dimension(:,:,:), intent(inout) :: temp,salt
 real(kind=8), dimension(size(temp,3)), intent(in) :: R
 real, intent(in) :: p_ref
@@ -1007,7 +1007,7 @@ real(kind=8), dimension(:,:,:), intent(in) :: h
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
 real(kind=8), dimension(size(temp,1)) :: press
-   
+
 integer :: nx,ny,nz,nt,i,j,k,n,itt
 logical :: adjust_salt , old_fit
 real    :: dT_dS
@@ -1023,15 +1023,15 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos
 ! # salinity that is consistent with the target density
 ! # using provided initial guess
 ! #   (inout)     temp - potential temperature (degC)
-! #   (inout)     salt - salinity (PSU)   
-! #   (in)           R - Desired potential density, in kg m-3.            
-! #   (in)       p_ref - Reference pressure, in Pa.                     
-! #   (in)       niter - maximum number of iterations  
+! #   (inout)     salt - salinity (PSU)
+! #   (in)           R - Desired potential density, in kg m-3.
+! #   (in)       p_ref - Reference pressure, in Pa.
+! #   (in)       niter - maximum number of iterations
 ! #   (in)           h - layer thickness . Do not iterate for massless layers
 ! #   (in)     k_start - starting index (i.e. below the buffer layer)
 ! #   (in)   land_fill - land fill value
 ! #   (in)        eos  - seawater equation of state
-   
+
 real, dimension(:,:,:), intent(inout) :: temp,salt
 real, dimension(size(temp,3)), intent(in) :: R
 real, intent(in) :: p_ref
@@ -1052,20 +1052,20 @@ real, parameter :: T_max = 31.0, T_min = -2.0
 real, parameter :: S_min = 0.5, S_max=65.0
 real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
 
-   
+
 #endif
-   
+
 
 old_fit = .true.   ! reproduces siena behavior
-                   ! will switch to the newer 
+                   ! will switch to the newer
                    ! method which simultaneously adjusts
                    ! temp and salt based on the ratio
                    ! of the thermal and haline coefficients.
-                    
+
 nx=size(temp,1);ny=size(temp,2); nz=size(temp,3)
 
 press(:) = p_ref
-   
+
 do j=1,ny
   dS(:,:) = 0. ! Needs to be zero everywhere since there is a maxval(abs(dS)) later...
   T=temp(:,j,:)
@@ -1082,12 +1082,12 @@ do j=1,ny
       call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
       call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
     enddo
-#endif         
+#endif
     do k=k_start,nz
       do i=1,nx
 
 !               if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln) then
-        if (abs(rho(i,k)-R(k))>tol) then               
+        if (abs(rho(i,k)-R(k))>tol) then
            if (old_fit) then
               dT(i,k)=(R(k)-rho(i,k))/drho_dT(i,k)
               if (dT(i,k)>max_t_adj) dT(i,k)=max_t_adj
@@ -1121,11 +1121,11 @@ do j=1,ny
         call calculate_density(T(:,k),S(:,k),press,rho(:,k),1,nx,eos)
         call calculate_density_derivs(T(:,k),S(:,k),press,drho_dT(:,k),drho_dS(:,k),1,nx,eos)
       enddo
-#endif             
+#endif
       do k=k_start,nz
         do i=1,nx
 !                   if (abs(rho(i,k)-R(k))>tol .and. hin(i,k)>epsln .and. abs(T(i,k)-land_fill) < epsln ) then
-          if (abs(rho(i,k)-R(k))>tol ) then                       
+          if (abs(rho(i,k)-R(k))>tol ) then
              dS(i,k)=(R(k)-rho(i,k))/drho_dS(i,k)
              if (dS(i,k)>max_s_adj) dS(i,k)=max_s_adj
              if (dS(i,k)<-1.0*max_s_adj) dS(i,k)=-1.0*max_s_adj
@@ -1148,7 +1148,7 @@ return
 
 end subroutine determine_temperature
 
- 
+
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
 
 !   This subroutine determines the layers bounded by interfaces e that overlap
@@ -1166,10 +1166,10 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 !                           overlap with the depth range.
 !  (out)     wt - The relative weights of each layer from k_top to k_bot.
 !  (out)     z1, z2 - z1 and z2 are the depths of the top and bottom limits of
-!                     the part of a layer that contributes to a depth level, 
+!                     the part of a layer that contributes to a depth level,
 !                     relative to the cell center and normalized by the cell
 !                     thickness, nondim.  Note that -1/2 <= z1 < z2 <= 1/2.
-   
+
 real, dimension(:), intent(in) :: e
 real, intent(in)   :: Z_top, Z_bot
 integer, intent(in) :: k_max, k_start
@@ -1178,7 +1178,7 @@ real, dimension(:), intent(out) :: wt, z1, z2
 
 real :: Ih, e_c, tot_wt, I_totwt
 integer :: k
-  
+
 wt(:)=0.0; z1(:)=0.0; z2(:)=0.0
 k_top = k_start; k_bot= k_start; wt(1) = 1.0; z1(1)=-0.5; z2(1) = 0.5
 
@@ -1218,7 +1218,7 @@ endif
 return
 
 end subroutine find_overlap
-  
+
 
 function find_limited_slope(val, e, k) result(slope)
 
@@ -1230,16 +1230,16 @@ function find_limited_slope(val, e, k) result(slope)
 !  (in)      slope - The normalized slope in the intracell distribution of val.
 !  (in)      k - The layer whose slope is being determined.
 
-    
+
 real, dimension(:), intent(in) :: val
 real, dimension(:), intent(in) :: e
 integer, intent(in) :: k
 real :: slope,amx,bmx,amn,bmn,cmn,dmn
 
 real :: d1, d2
-    
+
 if ((val(k)-val(k-1)) * (val(k)-val(k+1)) >= 0.0) then
-  slope = 0.0 ! ; curvature = 0.0   
+  slope = 0.0 ! ; curvature = 0.0
 else
   d1 = 0.5*(e(k-1)-e(k+1)) ; d2 = 0.5*(e(k)-e(k+2))
   slope = ((d1**2)*(val(k+1) - val(k)) + (d2**2)*(val(k) - val(k-1))) * &
@@ -1254,16 +1254,16 @@ else
   dmn = min(amn,cmn)
   slope = sign(1.0,slope) * dmn
 
-! min(abs(slope), &             
+! min(abs(slope), &
 !             2.0*(max(val(k-1),val(k),val(k+1)) - val(k)), &
 !             2.0*(val(k) - min(val(k-1),val(k),val(k+1))))
-! curvature = 0.0  
+! curvature = 0.0
 endif
 
 return
 
 end function find_limited_slope
-  
+
 
 
 function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
@@ -1293,29 +1293,29 @@ integer :: dir
 integer, dimension(size(rho,1),size(Rb,1)) :: ki_
 real, dimension(size(rho,1),size(Rb,1)) :: zi_
 integer, dimension(size(rho,1),size(rho,2)) :: nlevs_data
-integer, dimension(size(rho,1)) :: lo,hi        
+integer, dimension(size(rho,1)) :: lo,hi
 real :: slope,rsm,drhodz,hml_
 integer :: n,i,j,k,l,nx,ny,nz,nt
 integer :: nlay,kk,nkml_,nkbl_
 logical :: debug_ = .false.
-    
+
 real, parameter :: zoff=0.999
-    
+
 nlay=size(Rb)-1
-    
+
 zi=0.0
 
 
 if (PRESENT(debug)) debug_=debug
-    
-nx = size(rho,1); ny=size(rho,2); nz = size(rho,3) 
+
+nx = size(rho,1); ny=size(rho,2); nz = size(rho,3)
 nlevs_data(:,:) = size(rho,3)
 
 nkml_=0;nkbl_=0;hml_=0.0
 if (PRESENT(nkml)) nkml_=max(0,nkml)
 if (PRESENT(nkbl)) nkbl_=max(0,nkbl)
-if (PRESENT(hml)) hml_=hml    
-    
+if (PRESENT(hml)) hml_=hml
+
 if (PRESENT(nlevs)) then
   nlevs_data(:,:) = nlevs(:,:)
 endif
@@ -1341,7 +1341,7 @@ do j=1,ny
               if (drhodz  < 0.0) then
                 unstable=.true.
               endif
-              rho_(i,k) = rho_(i,k-1)+drhodz*zoff*(zin(k)-zin(k-1)) 
+              rho_(i,k) = rho_(i,k-1)+drhodz*zoff*(zin(k)-zin(k-1))
             endif
           endif
         enddo
@@ -1356,7 +1356,7 @@ do j=1,ny
               if (drhodz  < 0.0) then
                 unstable=.true.
               endif
-              rho_(i,k) = rho_(i,k+1)-drhodz*(zin(k+1)-zin(k)) 
+              rho_(i,k) = rho_(i,k+1)-drhodz*(zin(k+1)-zin(k))
             endif
           endif
         enddo
@@ -1367,9 +1367,9 @@ do j=1,ny
       print *,'final density profile= ', rho_(i,:)
     endif
   enddo i_loop
-          
+
   ki_(:,:) = 0
-  zi_(:,:) = 0.0          
+  zi_(:,:) = 0.0
   depth_(:)=-1.0*depth(:,j)
   lo(:)=1
   hi(:)=nlevs_data(:,j)
@@ -1404,33 +1404,33 @@ return
 end function find_interfaces
 
 subroutine meshgrid(x,y,x_T,y_T)
-    
+
 !  create a 2d-mesh of grid coordinates
 !  from 1-d arrays.
-    
+
 real, dimension(:), intent(in) :: x,y
 real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T
 
 integer :: ni,nj,i,j
-    
+
 ni=size(x,1);nj=size(y,1)
 
 do j=1,nj
   x_T(:,j)=x(:)
 enddo
-    
+
 do i=1,ni
   y_T(i,:)=y(:)
 enddo
 
 return
-    
+
 end subroutine meshgrid
-          
+
 subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
 !
 ! Solve del2 (zi) = 0 using successive iterations
-! with a 5 point stencil. Only points fill==1 are 
+! with a 5 point stencil. Only points fill==1 are
 ! modified. Except where bad==1, information propagates
 ! isotropically in index space.  The resulting solution
 ! in each region is an approximation to del2(zi)=0 subject to
@@ -1453,10 +1453,10 @@ real, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: mp
 integer, dimension(0:size(zi,1)+1,0:size(zi,2)+1) :: nm
 
 real :: Isum, bsum
-    
+
 ni=size(zi,1); nj=size(zi,2)
 
-    
+
 mp=fill_boundaries(zi,cyclic_x,tripolar_n)
 
 B(:,:,:)=0.0
@@ -1493,25 +1493,25 @@ do n=1,niter
   zi(:,:)=mp(1:ni,1:nj)
   mp = fill_boundaries(zi,cyclic_x,tripolar_n)
 end do
-    
-        
-    
+
+
+
 return
 
 end subroutine smooth_heights
 
 function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
 !
-! fill grid edges 
+! fill grid edges
 !
 integer, dimension(:,:), intent(in) :: m
 logical, intent(in) :: cyclic_x, tripolar_n
 real, dimension(size(m,1),size(m,2)) :: m_real
 real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
-integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp    
+integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
 m_real = real(m)
-    
+
 mp_real = fill_boundaries_real(m_real,cyclic_x,tripolar_n)
 
 mp = int(mp_real)
@@ -1519,10 +1519,10 @@ mp = int(mp_real)
 return
 
 end function fill_boundaries_int
-    
+
 function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
 !
-! fill grid edges 
+! fill grid edges
 !
 real, dimension(:,:), intent(in) :: m
 logical, intent(in) :: cyclic_x, tripolar_n
@@ -1533,7 +1533,7 @@ integer :: ni,nj,i,j
 ni=size(m,1); nj=size(m,2)
 
 mp(1:ni,1:nj)=m(:,:)
-    
+
 if (cyclic_x) then
   mp(0,1:nj)=m(ni,1:nj)
   mp(ni+1,1:nj)=m(1,1:nj)
@@ -1542,7 +1542,7 @@ else
   mp(ni+1,1:nj)=m(ni,1:nj)
 endif
 
-mp(1:ni,0)=m(1:ni,1)    
+mp(1:ni,0)=m(1:ni,1)
 if (tripolar_n) then
   do i=1,ni
     mp(i,nj+1)=m(ni-i+1,nj)

@@ -86,7 +86,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
   logical :: use_sponge
   logical :: bndExtrapolation = .true. ! If true, extrapolate boundaries
   integer :: i, j, k, col, total_sponge_cols
-  character(len=10)  :: remapScheme 
+  character(len=10)  :: remapScheme
   if (associated(CS)) then
     call MOM_error(WARNING, "initialize_sponge called with an associated "// &
                             "control structure.")
@@ -249,7 +249,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
 !            CS%var(m)%p(i,j,k) = I1pdamp * &
 !                                 (CS%var(m)%p(i,j,k) + tmp_val1 * damp)
         enddo
-        
+
   enddo ! end of c loop
   ! for debugging
   !c=CS%num_col

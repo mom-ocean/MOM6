@@ -32,8 +32,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress_wright, calculate_density_wright
-public calculate_density_derivs_wright, calculate_2_densities_wright
-public calculate_specvol_derivs_wright
+public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_scalar_wright, calculate_density_array_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
@@ -223,40 +222,6 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   enddo
 end subroutine calculate_compress_wright
 
-subroutine calculate_2_densities_wright( T, S, pressure1, pressure2, rho1, rho2, start, npts)
-  real,    intent(in),  dimension(:) :: T, S
-  real,    intent(in)                :: pressure1, pressure2
-  real,    intent(out), dimension(:) :: rho1, rho2
-  integer, intent(in)                :: start, npts
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure1 - the first pressure in Pa.                   *
-! *  (in)      pressure2 -  the second pressure in Pa.                 *
-! *  (out)     rho1 - density at pressure1 in kg m-3.                  *
-! *  (out)     rho2 - density at pressure2 in kg m-3.                  *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (sal in psu), potential temperature*
-! *  (th in deg C), and pressure in Pa.  It uses the expression from   *
-! *  Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.                *
-! *  Coded by R. Hallberg, 7/00                                        *
-! *====================================================================*
-  real :: al0, p0, lambda
-  integer :: j
-
-  do j=start, start+npts-1
-    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
-
-    rho1(j) = (pressure1 + p0) / (lambda + al0*(pressure1 + p0))
-    rho2(j) = (pressure2 + p0) / (lambda + al0*(pressure2 + p0))
-  enddo
-end subroutine calculate_2_densities_wright
-
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa)
   type(hor_index_type), intent(in)  :: HII, HIO
@@ -275,22 +240,22 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
 !
-! Arguments: T - potential temperature relative to the surface in C. 
-!  (in)      S - salinity in PSU.                                    
-!  (in)      z_t - height at the top of the layer in m.           
-!  (in)      z_b - height at the top of the layer in m.           
+! Arguments: T - potential temperature relative to the surface in C.
+!  (in)      S - salinity in PSU.
+!  (in)      z_t - height at the top of the layer in m.
+!  (in)      z_b - height at the top of the layer in m.
 !  (in)      rho_ref - A mean density, in kg m-3, that is subtracted out to reduce
 !                    the magnitude of each of the integrals.
 !                    (The pressure is calucated as p~=-z*rho_0*G_e.)
 !  (in)      rho_0 - A density, in kg m-3, that is used to calculate the pressure
 !                    (as p~=-z*rho_0*G_e) used in the equation of state.
-!  (in)      G_e - The Earth's gravitational acceleration, in m s-2. 
+!  (in)      G_e - The Earth's gravitational acceleration, in m s-2.
 !  (in)      G - The ocean's grid structure.
-!  (out)     dpa - The change in the pressure anomaly across the layer, 
-!                  in Pa.                                  
+!  (out)     dpa - The change in the pressure anomaly across the layer,
+!                  in Pa.
 !  (out,opt) intz_dpa - The integral through the thickness of the layer of the
 !                       pressure anomaly relative to the anomaly at the top of
-!                       the layer, in Pa m. 
+!                       the layer, in Pa m.
 !  (out,opt) intx_dpa - The integral in x of the difference between the
 !                       pressure anomaly at the top and bottom of the layer
 !                       divided by the x grid spacing, in Pa.
@@ -418,21 +383,21 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 !
-! Arguments: T - potential temperature relative to the surface in C. 
-!  (in)      S - salinity in PSU.                                    
-!  (in)      p_t - pressure at the top of the layer in Pa.           
-!  (in)      p_b - pressure at the top of the layer in Pa.           
+! Arguments: T - potential temperature relative to the surface in C.
+!  (in)      S - salinity in PSU.
+!  (in)      p_t - pressure at the top of the layer in Pa.
+!  (in)      p_b - pressure at the top of the layer in Pa.
 !  (in)      alpha_ref - A mean specific volume that is subtracted out to reduce
 !                        the magnitude of each of the integrals, m3 kg-1.
 !                        The calculation is mathematically identical with
 !                        different values of alpha_ref, but this reduces the
-!                        effects of roundoff.       
+!                        effects of roundoff.
 !  (in)      HI - The ocean's horizontal index structure.
-!  (out)     dza - The change in the geopotential anomaly across the layer, 
-!                  in m2 s-2.                                  
-!  (out,opt) intp_dza - The integral in pressure through the layer of the 
+!  (out)     dza - The change in the geopotential anomaly across the layer,
+!                  in m2 s-2.
+!  (out,opt) intp_dza - The integral in pressure through the layer of the
 !                       geopotential anomaly relative to the anomaly at the
-!                       bottom of the layer, in Pa m2 s-2. 
+!                       bottom of the layer, in Pa m2 s-2.
 !  (out,opt) intx_dza - The integral in x of the difference between the
 !                       geopotential anomaly at the top and bottom of the layer
 !                       divided by the x grid spacing, in m2 s-2.
@@ -461,7 +426,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
       al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
       p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
       lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
- 
+
       al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
       dp = p_b(i,j) - p_t(i,j)
       p_ave = 0.5*(p_t(i,j)+p_b(i,j))

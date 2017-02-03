@@ -26,7 +26,7 @@ module MOM_wave_structure
 !*    The subroutine in this module calculates the vertical structure  *
 !*    functions of the first baroclinic mode internal wave speed.      *
 !*    Calculation of interface values is the same as done in           *
-!*    MOM_wave_speed by Hallberg, 2008.                                *     
+!*    MOM_wave_speed by Hallberg, 2008.                                *
 !*                                                                     *
 !*  Macros written all in capital letters are defined in MOM_memory.h. *
 !*                                                                     *
@@ -44,7 +44,7 @@ module MOM_wave_structure
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums,     only : isnan => is_NaN
+use MOM_debugging,     only : isnan => is_NaN
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_EOS,           only : calculate_density_derivs
@@ -68,7 +68,7 @@ type, public :: wave_structure_CS ; !private
   real, allocatable, dimension(:,:,:) :: u_strct
                                    ! Vertical structure of horizontal velocity (normalized), in m s-1.
   real, allocatable, dimension(:,:,:) :: W_profile
-                                   ! Vertical profile of w_hat(z), where 
+                                   ! Vertical profile of w_hat(z), where
                                    ! w(x,y,z,t) = w_hat(z)*exp(i(kx+ly-freq*t)) is the full time-
                                    ! varying vertical velocity with w_hat(z) = W0*w_strct(z), in m s-1.
   real, allocatable, dimension(:,:,:) :: Uavg_profile
@@ -80,11 +80,11 @@ type, public :: wave_structure_CS ; !private
                                    ! Squared buoyancy frequency at each interface
   integer, allocatable, dimension(:,:):: num_intfaces
                                    ! Number of layer interfaces (including surface and bottom)
-  real    :: int_tide_source_x     ! X Location of generation site 
+  real    :: int_tide_source_x     ! X Location of generation site
                                    ! for internal tide for testing (BDM)
-  real    :: int_tide_source_y     ! Y Location of generation site 
+  real    :: int_tide_source_y     ! Y Location of generation site
                                    ! for internal tide for testing (BDM)
-                                   
+
 end type wave_structure_CS
 
 contains
@@ -100,7 +100,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   type(wave_structure_CS),                  pointer     :: CS
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: En
   logical,optional,                         intent(in)  :: full_halos
-  
+
 !    This subroutine determines the internal wave velocity structure for any mode.
 ! Arguments: h - Layer thickness, in m or kg m-2.
 !  (in)      tv - A structure containing the thermobaric variables.
@@ -115,11 +115,11 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 !  (in,opt)  full_halos - If true, do the calculation over the entire
 !                         computational domain.
 !
-! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with 
-! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the 
+! This subroutine solves for the eigen vector [vertical structure, e(k)] associated with
+! the first baroclinic mode speed [i.e., smallest eigen value (lam = 1/c^2)] of the
 ! system d2e/dz2 = -(N2/cn2)e, or (A-lam*I)e = 0, where A = -(1/N2)(d2/dz2), lam = 1/c^2,
 ! and I is the identity matrix. 2nd order discretization in the vertical lets this system
-! be represented as 
+! be represented as
 !
 !   -Igu(k)*e(k-1) + (Igu(k)+Igl(k)-lam)*e(k) - Igl(k)*e(k+1) = 0.0
 !
@@ -131,10 +131,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 ! where, upon noting N2 = reduced gravity/layer thickness, we get
 !    Igl(k) = 1.0/(gprime(k)*H(k)) ; Igu(k) = 1.0/(gprime(k)*H(k-1))
 !
-! The eigen value for this system is approximated using "wave_speed." This subroutine uses 
+! The eigen value for this system is approximated using "wave_speed." This subroutine uses
 ! these eigen values (mode speeds) to estimate the corresponding eigen vectors (velocity
-! structure) using the "inverse iteration with shift" method. The algorithm is 
-! 
+! structure) using the "inverse iteration with shift" method. The algorithm is
+!
 !   Pick a starting vector reasonably close to mode structure and with unit magnitude, b_guess
 !   For n=1,2,3,...
 !     Solve (A-lam*I)e = e_guess for e
@@ -180,7 +180,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   real, dimension(SZK_(G)+1) :: w_strct, u_strct, W_profile, Uavg_profile, z_int, N2
                                         ! local representations of variables in CS; note,
                                         ! not all rows will be filled if layers get merged!
-  real, dimension(SZK_(G)+1) :: w_strct2, u_strct2 
+  real, dimension(SZK_(G)+1) :: w_strct2, u_strct2
                                         ! squared values
   real, dimension(SZK_(G))   :: dz      ! thicknesses of merged layers (same as Hc I hope)
   real, dimension(SZK_(G)+1) :: dWdz_profile ! profile of dW/dz
@@ -200,18 +200,18 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   I_a_int = 1/a_int
-  
+
   !if (present(CS)) then
     if (.not. associated(CS)) call MOM_error(FATAL, "MOM_wave_structure: "// &
            "Module must be initialized before it is used.")
   !endif
-  
+
   if (present(full_halos)) then ; if (full_halos) then
     is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
   endif ; endif
-  
+
   Pi = (4.0*atan(1.0))
-  
+
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth/GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
@@ -285,7 +285,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
       if (G%mask2dT(i,j) > 0.5) then
 
         lam = 1/(cn(i,j)**2)
-        
+
         ! Calculate drxh_sum
         if (use_EOS) then
           pres(1) = 0.0
@@ -312,7 +312,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
                               max(0.0,Rf(k,i)-Rf(k-1,i))
           enddo
         endif ! use_EOS?
-        
+
         !   Find gprime across each internal interface, taking care of convective
         ! instabilities by merging layers.
         if (drxh_sum >= 0.0) then
@@ -347,7 +347,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
                 ! Add a new layer to the column.
                 kc = kc + 1
                 drho_dS(kc) = drho_dS(k) ; drho_dT(kc) = drho_dT(k)
-                Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i) 
+                Tc(kc) = Tf(k,i) ; Sc(kc) = Sf(k,i) ; Hc(kc) = Hf(k,i)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
@@ -378,7 +378,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               else
                 ! Add a new layer to the column.
                 kc = kc + 1
-                Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i) 
+                Rc(kc) = Rf(k,i) ; Hc(kc) = Hf(k,i)
               endif
             enddo
             ! At this point there are kc layers and the gprimes should be positive.
@@ -386,27 +386,27 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               gprime(k) = g_Rho0 * (Rc(k)-Rc(k-1))
             enddo
           endif  ! use_EOS?
-          
+
           !-----------------NOW FIND WAVE STRUCTURE-------------------------------------
           ! Construct and solve tridiagonal system for the interior interfaces
-          ! Note that kc   = number of layers, 
-          !           kc+1 = nzm = number of interfaces, 
+          ! Note that kc   = number of layers,
+          !           kc+1 = nzm = number of interfaces,
           !           kc-1 = number of interior interfaces (excluding surface and bottom)
           ! Also, note that "K" refers to an interface, while "k" refers to the layer below.
           ! Need at least 3 layers (2 internal interfaces) to generate a matrix, also
-          ! need number of layers to be greater than the mode number 
+          ! need number of layers to be greater than the mode number
           if (kc >= ModeNum + 1) then
             ! Set depth at surface
             z_int(1) = 0.0
-            ! Calculate Igu, Igl, depth, and N2 at each interior interface 
-            ! [excludes surface (K=1) and bottom (K=kc+1)] 
+            ! Calculate Igu, Igl, depth, and N2 at each interior interface
+            ! [excludes surface (K=1) and bottom (K=kc+1)]
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
               z_int(K) = z_int(K-1) + Hc(k-1)
               N2(K) = gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
             enddo
             ! Set stratification for surface and bottom (setting equal to nearest interface for now)
-            N2(1) = N2(2) ; N2(kc+1) = N2(kc) 
+            N2(1) = N2(2) ; N2(kc+1) = N2(kc)
             ! Calcualte depth at bottom
             z_int(kc+1) = z_int(kc)+Hc(kc)
             ! check that thicknesses sum to total depth
@@ -414,7 +414,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               call MOM_error(WARNING, "wave_structure: mismatch in total depths")
               print *, "kc=", kc
               print *, "z_int(kc+1)=", z_int(kc+1)
-              print *, "htot(i,j)=", htot(i,j)              
+              print *, "htot(i,j)=", htot(i,j)
             endif
 
             ! Populate interior rows of tridiagonal matrix; must multiply through by
@@ -445,11 +445,11 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             a_diag(row) = gprime(K)*(-Igu(K))
             b_diag(row) = gprime(K)*(Igu(K)+Igl(K)) - lam_z(row)
             c_diag(row) = 0.0
-            
+
             ! Guess a vector shape to start with (excludes surface and bottom)
             e_guess(1:kc-1) = sin(z_int(2:kc)/htot(i,j)*Pi)
             e_guess(1:kc-1) = e_guess(1:kc-1)/sqrt(sum(e_guess(1:kc-1)**2))
-                        
+
             ! Perform inverse iteration with tri-diag solver
             do itt=1,max_itt
               call tridiag_solver(a_diag(1:kc-1),b_diag(1:kc-1),c_diag(1:kc-1), &
@@ -459,7 +459,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             w_strct(2:kc) = e_guess(1:kc-1)
             w_strct(1)    = 0.0 ! rigid lid at surface
             w_strct(kc+1) = 0.0 ! zero-flux at bottom
-            
+
             ! Check to see if solver worked
             ig_stop = 0 ; jg_stop = 0
             if(isnan(sum(w_strct(1:kc+1))))then
@@ -469,10 +469,10 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               endif
               ig_stop = ig ; jg_stop = jg
             endif
-            
+
             ! Normalize vertical structure function of w such that
             ! \int(w_strct)^2dz = a_int (a_int could be any value, e.g., 0.5)
-            nzm = kc+1 ! number of layer interfaces after merging 
+            nzm = kc+1 ! number of layer interfaces after merging
                        !(including surface and bottom)
             w2avg = 0.0
             do k=1,nzm-1
@@ -481,7 +481,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             enddo
             w2avg = w2avg/htot(i,j)
             w_strct = w_strct/sqrt(htot(i,j)*w2avg*I_a_int)
-            
+
             ! Calculate vertical structure function of u (i.e. dw/dz)
             do K=2,nzm-1
               u_strct(K) = 0.5*((w_strct(K-1) - w_strct(K)  )/dz(k-1) + &
@@ -489,13 +489,13 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             enddo
             u_strct(1)   = (w_strct(1)   -  w_strct(2) )/dz(1)
             u_strct(nzm)  = (w_strct(nzm-1)-  w_strct(nzm))/dz(nzm-1)
-            
+
             ! Calculate wavenumber magnitude
             f2 = G%CoriolisBu(I,J)**2
             !f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
             !    (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
             Kmag2 = (freq**2 - f2) / (cn(i,j)**2 + cg_subRO**2)
-            
+
             ! Calculate terms in vertically integrated energy equation
             int_dwdz2 = 0.0 ; int_w2 = 0.0 ; int_N2w2 = 0.0
             u_strct2 = u_strct(1:nzm)**2
@@ -506,7 +506,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               int_w2    = int_w2    + 0.5*(w_strct2(K)+w_strct2(K+1))*dz(k)
               int_N2w2  = int_N2w2  + 0.5*(w_strct2(K)*N2(K)+w_strct2(K+1)*N2(K+1))*dz(k)
             enddo
-            
+
             ! Back-calculate amplitude from energy equation
             if (Kmag2 > 0.0) then
               KE_term = 0.25*GV%Rho0*( (1+f2/freq**2)/Kmag2*int_dwdz2 + int_w2 )
@@ -528,7 +528,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               dWdz_profile = 0.0
               Uavg_profile = 0.0
             endif
-             
+
             ! Store values in control structure
             CS%w_strct(i,j,1:nzm)     = w_strct
             CS%u_strct(i,j,1:nzm)     = u_strct
@@ -537,7 +537,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
             CS%z_depths(i,j,1:nzm)    = z_int
             CS%N2(i,j,1:nzm)          = N2
             CS%num_intfaces(i,j)      = nzm
-            
+
             !----for debugging; delete later----
             !if(ig .eq. ig_stop .and. jg .eq. jg_stop) then
               !print *, 'cn(ig,jg)=', cn(i,j)
@@ -568,7 +568,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
               !open(unit=2,file='out_z',form='formatted') ;  write(2,*) z_int ; close(2)
             !endif
             !-----------------------------------
- 
+
           else
             ! If not enough layers, default to zero
             nzm = kc+1
@@ -597,7 +597,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
       CS%num_intfaces(i,j)       = nzm
     endif ; enddo ! if cn>0.0? ; i-loop
   enddo ! j-loop
-  
+
 end subroutine wave_structure
 
 subroutine tridiag_solver(a,b,c,h,y,method,x)
@@ -607,13 +607,13 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
 
 !    This subroutine solves a tri-diagonal system Ax=y using either the standard
 ! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
-! "Hallberg substitution" (TDMA_H).  
+! "Hallberg substitution" (TDMA_H).
 !
-! Arguments: 
+! Arguments:
 !  (in)      a - lower diagonal with first entry equal to zero
 !  (in)      b - middle diagonal
 !  (in)      c - upper diagonal with last entry equal to zero
-!  (in)      h - vector of values that have already been added to b; used for 
+!  (in)      h - vector of values that have already been added to b; used for
 !                systems of the form (e.g. average layer thickness in vertical diffusion case):
 !                [ -alpha(k-1/2) ]                       * e(k-1) +
 !                [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
@@ -631,7 +631,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
   real    :: Q_prime, beta                ! intermediate values for solver
   integer :: k                            ! row (e.g. interface) index
   integer :: i,j
-  
+
   nrow = size(y)
   allocate(c_prime(nrow))
   allocate(y_prime(nrow))
@@ -639,13 +639,13 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
   allocate(alpha(nrow))
   allocate(A_check(nrow,nrow))
   allocate(y_check(nrow))
-  
+
   if (method == 'TDMA_T') then
-    ! Standard Thomas algoritim (4th variant). 
-    ! Note: Requires A to be non-singular for accuracy/stability 
+    ! Standard Thomas algoritim (4th variant).
+    ! Note: Requires A to be non-singular for accuracy/stability
     c_prime(:) = 0.0       ; y_prime(:) = 0.0
     c_prime(1) = c(1)/b(1) ; y_prime(1) = y(1)/b(1)
-    
+
     ! Forward sweep
     do k=2,nrow-1
       c_prime(k) = c(k)/(b(k)-a(k)*c_prime(k-1))
@@ -662,7 +662,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
       x(k) = y_prime(k)-c_prime(k)*x(k+1)
     enddo
     !print *, 'x=',x(1:nrow)
-    
+
     ! Check results - delete later
     !do j=1,nrow ; do i=1,nrow
     !  if(i==j)then ;       A_check(i,j) = b(i)
@@ -675,17 +675,17 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     !if(all(y_check .ne. y))then
     !  print *, "tridiag_solver: Uh oh, something's not right!"
     !  print *, "y=", y
-    !  print *, "y_check=", y_check 
+    !  print *, "y_check=", y_check
     !endif
-  
+
   elseif (method == 'TDMA_H') then
     ! Thomas algoritim (4th variant) w/ Hallberg substitution.
     ! For a layered system where k is at interfaces, alpha{k+1/2} refers to
-    ! some property (e.g. inverse thickness for mode-structure problem) of the 
-    ! layer below and alpha{k-1/2} refers to the layer above. 
+    ! some property (e.g. inverse thickness for mode-structure problem) of the
+    ! layer below and alpha{k-1/2} refers to the layer above.
     ! Here, alpha(k)=alpha{k+1/2} and alpha(k-1)=alpha{k-1/2}.
     ! Strictly speaking, this formulation requires A to be a non-singular,
-    ! symmetric, diagonally dominant matrix, with h>0. 
+    ! symmetric, diagonally dominant matrix, with h>0.
     ! Need to add a check for these conditions.
     do k=1,nrow-1
       if (abs(a(k+1)-c(k)) > 1.e-10) then
@@ -701,7 +701,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     y_prime(:) = 0.0       ; q(:) = 0.0
     y_prime(1) = beta*y(1) ; q(1) = beta*alpha(1)
     Q_prime    = 1-q(1)
-        
+
     ! Forward sweep
     do k=2,nrow-1
       beta = 1/(h(k)+alpha(k-1)*Q_prime+alpha(k))
@@ -715,7 +715,7 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
       beta = 1/(1e-15) ! place holder for unstable systems - delete later
     else
       beta = 1/(h(nrow)+alpha(nrow-1)*Q_prime+alpha(nrow))
-    endif    
+    endif
     y_prime(nrow) = beta*(y(nrow)+alpha(nrow-1)*y_prime(nrow-1))
     x(nrow) = y_prime(nrow)
     ! Backward sweep
@@ -725,12 +725,12 @@ subroutine tridiag_solver(a,b,c,h,y,method,x)
     !print *, 'yprime=',y_prime(1:nrow)
     !print *, 'x=',x(1:nrow)
   endif
-  
+
   deallocate(c_prime,y_prime,q,alpha,A_check,y_check)
 
 end subroutine tridiag_solver
-  
-  
+
+
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G
@@ -748,7 +748,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
-  
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
   if (associated(CS)) then
@@ -756,14 +756,14 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
                             "associated control structure.")
     return
   else ; allocate(CS) ; endif
-  
+
   call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
   call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                  "Y Location of generation site for internal tide", default=1.)
 
   CS%diag => diag
-  
+
   ! Allocate memory for variable in control structure; note,
   ! not all rows will be filled if layers get merged!
   allocate(CS%w_strct(isd:ied,jsd:jed,nz+1))

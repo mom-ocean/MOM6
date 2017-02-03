@@ -65,7 +65,6 @@ use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
@@ -731,8 +730,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
         absf_x_H = 0.25 * h(i,0) * &
-            ((abs(G%CoriolisBu(i,j)) + abs(G%CoriolisBu(i-1,j-1))) + &
-             (abs(G%CoriolisBu(i,j-1)) + abs(G%CoriolisBu(i-1,j))))
+            ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+             (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         ! If the mixed layer vertical viscosity specification is changed in
         ! MOM_vert_friction.F90, this line will have to be modified accordingly.
         h_3d(i,j,1) = h(i,0) / (3.0 + sqrt(absf_x_H*(absf_x_H + 2.0*kU_star) / &

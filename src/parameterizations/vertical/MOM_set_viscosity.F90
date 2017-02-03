@@ -51,7 +51,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only : uchksum, vchksum
+use MOM_debugging, only : uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -336,19 +336,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
       is = G%IscB ; ie = G%IecB
       do i=is,ie
         do_i(i) = .false.
-        if (G%mask2dCu(i,j) > 0) do_i(i) = .true.
+        if (G%mask2dCu(I,j) > 0) do_i(i) = .true.
       enddo
     else
       is = G%isc ; ie = G%iec
       do i=is,ie
         do_i(i) = .false.
-        if (G%mask2dCv(i,j) > 0) do_i(i) = .true.
+        if (G%mask2dCv(i,J) > 0) do_i(i) = .true.
       enddo
     endif
 
     if (m==1) then
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        if (u(i,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
+        if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
           h_at_vel(i,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
                           (h(i,j,k) + h(i+1,j,k) + h_neglect)
         else
@@ -357,7 +357,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
       endif ; enddo ; enddo
     else
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        if (v(i,j,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
+        if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
           h_at_vel(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / &
                           (h(i,j,k) + h(i,j+1,k) + h_neglect)
         else
@@ -385,11 +385,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
             v_at_u = set_v_at_u(v, h, G, i, j, k)
-            hutot = hutot + hweight * sqrt(u(i,j,k)*u(i,j,k) + &
+            hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
             u_at_v = set_u_at_v(u, h, G, i, j, k)
-            hutot = hutot + hweight * sqrt(v(i,j,k)*v(i,j,k) + &
+            hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
 
@@ -541,8 +541,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 ! The  bottom boundary layer thickness is found by solving the same
 ! equation as in Killworth and Edwards:    (h/h_f)^2 + h/h_N = 1.
 
-      if (m==1) then ; C2f = (G%CoriolisBu(i,j-1)+G%CoriolisBu(i,j))
-      else ; C2f = (G%CoriolisBu(i-1,j)+G%CoriolisBu(i,j)) ; endif
+      if (m==1) then ; C2f = (G%CoriolisBu(I,J-1)+G%CoriolisBu(I,J))
+      else ; C2f = (G%CoriolisBu(I-1,J)+G%CoriolisBu(I,J)) ; endif
 
       if (CS%cdrag * U_bg_sq <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
@@ -572,15 +572,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
           D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
-          tmp = G%mask2dCu(i,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
+          tmp = G%mask2dCu(I,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%mask2dCu(i,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
+          tmp = G%mask2dCu(I,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         else
           D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
-          tmp = G%mask2dCv(i+1,j) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
+          tmp = G%mask2dCv(i+1,J) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%mask2dCv(i,j-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
+          tmp = G%mask2dCv(i,J-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
@@ -672,7 +672,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
               !   vol = 0.5*L^2*(slope + a/3*(3-4L))
 
               !  Vol_err = 0.5*(L(K+1)*L(K+1))*(slope + a_3*(3.0-4.0*L(K+1))) - vol_below
-              ! Change to ... 
+              ! Change to ...
               !   if (min(Vol_below + Vol_err, vol) <= Vol_direct) then ?
               if (vol_below + Vol_err <= Vol_direct) then
                 L0 = L_direct ; Vol_0 = Vol_direct
@@ -743,8 +743,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
               BBL_frac = 0.0
             endif
 
-            if (m==1) then ; Cell_width = G%dy_Cu(i,j)
-            else ; Cell_width = G%dx_Cv(i,j) ; endif
+            if (m==1) then ; Cell_width = G%dy_Cu(I,j)
+            else ; Cell_width = G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
                 (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + m_to_H * &
@@ -756,28 +756,28 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, i, j, k)
-              visc%Ray_u(i,j,k) = Rayleigh*sqrt(u(i,j,k)*u(i,j,k) + &
+              visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
-            else ; visc%Ray_u(i,j,k) = 0.0 ; endif
+            else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, i, j, k)
-              visc%Ray_v(i,j,k) = Rayleigh*sqrt(v(i,j,k)*v(i,j,k) + &
+              visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
-            else ; visc%Ray_v(i,j,k) = 0.0 ; endif
+            else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
 
         enddo ! k loop to determine L(K).
 
         bbl_thick = bbl_thick * H_to_m
         if (m==1) then
-          visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, &
+          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick*BBL_visc_frac)
-          visc%bbl_thick_u(i,j) = bbl_thick
+          visc%bbl_thick_u(I,j) = bbl_thick
         else
-          visc%kv_bbl_v(i,j) = max(CS%KV_BBL_min, &
+          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, &
                                    cdrag_sqrt*ustar(i)*bbl_thick*BBL_visc_frac)
-          visc%bbl_thick_v(i,j) = bbl_thick
+          visc%bbl_thick_v(i,J) = bbl_thick
         endif
 
       else ! Not Channel_drag.
@@ -785,11 +785,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 ! the correct stress when the shear occurs over bbl_thick.
         bbl_thick = bbl_thick * H_to_m
         if (m==1) then
-          visc%kv_bbl_u(i,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
-          visc%bbl_thick_u(i,j) = bbl_thick
+          visc%kv_bbl_u(I,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
+          visc%bbl_thick_u(I,j) = bbl_thick
         else
-          visc%kv_bbl_v(i,j) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
-          visc%bbl_thick_v(i,j) = bbl_thick
+          visc%kv_bbl_v(i,J) = max(CS%KV_BBL_min, cdrag_sqrt*ustar(i)*bbl_thick)
+          visc%bbl_thick_v(i,J) = bbl_thick
         endif
       endif
     endif ; enddo ! end of i loop
@@ -830,15 +830,15 @@ function set_v_at_u(v, h, G, i, j, k)
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
 
-  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%mask2dCv(i,j-1)
-  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%mask2dCv(i+1,j-1)
-  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%mask2dCv(i,j)
-  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * G%mask2dCv(i+1,j)
+  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%mask2dCv(i,J-1)
+  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%mask2dCv(i+1,J-1)
+  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%mask2dCv(i,J)
+  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * G%mask2dCv(i+1,J)
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
-          ((hwt(3) * v(i,j,k) + hwt(2) * v(i+1,j-1,k)) + &
-           (hwt(4) * v(i+1,j,k) + hwt(1) * v(i,j-1,k))) / hwt_tot
+          ((hwt(3) * v(i,J,k) + hwt(2) * v(i+1,J-1,k)) + &
+           (hwt(4) * v(i+1,J,k) + hwt(1) * v(i,J-1,k))) / hwt_tot
 end function set_v_at_u
 
 function set_u_at_v(u, h, G, i, j, k)
@@ -851,15 +851,15 @@ function set_u_at_v(u, h, G, i, j, k)
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
 
-  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%mask2dCu(i-1,j)
-  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%mask2dCu(i,j)
-  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%mask2dCu(i-1,j+1)
-  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * G%mask2dCu(i,j+1)
+  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%mask2dCu(I-1,j)
+  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%mask2dCu(I,j)
+  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%mask2dCu(I-1,j+1)
+  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * G%mask2dCu(I,j+1)
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
-          ((hwt(2) * u(i,j,k) + hwt(3) * u(i-1,j+1,k)) + &
-           (hwt(1) * u(i-1,j,k) + hwt(4) * u(i,j+1,k))) / hwt_tot
+          ((hwt(2) * u(I,j,k) + hwt(3) * u(I-1,j+1,k)) + &
+           (hwt(1) * u(I-1,j,k) + hwt(4) * u(I,j+1,k))) / hwt_tot
 end function set_u_at_v
 
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
@@ -1162,7 +1162,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
     if (do_any_shelf) then
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) then
-        if (u(i,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
+        if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
           h_at_vel(i,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
                           (h(i,j,k) + h(i+1,j,k) + h_neglect)
         else
@@ -1185,7 +1185,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
           if (.not.CS%linear_drag) then
             v_at_u = set_v_at_u(v, h, G, i, j, k)
-            hutot = hutot + hweight * sqrt(u(i,j,k)**2 + &
+            hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
           if (use_EOS) then
@@ -1311,9 +1311,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
            absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
            if (CS%omega_frac > 0.0) &
-             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)        
+             absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
- 
+
          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
@@ -1407,7 +1407,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
     if (do_any_shelf) then
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        if (v(i,j,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
+        if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
           h_at_vel(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / &
                           (h(i,j,k) + h(i,j+1,k) + h_neglect)
         else
@@ -1564,7 +1564,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
   call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix = .false. ; 
+  use_kappa_shear = .false. ; use_CVMix = .false. ;
   useKPP = .false. ; useEPBL = .false.
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)

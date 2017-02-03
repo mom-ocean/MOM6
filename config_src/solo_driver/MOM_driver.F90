@@ -87,21 +87,21 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure containing pointers to the ocean forcing fields.
-  type(forcing) :: fluxes 
+  type(forcing) :: fluxes
 
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface) :: state  
-  
+  type(surface) :: state
+
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
   type(verticalGrid_type), pointer :: GV
-                                       
+
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
 
   ! This is .true. if incremental restart files may be saved.
-  logical :: permit_incr_restart = .true. 
-                               
+  logical :: permit_incr_restart = .true.
+
   integer :: n
 
   ! nmax is the number of iterations after which to stop so that the
@@ -111,9 +111,9 @@ program MOM_main
   integer :: nmax=2000000000;
 
   ! A structure containing several relevant directory paths.
-  type(directories) :: dirs   
+  type(directories) :: dirs
 
-  ! A suite of time types for use by MOM 
+  ! A suite of time types for use by MOM
   type(time_type), target :: Time       ! A copy of the ocean model's time.
                                         ! Other modules can set pointers to this and
                                         ! change it to manage diagnostics.
@@ -191,7 +191,12 @@ program MOM_main
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
+  integer :: ocean_nthreads = 1
+  integer :: ncores_per_node = 36
+  logical :: use_hyper_thread = .false.
+  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
+                            ocean_nthreads, ncores_per_node, use_hyper_thread
 
   !#######################################################################
 
@@ -232,6 +237,23 @@ program MOM_main
     endif
   endif
 
+!$  call omp_set_num_threads(ocean_nthreads)
+!$OMP PARALLEL private(adder)
+!$  base_cpu = get_cpu_affinity()
+!$  if (use_hyper_thread) then
+!$     if (imod(omp_get_thread_num(),2) == 0) then
+!$        adder = omp_get_thread_num()/2
+!$     else
+!$        adder = ncores_per_node + omp_get_thread_num()/2
+!$     endif
+!$  else
+!$     adder = omp_get_thread_num()
+!$  endif
+!$  call set_cpu_affinity (base_cpu + adder)
+!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  call flush(6)
+!$OMP END PARALLEL
+
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
     call open_file(unit,trim(dirs%restart_input_dir)//'ocean_solo.res', &
@@ -260,7 +282,7 @@ program MOM_main
   else
     Start_time = set_time(0,days=0)
   endif
-  
+
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
@@ -290,7 +312,7 @@ program MOM_main
                  "If true, enables the ice shelf model.", default=.false.)
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf 
+    ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
   endif
 
@@ -309,7 +331,7 @@ program MOM_main
   call get_param(param_file, mod, "DT_FORCING", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
-                 "The default value is given by DT.", units="s", default=dt)             
+                 "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
     call get_param(param_file, mod, "DT_OFFLINE", time_step, &
                    "Time step for the offline time step")
@@ -434,7 +456,7 @@ program MOM_main
 
     if (n==1) then
       call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
-      
+
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
                         Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
     endif
