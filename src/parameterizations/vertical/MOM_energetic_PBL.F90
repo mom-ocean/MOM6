@@ -142,6 +142,10 @@ type, public :: energetic_PBL_CS ; private
                              ! applies to in subsequent revisions of this code.
                              ! "_Neg" and "_Pos" refer to which scale is applied as a
                              ! function of negative or positive local buoyancy.
+  real    :: MSTAR_CAP       ! Since MSTAR is restoring undissipated energy to mixing,
+                             ! there must be a cap on how large it can be.  This
+                             ! is definitely a function of latitude (Ekman limit),
+                             ! but will be taken as constant for now.
   real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
                              ! to the mixing layer depth, Ekman depth, and Monin-Obukhov
                              ! depth.
@@ -735,6 +739,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if ((MLD_over_Stab) .ge. CS%MSTAR_XINT) then
             !Within linear regime
             MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab-CS%MSTAR_XINT)+CS%MSTAR_AT_XINT
+            MSTAR_mix = min(CS%MSTAR_CAP,MSTAR_MIX)
           else
             !Within hypterbolic decay regime
             MSTAR_mix = (MSTAR_B*(MLD_over_Stab-CS%MSTAR_XINT)+MSTAR_A)**(MSTAR_N)
@@ -1934,6 +1939,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "The exponent applied to the ratio of the distance to the MLD \n"//&
                  "and the MLD depth which determines the shape of the mixing length.",&
                  "units=nondim", default=2.0)
+  call get_param(param_file, mod, "MSTAR_CAP", CS%mstar_cap, &
+                 "Maximum value of mstar allowed in model \n"//&
+                 "(used if MSTAR_FIXED=false).",&
+                 "units=nondim", default=10.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_FIXED=false).",&
