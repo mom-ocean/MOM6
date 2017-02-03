@@ -484,7 +484,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     ! and the Monin-Obhukov depth.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
-  real :: dPE_debug, mixing_debug
+  real :: dPE_debug, mixing_debug, taux2, tauy2
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
   real, dimension(SZI_(G),SZK_(GV)) :: &
     mech_TKE_k, conv_PErel_k
@@ -599,8 +599,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
 
       U_Star = fluxes%ustar(i,j)
-      U_Star_Mean = sqrt(0.5*sqrt((fluxes%taux(i-1,j)+fluxes%taux(i,j))**2 &
-                    +(fluxes%tauy(i,j-1)+fluxes%tauy(i,j))**2)/GV%rho0)
+      taux2 = 0.
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+      tauy2 = 0.0
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+      U_Star_Mean = sqrt(sqrt(taux2 + tauy2)/GV%rho0)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
