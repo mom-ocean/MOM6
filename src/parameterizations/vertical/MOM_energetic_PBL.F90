@@ -143,7 +143,7 @@ type, public :: energetic_PBL_CS ; private
                              ! "_Neg" and "_Pos" refer to which scale is applied as a
                              ! function of negative or positive local buoyancy.
   real    :: MSTAR_CAP       ! Since MSTAR is restoring undissipated energy to mixing,
-                             ! there must be a cap on how large it can be.  This 
+                             ! there must be a cap on how large it can be.  This
                              ! is definitely a function of latitude (Ekman limit),
                              ! but will be taken as constant for now.
   real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
