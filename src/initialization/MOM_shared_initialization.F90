@@ -89,14 +89,14 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
   ! Local variables
   integer :: i,j
   real :: f1, f2
-  
+
   if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
       (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
     ! The gradient of the Coriolis parameter can not be calculated with this grid.
     dF_dx(:,:) = 0.0 ; dF_dy(:,:) = 0.0
     return
   endif
-  
+
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
     f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
@@ -583,8 +583,8 @@ subroutine reset_face_lengths_named(G, param_file, name)
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
 
-      if ((abs(G%geoLatCu(i,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(i,j)-26.0) < dx_2)) &
-        G%dy_Cu(i,j) = G%mask2dCu(i,j)*5000.0   ! Dardanelles
+      if ((abs(G%geoLatCu(I,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-26.0) < dx_2)) &
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e
@@ -837,11 +837,11 @@ subroutine reset_face_lengths_list(G, param_file)
       found_u = .false.; found_v = .false.
       isu = index(uppercase(line), "U_WIDTH" ); if (isu > 0) found_u = .true.
       isv = index(uppercase(line), "V_WIDTH" ); if (isv > 0) found_v = .true.
-      
+
       ! Store and check the relevant values.
       if (found_u) then
         u_pt = u_pt + 1
-        read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt) 
+        read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt)
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(u_lon(1,u_pt)) > 360.0) .or. (abs(u_lon(2,u_pt)) > 360.0)) &
@@ -895,7 +895,7 @@ subroutine reset_face_lengths_list(G, param_file)
         endif
       endif
     enddo
-    
+
     deallocate(lines)
   endif
 
@@ -909,7 +909,7 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
-  
+
       G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
     enddo
 
@@ -958,7 +958,7 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
   logical :: found_u, found_v
   integer :: isu, isv, icom, verbose
   integer :: last
-  
+
   num_lines = 0
 
   if (iounit <= 0) return
@@ -993,7 +993,7 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
 
 9 call MOM_error(FATAL, "read_face_length_list : "//&
                   "Error while reading file "//trim(filename))
- 
+
 end subroutine read_face_length_list
 ! -----------------------------------------------------------------------------
 
@@ -1056,7 +1056,7 @@ subroutine compute_global_grid_integrals(G)
     call MOM_error(FATAL, "compute_global_grid_integrals: "//&
                     "zero ocean area (check topography?)")
 
-  G%IareaT_global = 1. / G%areaT_global 
+  G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 

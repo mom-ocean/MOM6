@@ -66,7 +66,7 @@ module MOM_grid_initialize
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
 use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
 use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
 use MOM_domains, only : To_North, To_South, To_East, To_West
@@ -191,19 +191,19 @@ subroutine grid_metrics_chksum(parent, G)
 
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dxCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': dxCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dxBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': dxBu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%dyT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': dyT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%dyCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': dyCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%dyCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': dyCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%dyBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': dyBu',G%HI, haloshift=halo)
 
@@ -212,34 +212,34 @@ subroutine grid_metrics_chksum(parent, G)
 
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdxCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': IdxCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdxCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': IdxCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdxBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IdxBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IdyT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': IdyT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do j=jsd,jed ; tempE(I,j) = G%IdyCu(I,j) ; enddo ; enddo
   call uchksum(tempE,trim(parent)//': IdyCu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do J=JsdB,JedB ; tempN(i,J) = G%IdyCv(i,J) ; enddo ; enddo
   call vchksum(tempN,trim(parent)//': IdyCv',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IdyBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IdyBu',G%HI, haloshift=halo)
 
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%areaT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': areaT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%areaBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': areaBu',G%HI, haloshift=halo)
- 
+
   do i=isd,ied ; do j=jsd,jed ; tempH(i,j) = G%IareaT(i,j) ; enddo ; enddo
   call hchksum(tempH,trim(parent)//': IareaT',G%HI, haloshift=halo)
- 
+
   do I=IsdB,IedB ; do J=JsdB,JedB ; tempQ(I,J) = G%IareaBu(I,J) ; enddo ; enddo
   call qchksum(tempQ,trim(parent)//': IareaBu',G%HI, haloshift=halo)
 
@@ -274,7 +274,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
   type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
 !   This subroutine sets the grid metrics from a mosaic file.
-!  
+!
 ! Arguments:
 !  (inout)   G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -304,7 +304,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
   integer :: npei,npej
   integer, dimension(:), allocatable :: exni,exnj
   integer        :: start(4), nread(4)
- 
+
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
   call get_param(param_file, mod, "GRID_FILE", grid_file, &
@@ -442,7 +442,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
                  (tmpT(i2-1,j2) + tmpT(i2,j2-1))
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    areaBu(i,j) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+    areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
                   (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
@@ -542,7 +542,7 @@ subroutine set_grid_metrics_cartesian(G, param_file)
   I1off = G%idg_offset ; J1off = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
- 
+
   PI = 4.0*atan(1.0) ;
 
   call get_param(param_file, mod, "AXIS_UNITS", units_temp, &
@@ -679,11 +679,11 @@ subroutine set_grid_metrics_spherical(G, param_file)
   i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
- 
+
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
   PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
- 
+
   call get_param(param_file, mod, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain.", units="degrees", &
                  fail_if_missing=.true.)
@@ -844,7 +844,7 @@ subroutine set_grid_metrics_mercator(G, param_file)
   GP%njglobal = G%Domain%njglobal
 
   call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
- 
+
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
@@ -972,13 +972,13 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo
 
   do J=JsdB,JedB ; do I=IsdB,IedB
-    G%geoLonBu(i,j) = xq(i,j)*180.0/PI
-    G%geoLatBu(i,j) = yq(i,j)*180.0/PI
-    G%dxBu(i,j) = ds_di(xq(i,j), yq(i,j), GP)
-    G%dyBu(i,j) = ds_dj(xq(i,j), yq(i,j), GP)
+    G%geoLonBu(I,J) = xq(I,J)*180.0/PI
+    G%geoLatBu(I,J) = yq(I,J)*180.0/PI
+    G%dxBu(I,J) = ds_di(xq(I,J), yq(I,J), GP)
+    G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
-    G%areaBu(i,j) = G%dxBu(i,j) * G%dyBu(i,j)
-    G%IareaBu(i,j) = 1.0 / G%areaBu(i,j)
+    G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
+    G%IareaBu(I,J) = 1.0 / G%areaBu(I,J)
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -992,17 +992,17 @@ subroutine set_grid_metrics_mercator(G, param_file)
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
-    G%geoLonCu(i,j) = xu(i,j)*180.0/PI
-    G%geoLatCu(i,j) = yu(i,j)*180.0/PI
-    G%dxCu(i,j) = ds_di(xu(i,j), yu(i,j), GP)
-    G%dyCu(i,j) = ds_dj(xu(i,j), yu(i,j), GP)
+    G%geoLonCu(I,j) = xu(I,j)*180.0/PI
+    G%geoLatCu(I,j) = yu(I,j)*180.0/PI
+    G%dxCu(I,j) = ds_di(xu(I,j), yu(I,j), GP)
+    G%dyCu(I,j) = ds_dj(xu(I,j), yu(I,j), GP)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
-    G%geoLonCv(i,j) = xv(i,j)*180.0/PI
-    G%geoLatCv(i,j) = yv(i,j)*180.0/PI
-    G%dxCv(i,j) = ds_di(xv(i,j), yv(i,j), GP)
-    G%dyCv(i,j) = ds_dj(xv(i,j), yv(i,j), GP)
+    G%geoLonCv(i,J) = xv(i,J)*180.0/PI
+    G%geoLatCv(i,J) = yv(i,J)*180.0/PI
+    G%dxCv(i,J) = ds_di(xv(i,J), yv(i,J), GP)
+    G%dyCv(i,J) = ds_dj(xv(i,J), yv(i,J), GP)
   enddo ; enddo
 
   if (.not.simple_area) then

@@ -1,9 +1,9 @@
-!> This module contains the routines used to set up and use a set of (one for now) 
+!> This module contains the routines used to set up and use a set of (one for now)
 !! dynamically passive tracers. For now, just one passive tracer is injected in
 !! the sponge layer.
 !! Set up and use passive tracers requires the following:
 !! (1) register_ISOMIP_tracer
-!! (2) 
+!! (2)
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
@@ -166,7 +166,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
 end function register_ISOMIP_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output. 
+! and it sets up the tracer output.
 subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                     ALE_sponge_CSp, diag_to_Z_CSp)
 
@@ -225,7 +225,7 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie
-          CS%tr(i,j,k,m) = 0.0 
+          CS%tr(i,j,k,m) = 0.0
         enddo ; enddo ; enddo
       enddo
     endif
@@ -242,14 +242,14 @@ subroutine initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 !        "The pointer to ALEsponge_CSp must be associated if SPONGE is defined.")
 
 !    allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
-    
+
 !    do j=js,je ; do i=is,ie
-!      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then      
+!      if (G%geoLonT(i,j) >= 790.0 .AND. G%geoLonT(i,j) <= 800.0) then
 !        temp(i,j,:) = 1.0
 !      else
 !        temp(i,j,:) = 0.0
 !      endif
-!    enddo ; enddo 
+!    enddo ; enddo
 
       !   do m=1,NTR
 !    do m=1,1
@@ -337,7 +337,7 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real :: melt(SZI_(G),SZJ_(G))  ! melt water (positive for melting 
+  real :: melt(SZI_(G),SZJ_(G))  ! melt water (positive for melting
                                  ! negative for freezing)
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -350,14 +350,14 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
   mmax = MAXVAL(melt(is:ie,js:je))
   call max_across_PEs(mmax)
   !write(*,*)'max melt', mmax
-  ! dye melt water (m=1), dye = 1 if melt=max(melt) 
+  ! dye melt water (m=1), dye = 1 if melt=max(melt)
   do m=1,NTR
      do j=js,je ; do i=is,ie
       if (melt(i,j) > 0.0) then ! melting
          !write(*,*)'i,j,melt,melt/mmax',i,j,melt(i,j),melt(i,j)/mmax
          CS%tr(i,j,1:2,m) = melt(i,j)/mmax ! inject dye in the ML
       else ! freezing
-         CS%tr(i,j,1:2,m) = 0.0 
+         CS%tr(i,j,1:2,m) = 0.0
       endif
     enddo ; enddo
   enddo
@@ -366,7 +366,7 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
           h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;    
+      enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
@@ -418,7 +418,7 @@ subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
   type(ISOMIP_tracer_CS),                     pointer       :: CS !< The control structure returned by a previous call to ISOMIP_register_tracer.
   integer :: i, j, m, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then

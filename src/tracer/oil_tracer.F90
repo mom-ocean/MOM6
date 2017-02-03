@@ -323,10 +323,10 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   do j=G%jsdB+1,G%jed ; do i=G%isdB+1,G%ied
     ! This test for i,j index is specific to a lat/lon (non-rotated grid).
     ! and needs to be generalized to work properly on the tri-polar grid.
-    if (CS%oil_source_longitude<G%geoLonBu(i,j) .and. &
-        CS%oil_source_longitude>=G%geoLonBu(i-1,j) .and. &
-        CS%oil_source_latitude<G%geoLatBu(i,j) .and. &
-        CS%oil_source_latitude>=G%geoLatBu(i,j-1) ) then
+    if (CS%oil_source_longitude<G%geoLonBu(I,J) .and. &
+        CS%oil_source_longitude>=G%geoLonBu(I-1,J) .and. &
+        CS%oil_source_latitude<G%geoLatBu(I,J) .and. &
+        CS%oil_source_latitude>=G%geoLatBu(I,J-1) ) then
       CS%oil_source_i=i
       CS%oil_source_j=j
     endif
@@ -469,7 +469,7 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     do m=1,CS%ntr
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;    
+      enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
@@ -628,7 +628,7 @@ subroutine oil_tracer_surface_state(state, h, G, CS)
 !                 register_oil_tracer.
   integer :: m, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then

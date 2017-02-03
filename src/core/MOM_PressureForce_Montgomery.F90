@@ -48,7 +48,7 @@ contains
 !! Determines the acceleration due to pressure forces in a
 !! non-Boussinesq fluid using the compressibility compensated (if appropriate)
 !! Montgomery-potential form described in Hallberg (Ocean Mod., 2005).
-!! 
+!!
 !! To work, the following fields must be set outside of the usual
 !! ie to ie, je to je range before this subroutine is called:
 !! h[ie+1] and h[je+1] and and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],

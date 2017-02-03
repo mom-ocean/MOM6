@@ -232,7 +232,7 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
     register_boundary_impulse_tracer(HI, GV, param_file,  CS%boundary_impulse_tracer_CSp, &
                         tr_Reg, restart_CS)
-                        
+
 
 end subroutine call_tracer_register
 
@@ -308,7 +308,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
                                 sponge_CSp, diag_to_Z_CSp, tv)
   if (CS%use_boundary_impulse_tracer) &
     call initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS%boundary_impulse_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp, tv)                                
+                                sponge_CSp, diag_to_Z_CSp, tv)
 
 end subroutine tracer_flow_control_init
 
@@ -329,7 +329,7 @@ subroutine get_chl_from_model(Chl_array, G, CS)
     call MOM_error(FATAL, "get_chl_from_model was called in a configuration "// &
              "that is unable to provide a sensible model-based value.\n"// &
              "CS%use_MOM_generic_tracer is false and no other viable options are on.")
-  endif  
+  endif
 #else
   call MOM_error(FATAL, "get_chl_from_model was called in a configuration "// &
            "that is unable to provide a sensible model-based value.\n"// &
@@ -381,7 +381,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
   logical,                               intent(in) :: debug
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
-  
+
 !   This subroutine calls all registered tracer column physics
 ! subroutines.
 
@@ -404,10 +404,10 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
 !  (in)      CS - The control structure returned by a previous call to
 !                 call_tracer_register.
 !  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
-!                             Stored previously in diabatic CS.  
+!                             Stored previously in diabatic CS.
 !  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
-!                             Stored previously in diabatic CS.  
-!  (in)      debug - Calculates checksums     
+!                             Stored previously in diabatic CS.
+!  (in)      debug - Calculates checksums
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
@@ -508,7 +508,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
                                      G, GV, CS%pseudo_salt_tracer_CSp, tv, debug)
     if (CS%use_boundary_impulse_tracer) &
       call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
-                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug)                                     
+                                     G, GV, CS%boundary_impulse_tracer_CSp, tv, debug)
 
 
   endif
@@ -613,7 +613,7 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
                        set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
     nn=ns_tot-ns+1
     nn=MOM_generic_tracer_min_max(nn, got_min_max, global_min,  global_max, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax ,&
-                                     G, CS%MOM_generic_tracer_CSp,names, units)   
+                                     G, CS%MOM_generic_tracer_CSp,names, units)
 
   endif
 #endif
@@ -629,14 +629,14 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
                          names, units, stock_index)
     call store_stocks("boundary_impulse_tracer", ns, names, units, values, index, &
            stock_values, set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
-  endif  
-  
+  endif
+
   if (ns_tot == 0) stock_values(1) = 0.0
 
   if (present(num_stocks)) num_stocks = ns_tot
 
 end subroutine call_tracer_stocks
-  
+
 subroutine store_stocks(pkg_name, ns, names, units, values, index, stock_values, &
                         set_pkg_name, max_ns, ns_tot, stock_names, stock_units)
   character(len=*),                         intent(in)    :: pkg_name
@@ -670,7 +670,7 @@ subroutine store_stocks(pkg_name, ns, names, units, values, index, stock_values,
   endif
 
   if (ns_tot+ns > max_ns) then
-    write(ns_text,'(i8)') ns_tot+ns ; write(max_text,'(i8)') max_ns 
+    write(ns_text,'(i8)') ns_tot+ns ; write(max_text,'(i8)') max_ns
     call MOM_error(FATAL,"Attempted to return more tracer stock values (at least "//&
       trim(adjustl(ns_text))//") than the size "//trim(adjustl(max_text))//&
       "of the smallest value, name, or units array.")

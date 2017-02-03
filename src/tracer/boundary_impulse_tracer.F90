@@ -2,7 +2,6 @@
 module boundary_impulse_tracer
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,     only : hchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
@@ -57,18 +56,18 @@ type, public :: boundary_impulse_tracer_CS ; private
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   logical :: mask_tracers  ! If true, boundary_impulse is masked out in massless layers.
-  logical :: tracers_may_reinit  ! If true, boundary_impulse can be initialized if 
+  logical :: tracers_may_reinit  ! If true, boundary_impulse can be initialized if
                                  ! not found in restart file
   integer, dimension(NTR_MAX) :: &
     ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
     id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1, &
     id_tr_dfx = -1, id_tr_dfy = -1
-    
+
   integer :: nkml ! Number of layers in mixed layer
   real, dimension(NTR_MAX)  :: land_val = -1.0
   real :: kw_eff ! An effective piston velocity used to flux tracer out at the surface
-  real :: remaining_source_time ! How much longer (same units as the timestep) to 
+  real :: remaining_source_time ! How much longer (same units as the timestep) to
                                 ! inject the tracer at the surface
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
@@ -125,10 +124,10 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
                  "into the mixed layer. After this time has elapsed, the\n"//&
                  "surface becomes a sink for the boundary impulse tracer.", &
                  default=31536000.0)
-  
+
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
-  
+
   CS%nkml = max(GV%nkml,1)
 
   do m=1,CS%ntr
@@ -219,7 +218,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
       enddo ; enddo ; enddo
     endif
   enddo ! Tracer loop
-  
+
   if (associated(OBC)) then
   ! All tracers but the first have 0 concentration in their inflows. As this
   ! is the default value, the following calls are unnecessary.
@@ -280,7 +279,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   logical,                            intent(in) :: debug
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
-  
+
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -302,10 +301,10 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 !                 register_boundary_impulse_tracer.
 !  (in)      tv - Thermodynamic structure with T and S
 !  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
-!                             Stored previously in diabatic CS.  
+!                             Stored previously in diabatic CS.
 !  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
-!                             Stored previously in diabatic CS.  
-!  (in)      debug - Calculates checksums   
+!                             Stored previously in diabatic CS.
+!  (in)      debug - Calculates checksums
 !
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -316,9 +315,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
   real, allocatable :: local_tr(:,:,:)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke  
-  
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
   if (.not.associated(CS)) return
   if (CS%ntr < 1) return
 
@@ -333,7 +332,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   else
     call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,1), G, GV)
   endif
-  
+
   ! Set surface conditions
   do m=1,1
     if(CS%remaining_source_time>0.0) then
@@ -346,9 +345,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
         CS%tr(i,j,k,m) = 0.0
       enddo ; enddo ; enddo
     endif
-    
+
   enddo
-          
+
   allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
   do m=1,1
     if (CS%id_tracer(m)>0) then
@@ -430,8 +429,8 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
                            (G%mask2dT(i,j) * G%areaT(i,j) * h(i,j,k))
     enddo ; enddo ; enddo
     stocks(m) = GV%H_to_kg_m2 * stocks(m)
-  enddo  
-  
+  enddo
+
   boundary_impulse_stock = CS%ntr
 
 end function boundary_impulse_stock
@@ -452,7 +451,7 @@ subroutine boundary_impulse_tracer_surface_state(state, h, G, CS)
 !                 register_boundary_impulse_tracer.
   integer :: m, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
@@ -491,30 +490,30 @@ end subroutine boundary_impulse_tracer_end
 !! contact with the atmosphere) of a water parcel is best characterized as a distribution of ages
 !! because water parcels leaving the surface arrive at a particular interior point at different times.
 !! The more commonly used ideal age tracer is the first moment of the TTD, equivalently referred to as the
-!! mean age. 
+!! mean age.
 !!
 !! A boundary impulse response (BIR) is a passive tracer whose surface boundary condition is a rectangle
-!! function with width $\Delta t$. In the case of unsteady flow, multiple BIRs, initiated at different 
+!! function with width $\Delta t$. In the case of unsteady flow, multiple BIRs, initiated at different
 !! times in the model can be used to infer the transit time distribution or Green's function between
 !! the oceanic surface and interior. In the case of steady or cyclostationary flow, a single BIR is
 !! sufficient.
 !!
 !! In the References section, both the theoretical discussion of TTDs and BIRs are listed along with
 !! modeling studies which have this used framework in scientific investigations
-!! 
+!!
 !! \section Run-time parameters
 !! -DO_BOUNDARY_IMPULSE_TRACER: Enables the boundary impulse tracer model
 !! -IMPULSE_SOURCE_TIME: Length of time that the surface layer acts as a source of the BIR tracer
 !!
 !! \section References
 !! \subsection TTD and BIR Theory
-!!  -Holzer, M., and T.M. Hall, 2000: Transit-time and tracer-age distributions in geophysical flows. 
+!!  -Holzer, M., and T.M. Hall, 2000: Transit-time and tracer-age distributions in geophysical flows.
 !!    J. Atmos. Sci., 57, 3539-3558, doi:10.1175/1520-0469(2000)057<3539:TTATAD>2.0.CO;2.
 !!  -T.W.N. Haine, H. Zhang, D.W. Waugh, M. Holzer, On transit-time distributions in unsteady circulation
 !!    models, Ocean Modelling, Volume 21, Issues 1–2, 2008, Pages 35-45, ISSN 1463-5003
 !!    http://dx.doi.org/10.1016/j.ocemod.2007.11.004.
 !! \subsection BIR Modelling applications
-!!  -Peacock, S., and M. Maltrud (2006), Transit-time distributions in a global ocean model, 
+!!  -Peacock, S., and M. Maltrud (2006), Transit-time distributions in a global ocean model,
 !!    J. Phys. Oceanogr., 36(3), 474–495, doi:10.1175/JPO2860.1.
 !!  -Maltrud, M., Bryan, F. & Peacock, Boundary impulse response functions in a century-long eddying global
 !!  ocean simulation, S. Environ Fluid Mech (2010) 10: 275. doi:10.1007/s10652-009-9154-3

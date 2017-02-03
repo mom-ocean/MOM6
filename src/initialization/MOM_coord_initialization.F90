@@ -3,7 +3,7 @@ module MOM_coord_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : chksum
+use MOM_debugging, only : chksum
 use MOM_EOS, only : calculate_density, EOS_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
@@ -357,7 +357,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
   call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_Dense, &
                  "The initial densest salinities when COORD_CONFIG \n"//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
- 
+
   call get_param(param_file, mod, "TS_RANGE_RESOLN_RATIO", res_rat, &
                  "The ratio of density space resolution in the densest \n"//&
                  "part of the range to that in the lightest part of the \n"//&
@@ -456,9 +456,9 @@ subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
 
-! This subroutine sets the layer densities (Rlay) and the interface  
+! This subroutine sets the layer densities (Rlay) and the interface
 ! reduced gravities (g) according to a linear profile starting at a
-! reference surface layer density and spanning a range of densities 
+! reference surface layer density and spanning a range of densities
 ! to the bottom defined by the parameter RLAY_RANGE
 ! (defaulting to 2.0 if not defined)
   character(len=40)  :: mod = "set_coord_linear" ! This subroutine
@@ -486,7 +486,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
   enddo
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
-  do k=2,nz 
+  do k=2,nz
      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 

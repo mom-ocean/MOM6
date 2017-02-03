@@ -337,7 +337,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
     if (CS%allow_flux_adjustments) then
-      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)	 
+      call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
       call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
     endif
 
@@ -769,19 +769,19 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
 
   overrode_h = .false.
   call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
- 
-  if (overrode_h) then 
+
+  if (overrode_h) then
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       fluxes%heat_added(i,j) = fluxes%heat_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
   endif
- 
+
   call pass_var(fluxes%heat_added, G%Domain)
- 
+
   overrode_h = .false.
   call data_override('OCN', 'sflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
- 
-  if (overrode_h) then 
+
+  if (overrode_h) then
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
@@ -791,16 +791,16 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   overrode_h = .false.
 
   call data_override('OCN', 'prcme_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
- 
-  if (overrode_h) then 
+
+  if (overrode_h) then
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       fluxes%vprec(i,j) = fluxes%vprec(i,j) + temp_at_h(i,j)* G%mask2dT(i,j)
     enddo; enddo
   endif
- 
+
   call pass_var(fluxes%vprec, G%Domain)
- 
- 
+
+
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
   ! Either reads data or leaves contents unchanged
   overrode_x = .false. ; overrode_y = .false.
@@ -825,12 +825,12 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
       tempx_at_h(i,j) = cosA * zonal_tau - sinA * merid_tau
       tempy_at_h(i,j) = sinA * zonal_tau + cosA * merid_tau
     enddo ; enddo
-  
+
     ! Average to C-grid locations
     do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
       fluxes%taux(I,j) = fluxes%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
     enddo ; enddo
-  
+
     do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
       fluxes%tauy(i,J) = fluxes%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
     enddo ; enddo
