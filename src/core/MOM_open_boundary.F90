@@ -120,8 +120,8 @@ type, public :: ocean_OBC_type
                                                       !! in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points
                                                       !! in the global domain use specified BCs.
-  logical :: user_BCs_set_globally = .false.          !< True if any OBC_CONFIG or OBC_VALUES_CONFIG
-                                                      !! set for input from user directory.
+  logical :: user_BCs_set_globally = .false.          !< True if any OBC_USER_CONFIG is set
+                                                      !! for input from user directory.
   logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
@@ -204,8 +204,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   integer :: l ! For looping over segments
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
-  character(len=200) :: config1          ! String for OBC_CONFIG
-  character(len=200) :: config2          ! String for OBC_VALUES_CONFIG
+  character(len=200) :: config1          ! String for OBC_USER_CONFIG
 
   allocate(OBC)
 
@@ -217,16 +216,13 @@ subroutine open_boundary_config(G, param_file, OBC)
   call get_param(param_file, mod, "G_EARTH", OBC%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "OBC_CONFIG", config1, &
+  call get_param(param_file, mod, "OBC_USER_CONFIG", config1, &
                  "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n", default="None", do_not_log=.true.)
-  call get_param(param_file, mod, "OBC_VALUES_CONFIG", config2, &
-                 "A string that sets how the open boundary values are \n"//&
-                 " configured: \n", default="None", do_not_log=.true.)
+                 " configured: \n", default="none", do_not_log=.true.)
   call get_param(param_file, mod, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
-  if (config1 .ne. "None" .or. config2 .ne. "None") OBC%user_BCs_set_globally = .true.
+  if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
