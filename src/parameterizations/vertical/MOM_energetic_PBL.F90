@@ -739,7 +739,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if ((MLD_over_Stab) .ge. CS%MSTAR_XINT) then
             !Within linear regime
             MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab-CS%MSTAR_XINT)+CS%MSTAR_AT_XINT
-            MSTAR_mix = min(CS%MSTAR_CAP,MSTAR_MIX)
+            if (CS%MSTAR_CAP>=0.) MSTAR_mix = min(CS%MSTAR_CAP,MSTAR_MIX)
           else
             !Within hypterbolic decay regime
             MSTAR_mix = (MSTAR_B*(MLD_over_Stab-CS%MSTAR_XINT)+MSTAR_A)**(MSTAR_N)
@@ -1940,9 +1940,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "and the MLD depth which determines the shape of the mixing length.",&
                  "units=nondim", default=2.0)
   call get_param(param_file, mod, "MSTAR_CAP", CS%mstar_cap, &
-                 "Maximum value of mstar allowed in model \n"//&
+                 "Maximum value of mstar allowed in model if non-negative\n"//&
                  "(used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=10.0)
+                 "units=nondim", default=-1.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_FIXED=false).",&
