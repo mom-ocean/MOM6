@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_io, only : EAST_FACE, NORTH_FACE, CORNER
+use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_io, only : slasher, read_data, field_size
 use MOM_obsolete_params, only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions, only : extract_word, remove_spaces
@@ -1166,17 +1166,21 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          elseif (segment%radiation) then
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
+           if (segment%oblique) then
+             if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
+               dhdy = segment%grad_normal(J-1,1,k)
+             elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
+               dhdy = 0.0
+             else
+               dhdy = segment%grad_normal(J,1,k)
+             endif
+           endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            if (dhdx == 0.0) dhdx=eps  ! avoid segv
            Cx = min(dhdt/dhdx,rx_max) ! default to normal radiation
            Cy = 0.0
            cff = max(dhdx*dhdx,eps)
            if (segment%oblique) then
-             if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
-               dhdy = segment%grad_normal(J-1,1,k)
-             else
-               dhdy = segment%grad_normal(J,1,k)
-             endif
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
              if (dhdy==0.) dhdy=eps ! avoid segv
              Cy = min(cff,max(dhdt/dhdy,-cff))
@@ -1209,17 +1213,21 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          elseif (segment%radiation) then
            dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
            dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
+           if (segment%oblique) then
+             if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
+               dhdy = segment%grad_normal(J-1,1,k)
+             elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
+               dhdy = 0.0
+             else
+               dhdy = segment%grad_normal(J,1,k)
+             endif
+           endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            if (dhdx == 0.0) dhdx=eps  ! avoid segv
            Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
            Cy = 0.
            cff = max(dhdx*dhdx, eps)
            if (segment%oblique) then
-             if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
-               dhdy = segment%grad_normal(J-1,1,k)
-             else
-               dhdy = segment%grad_normal(J,1,k)
-             endif
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
              if (dhdy==0.) dhdy=eps ! avoid segv
              Cy = min(cff,max(dhdt/dhdy,-cff))
@@ -1252,17 +1260,21 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          elseif (segment%radiation) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
+           if (segment%oblique) then
+             if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
+               dhdx = segment%grad_normal(I-1,1,k)
+             elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
+               dhdx = 0.0
+             else
+               dhdx = segment%grad_normal(I,1,k)
+             endif
+           endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
            if (dhdy == 0.0) dhdy=eps  ! avoid segv
            Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
            Cx = 0
            cff = max(dhdy*dhdy, eps)
            if (segment%oblique) then
-             if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
-               dhdx = segment%grad_normal(I-1,1,k)
-             else
-               dhdx = segment%grad_normal(I,1,k)
-             endif
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
              if (dhdx==0.) dhdx=eps ! avoid segv
              Cx = min(cff,max(dhdt/dhdx,-cff))
@@ -1296,17 +1308,21 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
          elseif (segment%radiation) then
            dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
            dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
+           if (segment%oblique) then
+             if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
+               dhdx = segment%grad_normal(I-1,1,k)
+             elseif (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) == 0.0) then
+               dhdx = 0.0
+             else
+               dhdx = segment%grad_normal(I,1,k)
+             endif
+           endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
            if (dhdy == 0.0) dhdy=eps  ! avoid segv
            Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
            Cx = 0
            cff = max(dhdy*dhdy, eps)
            if (segment%oblique) then
-             if (dhdt*(segment%grad_normal(I,1,k) + segment%grad_normal(I-1,1,k)) > 0.0) then
-               dhdx = segment%grad_normal(I-1,1,k)
-             else
-               dhdx = segment%grad_normal(I,1,k)
-             endif
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
              if (dhdx==0.) dhdx=eps ! avoid segv
              Cx = min(cff,max(dhdt/dhdx,-cff))
@@ -1347,104 +1363,47 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
   if (segment%is_E_or_W) then
 
     if (.not.ASSOCIATED(segment%grad_normal)) then
-      allocate(segment%grad_normal(segment%HI%JscB-1:segment%HI%JecB+1,2,G%ke))
+      allocate(segment%grad_normal(segment%HI%JscB:segment%HI%JecB,2,G%ke))
     endif
 
     if (segment%direction == OBC_DIRECTION_E) then
       I=segment%HI%iscB
       do k=1,G%ke
-        do J=segment%HI%JscB-1,segment%HI%JecB+1
+        do J=segment%HI%JscB,segment%HI%JecB
           segment%grad_normal(J,1,k) = uvel(I-1,j+1,k)-uvel(I-1,j,k)
           segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
         enddo
-! What's all this?
-!       if (segment%HI%jsc+G%jdg_offset .eq. segment%HI%jsg) then
-!         J=segment%HI%jsc
-!         segment%grad_normal(J,2,k)=segment%grad_normal(J,1,k)
-!         segment%grad_normal(J,3,k)=segment%grad_normal(J,4,k)
-!         segment%grad_normal(J-1,1,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J-1,2,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J-1,3,k)=segment%grad_normal(J,3,k)
-!         segment%grad_normal(J-1,4,k)=segment%grad_normal(J,3,k)
-!       endif
-!       if (segment%HI%jec+G%jdg_offset .eq. segment%HI%jeg) then
-!         J=segment%HI%jec
-!         segment%grad_normal(J,1,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J,4,k)=segment%grad_normal(J,3,k)
-!       endif
       enddo
     else ! western segment
       I=segment%HI%iscB
       do k=1,G%ke
-        do J=segment%HI%JscB-1,segment%HI%JecB+1
+        do J=segment%HI%JscB,segment%HI%JecB
           segment%grad_normal(J,1,k) = uvel(I+1,j+1,k)-uvel(I+1,j,k)
           segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
         enddo
-!       if (segment%HI%jsc+G%jdg_offset .eq. segment%HI%jsg) then
-!         J=segment%HI%jsc
-!         segment%grad_normal(J,2,k)=segment%grad_normal(J,1,k)
-!         segment%grad_normal(J,3,k)=segment%grad_normal(J,4,k)
-!         segment%grad_normal(J-1,1,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J-1,2,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J-1,3,k)=segment%grad_normal(J,3,k)
-!         segment%grad_normal(J-1,4,k)=segment%grad_normal(J,3,k)
-!       endif
-!       if (segment%HI%jec+G%jdg_offset .eq. segment%HI%jeg) then
-!         J=segment%HI%jec
-!         segment%grad_normal(J,1,k)=segment%grad_normal(J,2,k)
-!         segment%grad_normal(J,4,k)=segment%grad_normal(J,3,k)
-!       endif
       enddo
     endif
   else if (segment%is_N_or_S) then
 
     if (.not.ASSOCIATED(segment%grad_normal)) then
-      allocate(segment%grad_normal(segment%HI%IscB-1:segment%HI%IecB+1,2,G%ke))
+      allocate(segment%grad_normal(segment%HI%IscB:segment%HI%IecB,2,G%ke))
     endif
 
     if (segment%direction == OBC_DIRECTION_N) then
       J=segment%HI%jscB
       do k=1,G%ke
-        do I=segment%HI%IscB-1,segment%HI%IecB+1
+        do I=segment%HI%IscB,segment%HI%IecB
           segment%grad_normal(I,1,k) = vvel(i+1,J-1,k)-vvel(i,J-1,k)
           segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
         enddo
-!       if (segment%HI%isc+G%idg_offset .eq. segment%HI%isg) then
-!         I=segment%HI%isc
-!         segment%grad_normal(I,2,k)=segment%grad_normal(I,1,k)
-!         segment%grad_normal(I,3,k)=segment%grad_normal(I,4,k)
-!         segment%grad_normal(I-1,1,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I-1,2,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I-1,3,k)=segment%grad_normal(I,3,k)
-!         segment%grad_normal(I-1,4,k)=segment%grad_normal(I,3,k)
-!       endif
-!       if (segment%HI%iec+G%idg_offset .eq. segment%HI%ieg) then
-!         I=segment%HI%iec
-!         segment%grad_normal(I,1,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I,4,k)=segment%grad_normal(I,3,k)
-!       endif
       enddo
     else ! south segment
       J=segment%HI%jscB
       do k=1,G%ke
-        do I=segment%HI%IscB-1,segment%HI%IecB+1
+        do I=segment%HI%IscB,segment%HI%IecB
           segment%grad_normal(I,1,k) = vvel(i+1,J+1,k)-vvel(i,J+1,k)
           segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
         enddo
-!       if (segment%HI%isc+G%idg_offset .eq. segment%HI%isg) then
-!         I=segment%HI%isc
-!         segment%grad_normal(I,2,k)=segment%grad_normal(I,1,k)
-!         segment%grad_normal(I,3,k)=segment%grad_normal(I,4,k)
-!         segment%grad_normal(I-1,1,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I-1,2,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I-1,3,k)=segment%grad_normal(I,3,k)
-!         segment%grad_normal(I-1,4,k)=segment%grad_normal(I,3,k)
-!       endif
-!       if (segment%HI%iec+G%idg_offset .eq. segment%HI%ieg) then
-!         I=segment%HI%iec
-!         segment%grad_normal(I,1,k)=segment%grad_normal(I,2,k)
-!         segment%grad_normal(I,4,k)=segment%grad_normal(I,3,k)
-!       endif
       enddo
     endif
   endif
