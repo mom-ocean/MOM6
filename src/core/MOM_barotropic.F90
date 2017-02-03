@@ -2366,7 +2366,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: cff, Cx, Cy, tau
   real :: dhdt, dhdx, dhdy
   integer :: i, j, is, ie, js, je
-  real, dimension(SZI_(G),SZJ_(G)) :: grad
+  real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real, parameter :: eps = 1.0e-20
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
