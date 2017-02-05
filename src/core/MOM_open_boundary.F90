@@ -1182,7 +1182,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              Cy = min(cff,max(dhdt/dhdy,-cff))
            endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
-              (max(Cy,0.0)*segment%grad_normal(J-1,2,k) - min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
+              max(Cy,0.0)*segment%grad_normal(J-1,2,k) - min(Cy,0.0)*segment%grad_normal(J,2,k)) / (cff + Cx)
          endif
          if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
@@ -1229,7 +1229,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              Cy = min(cff,max(dhdt/dhdy,-cff))
            endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
-             (max(Cy,0.0)*segment%grad_normal(J-1,2,k) - min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
+             max(Cy,0.0)*segment%grad_normal(J-1,2,k) - min(Cy,0.0)*segment%grad_normal(J,2,k)) / (cff + Cx)
          endif
          if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
@@ -1276,7 +1276,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              Cx = min(cff,max(dhdt/dhdx,-cff))
            endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
-              (max(Cx,0.0)*segment%grad_normal(I-1,2,k) - min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
+              max(Cx,0.0)*segment%grad_normal(I-1,2,k) - min(Cx,0.0)*segment%grad_normal(I,2,k)) / (cff + Cy)
          endif
          if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
@@ -1324,7 +1324,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
              Cx = min(cff,max(dhdt/dhdx,-cff))
            endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
-              (max(Cx,0.0)*segment%grad_normal(I-1,2,k) - min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
+              max(Cx,0.0)*segment%grad_normal(I-1,2,k) - min(Cx,0.0)*segment%grad_normal(I,2,k)) / (cff + Cy)
          endif
          if ((segment%radiation .or. segment%legacy) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
