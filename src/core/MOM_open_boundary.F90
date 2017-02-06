@@ -1673,7 +1673,7 @@ end function lookup_seg_field
 
 subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
 
-  type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
+  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
   type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
