@@ -2402,6 +2402,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
               dhdy = grad(I-1,J-1)
+            elseif (dhdt*(grad(I-1,J) + grad(I-1,J-1)) == 0.0) then
+              dhdy = 0.0
             else
               dhdy = grad(I-1,J)
             endif
@@ -2446,6 +2448,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
               dhdy = grad(I+1,J-1)
+            elseif (dhdt*(grad(I+1,J) + grad(I+1,J-1)) == 0.0) then
+              dhdy = 0.0
             else
               dhdy = grad(I+1,J)
             endif
@@ -2511,6 +2515,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
               dhdx = grad(I-1,J-1)
+            elseif (dhdt*(grad(I,J-1) + grad(I-1,J-1)) == 0.0) then
+              dhdx = 0.0
             else
               dhdx = grad(I,J-1)
             endif
@@ -2556,6 +2562,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
               dhdx = grad(I-1,J+1)
+            elseif (dhdt*(grad(I,J+1) + grad(I-1,J+1)) == 0.0) then
+              dhdx = 0.0
             else
               dhdx = grad(I,J+1)
             endif
