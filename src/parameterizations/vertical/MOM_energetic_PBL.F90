@@ -151,10 +151,15 @@ type, public :: energetic_PBL_CS ; private
                              ! depth.
   real    :: MSTAR_XINT      ! Value where MSTAR function transitions from linear
                              ! to decay toward MSTAR->0 at fully developed Ekman depth.
+  real    :: MSTAR_XINT_UP   ! Similar but for transition to asymptotic cap.
   real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
                              ! changes to linear transition.
   real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
   real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
+  real :: MSTAR_N = -2.      ! Exponent in decay at negative and positive limits of MLD_over_STAB
+  real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
+  real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
+                             !  ends of the linear fit within the well constrained region.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
   logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
@@ -479,10 +484,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: C_MO = 1. ! Constant in STAB_SCALE for Monin-Obukhov
   real :: C_EK = 2. ! Constant in STAB_SCALE for Ekman length
   real :: MLD_over_STAB ! Mixing layer depth divided by STAB_SCALE
-  real :: MSTAR_N = -2. ! Exponent in hyperolic decay at negative values of MLD_over_STAB
-  real :: MSTAR_A  ! MSTAR_A and MSTAR_B are coefficients in hyperbolic decay which
-  real :: MSTAR_B  !  are computed to match the value and slope of the linear fit at the
-                   !  value of mld_over_stab where the transition is set.
   real :: MSTAR_MIX! The value of mstar (Proportionality of TKE to drive mixing to ustar
                     ! cubed) which is computed as a function of latitude, boundary layer depth,
                     ! and the Monin-Obhukov depth.
@@ -725,17 +726,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (.not.CS%Use_Mstar_Fixed) then
           ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
           ! First solve for the TKE to PE length scale
-          MLD_over_Stab = MLD_guess / Stab_Scale
-          !Fitting coefficients for hyperbolic decay as MLD -> Ekman depth
-          MSTAR_A = CS%MSTAR_AT_XINT**(1./MSTAR_N)
-          MSTAR_B = CS%MSTAR_SLOPE / (MSTAR_N*MSTAR_A**(MSTAR_N-1.))
-          if ((MLD_over_Stab) .ge. CS%MSTAR_XINT) then
-            !Within linear regime
-            MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab-CS%MSTAR_XINT)+CS%MSTAR_AT_XINT
-            MSTAR_mix = min(CS%MSTAR_CAP,MSTAR_MIX)
+          MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
+          if ((MLD_over_Stab) .le. 0.0) then
+             !Asymptote to 0 as MLD_over_Stab -> -infinity
+             MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
+          elseif ((MLD_over_Stab) .ge.CS%MSTAR_XINT_UP ) then
+             !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
+             MSTAR_mix = CS%MSTAR_CAP - (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)+CS%MSTAR_A2)**(CS%MSTAR_N)
           else
-            !Within hypterbolic decay regime
-            MSTAR_mix = (MSTAR_B*(MLD_over_Stab-CS%MSTAR_XINT)+MSTAR_A)**(MSTAR_N)
+            !Within linear regime
+            MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
           endif
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_V*GV%Rho0)*((U_Star**3))
@@ -2130,6 +2130,18 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%Enhance_V, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%MSTAR_MIX, isd, ied, jsd, jed)
+
+
+  !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
+  CS%MSTAR_A = CS%MSTAR_AT_XINT**(1./CS%MSTAR_N)
+  CS%MSTAR_B = CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A**(CS%MSTAR_N-1.))
+  !Fitting coefficients to asymptote toward MSTAR_CAP
+  !*Fixed to begin asymptote at MSTAR_CAP-0.5 toward MSTAR_CAP
+  CS%MSTAR_A2 = 0.5**(1./CS%MSTAR_N)
+  CS%MSTAR_B2 = -CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A2**(CS%MSTAR_N-1))
+  !Compute value of X (referenced to MSTAR_XINT) where transition
+  ! to asymptotic regime based on value of X where MSTAR=MSTAR_CAP-0.5
+  CS%MSTAR_XINT_UP = (CS%MSTAR_CAP-0.5-CS%MSTAR_AT_XINT)/CS%MSTAR_SLOPE
 
 end subroutine energetic_PBL_init
 
