@@ -344,7 +344,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                         ! in roundoff and can be neglected, in m.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m
+  integer :: i, j, m, i_up
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
@@ -423,43 +423,38 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     if (usePPM) then
       do m=1,ntr ; do I=is-1,ie
+        ! centre cell depending on upstream direction
         if (uhh(I) >= 0.0) then
-          ! Implementation of PPM-H3
-          Tp = Tr(m)%t(i+1,j,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i-1,j,k)
-          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
-          dA = aR - aL ; mA = 0.5*( aR + aL )
-          if (G%mask2dCu(I,j)*G%mask2dCu(I-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
-          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-            aL = 3.*Tc - 2.*aR
-          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-            aR = 3.*Tc - 2.*aL
-          endif
-          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
-          flux_x(I,m) = uhh(I)*( aR - 0.5 * CFL(I) * ( &
-                  ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+          i_up = i
         else
-          ! Implementation of PPM-H3
-          Tp = Tr(m)%t(i+2,j,k) ; Tc = Tr(m)%t(i+1,j,k) ; Tm = Tr(m)%t(i,j,k)
-          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
-          dA = aR - aL ; mA = 0.5*( aR + aL )
-          dA = aR - aL ; mA = 0.5*( aR + aL )
-          if (G%mask2dCu(I,j)*G%mask2dCu(I+1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
-          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-            aL = 3.*Tc - 2.*aR
-          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-            aR = 3.*Tc - 2.*aL
-          endif
-          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          i_up = i+1
+        endif
+
+        ! Implementation of PPM-H3
+        Tp = Tr(m)%t(i_up+1,j,k) ; Tc = Tr(m)%t(i_up,j,k) ; Tm = Tr(m)%t(i_up-1,j,k)
+
+        aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+        aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+        aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+        aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+
+        dA = aR - aL ; mA = 0.5*( aR + aL )
+        if (G%mask2dCu(I_up,j)*G%mask2dCu(I_up-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+           aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+        elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+           aL = 3.*Tc - 2.*aR
+        elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+           aR = 3.*Tc - 2.*aL
+        endif
+
+        a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+
+        if (uhh(I) >= 0.0) then
+          flux_x(I,m) = uhh(I)*( aR - 0.5 * CFL(I) * ( &
+               ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        else
           flux_x(I,m) = uhh(I)*( aL + 0.5 * CFL(I) * ( &
-                  ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
+               ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
         endif
       enddo ; enddo
     else ! PLM
@@ -608,7 +603,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m
+  integer :: i, j, m, j_up
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
@@ -687,42 +682,38 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
     if (usePPM) then
       do m=1,ntr ; do i=is,ie
+        ! centre cell depending on upstream direction
         if (vhh(i,J) >= 0.0) then
-          ! Implementation of PPM-H3
-          Tp = Tr(m)%t(i,j+1,k) ; Tc = Tr(m)%t(i,j,k) ; Tm = Tr(m)%t(i,j-1,k)
-          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
-          dA = aR - aL ; mA = 0.5*( aR + aL )
-          if (G%mask2dCv(i,J)*G%mask2dCv(i,J-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
-          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-            aL = 3.*Tc - 2.*aR
-          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-            aR = 3.*Tc - 2.*aL
-          endif
-          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
-          flux_y(i,m,J) = vhh(i,J)*( aR - 0.5 * CFL(i) * ( &
-                ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+          j_up = j
         else
-          ! Implementation of PPM-H3
-          Tp = Tr(m)%t(i,j+2,k) ; Tc = Tr(m)%t(i,j+1,k) ; Tm = Tr(m)%t(i,j,k)
-          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
-          dA = aR - aL ; mA = 0.5*( aR + aL )
-          if (G%mask2dCv(i,J)*G%mask2dCv(i,J+1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
-            aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
-          elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-            aL = 3.*Tc - 2.*aR
-          elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-            aR = 3.*Tc - 2.*aL
-          endif
-          a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+          j_up = j + 1
+        endif
+
+        ! Implementation of PPM-H3
+        Tp = Tr(m)%t(i,j_up+1,k) ; Tc = Tr(m)%t(i,j_up,k) ; Tm = Tr(m)%t(i,j_up-1,k)
+
+        aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+        aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+        aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+        aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+
+        dA = aR - aL ; mA = 0.5*( aR + aL )
+        if (G%mask2dCv(i,J_up)*G%mask2dCv(i,J_up-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
+          aL = Tc ; aR = Tc ! PCM for local extremum and bounadry cells
+        elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
+          aL = 3.*Tc - 2.*aR
+        elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
+          aR = 3.*Tc - 2.*aL
+        endif
+
+        a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
+
+        if (vhh(i,J) >= 0.0) then
+          flux_y(i,m,J) = vhh(i,J)*( aR - 0.5 * CFL(i) * ( &
+               ( aR - aL ) - a6 * ( 1. - 2./3. * CFL(I) ) ) )
+        else
           flux_y(i,m,J) = vhh(i,J)*( aL + 0.5 * CFL(i) * ( &
-                ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
+               ( aR - aL ) + a6 * ( 1. - 2./3. * CFL(I) ) ) )
         endif
       enddo ; enddo
     else ! PLM
