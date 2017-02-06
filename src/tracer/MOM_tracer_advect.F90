@@ -32,6 +32,7 @@ type, public :: tracer_advect_CS ; private
                                    !< timing of diagnostic output.
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
+  logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
   type(group_pass_type) :: pass_uhr_vhr_t_hprev ! For group pass
 end type tracer_advect_CS
 
@@ -249,11 +250,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
         ! First, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv-stencil, jev+stencil, k, G, GV, CS%usePPM)
+                      isv, iev, jsv-stencil, jev+stencil, k, G, GV, CS%usePPM, CS%useHuynh)
 
         !  Next, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM, CS%useHuynh)
 
         domore_k(k) = 0
         do j=jsv-stencil,jev+stencil ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -263,11 +264,11 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
 
         ! First, advect meridionally.
         call advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                      isv-stencil, iev+stencil, jsv, jev, k, G, GV, CS%usePPM)
+                      isv-stencil, iev+stencil, jsv, jev, k, G, GV, CS%usePPM, CS%useHuynh)
 
         ! Next, advect zonally.
         call advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                      isv, iev, jsv, jev, k, G, GV, CS%usePPM)
+                      isv, iev, jsv, jev, k, G, GV, CS%usePPM, CS%useHuynh)
 
         domore_k(k) = 0
         do j=jsv,jev ; if (domore_u(j,k)) domore_k(k) = 1 ; enddo
@@ -310,7 +311,7 @@ end subroutine advect_tracer
 !> This subroutine does 1-d flux-form advection in the zonal direction using
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
-                    is, ie, js, je, k, G, GV, usePPM)
+                    is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
@@ -321,7 +322,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
   real,                                      intent(in)    :: Idt
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM
+  logical,                                   intent(in)    :: usePPM, useHuynh
 
   real, dimension(SZIB_(G),ntr) :: &
     slope_x, &          ! The concentration slope per grid point in units of
@@ -348,7 +349,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
-  usePLMslope = .not. usePPM
+  usePLMslope = .not. (usePPM .and. useHuynh)
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
@@ -433,10 +434,15 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         ! Implementation of PPM-H3
         Tp = Tr(m)%t(i_up+1,j,k) ; Tc = Tr(m)%t(i_up,j,k) ; Tm = Tr(m)%t(i_up-1,j,k)
 
-        aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-        aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-        aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-        aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+        if (useHuynh) then
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+        else
+          aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)))
+          aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)))
+        endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
         if (G%mask2dCu(I_up,j)*G%mask2dCu(I_up-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
@@ -568,7 +574,7 @@ end subroutine advect_x
 !> This subroutine does 1-d flux-form advection using a monotonic piecewise
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
-                    is, ie, js, je, k, G, GV, usePPM)
+                    is, ie, js, je, k, G, GV, usePPM, useHuynh)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
@@ -579,7 +585,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
   real,                                      intent(in)    :: Idt
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
-  logical,                                   intent(in)    :: usePPM
+  logical,                                   intent(in)    :: usePPM, useHuynh
 
   real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     slope_y, &                  ! The concentration slope per grid point in units of
@@ -607,7 +613,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
-  usePLMslope = .not. usePPM
+  usePLMslope = .not. (usePPM .and. useHuynh)
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
@@ -692,10 +698,15 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         ! Implementation of PPM-H3
         Tp = Tr(m)%t(i,j_up+1,k) ; Tc = Tr(m)%t(i,j_up,k) ; Tm = Tr(m)%t(i,j_up-1,k)
 
-        aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
-        aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
-        aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
-        aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+        if (useHuynh) then
+          aL = ( 5.*Tc + ( 2.*Tm - Tp ) )/6. ! H3 estimate
+          aL = max( min(Tc,Tm), aL) ; aL = min( max(Tc,Tm), aL) ! Bound
+          aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
+          aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
+        else
+          aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)))
+          aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)))
+        endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
         if (G%mask2dCv(i,J_up)*G%mask2dCv(i,J_up-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
@@ -864,6 +875,10 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
       CS%usePPM = .false.
     case ("PPM:H3")
       CS%usePPM = .true.
+      CS%useHuynh = .true.
+    case ("PPM")
+      CS%usePPM = .true.
+      CS%useHuynh = .false.
     case default
       call MOM_error(FATAL, "MOM_tracer_advect, tracer_advect_init: "//&
            "Unknown TRACER_ADVECTION_SCHEME = "//trim(mesg))
