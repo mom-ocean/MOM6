@@ -163,6 +163,7 @@ type, public :: energetic_PBL_CS ; private
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
   logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
+  logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LA_windsea = .false.
   logical :: orig_PE_calc = .true.
@@ -489,7 +490,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     ! and the Monin-Obhukov depth.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
-  real :: dPE_debug, mixing_debug
+  real :: dPE_debug, mixing_debug, taux2, tauy2
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
   real, dimension(SZI_(G),SZK_(GV)) :: &
     mech_TKE_k, conv_PErel_k
@@ -604,8 +605,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
 
       U_Star = fluxes%ustar(i,j)
-      U_Star_Mean = sqrt(0.5*sqrt((fluxes%taux(i-1,j)+fluxes%taux(i,j))**2 &
-                    +(fluxes%tauy(i,j-1)+fluxes%tauy(i,j))**2)/GV%rho0)
+      taux2 = 0.
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+      tauy2 = 0.0
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+      U_Star_Mean = sqrt(sqrt(taux2 + tauy2)/GV%rho0)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -728,15 +736,26 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           ! First solve for the TKE to PE length scale
           MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
           if ((MLD_over_Stab) .le. 0.0) then
-             !Asymptote to 0 as MLD_over_Stab -> -infinity
-             MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
-          elseif ((MLD_over_Stab) .ge.CS%MSTAR_XINT_UP ) then
-             !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
-             MSTAR_mix = CS%MSTAR_CAP - (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)+CS%MSTAR_A2)**(CS%MSTAR_N)
+            !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
+            MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
           else
-            !Within linear regime
-            MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
+            if (CS%MSTAR_CAP>=0.) then
+              if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
+                !If using flat cap (or if using asymptotic cap but within linear regime we
+                ! can make use of same code)
+                MSTAR_mix = max(CS%MSTAR_CAP, &
+                     CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT)
+              else
+                !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
+                MSTAR_mix = CS%MSTAR_CAP - &
+                     (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)+CS%MSTAR_A2)**(CS%MSTAR_N)
+              endif
+            else
+              !No cap if negative cap value given.
+              MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
+            endif
           endif
+
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_V*GV%Rho0)*((U_Star**3))
           conv_PErel(i) = 0.0
@@ -1933,9 +1952,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "and the MLD depth which determines the shape of the mixing length.",&
                  "units=nondim", default=2.0)
   call get_param(param_file, mod, "MSTAR_CAP", CS%mstar_cap, &
-                 "Maximum value of mstar allowed in model \n"//&
+                 "Maximum value of mstar allowed in model if non-negative\n"//&
                  "(used if MSTAR_FIXED=false).",&
-                 "units=nondim", default=10.0)
+                 "units=nondim", default=-1.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_FIXED=false).",&
@@ -1952,6 +1971,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "True to use a fixed value of mstar, if false mstar depends \n"//&
                  "on the composite Obhukov length and Ekman length.","units=nondim",&
                  default=.true.)
+  call get_param(param_file, mod, "MSTAR_FLATCAP", CS%MSTAR_FLATCAP, &
+                 "Set false to use asmptotic cap or defaults to true to use flat cap."&
+                 ,"units=nondim",default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
                  "surface fluxes that is available to drive entrainment \n"//&
