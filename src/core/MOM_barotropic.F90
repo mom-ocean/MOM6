@@ -2368,7 +2368,10 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   integer :: i, j, is, ie, js, je
   real, dimension(SZIB_(G),SZJB_(G)) :: grad
   real, parameter :: eps = 1.0e-20
+  real :: rx_max, ry_max ! coefficients for radiation
+! type(OBC_segment_type), pointer :: segment     ! Maybe later?
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
   if (apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
@@ -2396,19 +2399,25 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J-1) = ubt_old(I-1,j) - ubt_old(I-1,j-1)
           dhdt = ubt_old(I-1,j)-ubt(I-1,j) !old-new
           dhdx = ubt(I-1,j)-ubt(I-2,j) !in new time backward sasha for I-1
-          if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
-            dhdy = grad(I-1,J-1)
-          else
-            dhdy = grad(I-1,J)
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+            if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
+              dhdy = grad(I-1,J-1)
+            else
+              dhdy = grad(I-1,J)
+            endif
           endif
-          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-          Cx = dhdt*dhdx
+          if (dhdt*dhdx < 0.0) dhdt = 0.0
+          if (dhdx == 0.0) dhdx=eps  ! avoid segv
+          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
           Cy = 0
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) &
-               Cy = min(cff, max(dhdt*dhdy, -cff))
+          cff = max(dhdx*dhdx, eps)
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+            if (dhdy==0.) dhdy=eps ! avoid segv
+            Cy = min(cff, max(dhdt/dhdy, -cff))
+          endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
-              (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
+              (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         elseif (OBC%segment(OBC%OBC_segment_u(I,j))%gradient) then
           ubt(I,j) = ubt(I-1,j)
@@ -2434,20 +2443,27 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I+1,J-1) = ubt_old(I+1,j) - ubt_old(I+1,j-1)
           dhdt = ubt_old(I+1,j)-ubt(I+1,j) !old-new
           dhdx = ubt(I+1,j)-ubt(I+2,j) !in new time backward sasha for I+1
-          if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
-            dhdy = grad(I+1,J-1)
-          else
-            dhdy = grad(I+1,J)
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+            if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
+              dhdy = grad(I+1,J-1)
+            else
+              dhdy = grad(I+1,J)
+            endif
           endif
-          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-          Cx = dhdt*dhdx
+          if (dhdt*dhdx < 0.0) dhdt = 0.0
+          if (dhdx == 0.0) dhdx=eps  ! avoid segv
+          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
           Cy = 0
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) &
-               Cy = min(cff,max(dhdt*dhdy,-cff))
+          cff = max(dhdx*dhdx, eps)
+          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+            if (dhdy==0.) dhdy=eps ! avoid segv
+            Cy = min(cff,max(dhdt/dhdy,-cff))
+          endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
-              (max(Cy,0.0)*grad(I,J-1) - min(Cy,0.0)*grad(I,J))) / (cff + Cx)
-          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+              (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
+!         vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+          vel_trans = ubt(I,j)
         elseif (OBC%segment(OBC%OBC_segment_u(I,j))%gradient) then
           ubt(I,j) = ubt(I+1,j)
           vel_trans = ubt(I,j)
@@ -2520,20 +2536,27 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J-1) = vbt_old(i,J-1) - vbt_old(i-1,J-1)
           dhdt = vbt_old(i,J-1)-vbt(i,J-1) !old-new
           dhdy = vbt(i,J-1)-vbt(i,J-2) !in new time backward sasha for J-1
-          if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
-            dhdx = grad(I-1,J-1)
-          else
-            dhdx = grad(I,J-1)
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+            if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
+              dhdx = grad(I-1,J-1)
+            else
+              dhdx = grad(I,J-1)
+            endif
           endif
-          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-          Cy = dhdt*dhdy
+          if (dhdt*dhdy < 0.0) dhdt = 0.0
+          if (dhdy == 0.0) dhdy=eps  ! avoid segv
+          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
           Cx = 0
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) &
-               Cx = min(cff,max(dhdt*dhdx,-cff))
+          cff = max(dhdy*dhdy, eps)
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+            if (dhdx==0.) dhdx=eps ! avoid segv
+            Cx = min(cff,max(dhdt/dhdx,-cff))
+          endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
-            (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+            (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
+!         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+          vel_trans = vbt(I,j)
         elseif (OBC%segment(OBC%OBC_segment_v(i,J))%gradient) then
           vbt(i,J) = vbt(i,J-1)
           vel_trans = vbt(i,J)
@@ -2558,20 +2581,27 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           grad(I-1,J+1) = vbt_old(i,J+1) - vbt_old(i-1,J+1)
           dhdt = vbt_old(i,J+1)-vbt(i,J+1) !old-new
           dhdy = vbt(i,J+1)-vbt(i,J+2) !in new time backward sasha for J+1
-          if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
-            dhdx = grad(I-1,J+1)
-          else
-            dhdx = grad(I,J+1)
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+            if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
+              dhdx = grad(I-1,J+1)
+            else
+              dhdx = grad(I,J+1)
+            endif
           endif
-          cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-          Cy = dhdt*dhdy
+          if (dhdt*dhdy < 0.0) dhdt = 0.0
+          if (dhdy == 0.0) dhdy=eps  ! avoid segv
+          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
           Cx = 0
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) &
-               Cx = min(cff,max(dhdt*dhdx,-cff))
+          cff = max(dhdy*dhdy, eps)
+          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+            cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+            if (dhdx==0.) dhdx=eps ! avoid segv
+            Cx = min(cff,max(dhdt/dhdx,-cff))
+          endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
-            (max(Cx,0.0)*grad(I-1,J) - min(Cx,0.0)*grad(I,J))) / (cff + Cy)
-          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+            (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
+!         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+          vel_trans = vbt(i,J)
         elseif (OBC%segment(OBC%OBC_segment_v(i,J))%gradient) then
           vbt(i,J) = vbt(i,J+1)
           vel_trans = vbt(i,J)
