@@ -93,7 +93,10 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
-  stencil = 2                   ! The scheme's stencil; 2 for PLM.
+  stencil = 2                   ! The scheme's stencil; 2 for PLM and PPM:H3
+
+  ! increase stencil size for Colella & Woodward PPM
+  if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_advect: "// &
        "tracer_advect_init must be called before advect_tracer.")
