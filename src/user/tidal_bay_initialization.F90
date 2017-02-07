@@ -102,11 +102,10 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
 
-!   print *, "Tidal_bay init", segment%on_pe, my_area, my_flux, cff
     if (.not. segment%on_pe) cycle
 
-!   segment%normal_vel_bt(:,:) = my_flux/my_area
-!   segment%eta(:,:) = cff
+    segment%normal_vel_bt(:,:) = my_flux/my_area
+    segment%eta(:,:) = cff
 
   enddo ! end segment loop
 
