@@ -88,8 +88,8 @@ type, public :: OBC_segment_type
                                                     !<wave speed (m -s) at OBC-points.
   real, pointer, dimension(:,:)   :: Htot=>NULL()   !<The total column thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: h=>NULL()      !<The cell thickness (m) at OBC-points.
+  real, pointer, dimension(:,:,:) :: e=>NULL()      !<The interface height (m?) at OBC-points.
   real, pointer, dimension(:,:,:) :: tangent_vel=>NULL()    !<The layer velocity tangential to the OB segment (m s-1).
-  real, pointer, dimension(:,:,:) :: tangent_trans=>NULL()  !<The layer transport tangential to the OB segment (m3 s-1).
   real, pointer, dimension(:,:)   :: tangent_vel_bt=>NULL() !<The barotropic velocity tangential to the OB segment (m s-1).
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !<The layer velocity normal to the OB segment (m s-1).
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !<The layer transport normal to the OB segment (m3 s-1).
@@ -285,9 +285,9 @@ subroutine open_boundary_config(G, param_file, OBC)
       endif
     enddo
 
-!   if (open_boundary_query(OBC, needs_ext_seg_data=.true.) .and. .not. OBC%user_BCs_set_globally) &
 !   if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
-!     call initialize_segment_data(G, OBC, param_file)
+    if (open_boundary_query(OBC, needs_ext_seg_data=.true.) .and. .not. OBC%user_BCs_set_globally) &
+      call initialize_segment_data(G, OBC, param_file)
   endif
 
   ! Safety check
@@ -309,23 +309,22 @@ subroutine initialize_segment_data(G, OBC, PF)
   type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
   type(param_file_type), intent(in)   :: PF  !< Parameter file handle
 
-  integer :: num_segs,n,m,num_fields
+  integer :: n,m,num_fields
   character(len=256) :: segstr, filename
-  character(len=20)  :: segnam,suffix
+  character(len=20)  :: segnam, suffix
   character(len=32)  :: varnam, fieldname
   real               :: value
   integer            :: orient
   character(len=32), dimension(MAX_OBC_FIELDS) :: fields  ! segment field names
   character(len=128) :: inputdir
-  type(OBC_segment_type), pointer, dimension(:) :: OBC_segments ! pointer to segment type list
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
   character(len=32)  :: remappingScheme
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
   integer, dimension(4) :: siz,siz2
   integer :: is, ie, js, je
-  integer :: is_obc,ie_obc,js_obc,je_obc
+  integer :: isd, ied, jsd, jed
+  integer :: IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  num_segs = OBC%number_of_segments
 
   ! There is a problem with the order of the OBC initialization
   ! with respect to ALE_init. Currently handling this by copying the
@@ -342,7 +341,7 @@ subroutine initialize_segment_data(G, OBC, PF)
           trim(remappingSchemesDoc), default=remappingDefaultScheme)
   call get_param(PF, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
           "If true, cell-by-cell reconstructions are checked for\n"//&
-          "consistency and if non-monotonicty or an inconsistency is\n"//&
+          "consistency and if non-monotonicity or an inconsistency is\n"//&
           "detected then a FATAL error is issued.", default=.false.)
   call get_param(PF, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
           "If true, the results of remapping are checked for\n"//&
@@ -358,45 +357,45 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_reconstruction=check_reconstruction, &
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
-  OBC_segments => OBC%segment(1:num_segs)
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
 
-  do n=1, num_segs
+    if (.not. segment%on_pe) return
+
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
     call get_param(PF, mod, segnam, segstr)
 
     call parse_segment_data_str(trim(segstr),fields=fields, num_fields=num_fields)
     if (num_fields == 0) cycle ! cycle to next segment
-    allocate(OBC_segments(n)%field(num_fields))
+    allocate(segment%field(num_fields))
 
-    if (OBC_segments(n)%Flather) then
+    if (segment%Flather) then
       if (num_fields /= 3) call MOM_error(FATAL, &
                    "MOM_open_boundary, initialize_segment_data: "//&
                    "Need three inputs for Flather")
-      OBC_segments(n)%num_fields = 3 ! these are the input fields required for the Flather option
+      segment%num_fields = 3 ! these are the input fields required for the Flather option
                                        ! note that this is assuming that the inputs are coming in this order
                                        ! and independent of the input param string . Needs cleanup - mjh
-      allocate(OBC_segments(n)%field_names(OBC_segments(n)%num_fields))
-      OBC_segments(n)%field_names(:)='None'
-      OBC_segments(n)%field_names(1)='UO'
-      OBC_segments(n)%field_names(2)='VO'
-      OBC_segments(n)%field_names(3)='ZOS'
+      allocate(segment%field_names(segment%num_fields))
+      segment%field_names(:)='None'
+      segment%field_names(1)='UO'
+      segment%field_names(2)='VO'
+      segment%field_names(3)='ZOS'
     endif
 
 !!
 ! CODE HERE FOR OTHER OPTIONS (CLAMPED, NUDGED,..)
 !!
 
-    if (OBC_segments(n)%is_E_or_W) then
-      is_obc = max(OBC_segments(n)%is_obc,is-1)
-      ie_obc = min(OBC_segments(n)%ie_obc,ie)
-      js_obc = max(OBC_segments(n)%js_obc,js-1)
-      je_obc = min(OBC_segments(n)%je_obc,je)
-    else
-    endif
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
     do m=1,num_fields
       call parse_segment_data_str(segstr,var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
-      OBC_segments(n)%field(m)%name = trim(fields(m))
+      segment%field(m)%name = trim(fields(m))
       if (trim(filename) /= 'none') then
          filename = trim(inputdir)//trim(filename)
          fieldname = trim(fieldname)//trim(suffix)
@@ -415,26 +414,30 @@ subroutine initialize_segment_data(G, OBC, PF)
          endif
          siz2(3)=siz(3)
 
-         allocate(OBC_segments(n)%field(m)%buffer_src(is_obc:ie_obc,js_obc:je_obc,siz2(3)))
-         OBC_segments(n)%field(m)%buffer_src(:,:,:)=0.0
-         OBC_segments(n)%field(m)%fid = init_external_field(trim(filename),trim(fieldname))
+         if (segment%is_E_or_W) then
+           allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz2(3)))
+         else
+           allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
+         endif
+         segment%field(m)%buffer_src(:,:,:)=0.0
+         segment%field(m)%fid = init_external_field(trim(filename),trim(fieldname))
           if (siz(3) > 1) then
             fieldname = 'dz_'//trim(fieldname)
             call field_size(filename,fieldname,siz,no_domain=.true.)
-            if (OBC_segments(n)%direction == OBC_DIRECTION_E .or. OBC_segments(n)%direction == OBC_DIRECTION_W) then
-              allocate(OBC_segments(n)%field(m)%dz_src(is_obc:ie_obc,js_obc+1:je_obc,siz(3)))
+            if (segment%is_E_or_W) then
+              allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)))
             else
-              allocate(OBC_segments(n)%field(m)%dz_src(is_obc+1:ie_obc,js_obc:je_obc,siz(3)))
+              allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)))
             endif
-            OBC_segments(n)%field(m)%dz_src(:,:,:)=0.0
-            OBC_segments(n)%field(m)%nk_src=siz(3)
-            OBC_segments(n)%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname))
+            segment%field(m)%dz_src(:,:,:)=0.0
+            segment%field(m)%nk_src=siz(3)
+            segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname))
           else
-            OBC_segments(n)%field(m)%nk_src=1
+            segment%field(m)%nk_src=1
           endif
        else
-          OBC_segments(n)%field(m)%fid = -1
-          OBC_segments(n)%field(m)%value = value
+          segment%field(m)%fid = -1
+          segment%field(m)%value = value
        endif
     enddo
 
@@ -1820,6 +1823,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%e(IsdB:IedB,jsd:jed,OBC%ke));              segment%e(:,:,:)=0.0
     allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
     allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
     allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
@@ -1831,6 +1835,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
     allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));              segment%h(:,:,:)=0.0
+    allocate(segment%e(isd:ied,JsdB:JedB,OBC%ke));              segment%e(:,:,:)=0.0
     allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke));     segment%normal_vel(:,:,:)=0.0
     allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke));   segment%normal_trans(:,:,:)=0.0
     allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));         segment%normal_vel_bt(:,:)=0.0
@@ -1886,12 +1891,13 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
 end subroutine open_boundary_test_extern_uv
 
 subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
-  type(ocean_grid_type),                     intent(in)    :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !<  Ocean vertical grid structure
+  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV  !<  Ocean vertical grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout)    :: h !< Thickness
-!  real, dimension(SZI_(G),SZJ_(G))         , intent(inout)    :: eta !< Thickness
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h   !< Thickness
+! real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: e   !< Layer interface height
+! real, dimension(SZI_(G),SZJ_(G))         , intent(inout) :: eta !< Thickness
   type(time_type),                           intent(in)    :: Time
   ! Local variables
 
@@ -1985,6 +1991,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           endif
           do k=1,G%ke
             segment%h(I,j,k) = h(i+ishift,j,k)
+!           segment%e(I,j,k) = e(i+ishift,j,k)
           enddo
         enddo
       enddo
@@ -2002,6 +2009,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
           endif
           do k=1,G%ke
             segment%h(i,J,k) = h(i,j+jshift,k)
+!           segment%e(i,J,k) = e(i,j+jshift,k)
           enddo
         enddo
       enddo
