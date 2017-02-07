@@ -579,7 +579,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%legacy = .true.
       OBC%segment(l_seg)%Flather = .true.
       OBC%segment(l_seg)%radiation = .true.
-      OBC%segment(l_seg)%gradient = .true.
       OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
@@ -685,7 +684,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       this_kind = OBC_FLATHER
       OBC%segment(l_seg)%legacy = .true.
-      OBC%segment(l_seg)%gradient = .true.
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%Flather = .true.
       OBC%update_OBC = .true.
