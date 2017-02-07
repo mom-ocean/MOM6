@@ -743,7 +743,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
                 !If using flat cap (or if using asymptotic cap but within linear regime we
                 ! can make use of same code)
-                MSTAR_mix = max(CS%MSTAR_CAP, &
+                MSTAR_mix = min(CS%MSTAR_CAP, &
                      CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT)
               else
                 !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
