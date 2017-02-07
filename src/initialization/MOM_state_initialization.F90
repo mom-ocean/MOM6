@@ -455,9 +455,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
       OBC%update_OBC = .false.
-    elseif (trim(config) == "tidal_bay") then
-    ! Shouldn't be getting here...
-    ! OBC%update_OBC = .true.
     elseif (lowercase(trim(config)) == "supercritical") then
       call supercritical_set_OBC_data(OBC, G, PF)
     elseif (trim(config) == "USER") then
