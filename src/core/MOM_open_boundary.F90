@@ -75,7 +75,7 @@ type, public :: OBC_segment_type
   logical :: is_N_or_S      !< True is the OB is facing North or South and exists on this PE.
   logical :: is_E_or_W      !< True is the OB is facing East or West and exists on this PE.
   type(OBC_segment_data_type), pointer, dimension(:) :: field=>NULL()   !<  OBC data
-  integer :: num_fields !< number of OBC data fields (e.g. u_normal,u_parallel and eta for Flather)
+  integer :: num_fields     !< number of OBC data fields (e.g. u_normal,u_parallel and eta for Flather)
   character(len=32), pointer, dimension(:) :: field_names=>NULL() !< field names for this segment
   integer :: Is_obc         !< i-indices of boundary segment.
   integer :: Ie_obc         !< i-indices of boundary segment.
@@ -84,19 +84,28 @@ type, public :: OBC_segment_type
   real :: Tnudge_in         !< Inverse nudging timescale on inflow (1/s).
   real :: Tnudge_out        !< Inverse nudging timescale on outflow (1/s).
   logical :: on_pe          !< true if segment is located in the computational domain
-  real, pointer, dimension(:,:)   :: Cg=>NULL()     !<The external gravity
-                                                    !<wave speed (m -s) at OBC-points.
-  real, pointer, dimension(:,:)   :: Htot=>NULL()   !<The total column thickness (m) at OBC-points.
-  real, pointer, dimension(:,:,:) :: h=>NULL()      !<The cell thickness (m) at OBC-points.
-  real, pointer, dimension(:,:,:) :: e=>NULL()      !<The interface height (m?) at OBC-points.
-  real, pointer, dimension(:,:,:) :: tangent_vel=>NULL()    !<The layer velocity tangential to the OB segment (m s-1).
-  real, pointer, dimension(:,:)   :: tangent_vel_bt=>NULL() !<The barotropic velocity tangential to the OB segment (m s-1).
-  real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !<The layer velocity normal to the OB segment (m s-1).
-  real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !<The layer transport normal to the OB segment (m3 s-1).
-  real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !<The barotropic velocity normal to the OB segment (m s-1).
-  real, pointer, dimension(:,:)   :: normal_trans_bt=>NULL()!<The barotropic transport normal to the OB segment (m3 s-1).
-  real, pointer, dimension(:,:)   :: eta=>NULL()    !<The sea-surface elevation along the segment (m).
-  real, pointer, dimension(:,:,:) :: grad_normal=>NULL() !<The gradient of the normal flow along the segment (m s-1)
+  real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity
+                                                    !< wave speed (m -s) at OBC-points.
+  real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
+  real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
+  real, pointer, dimension(:,:,:) :: e=>NULL()      !< The interface height (m?) at OBC-points.
+  real, pointer, dimension(:,:,:) :: tangent_vel=>NULL()    !< The layer velocity tangential to the
+                                                            !! OB segment (m s-1).
+  real, pointer, dimension(:,:)   :: tangent_vel_bt=>NULL() !< The barotropic velocity tangential
+                                                            !! to the OB segment (m s-1).
+  real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
+                                                            !! segment (m s-1).
+  real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
+                                                            !! segment (m3 s-1).
+  real, pointer, dimension(:,:)   :: normal_vel_bt=>NULL()  !< The barotropic velocity normal to
+                                                            !! the OB segment (m s-1).
+  real, pointer, dimension(:,:)   :: normal_trans_bt=>NULL()!< The barotropic transport normal to
+                                                            !! the OB segment (m3 s-1).
+  real, pointer, dimension(:,:)   :: eta=>NULL()            !< The sea-surface elevation along the segment (m).
+  real, pointer, dimension(:,:,:) :: grad_normal=>NULL()    !< The gradient of the normal flow along the
+                                                            !! segment (m s-1)
+  real, pointer, dimension(:,:,:) :: rx_normal => NULL()    !< The rx_old_u value for radiation coeff
+                                                            !! for normal velocity
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
@@ -139,12 +148,6 @@ type, public :: ocean_OBC_type
   integer, pointer, dimension(:,:) :: &
     OBC_segment_u => NULL(), &   !< Segment number of u-points.
     OBC_segment_v => NULL()      !< Segment number of v-points.
-  ! The following apply at points with OBC_kind_[uv] = OBC_FLATHER.
-  real, pointer, dimension(:,:,:) :: &
-    rx_old_u => NULL(), &  !< The rx_old_u value for radiation coeff for u-velocity in x-direction
-    ry_old_v => NULL(), &  !< The ry_old_v value for radiation coeff for v-velocity in y-direction
-    rx_old_h => NULL(), &  !< The rx_old_h value for radiation coeff for layer thickness h in x-direction
-    ry_old_h => NULL()     !< The ry_old_h value for radiation coeff for layer thickness h in y-direction
 
   !   The following can be used to specify the outer-domain values of the
   ! surface height and barotropic velocity.  If these are not allocated, the
@@ -265,6 +268,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%segment(l)%is_E_or_W = .false.
       OBC%segment(l)%Tnudge_in = 0.0
       OBC%segment(l)%Tnudge_out = 0.0
+      OBC%segment(l)%num_fields = 0.0
     enddo
     allocate(OBC%OBC_segment_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%OBC_segment_u(:,:) = OBC_NONE
     allocate(OBC%OBC_segment_v(G%isd:G%ied,G%JsdB:G%JedB)) ; OBC%OBC_segment_v(:,:) = OBC_NONE
@@ -285,19 +289,18 @@ subroutine open_boundary_config(G, param_file, OBC)
       endif
     enddo
 
-!   if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
-    if (open_boundary_query(OBC, needs_ext_seg_data=.true.) .and. .not. OBC%user_BCs_set_globally) &
+    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
       call initialize_segment_data(G, OBC, param_file)
-  endif
+    endif
 
-  ! Safety check
-  if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
+    ! Safety check
+    if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
       .not.G%symmetric ) call MOM_error(FATAL, &
                  "MOM_open_boundary, open_boundary_config: "//&
                  "Symmetric memory must be used when using Flather OBCs.")
 
-  if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
-            OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
+    if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
+              OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
   endif
@@ -357,10 +360,12 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_reconstruction=check_reconstruction, &
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
+  if (OBC%user_BCs_set_globally) return
+
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
 
-    if (.not. segment%on_pe) return
+    if (.not. segment%on_pe) cycle
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
@@ -941,7 +946,7 @@ logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, a
   logical, optional,    intent(in)  :: apply_specified_OBC !< If present, returns True if specified_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_Flather_OBC   !< If present, returns True if Flather_*_BCs_exist_globally is true
   logical, optional,    intent(in)  :: apply_nudged_OBC    !< If present, returns True if nudged_*_BCs_exist_globally is true
-  logical, optional,    intent(in)  :: needs_ext_seg_data      !< If present, returns True if external segment data needed
+  logical, optional,    intent(in)  :: needs_ext_seg_data  !< If present, returns True if external segment data needed
   open_boundary_query = .false.
   if (.not. associated(OBC)) return
   if (present(apply_open_OBC)) open_boundary_query = OBC%open_u_BCs_exist_globally .or. &
@@ -964,10 +969,6 @@ subroutine open_boundary_dealloc(OBC)
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%OBC_segment_u)) deallocate(OBC%OBC_segment_u)
   if (associated(OBC%OBC_segment_v)) deallocate(OBC%OBC_segment_v)
-  if (associated(OBC%rx_old_u)) deallocate(OBC%rx_old_u)
-  if (associated(OBC%ry_old_v)) deallocate(OBC%ry_old_v)
-  if (associated(OBC%rx_old_h)) deallocate(OBC%rx_old_h)
-  if (associated(OBC%ry_old_h)) deallocate(OBC%ry_old_h)
   if (associated(OBC%ubt_outer)) deallocate(OBC%ubt_outer)
   if (associated(OBC%vbt_outer)) deallocate(OBC%vbt_outer)
   if (associated(OBC%eta_outer_u)) deallocate(OBC%eta_outer_u)
@@ -1157,8 +1158,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
-           rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-           OBC%rx_old_u(I,j,k) = rx_avg
+           rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
+           segment%rx_normal(I,j,k) = rx_avg
            u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
          elseif (segment%radiation) then
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
@@ -1191,7 +1192,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            else
              tau = segment%Tnudge_out
            endif
-           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
+           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(segment%normal_vel(I,j,k) - u_old(I,j,k))
+!          u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
          endif
        enddo; enddo
      endif
@@ -1204,8 +1206,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
            rx_new = 0.0
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
-           rx_avg = (1.0-gamma_u)*OBC%rx_old_u(I,j,k) + gamma_u*rx_new
-           OBC%rx_old_u(I,j,k) = rx_avg
+           rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
+           segment%rx_normal(I,j,k) = rx_avg
            u_new(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
          elseif (segment%radiation) then
            dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
@@ -1238,7 +1240,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            else
              tau = segment%Tnudge_out
            endif
-           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
+           u_new(I,j,k) = u_new(I,j,k) + dt*tau*(segment%normal_vel(I,j,k) - u_old(I,j,k))
+!          u_new(I,j,k) = u_new(I,j,k) + dt*tau*(OBC%u(I,j,k) - u_old(I,j,k))
          endif
        enddo; enddo
      endif
@@ -1251,8 +1254,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
-           OBC%ry_old_v(i,J,k) = ry_avg
+           ry_avg = (1.0-gamma_v)*segment%rx_normal(I,j,k) + gamma_v*ry_new
+           segment%rx_normal(i,J,k) = ry_avg
            v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
          elseif (segment%radiation) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
@@ -1285,7 +1288,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            else
              tau = segment%Tnudge_out
            endif
-           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
+           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(segment%normal_vel(i,J,k) - v_old(i,J,k))
+!          v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
          endif
        enddo; enddo
      endif
@@ -1299,8 +1303,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
            ry_new = 0.0
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
-           ry_avg = (1.0-gamma_v)*OBC%ry_old_v(I,j,k) + gamma_v*ry_new
-           OBC%ry_old_v(i,J,k) = ry_avg
+           ry_avg = (1.0-gamma_v)*segment%rx_normal(I,j,k) + gamma_v*ry_new
+           segment%rx_normal(i,J,k) = ry_avg
            v_new(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
          elseif (segment%radiation) then
            dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
@@ -1333,7 +1337,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
            else
              tau = segment%Tnudge_out
            endif
-           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
+           v_new(i,J,k) = v_new(i,J,k) + dt*tau*(segment%normal_vel(i,J,k) - v_old(i,J,k))
+!          v_new(i,J,k) = v_new(i,J,k) + dt*tau*(OBC%v(i,J,k) - v_old(i,J,k))
          endif
        enddo; enddo
      end if
@@ -1501,14 +1506,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   ! no radiation conditions applied to the thicknesses, since the thicknesses
   ! might not be physically motivated.  Instead, sponges should be used to
   ! enforce the near-boundary layer structure.
-  if (OBC%Flather_u_BCs_exist_globally) then
-    allocate(OBC%rx_old_u(IsdB:IedB,jsd:jed,nz)) ; OBC%rx_old_u(:,:,:) = 0.0
- !   allocate(OBC%rx_old_h(Isd:Ied,jsd:jed,nz))   ; OBC%rx_old_h(:,:,:) = 0.0
-  endif
-  if (OBC%Flather_v_BCs_exist_globally) then
-    allocate(OBC%ry_old_v(isd:ied,JsdB:JedB,nz)) ; OBC%ry_old_v(:,:,:) = 0.0
- !   allocate(OBC%ry_old_h(isd:ied,Jsd:Jed,nz))   ; OBC%ry_old_h(:,:,:) = 0.0
-  endif
   if (OBC%nudged_u_BCs_exist_globally) then
     allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
     allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
@@ -1831,6 +1828,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
     allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
     allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
+    allocate(segment%rx_normal(IsdB:IedB,jsd:jed,OBC%ke));      segment%rx_normal(:,:,:)=0.0
   else
     allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
@@ -1843,6 +1841,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
     allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
     allocate(segment%eta(isd:ied,JsdB:JedB));                   segment%eta(:,:)=0.0
+    allocate(segment%rx_normal(isd:ied,JsdB:JedB,OBC%ke));      segment%rx_normal(:,:,:)=0.0
   endif
 end subroutine allocate_OBC_segment_data
 
@@ -2080,12 +2079,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
          endif
       endif
 
-      if (trim(segment%field(m)%name) == 'UO' .or. trim(segment%field(m)%name) == 'VO') then
+      if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
          if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
-           if((trim(segment%field(m)%name) == 'UO' .and. (segment%direction == OBC_DIRECTION_W .or. &
-                                                        segment%direction == OBC_DIRECTION_E)) .or. &
-              (trim(segment%field(m)%name) == 'VO' .and. (segment%direction == OBC_DIRECTION_N .or. &
-                                                        segment%direction == OBC_DIRECTION_S))) then
+           if((trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) .or.  &
+              (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S)) then
              do j=js_obc,je_obc
                 do i=is_obc,ie_obc
                    segment%normal_trans_bt(i,j) = 0.0
@@ -2101,7 +2098,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
          endif
       endif
 
-      if (trim(segment%field(m)%name) == 'ZOS') then
+      if (trim(segment%field(m)%name) == 'SSH') then
         do j=js_obc,je_obc
           do i=is_obc,ie_obc
               segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
