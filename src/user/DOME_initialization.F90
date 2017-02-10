@@ -283,9 +283,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-  allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-
   g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
@@ -314,28 +311,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                                         (2.0 - Ri_trans))
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
                                        log((2.0+Ri_trans)/(2.0-Ri_trans))
-    ! Old way
-    do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        ! This needs to be unneccesarily complicated without symmetric memory.
-        lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-        ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
-        OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                              exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-        OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
-      else
-        OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
-      endif
-    enddo ; enddo
     ! New way
     isd = segment%HI%isd ; ied = segment%HI%ied
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
-!   do J=JsdB,JedB ; do i=isd,ied
-!     lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-!     segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-!                                 exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-!     segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
-!   enddo ; enddo
+    do J=JsdB,JedB ; do i=isd,ied
+      lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+      segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
+                                  exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+      segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
+    enddo ; enddo
   enddo
 
   !   The inflow values of temperature and salinity also need to be set here if

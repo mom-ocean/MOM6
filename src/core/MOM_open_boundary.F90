@@ -1817,35 +1817,48 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   if (.not. segment%on_pe) return
 
   if (segment%is_E_or_W) then
+    ! If these are just Flather, change update_OBC_segment_data accordingly
     allocate(segment%Cg(IsdB:IedB,jsd:jed));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(IsdB:IedB,jsd:jed));                  segment%Htot(:,:)=0.0
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke));              segment%h(:,:,:)=0.0
-    allocate(segment%e(IsdB:IedB,jsd:jed,OBC%ke));              segment%e(:,:,:)=0.0
-    if (segment%nudged) then
+    if (segment%Flather) then
+!     allocate(segment%e(IsdB:IedB,jsd:jed,OBC%ke));              segment%e(:,:,:)=0.0
+      allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
+      allocate(segment%rx_normal(IsdB:IedB,jsd:jed,OBC%ke));      segment%rx_normal(:,:,:)=0.0
+!     allocate(segment%normal_trans_bt(IsdB:IedB,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
+    endif
+    if (segment%Flather .or. segment%specified) then
+      allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
+    endif
+    if (segment%nudged .or. segment%specified) then
       allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    endif
+    if (segment%specified) then
       allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke));   segment%normal_trans(:,:,:)=0.0
     endif
-    allocate(segment%normal_vel_bt(IsdB:IedB,jsd:jed));         segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans_bt(IsdB:IedB,jsd:jed));       segment%normal_trans_bt(:,:)=0.0
-    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
-    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
-    allocate(segment%eta(IsdB:IedB,jsd:jed));                   segment%eta(:,:)=0.0
-    allocate(segment%rx_normal(IsdB:IedB,jsd:jed,OBC%ke));      segment%rx_normal(:,:,:)=0.0
+!   allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+!   allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
   else
     allocate(segment%Cg(isd:ied,JsdB:JedB));                    segment%Cg(:,:)=0.
     allocate(segment%Htot(isd:ied,JsdB:JedB));                  segment%Htot(:,:)=0.0
     allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke));              segment%h(:,:,:)=0.0
-    allocate(segment%e(isd:ied,JsdB:JedB,OBC%ke));              segment%e(:,:,:)=0.0
-    if (segment%nudged) then
+    if (segment%Flather) then
+!     allocate(segment%e(isd:ied,JsdB:JedB,OBC%ke));              segment%e(:,:,:)=0.0
+      allocate(segment%eta(isd:ied,JsdB:JedB));                   segment%eta(:,:)=0.0
+      allocate(segment%rx_normal(isd:ied,JsdB:JedB,OBC%ke));      segment%rx_normal(:,:,:)=0.0
+!     allocate(segment%normal_trans_bt(isd:ied,JsdB:JedB));       segment%normal_trans_bt(:,:)=0.0
+    endif
+    if (segment%Flather .or. segment%specified) then
+      allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));         segment%normal_vel_bt(:,:)=0.0
+    endif
+    if (segment%nudged .or. segment%specified) then
       allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke));     segment%normal_vel(:,:,:)=0.0
+    endif
+    if (segment%specified) then
       allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke));   segment%normal_trans(:,:,:)=0.0
     endif
-    allocate(segment%normal_vel_bt(isd:ied,JsdB:JedB));         segment%normal_vel_bt(:,:)=0.0
-    allocate(segment%normal_trans_bt(isd:ied,JsdB:JedB));       segment%normal_trans_bt(:,:)=0.0
-    allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
-    allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
-    allocate(segment%eta(isd:ied,JsdB:JedB));                   segment%eta(:,:)=0.0
-    allocate(segment%rx_normal(isd:ied,JsdB:JedB,OBC%ke));      segment%rx_normal(:,:,:)=0.0
+!   allocate(segment%tangent_vel(IsdB:IedB,JsdB:JedB,OBC%ke));  segment%tangent_vel(:,:,:)=0.0
+!   allocate(segment%tangent_vel_bt(IsdB:IedB,JsdB:JedB));      segment%tangent_vel_bt(:,:)=0.0
   endif
 end subroutine allocate_OBC_segment_data
 
@@ -1939,7 +1952,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     je_obc = min(segment%je_obc,je)
 
 
-    if (segment%direction == OBC_DIRECTION_W .or. segment%direction == OBC_DIRECTION_E) then
+    if (segment%is_E_or_W) then
       nj_seg=nj_seg-1
       js_obc=js_obc+1
     else

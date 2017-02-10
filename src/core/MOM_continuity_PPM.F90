@@ -387,7 +387,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                             dt, G, j, ish, ieh, do_I, CS%vol_CFL)
       if (local_specified_BC) then ; do I=ish-1,ieh
         if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-          uh(I,j,k) = OBC%uh(I,j,k)
+          uh(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_trans(I,j,k)
       enddo ; endif
     enddo
 
@@ -495,7 +495,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
             if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-              u_cor(I,j,k) = OBC%u(I,j,k)
+              u_cor(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
           enddo ; endif
         enddo ; endif ! u-corrected
 
@@ -510,7 +510,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
           do I=ish-1,ieh ; u_cor_aux(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
             if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-              u_cor_aux(I,j,k) = OBC%u(I,j,k)
+              u_cor_aux(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
           enddo ; endif
         enddo
       endif ! do_aux
@@ -525,9 +525,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
             if (do_I(I)) BT_cont%Fa_u_W0(I,j) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
-            if (abs(OBC%u(I,j,k)) > 0.0) &
+            if (abs(OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)) > 0.0) &
               BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + &
-                   OBC%uh(I,j,k) / OBC%u(I,j,k)
+                   OBC%segment(OBC%OBC_segment_u(I,j))%normal_trans(I,j,k) / &
+                   OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
             BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
@@ -1135,7 +1136,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                             dt, G, J, ish, ieh, do_I, CS%vol_CFL)
       if (local_specified_BC) then ; do i=ish,ieh
         if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-          vh(i,J,k) = OBC%vh(i,J,k)
+          vh(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_trans(i,J,k)
       enddo ; endif
     enddo ! k-loop
     if ((.not.use_visc_rem) .or. (.not.CS%use_visc_rem_max)) then ; do i=ish,ieh
@@ -1239,7 +1240,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
             if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-              v_cor(i,J,k) = OBC%v(i,J,k)
+              v_cor(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
           enddo ; endif
         enddo ; endif ! v-corrected
       endif
@@ -1253,7 +1254,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
           do i=ish,ieh ; v_cor_aux(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
             if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-              v_cor_aux(i,J,k) = OBC%v(i,J,k)
+              v_cor_aux(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
           enddo ; endif
         enddo
       endif ! do_aux
@@ -1268,9 +1269,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
             if (do_I(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(I,j)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
-            if (abs(OBC%v(i,J,k)) > 0.0) &
+            if (abs(OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)) > 0.0) &
               BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + &
-                   OBC%vh(i,J,k) / OBC%v(i,J,k)
+                   OBC%segment(OBC%OBC_segment_v(i,J))%normal_trans(i,J,k) / &
+                   OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (do_I(i)) then
             BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
