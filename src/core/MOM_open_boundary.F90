@@ -131,7 +131,8 @@ type, public :: ocean_OBC_type
                                                       !! in the global domain use specified BCs.
   logical :: user_BCs_set_globally = .false.          !< True if any OBC_USER_CONFIG is set
                                                       !! for input from user directory.
-  logical :: update_OBC = .false. !< Is the open boundary info going to get updated?
+  logical :: update_OBC = .false.                     !< Is OBC data time-dependent
+  logical :: needs_IO_for_data = .false.              !< Is any i/o needed for OBCs
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the relative vorticity on open boundaries.
@@ -365,28 +366,29 @@ subroutine initialize_segment_data(G, OBC, PF)
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
 
-    if (.not. segment%on_pe) cycle
-
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
     call get_param(PF, mod, segnam, segstr)
 
-    call parse_segment_data_str(trim(segstr),fields=fields, num_fields=num_fields)
+    call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) cycle ! cycle to next segment
-    allocate(segment%field(num_fields))
 
-    if (segment%Flather) then
-      if (num_fields /= 3) call MOM_error(FATAL, &
+    if (segment%on_pe) then
+      allocate(segment%field(num_fields))
+
+      if (segment%Flather) then
+        if (num_fields /= 3) call MOM_error(FATAL, &
                    "MOM_open_boundary, initialize_segment_data: "//&
                    "Need three inputs for Flather")
-      segment%num_fields = 3 ! these are the input fields required for the Flather option
+        segment%num_fields = 3 ! these are the input fields required for the Flather option
                                        ! note that this is assuming that the inputs are coming in this order
                                        ! and independent of the input param string . Needs cleanup - mjh
-      allocate(segment%field_names(segment%num_fields))
-      segment%field_names(:)='None'
-      segment%field_names(1)='UO'
-      segment%field_names(2)='VO'
-      segment%field_names(3)='ZOS'
+        allocate(segment%field_names(segment%num_fields))
+        segment%field_names(:)='None'
+        segment%field_names(1)='UO'
+        segment%field_names(2)='VO'
+        segment%field_names(3)='ZOS'
+      endif
     endif
 
 !!
@@ -399,9 +401,13 @@ subroutine initialize_segment_data(G, OBC, PF)
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
     do m=1,num_fields
-      call parse_segment_data_str(segstr,var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
-      segment%field(m)%name = trim(fields(m))
+      call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
       if (trim(filename) /= 'none') then
+        OBC%update_OBC = .true. ! Data is assumed to be time-dependent if we are reading from file
+        OBC%needs_IO_for_data = .true. ! At least one segment is using I/O for OBC data
+        if (segment%on_pe) then
+         segment%values_needed = .true. ! Indicates that i/o will be needed for this segment
+         segment%field(m)%name = trim(fields(m))
          filename = trim(inputdir)//trim(filename)
          fieldname = trim(fieldname)//trim(suffix)
          call field_size(filename,fieldname,siz,no_domain=.true.)
@@ -444,11 +450,9 @@ subroutine initialize_segment_data(G, OBC, PF)
           segment%field(m)%fid = -1
           segment%field(m)%value = value
        endif
+      endif
     enddo
-
   enddo
-
-  return
 
 end subroutine initialize_segment_data
 
@@ -559,8 +563,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
       OBC%segment(l_seg)%Flather = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
@@ -574,8 +576,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%segment(l_seg)%Tnudge_in = 1.0/(3*86400)
       OBC%segment(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_u_BCs_exist_globally = .true.
@@ -587,13 +587,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%legacy = .true.
       OBC%segment(l_seg)%Flather = .true.
       OBC%segment(l_seg)%radiation = .true.
-      OBC%update_OBC = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
@@ -666,8 +663,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       this_kind = OBC_FLATHER
       OBC%segment(l_seg)%Flather = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
@@ -681,8 +676,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%segment(l_seg)%Tnudge_in = 1.0/(3*86400)
       OBC%segment(l_seg)%Tnudge_out = 1.0/(360*86400)
       OBC%nudged_v_BCs_exist_globally = .true.
@@ -694,13 +687,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%legacy = .true.
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%Flather = .true.
-      OBC%update_OBC = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
-      OBC%segment(l_seg)%values_needed = .true.
-      OBC%update_OBC = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
       Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
@@ -957,8 +947,7 @@ logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, a
                                                         OBC%Flather_v_BCs_exist_globally
   if (present(apply_nudged_OBC)) open_boundary_query = OBC%nudged_u_BCs_exist_globally .or. &
                                                        OBC%nudged_v_BCs_exist_globally
-  if (present(needs_ext_seg_data) .and. OBC%number_of_segments > 0 .and. &
-      OBC%update_OBC) open_boundary_query = OBC%update_OBC
+  if (present(needs_ext_seg_data)) open_boundary_query = OBC%needs_IO_for_data
 
 end function open_boundary_query
 
