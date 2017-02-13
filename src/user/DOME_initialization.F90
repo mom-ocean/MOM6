@@ -26,6 +26,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : OBC_segment_type
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -269,6 +270,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   character(len=40)  :: mod = "DOME_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -281,12 +283,16 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-  allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-
   g_prime_tot = (GV%g_Earth/GV%Rho0)*2.0
   Def_Rad = sqrt(D_edge*g_prime_tot) / (1.0e-4*1000.0)
   tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*Def_Rad) * GV%m_to_H
+
+  if (OBC%number_of_segments .ne. 1) then
+    print *, 'Error in DOME OBC segment setup'
+    return   !!! Need a better error message here
+  endif
+  segment => OBC%segment(1)
+  if (.not. segment%on_pe) return
 
   do k=1,nz
     rst = -1.0
@@ -305,17 +311,14 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                                         (2.0 - Ri_trans))
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
                                        log((2.0+Ri_trans)/(2.0-Ri_trans))
+    ! New way
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
     do J=JsdB,JedB ; do i=isd,ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        ! This needs to be unneccesarily complicated without symmetric memory.
-        lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-        ! if (isd > IsdB) lon_im1 = G%geoLonBu(I-1,J)
-        OBC%vh(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                              exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-        OBC%v(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
-      else
-        OBC%vh(i,J,k) = 0.0 ; OBC%v(i,J,k) = 0.0
-      endif
+      lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
+      segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
+                                  exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
+      segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
     enddo ; enddo
   enddo
 

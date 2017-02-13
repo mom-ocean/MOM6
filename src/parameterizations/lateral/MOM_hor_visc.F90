@@ -259,6 +259,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
+    dvdx, dudy, & ! components in the shearing strain (s-1)
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy      ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
@@ -298,7 +299,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k
+  integer :: i, j, k, n
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -308,6 +309,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
+    apply_OBC = .true.
   endif ; endif ; endif
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
@@ -360,18 +362,44 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
     enddo ; enddo
-
+    ! Components for the shearing strain
+    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+      dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
+      dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
+    enddo ; enddo
+    ! Adjust contributions to shearing strain on open boundaries.
+    if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            if (OBC%zero_strain) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_strain) then
+              dudy(I,J) = 0.
+            endif
+          enddo
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            if (OBC%zero_strain) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_strain) then
+              dvdx(I,J) = 0.
+            endif
+          enddo
+        endif
+      enddo
+    endif ; endif
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * &
-            (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
+        sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
       enddo ; enddo
     else
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        sh_xy(I,J) = G%mask2dBu(I,J) * &
-            (CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J)))
+        sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
       enddo ; enddo
     endif
 
@@ -385,6 +413,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         v0(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J)*sh_xy(I,J) - CS%DY2q(I-1,J)*sh_xy(I-1,J)) - &
                   CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*sh_xx(i,j+1) - CS%DX2h(i,j)*sh_xx(i,j))
       enddo ; enddo
+      if (apply_OBC .and. OBC%zero_biharmonic) then
+        do n=1,OBC%number_of_segments
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+              v0(i,J) = 0.
+            enddo
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
+              u0(I,j) = 0.
+            enddo
+          endif
+        enddo
+      endif
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -469,6 +512,39 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
     enddo ; enddo
 
+    if (CS%biharmonic) then
+      ! Gradient of Laplacian, for use in bi-harmonic term
+      do J=js-1,Jeq ; do I=is-1,Ieq
+        dvdx(I,J) = CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J))
+        dudy(I,J) = CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j))
+      enddo ; enddo
+      ! Adjust contributions to shearing strain on open boundaries.
+      if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+        do n=1,OBC%number_of_segments
+          if (OBC%segment(n)%is_N_or_S) then
+            J = OBC%segment(n)%HI%JsdB
+            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+              if (OBC%zero_strain) then
+                dvdx(I,J) = 0.
+                dudy(I,J) = 0.
+              elseif (OBC%freeslip_strain) then
+                dudy(I,J) = 0.
+              endif
+            enddo
+          elseif (OBC%segment(n)%is_E_or_W) then
+            I = OBC%segment(n)%HI%IsdB
+            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+              if (OBC%zero_strain) then
+                dvdx(I,J) = 0.
+                dudy(I,J) = 0.
+              elseif (OBC%freeslip_strain) then
+                dvdx(I,J) = 0.
+              endif
+            enddo
+          endif
+        enddo
+      endif ; endif
+    endif
     do J=js-1,Jeq ; do I=is-1,Ieq
       if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) &
         Shear_mag = sqrt(sh_xy(I,J)*sh_xy(I,J) + &
@@ -568,15 +644,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
         if (CS%id_Ah_q>0) Ah_q(I,J,k) = Ah
 
-        str_xy(I,J) = str_xy(I,J) + Ah * &
-            (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J)))
+        str_xy(I,J) = str_xy(I,J) + Ah * ( dvdx(I,J) + dudy(I,J) )
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xy(I,J) =             Ah * &
-            (CS%DX_dyBu(I,J)*(u0(I,j+1)*G%IdxCu(I,j+1) - u0(I,j)*G%IdxCu(I,j)) + &
-             CS%DY_dxBu(I,J)*(v0(i+1,J)*G%IdyCv(i+1,J) - v0(i,J)*G%IdyCv(i,J)))
-        bhstr_xy(I,J) =   bhstr_xy(I,J) * (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
+        bhstr_xy(I,J) = Ah * ( dvdx(I,J) + dudy(I,J) ) * &
+                        (hq * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
 
       endif  ! biharmonic
 
@@ -595,10 +667,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
                      G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
 
-      if (apply_OBC) then ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%radiation) diffu(I,j,k) = 0.0
-      endif ; endif
     enddo ; enddo
+    if (apply_OBC) then
+      ! This is not the right boundary condition. If all the masking of tendencies are done
+      ! correctly later then eliminating this block should not change answers.
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
+            diffu(I,j,k) = 0.
+          enddo
+        endif
+      enddo
+    endif
 
 !  Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
     do J=Jsq,Jeq ; do i=is,ie
@@ -607,10 +688,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
                      G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
-      if (apply_OBC) then ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%radiation) diffv(I,j,k) = 0.0
-      endif ; endif
     enddo ; enddo
+    if (apply_OBC) then
+      ! This is not the right boundary condition. If all the masking of tendencies are done
+      ! correctly later then eliminating this block should not change answers.
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+            diffv(i,J,k) = 0.
+          enddo
+        endif
+      enddo
+    endif
 
     if (find_FrictWork) then ; do j=js,je ; do i=is,ie
     ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
