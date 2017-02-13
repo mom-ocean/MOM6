@@ -442,30 +442,32 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   ! Reads OBC parameters not pertaining to the location of the boundaries
   call open_boundary_init(G, PF, OBC)
 
-  ! This is the legacy approach to turning on open boundaries
-  call get_param(PF, mod, "OBC_USER_CONFIG", config, &
+  ! This controls user code for setting open boundary data
+  if (associated(OBC)) then
+    call get_param(PF, mod, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open\n"//&
                  " boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
                  "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
                  "   supercritical - now only needed here for the allocations\n"//&
                  "   USER - user specified", default="none")
-  if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
-  if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
-    if (trim(config) == "DOME") then
-      call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
-      OBC%update_OBC = .false.
-    elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, PF)
-    elseif (trim(config) == "USER") then
-      call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-    elseif (.not. trim(config) == "none") then
-      call MOM_error(FATAL, "The open boundary conditions specified by "//&
-              "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
+    if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
+    if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
+      if (trim(config) == "DOME") then
+        call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
+        OBC%update_OBC = .false.
+      elseif (lowercase(trim(config)) == "supercritical") then
+        call supercritical_set_OBC_data(OBC, G, PF)
+      elseif (trim(config) == "USER") then
+        call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
+      elseif (.not. trim(config) == "none") then
+        call MOM_error(FATAL, "The open boundary conditions specified by "//&
+                "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
+      endif
     endif
-  endif
-  if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-    call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+    if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
+      call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+    endif
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
 !   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
