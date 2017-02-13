@@ -347,9 +347,13 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
           'Unable to interpret "'//trim(string)//'".')
     endif
     allocate(dz(ke))
-    dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
+    if (ke==1) then
+      dz(:) = uniformResolution(ke, coord_mode, tmpReal, GV%Rlay(1), GV%Rlay(1))
+    else
+      dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
                    GV%Rlay(1)+0.5*(GV%Rlay(1)-GV%Rlay(2)), &
                    GV%Rlay(ke)+0.5*(GV%Rlay(ke)-GV%Rlay(ke-1)) )
+    endif
     if (main_parameters) call log_param(param_file, mod, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
   elseif (trim(string)=='PARAM') then
