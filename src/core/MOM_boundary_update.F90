@@ -56,7 +56,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, Time)
 
   if (OBC%OBC_user_config == "tidal_bay") then
     call tidal_bay_set_OBC_data(OBC, G, h, Time)
-  else
+  elseif (OBC%needs_IO_for_data) then
     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   endif
 
