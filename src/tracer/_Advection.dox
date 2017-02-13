@@ -1,0 +1,24 @@
+/*! \page Advection Tracer Advection
+
+MOM6 implements a generalised tracer advection scheme, which is a combination of the modified flux advection scheme (Easter, 1993) with reconstructed tracer distributions. The tracer distributions may be piecewise linear (PLM) or piecewise parabolic (PPM), which may itself use either the Colella and Woodward (CW84) or Huynh (H3) reconstruction.
+
+\section Flux_advection Flux advection
+The modified flux advection scheme preserves the tracer mixing ratio in a cell across directional splitting by accounting for changes in mass changes. Fluxes are applied to alternate directions in turn, restricting the applied flux so as not to evacuate all mass out of a cell. Because of this, we need to know the stencil used during the calculation of the reconstruction. Every iteration of the splitting algorithm, cells at the edge of a processor's data domain are invalidated. When this invalidation region extends below the halo, a group pass is required to refresh the halo. A larger stencil (such as for the CW84 reconstruction) therefore introduces more frequent updates, and may impact performance.
+
+\section Tracer_reconstruction Tracer reconstruction
+While MOM6 only carries the mean tracer concentration in a cell, a higher order reconstruction is computed for the purpose of advection. Reconstructions are also modified to ensure that monotonicity is preserved (i.e. spurious minima or maxima cannot be introduced).
+
+The piecewise linear (PLM) reconstruction uses the monotonic modified van Leer scheme (Lin et al., 1994). One might think to use the average of the one-sided differences of mean tracer concentration within a cell to calculate the slope of the linear reconstruction, however this method guarantees neither monotonicity, nor positive definiteness. Instead, the method is locally limited to the minimum of this average slope and each of the one-sided slopes, i.e. \f[\Delta \Phi_i = \min\left\{\left|[\Delta \Phi_i]_\text{avg}\right|, 2\left(\Phi_i - \Phi_i^\text{min}\right), 2\left(\Phi_i^\text{max} - \Phi_i\right)\right\}\f]
+(where \f$\Phi_i^\text{min}\f$ is the minimum in the 3-point stencil).
+
+In a PPM scheme, for a cell with mean tracer concentration \f$\Phi_i\f$, the values at the left and right interfaces, \f$\Phi_{L,i}\f$ and \f$\Phi_{R,i}\f$ must be estimated. First, an interpolation is used to calculate \f$\Phi_{i-1/2}\f$ and \f$\Phi_{i+1/2}\f$. These values are then modified to preserve monotonicity in each cell, which introduces discontinuities between cell edges (e.g. \f$\Phi_{R,i}\f$ and \f$\Phi_{L,i+1}\f$).
+
+The reconstruction \f$\Phi_i(\xi)\f$ then satisfies three properties:
+
+- total amount of tracer is conserved, \f$\int_{\xi_{i-1/2}}^{\xi_{i+1/2}} \Phi_i(\xi') \,\mathrm d\xi' = \Phi_i\f$
+- left interface value matches, \f$\Phi(\xi_{i-1/2}) = \Phi_{L,i}\f$
+- right interface value matches, \f$\Phi(\xi_{i+1/2}) = \Phi_{R,i}\f$
+
+There are two methods of reconstruction for a piecewise parabolic (PPM) profile. They differ in the estimate of interface values \f$\Phi_{i+1/2}\f$ prior to monotonicity limiting. The Colella and Woodward (1984) scheme makes use of the limited slope \f$\Delta\Phi_i\f$ from PLM, above. This has the effect of requiring a larger stencil for each reconstruction. On the other hand, the Huynh (1997) scheme reduces the requirement of this stencil, by only examining the tracer concentrations in adjacent cells, at the same time reducing order of accuracy of the reconstruction.
+
+*/
