@@ -58,6 +58,8 @@ subroutine find_obsolete_params(param_file)
        hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
   call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", &
        hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
+  call obsolete_char(param_file, "OBC_CONFIG", &
+       hint="Instead use OBC_USER_CONFIG and use the new segments protocol.")
 
   test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
   test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)
