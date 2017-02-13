@@ -318,10 +318,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then
-    do k=1,nz ; do j=js,je ; do I=is-2,ie+1
+    do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
       u_old_rad_OBC(I,j,k) = u(I,j,k)
     enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-2,je+1 ; do i=is,ie
+    do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
       v_old_rad_OBC(i,J,k) = v(i,J,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
@@ -429,7 +429,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
   endif; endif
 
   if (G%nonblocking_updates) then
@@ -639,7 +639,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G)
+         v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+    call cpu_clock_begin(id_clock_pass)
+    call do_group_pass(CS%pass_hp_uv, G%Domain)
+    if (G%nonblocking_updates) then
+      call start_group_pass(CS%pass_av_uvh, G%Domain)
+    endif
+    call cpu_clock_end(id_clock_pass)
   endif
 
   ! h_av = (h + hp)/2
@@ -683,7 +689,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
   endif; endif
 
   if (G%nonblocking_updates) then
@@ -855,7 +861,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, &
-             v_old_rad_OBC, h, h_old_rad_OBC, G)
+             v_old_rad_OBC, h, h_old_rad_OBC, G, dt)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
@@ -1145,7 +1151,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
     call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, VarMix, &
-                              G, GV, CS%hor_visc_CSp)
+                              G, GV, CS%hor_visc_CSp, OBC=CS%OBC)
   if (.not. query_initialized(CS%u_av,"u2", restart_CS) .or. &
       .not. query_initialized(CS%u_av,"v2", restart_CS)) then
     CS%u_av(:,:,:) = u(:,:,:)

@@ -348,7 +348,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                         ! in roundoff and can be neglected, in m.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, i_up
+  integer :: i, j, m, n, i_up
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
@@ -500,26 +500,23 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     endif ! usePPM
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_u_BCs_exist_globally) then
-      do_any_i = .false.
-      do I=is-1,ie
-        do_i(I) = .false.
-        if (OBC%OBC_segment_u(I,j) /= OBC_NONE .and. uhr(I,j,k) /= 0.0) then
-          ! Tracer fluxes are set to prescribed values only for inflows
-          ! from masked areas.
-          if (((uhr(I,j,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W))) .or. &
-              ((uhr(I,j,k) < 0.0) .and. ((G%mask2dT(i+1,j) < 0.5) .or. &
-                  (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E))) ) then
-            do_i(I) = .true. ; do_any_i = .true.
-            uhh(I) = uhr(I,j,k)
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_E_or_W) then
+          if (j >= OBC%segment(n)%HI%jsd .and. j<= OBC%segment(n)%HI%jed) then
+            I = OBC%segment(n)%HI%IsdB
+            ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
+            if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
+                (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
+              uhh(I) = uhr(I,j,k)
+              do m=1,ntr
+                if (associated(Tr(m)%OBC_in_u)) then
+                  flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
+                else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
+              enddo
+            endif
           endif
         endif
       enddo
-      if (do_any_i) then ; do m=1,ntr ; do i=is,ie ; if (do_i(i)) then
-        if (associated(Tr(m)%OBC_in_u)) then
-          flux_x(I,m) = uhh(I)*Tr(m)%OBC_in_u(I,j,k)
-        else ; flux_x(I,m) = uhh(I)*Tr(m)%OBC_inflow_conc ; endif
-      endif ; enddo ; enddo ; endif
     endif ; endif ; endif
 
     ! Calculate new tracer concentration in each cell after accounting
@@ -612,7 +609,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, j_up
+  integer :: i, j, m, n, j_up
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
@@ -763,26 +760,23 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     endif ! usePPM
 
     if (associated(OBC)) then ; if (OBC%OBC_pe) then ; if (OBC%specified_v_BCs_exist_globally) then
-      do_any_i = .false.
-      do i=is,ie
-        do_i(i) = .false.
-        if (OBC%OBC_segment_v(i,J) /= OBC_NONE .and. vhr(i,J,k) /= 0.0) then
-        ! Tracer fluxes are set to prescribed values only for inflows
-        ! from masked areas.
-          if (((vhr(i,J,k) > 0.0) .and. ((G%mask2dT(i,j) < 0.5) .or. &
-                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S))) .or. &
-              ((vhr(i,J,k) < 0.0) .and. ((G%mask2dT(i,j+1) < 0.5) .or. &
-                  (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N))) ) then
-            do_i(i) = .true. ; do_any_i = .true.
-            vhh(i,J) = vhr(i,J,k)
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_N_or_S) then
+          if (J >= OBC%segment(n)%HI%JsdB .and. J<= OBC%segment(n)%HI%JedB) then
+            i = OBC%segment(n)%HI%isd
+            ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
+            if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
+                (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
+              vhh(i,J) = vhr(i,J,k)
+              do m=1,ntr
+                if (associated(Tr(m)%OBC_in_v)) then
+                  flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
+                else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
+              enddo
+            endif
           endif
         endif
       enddo
-      if (do_any_i) then ; do m=1,ntr ; do i=is,ie ; if (do_i(i)) then
-        if (associated(Tr(m)%OBC_in_v)) then
-          flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_in_v(i,J,k)
-        else ; flux_y(i,m,J) = vhh(i,J)*Tr(m)%OBC_inflow_conc ; endif
-      endif ; enddo ; enddo ; endif
     endif ; endif ; endif
   else ! not domore_v.
     do i=is,ie ; vhh(i,J) = 0.0 ; enddo
