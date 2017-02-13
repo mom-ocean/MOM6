@@ -871,7 +871,8 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mod, "TRACER_ADVECTION_SCHEME", mesg, &
           desc="The horizontal transport scheme for tracers:\n"//&
           "  PLM    - Piecewise Linear Method\n"//&
-          "  PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)" &
+          "  PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)\n"// &
+          "  PPM    - Piecewise Parabolic Method (Colella-Woodward)" &
           , default='PLM')
   select case (trim(mesg))
     case ("PLM")
