@@ -627,15 +627,21 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   h_neglect = GV%H_subroundoff
 
   !do i=is,ie ; ts2(i) = 0.0 ; enddo
-  do_j_tr(:) = .false.
-  ! Indexing in the next few lines could be more elegant
-  if (usePPM .and. .not. useHuynh) then
-    do J=js-1,je ; if (domore_v(J,k)) then ; do j2=-1,2 ; do_j_tr(j+J2) = .true. ; enddo ; endif ; enddo
-  else
-    do J=js-1,je ; if (domore_v(J,k)) then ; do j2=0,1 ; do_j_tr(j+J2) = .true. ; enddo ; endif ; enddo
-  endif
 
-  !   Calculate the j-direction profiles (slopes) of each tracer that
+  ! We conditionally perform work on tracer points: calculating the PLM slope,
+  ! and updating tracer concentration within a cell
+  ! this depends on whether there is a flux which would affect this tracer point,
+  ! as indicated by domore_v. In the case of PPM reconstruction, a flux requires
+  ! slope calculations at the two tracer points on either side (as indicated by
+  ! the stencil variable), so we account for this with the do_j_tr flag array
+  !
+  ! Note: this does lead to unnecessary work in updating tracer concentrations,
+  ! since that doesn't need a wider stencil with the PPM advection scheme, but
+  ! this would require an additional loop, etc.
+  do_j_tr(:) = .false.
+  do J=js-1,je ; if (domore_v(J,k)) then ; do j2=1-stencil,stencil ; do_j_tr(j+j2) = .true. ; enddo ; endif ; enddo
+
+  ! Calculate the j-direction profiles (slopes) of each tracer that
   ! is being advected.
   if (usePLMslope) then
     do j=js-stencil,je+stencil ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
