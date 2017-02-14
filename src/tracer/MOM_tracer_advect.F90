@@ -446,8 +446,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
           aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
         else
-          aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)))
-          aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)))
+          aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)) / 3.)
+          aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)) / 3.)
         endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
@@ -710,8 +710,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
           aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
         else
-          aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)))
-          aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)))
+          aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)) / 3.)
+          aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)) / 3.)
         endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
