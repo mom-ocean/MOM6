@@ -348,11 +348,14 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                         ! in roundoff and can be neglected, in m.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, n, i_up
+  integer :: i, j, m, n, i_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
+  ! stencil for calculating slope values
+  stencil = 1
+  if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
@@ -366,7 +369,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     ! Calculate the i-direction profiles (slopes) of each tracer that
     ! is being advected.
     if (usePLMslope) then
-      do m=1,ntr ; do i=is-1,ie+1
+      do m=1,ntr ; do i=is-stencil,ie+stencil
        !if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
        !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))) then
        !  maxslope = 4.0*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k))
@@ -609,11 +612,14 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, n, j_up
+  integer :: i, j, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
+  ! stencil for calculating slope values
+  stencil = 1
+  if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
@@ -625,7 +631,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   !   Calculate the j-direction profiles (slopes) of each tracer that
   ! is being advected.
   if (usePLMslope) then
-    do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
+    do j=js-stencil,je+stencil ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
       !if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
       !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))) then
       !  maxslope = 4.0*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))
