@@ -227,6 +227,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
+  ! Should this be set in MOM_input instead?
+  if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
