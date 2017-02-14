@@ -327,9 +327,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM, useHuynh
 
-  real, dimension(SZIB_(G),ntr) :: &
-    slope_x, &          ! The concentration slope per grid point in units of
+  real, dimension(SZI_(G),ntr) :: &
+    slope_x             ! The concentration slope per grid point in units of
                         ! concentration (nondim.).
+  real, dimension(SZIB_(G),ntr) :: &
     flux_x              ! The tracer flux across a boundary in m3*conc or kg*conc.
   real :: maxslope      ! The maximum concentration slope per grid point
                         ! consistent with monotonicity, in conc. (nondim.).
@@ -389,7 +390,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         dMn= Tc - min( Tp, Tc, Tm )
         slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
             sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
-        enddo ; enddo
+      enddo ; enddo
     endif ! usePLMslope
 
     ! Calculate the i-direction fluxes of each tracer, using as much
@@ -590,9 +591,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM, useHuynh
 
-  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    slope_y, &                  ! The concentration slope per grid point in units of
+  real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
+    slope_y                     ! The concentration slope per grid point in units of
                                 ! concentration (nondim.).
+  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     flux_y                      ! The tracer flux across a boundary in m3 * conc or kg*conc.
   real :: maxslope              ! The maximum concentration slope per grid point
                                 ! consistent with monotonicity, in conc. (nondim.).
@@ -612,7 +614,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, n, j_up, stencil
+  integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
@@ -624,9 +626,14 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
 
- !do i=is,ie ; ts2(i) = 0.0 ; enddo
-  do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
-  do j=js,je ; do_j_tr(j) = (domore_v(J-1,k) .or. domore_v(J,k)) ; enddo
+  !do i=is,ie ; ts2(i) = 0.0 ; enddo
+  do_j_tr(:) = .false.
+  ! Indexing in the next few lines could be more elegant
+  if (usePPM .and. .not. useHuynh) then
+    do J=js-1,je ; if (domore_v(J,k)) then ; do j2=-1,2 ; do_j_tr(j+J2) = .true. ; enddo ; endif ; enddo
+  else
+    do J=js-1,je ; if (domore_v(J,k)) then ; do j2=0,1 ; do_j_tr(j+J2) = .true. ; enddo ; endif ; enddo
+  endif
 
   !   Calculate the j-direction profiles (slopes) of each tracer that
   ! is being advected.
