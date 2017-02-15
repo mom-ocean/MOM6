@@ -142,18 +142,28 @@ type, public :: energetic_PBL_CS ; private
                              ! applies to in subsequent revisions of this code.
                              ! "_Neg" and "_Pos" refer to which scale is applied as a
                              ! function of negative or positive local buoyancy.
+  real    :: MSTAR_CAP       ! Since MSTAR is restoring undissipated energy to mixing,
+                             ! there must be a cap on how large it can be.  This
+                             ! is definitely a function of latitude (Ekman limit),
+                             ! but will be taken as constant for now.
   real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
                              ! to the mixing layer depth, Ekman depth, and Monin-Obukhov
                              ! depth.
   real    :: MSTAR_XINT      ! Value where MSTAR function transitions from linear
                              ! to decay toward MSTAR->0 at fully developed Ekman depth.
+  real    :: MSTAR_XINT_UP   ! Similar but for transition to asymptotic cap.
   real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
                              ! changes to linear transition.
   real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
   real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
+  real :: MSTAR_N = -2.      ! Exponent in decay at negative and positive limits of MLD_over_STAB
+  real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
+  real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
+                             !  ends of the linear fit within the well constrained region.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
   logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
+  logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LA_windsea = .false.
   logical :: orig_PE_calc = .true.
@@ -171,6 +181,7 @@ type, public :: energetic_PBL_CS ; private
     ML_depth, &        ! The mixed layer depth in m.
     ML_depth2, &       ! The mixed layer depth in m.
     Enhance_V, &       ! The enhancement to the turbulent velocity scale (non-dim)
+    MSTAR_MIX, &       ! Mstar used in EPBL
     diag_TKE_wind, &   ! The wind source of TKE.
     diag_TKE_MKE, &    ! The resolved KE source of TKE.
     diag_TKE_conv, &   ! The convective source of TKE.
@@ -188,7 +199,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
-  integer :: id_OSBL = -1, id_LT_Enhancement = -1
+  integer :: id_OSBL = -1, id_LT_Enhancement = -1, id_MSTAR_mix = -1
 end type energetic_PBL_CS
 
 integer :: num_msg = 0, max_msg = 2
@@ -356,7 +367,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: I_dtrho   ! 1.0 / (dt * Rho0) in m3 kg-1 s-1.  This is
                     ! used convert TKE back into ustar^3.
   real :: U_star    ! The surface friction velocity, in m s-1.
-  real :: U_10      ! An approximate (neutral) wind speed backed out of the friction velocity
+  real :: U_Star_Mean ! The surface friction without gustiness in m s-1.
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
   real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact.
   real :: LA        ! The Langmuir number (non-dim)
@@ -474,16 +485,12 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: C_MO = 1. ! Constant in STAB_SCALE for Monin-Obukhov
   real :: C_EK = 2. ! Constant in STAB_SCALE for Ekman length
   real :: MLD_over_STAB ! Mixing layer depth divided by STAB_SCALE
-  real :: MSTAR_N = -2. ! Exponent in hyperolic decay at negative values of MLD_over_STAB
-  real :: MSTAR_A  ! MSTAR_A and MSTAR_B are coefficients in hyperbolic decay which
-  real :: MSTAR_B  !  are computed to match the value and slope of the linear fit at the
-                   !  value of mld_over_stab where the transition is set.
-  real :: MSTAR_MIX ! The value of mstar (Proportionality of TKE to drive mixing to ustar
+  real :: MSTAR_MIX! The value of mstar (Proportionality of TKE to drive mixing to ustar
                     ! cubed) which is computed as a function of latitude, boundary layer depth,
                     ! and the Monin-Obhukov depth.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
-  real :: dPE_debug, mixing_debug
+  real :: dPE_debug, mixing_debug, taux2, tauy2
   real, dimension(20) :: TKE_left_itt, PE_chg_itt, Kddt_h_itt, dPEa_dKd_itt, MKE_src_itt
   real, dimension(SZI_(G),SZK_(GV)) :: &
     mech_TKE_k, conv_PErel_k
@@ -515,6 +522,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
   h_tt_min = 0.0
   vonKar = 0.41
+  mstar_mix=CS%MSTAR!Initialize to mstar
   I_dtrho = 0.0 ; if (dt*GV%Rho0 > 0.0) I_dtrho = 1.0 / (dt*GV%Rho0)
 
   ! Determine whether to zero out diagnostics before accumulation.
@@ -536,7 +544,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     if (CS%Mixing_Diagnostics) then
       CS%Mixing_Length(:,:,:) = 0.0
       CS%Velocity_Scale(:,:,:) = 0.0
-      !CS%Mstar_Used(:,:) = 0.0 ! Should add diagnostic Mstar_Used
     endif
 !!OMP end parallel
   endif
@@ -598,6 +605,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
 
       U_Star = fluxes%ustar(i,j)
+      taux2 = 0.
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+      tauy2 = 0.0
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+      U_Star_Mean = sqrt(sqrt(taux2 + tauy2)/GV%rho0)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -701,7 +717,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ENHANCE_V=1.e0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
         if (CS%Use_LA_windsea) then
-          call get_LA_windsea( u_star, MLD_guess, GV, LA)
+          call get_LA_windsea( u_star_mean, MLD_guess, GV, LA)
           if (CS%LT_Enhance_Form==1) then
             !Original w'/ust scaling
             ENHANCE_V = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
@@ -718,17 +734,28 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (.not.CS%Use_Mstar_Fixed) then
           ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
           ! First solve for the TKE to PE length scale
-          MLD_over_Stab = MLD_guess / Stab_Scale
-          !Fitting coefficients for hyperbolic decay as MLD -> Ekman depth
-          MSTAR_A = CS%MSTAR_AT_XINT**(1./MSTAR_N)
-          MSTAR_B = CS%MSTAR_SLOPE / (MSTAR_N*MSTAR_A**(MSTAR_N-1.))
-          if ((MLD_over_Stab) .ge. CS%MSTAR_XINT) then
-            !Within linear regime
-            MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab-CS%MSTAR_XINT)+CS%MSTAR_AT_XINT
+          MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
+          if ((MLD_over_Stab) .le. 0.0) then
+            !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
+            MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
           else
-            !Within hypterbolic decay regime
-            MSTAR_mix = (MSTAR_B*(MLD_over_Stab-CS%MSTAR_XINT)+MSTAR_A)**(MSTAR_N)
+            if (CS%MSTAR_CAP>=0.) then
+              if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
+                !If using flat cap (or if using asymptotic cap but within linear regime we
+                ! can make use of same code)
+                MSTAR_mix = min(CS%MSTAR_CAP, &
+                     CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT)
+              else
+                !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
+                MSTAR_mix = CS%MSTAR_CAP - &
+                     (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)+CS%MSTAR_A2)**(CS%MSTAR_N)
+              endif
+            else
+              !No cap if negative cap value given.
+              MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
+            endif
           endif
+
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_V*GV%Rho0)*((U_Star**3))
           conv_PErel(i) = 0.0
@@ -1374,7 +1401,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         enddo
       endif
       CS%Enhance_V(i,j) = Enhance_V
-
+      CS%MSTAR_MIX(i,j) = MSTAR_MIX
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
@@ -1428,6 +1455,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
     if (CS%id_LT_Enhancement >0) &
       call post_data(CS%id_LT_Enhancement, CS%Enhance_V, CS%diag)
+    if (CS%id_MSTAR_MIX >0) &
+      call post_data(CS%id_MSTAR_MIX, CS%MSTAR_MIX, CS%diag)
   endif
 
 end subroutine energetic_PBL
@@ -1922,6 +1951,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "The exponent applied to the ratio of the distance to the MLD \n"//&
                  "and the MLD depth which determines the shape of the mixing length.",&
                  "units=nondim", default=2.0)
+  call get_param(param_file, mod, "MSTAR_CAP", CS%mstar_cap, &
+                 "Maximum value of mstar allowed in model if non-negative\n"//&
+                 "(used if MSTAR_FIXED=false).",&
+                 "units=nondim", default=-1.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_FIXED=false).",&
@@ -1938,6 +1971,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "True to use a fixed value of mstar, if false mstar depends \n"//&
                  "on the composite Obhukov length and Ekman length.","units=nondim",&
                  default=.true.)
+  call get_param(param_file, mod, "MSTAR_FLATCAP", CS%MSTAR_FLATCAP, &
+                 "Set false to use asmptotic cap or defaults to true to use flat cap."&
+                 ,"units=nondim",default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
                  "surface fluxes that is available to drive entrainment \n"//&
@@ -2082,6 +2118,8 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
       Time, 'Velocity Scale that is used.', 'meter second-1')
   CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
       Time, 'LT enhancement that is used.', 'non-dim')
+  CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
+      Time, 'MSTAR that is used.', 'non-dim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
       Time, 'Boundary layer depth from the iteration.', 'meter')
 
@@ -2113,6 +2151,19 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%Enhance_V, isd, ied, jsd, jed)
+  call safe_alloc_alloc(CS%MSTAR_MIX, isd, ied, jsd, jed)
+
+
+  !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
+  CS%MSTAR_A = CS%MSTAR_AT_XINT**(1./CS%MSTAR_N)
+  CS%MSTAR_B = CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A**(CS%MSTAR_N-1.))
+  !Fitting coefficients to asymptote toward MSTAR_CAP
+  !*Fixed to begin asymptote at MSTAR_CAP-0.5 toward MSTAR_CAP
+  CS%MSTAR_A2 = 0.5**(1./CS%MSTAR_N)
+  CS%MSTAR_B2 = -CS%MSTAR_SLOPE / (CS%MSTAR_N*CS%MSTAR_A2**(CS%MSTAR_N-1))
+  !Compute value of X (referenced to MSTAR_XINT) where transition
+  ! to asymptotic regime based on value of X where MSTAR=MSTAR_CAP-0.5
+  CS%MSTAR_XINT_UP = (CS%MSTAR_CAP-0.5-CS%MSTAR_AT_XINT)/CS%MSTAR_SLOPE
 
 end subroutine energetic_PBL_init
 
@@ -2124,6 +2175,7 @@ subroutine energetic_PBL_end(CS)
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
   if (allocated(CS%Enhance_V))           deallocate(CS%Enhance_V)
+  if (allocated(CS%MSTAR_MIX))           deallocate(CS%MSTAR_MIX)
   if (allocated(CS%diag_TKE_wind))       deallocate(CS%diag_TKE_wind)
   if (allocated(CS%diag_TKE_MKE))        deallocate(CS%diag_TKE_MKE)
   if (allocated(CS%diag_TKE_conv))       deallocate(CS%diag_TKE_conv)
