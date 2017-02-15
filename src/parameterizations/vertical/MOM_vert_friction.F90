@@ -193,7 +193,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   logical :: do_i(SZIB_(G))
 
-  integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
@@ -388,20 +388,24 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
-  if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    if (OBC%specified_u_BCs_exist_globally) then
-      do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) &
-          u(I,j,k) = OBC%u(I,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (OBC%specified_v_BCs_exist_globally) then
-      do k=1,nz ; do J=Jsq,Jeq ; do i=G%isc,G%iec
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) &
-          v(i,J,k) = OBC%v(i,J,k)
-      enddo ; enddo ; enddo
-    endif
-  endif ; endif
+  if (associated(OBC)) then
+    do n=1,OBC%number_of_segments
+      if (OBC%segment(n)%specified) then
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do k=1,nz ; do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+            v(i,J,k) = OBC%segment(n)%normal_vel(i,J,k)
+          enddo ; enddo
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do k=1,nz ; do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
+            u(I,j,k) = OBC%segment(n)%normal_vel(I,j,k)
+          enddo ; enddo
+        endif
+      endif
+    enddo
+  endif
+
 ! Offer diagnostic fields for averaging.
   if (CS%id_du_dt_visc > 0) &
     call post_data(CS%id_du_dt_visc, ADp%du_dt_visc, CS%diag)
