@@ -71,7 +71,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m2 H)
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamics structure
   real,                                      intent(in)    :: dt     !< Time increment (s)
-  type(MEKE_type),                           intent(inout) :: MEKE   !< MEKE control structure
+  type(MEKE_type),                           pointer       :: MEKE   !< MEKE control structure
   type(VarMix_CS),                           pointer       :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                      intent(inout) :: CDp    !< Diagnostics for the continuity equation
   type(thickness_diffuse_CS),                pointer       :: CS     !< Control structure for thickness diffusion
@@ -107,7 +107,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
                     ! in roundoff and can be neglected, in H.
   logical :: use_VarMix, Resoln_scaled, use_stored_slopes, khth_use_ebt_struct
   integer :: i, j, k, is, ie, js, je, nz
-  logical :: MEKE_not_null
   real :: hu(SZI_(G), SZJ_(G))       ! u-thickness (H)
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
@@ -115,16 +114,15 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
-  MEKE_not_null = (LOC(MEKE) .NE. 0)
 
   if ((.not.CS%thickness_diffuse) .or. &
-       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. MEKE_not_null ) ) return
+       .not.( CS%Khth > 0.0 .or. associated(VarMix) .or. associated(MEKE) ) ) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   h_neglect = GV%H_subroundoff
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
-  if (MEKE_not_null) then
+  if (associated(MEKE)) then
     if (ASSOCIATED(MEKE%GM_src)) then
       do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
     endif
@@ -154,7 +152,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   ! Set the diffusivities.
 !$OMP parallel default(none) shared(is,ie,js,je,Khth_Loc_u,CS,use_VarMix,VarMix,    &
-!$OMP                               MEKE_not_null,MEKE,Resoln_scaled,KH_u,          &
+!$OMP                               MEKE,Resoln_scaled,KH_u,          &
 !$OMP                               KH_u_CFL,nz,Khth_Loc,KH_v,KH_v_CFL,int_slope_u, &
 !$OMP                               int_slope_v,khth_use_ebt_struct)
 !$OMP do
@@ -169,7 +167,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     enddo ; enddo
   endif
 
-  if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
+  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
 !$OMP do
     do j=js,je ; do I=is-1,ie
       Khth_Loc_u(I,j) = Khth_Loc_u(I,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
@@ -222,7 +220,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       Khth_Loc(i,j) = Khth_Loc(i,j) + CS%KHTH_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
     enddo ; enddo
   endif
-  if (MEKE_not_null) then ; if (associated(MEKE%Kh)) then
+  if (associated(MEKE)) then ; if (associated(MEKE%Kh)) then
 !$OMP do
     do J=js-1,je ; do i=is,ie
       Khth_Loc(i,j) = Khth_Loc(i,j) + MEKE%KhTh_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
@@ -323,7 +321,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   ! This needs to happen after the H update and before the next post_data.
   call diag_update_remap_grids(CS%diag)
 
-  if (MEKE_not_null .AND. ASSOCIATED(VarMix)) then
+  if (associated(MEKE) .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,MEKE,VarMix)
       do j=js,je ; do i=is,ie
@@ -399,7 +397,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),   intent(out) :: uhD    !< Zonal mass fluxes (m3/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),   intent(out) :: vhD    !< Meridional mass fluxes (m3/s)
   real,                                        intent(in)  :: dt     !< Time increment (s)
-  type(MEKE_type),                             intent(inout) :: MEKE !< MEKE control structue
+  type(MEKE_type),                             pointer     :: MEKE   !< MEKE control structue
   type(thickness_diffuse_CS),                  pointer     :: CS     !< Control structure for thickness diffusion
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), optional, intent(in)  :: int_slope_u !< Ratio that determine how much of
                                                                      !! the isopycnal slopes are taken directly from the
@@ -481,7 +479,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 ! Diagnostics that should be eliminated altogether later...
  ! real, dimension(SZIB_(G), SZJ_(G), SZK_(G)+1) :: sfn_x, sfn_slope_x
  ! real, dimension(SZI_(G), SZJB_(G), SZK_(G)+1) :: sfn_y, sfn_slope_y
-  logical :: MEKE_not_null, present_int_slope_u, present_int_slope_v
+  logical :: present_int_slope_u, present_int_slope_v
   logical :: present_slope_x, present_slope_y, calc_derivatives
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
@@ -495,7 +493,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   dz_neglect = GV%H_subroundoff*H_to_m
 
   use_EOS = associated(tv%eqn_of_state)
-  MEKE_not_null = (LOC(MEKE) .NE. 0)
   present_int_slope_u = PRESENT(int_slope_u)
   present_int_slope_v = PRESENT(int_slope_v)
   present_slope_x = PRESENT(slope_x)
@@ -504,7 +501,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   nk_linear = max(GV%nkml, 1)
 
   find_work = .false.
-  if (MEKE_not_null) find_work = ASSOCIATED(MEKE%GM_src)
+  if (associated(MEKE)) find_work = ASSOCIATED(MEKE%GM_src)
   find_work = (ASSOCIATED(CS%GMwork) .or. find_work)
 
   if (use_EOS) then
@@ -991,7 +988,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
     Work_h = 0.5 * G%IareaT(i,j) * &
       ((Work_u(I-1,j) + Work_u(I,j)) + (Work_v(i,J-1) + Work_v(i,J)))
     if (ASSOCIATED(CS%GMwork)) CS%GMwork(i,j) = Work_h
-    if (MEKE_not_null) then ; if (ASSOCIATED(MEKE%GM_src)) then
+    if (associated(MEKE)) then ; if (ASSOCIATED(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
   enddo ; enddo ; endif
