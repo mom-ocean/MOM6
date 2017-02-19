@@ -22,8 +22,10 @@ import subprocess
 #sys.path.insert(0, os.path.abspath('.'))
 
 # Create API documentation
-subprocess.call('doxygen Doxyfile_rtd', shell=True)
-#subprocess.call('./doxygen/bin/doxygen Doxyfile_rtd', shell=True)
+doxygenize = 'doxygen Doxyfile_rtd'
+if os.path.exists('./doxygen/bin/doxygen'): doxygenize = './doxygen/bin/'+doxygenize
+return_code = subprocess.call(doxygenize, shell=True)
+if return_code != 0: sys.exit(return_code)
 
 # -- General configuration ------------------------------------------------
 
