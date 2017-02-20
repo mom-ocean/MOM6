@@ -606,16 +606,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 
         if (k > nk_linear) then
           if (use_EOS) then
-            if (present_slope_x) then
-              Slope = slope_x(I,j,k)
-              slope2_Ratio_u(I,K) = Slope**2 * I_slope_max2
-            else
-              hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
-              hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
+            if (CS%use_FGNV_streamfn .or. .not.present_slope_x) then
               hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
               hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-              haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
-              haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
               haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
               haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
               if (GV%Boussinesq) then
@@ -626,13 +619,24 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
               endif
               ! Use the harmonic mean thicknesses to weight the horizontal gradients.
               ! These unnormalized weights have been rearranged to minimize divisions.
-              wtA = hg2A*haB ; wtB = hg2B*haA
               wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
               drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
               ! The expression for drdz above is mathematically equivalent to:
               !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
               !          ((hg2L/haL) + (hg2R/haR))
+            endif
+            if (present_slope_x) then
+              Slope = slope_x(I,j,k)
+              slope2_Ratio_u(I,K) = Slope**2 * I_slope_max2
+            else
+              hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
+              hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
+              haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+              haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
+              ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+              ! These unnormalized weights have been rearranged to minimize divisions.
+              wtA = hg2A*haB ; wtB = hg2B*haA
               ! This is the gradient of density along geopotentials.
               drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
                       drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
@@ -817,16 +821,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 
         if (k > nk_linear) then
           if (use_EOS) then
-            if (present_slope_y) then
-              Slope = slope_y(i,J,k)
-              slope2_Ratio_v(i,K) = Slope**2 * I_slope_max2
-            else
-              hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
-              hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+            if (CS%use_FGNV_streamfn .or. .not.present_slope_y) then
               hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
               hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
-              haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
-              haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
               haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
               haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
               if (GV%Boussinesq) then
@@ -837,13 +834,24 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
               endif
               ! Use the harmonic mean thicknesses to weight the horizontal gradients.
               ! These unnormalized weights have been rearranged to minimize divisions.
-              wtA = hg2A*haB ; wtB = hg2B*haA
               wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
               drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
               ! The expression for drdz above is mathematically equivalent to:
               !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
               !          ((hg2L/haL) + (hg2R/haR))
+            endif
+            if (present_slope_y) then
+              Slope = slope_y(i,J,k)
+              slope2_Ratio_v(i,K) = Slope**2 * I_slope_max2
+            else
+              hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
+              hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+              haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
+              haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
+              ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+              ! These unnormalized weights have been rearranged to minimize divisions.
+              wtA = hg2A*haB ; wtB = hg2B*haA
               ! This is the gradient of density along geopotentials.
               drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
                       drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
