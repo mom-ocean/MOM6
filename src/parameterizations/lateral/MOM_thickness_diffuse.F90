@@ -452,7 +452,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
   real :: drdx, drdy, drdz  ! Zonal, meridional, and vertical density gradients,
                             ! in units of kg m-4.
   real :: Sfn_est       ! Two preliminary estimates (before limiting) of the
-  real :: Sfn_unlim     ! overturning streamfunction, both in m3 s-1.
+                        ! overturning streamfunction, both in m3 s-1.
+  real :: Sfn_unlim_u(SZIB_(G), SZK_(G)+1) ! Streamfunction for u-points (m3 s-1)
+  real :: Sfn_unlim_v(SZI_(G), SZK_(G)+1)  ! Streamfunction for v-points (m3 s-1)
   real :: Sfn           ! The overturning streamfunction, in m3 s-1.
   real :: Sfn_safe      ! The streamfunction that goes linearly back to 0 at the
                         ! top.  This is a good thing to use when the slope is
@@ -554,191 +556,195 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
 !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OMP                                  drdx,mag_grad2,Slope,slope2_Ratio,           &
+!$OMP                                  Sfn_unlim_u,                                 &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
-  do j=js,je ; do K=nz,2,-1
-    if (find_work .and. .not.(use_EOS)) then
-      drdiA = 0.0 ; drdiB = 0.0
+  do j=js,je
+    do K=nz,2,-1
+      if (find_work .and. .not.(use_EOS)) then
+        drdiA = 0.0 ; drdiB = 0.0
 !       drdkL = GV%g_prime(k) ; drdkR = GV%g_prime(k)
-      drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
-    endif
-
-    calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
-                (find_work .or. .not. present_slope_x)
-
-    ! Calculate the zonal fluxes and gradients.
-    if (calc_derivatives) then
-      do I=is-1,ie
-        pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
-        T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
-        S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
-      enddo
-      call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
-                   drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
-    endif
-
-    do I=is-1,ie
+        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
+      endif
+  
+      calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
+                  (find_work .or. .not. present_slope_x)
+  
+      ! Calculate the zonal fluxes and gradients.
       if (calc_derivatives) then
-        ! Estimate the horizontal density gradients along layers.
-        drdiA = drho_dT_u(I) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
-                drho_dS_u(I) * (S(i+1,j,k-1)-S(i,j,k-1))
-        drdiB = drho_dT_u(I) * (T(i+1,j,k)-T(i,j,k)) + &
-                drho_dS_u(I) * (S(i+1,j,k)-S(i,j,k))
-
-        ! Estimate the vertical density gradients times the grid spacing.
-        drdkL = (drho_dT_u(I) * (T(i,j,k)-T(i,j,k-1)) + &
-                 drho_dS_u(I) * (S(i,j,k)-S(i,j,k-1)))
-        drdkR = (drho_dT_u(I) * (T(i+1,j,k)-T(i+1,j,k-1)) + &
-                 drho_dS_u(I) * (S(i+1,j,k)-S(i+1,j,k-1)))
+        do I=is-1,ie
+          pres_u(I) = 0.5*(pres(i,j,K) + pres(i+1,j,K))
+          T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
+          S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
+        enddo
+        call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, &
+                     drho_dS_u, (is-IsdB+1)-1, ie-is+2, tv%eqn_of_state)
       endif
-
-      if (k > nk_linear) then
-        if (use_EOS) then
-          if (present_slope_x) then
-            Slope = slope_x(I,j,k)
-            slope2_Ratio = Slope**2 * I_slope_max2
-          else
-            hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
-            hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
-            hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-            hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
-            haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
-            haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
-            haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-            haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
-            if (GV%Boussinesq) then
-              dzaL = haL * H_to_m ; dzaR = haR * H_to_m
-            else
-              dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-              dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
-            endif
-            ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-            ! These unnormalized weights have been rearranged to minimize divisions.
-            wtA = hg2A*haB ; wtB = hg2B*haA
-            wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
-
-            drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-            ! The expression for drdz above is mathematically equivalent to:
-            !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-            !          ((hg2L/haL) + (hg2R/haR))
-            ! This is the gradient of density along geopotentials.
-            drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
-                    drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
-
-            ! This estimate of slope is accurate for small slopes, but bounded
-            ! to be between -1 and 1.
-            mag_grad2 = drdx**2 + drdz**2
-            if (mag_grad2 > 0.0) then
-              Slope = drdx / sqrt(mag_grad2)
+  
+      do I=is-1,ie
+        if (calc_derivatives) then
+          ! Estimate the horizontal density gradients along layers.
+          drdiA = drho_dT_u(I) * (T(i+1,j,k-1)-T(i,j,k-1)) + &
+                  drho_dS_u(I) * (S(i+1,j,k-1)-S(i,j,k-1))
+          drdiB = drho_dT_u(I) * (T(i+1,j,k)-T(i,j,k)) + &
+                  drho_dS_u(I) * (S(i+1,j,k)-S(i,j,k))
+  
+          ! Estimate the vertical density gradients times the grid spacing.
+          drdkL = (drho_dT_u(I) * (T(i,j,k)-T(i,j,k-1)) + &
+                   drho_dS_u(I) * (S(i,j,k)-S(i,j,k-1)))
+          drdkR = (drho_dT_u(I) * (T(i+1,j,k)-T(i+1,j,k-1)) + &
+                   drho_dS_u(I) * (S(i+1,j,k)-S(i+1,j,k-1)))
+        endif
+  
+        if (k > nk_linear) then
+          if (use_EOS) then
+            if (present_slope_x) then
+              Slope = slope_x(I,j,k)
               slope2_Ratio = Slope**2 * I_slope_max2
-            else ! Just in case mag_grad2 = 0 ever.
-              Slope = 0.0
-              slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+            else
+              hg2A = h(i,j,k-1)*h(i+1,j,k-1) + h_neglect2
+              hg2B = h(i,j,k)*h(i+1,j,k) + h_neglect2
+              hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+              hg2R = h(i+1,j,k-1)*h(i+1,j,k) + h_neglect2
+              haA = 0.5*(h(i,j,k-1) + h(i+1,j,k-1))
+              haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
+              haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+              haR = 0.5*(h(i+1,j,k-1) + h(i+1,j,k)) + h_neglect
+              if (GV%Boussinesq) then
+                dzaL = haL * H_to_m ; dzaR = haR * H_to_m
+              else
+                dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+                dzaR = 0.5*(e(i+1,j,K-1) - e(i+1,j,K+1)) + dz_neglect
+              endif
+              ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+              ! These unnormalized weights have been rearranged to minimize divisions.
+              wtA = hg2A*haB ; wtB = hg2B*haA
+              wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+  
+              drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+              ! The expression for drdz above is mathematically equivalent to:
+              !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+              !          ((hg2L/haL) + (hg2R/haR))
+              ! This is the gradient of density along geopotentials.
+              drdx = ((wtA * drdiA + wtB * drdiB) / (wtA + wtB) - &
+                      drdz * (e(i,j,K)-e(i+1,j,K))) * G%IdxCu(I,j)
+  
+              ! This estimate of slope is accurate for small slopes, but bounded
+              ! to be between -1 and 1.
+              mag_grad2 = drdx**2 + drdz**2
+              if (mag_grad2 > 0.0) then
+                Slope = drdx / sqrt(mag_grad2)
+                slope2_Ratio = Slope**2 * I_slope_max2
+              else ! Just in case mag_grad2 = 0 ever.
+                Slope = 0.0
+                slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+              endif
             endif
-          endif
-
-          ! Adjust real slope by weights that bias towards slope of interfaces
-          ! that ignore density gradients along layers.
-          if (present_int_slope_u) then
-            Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
-                    int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
-            slope2_Ratio = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio
-          endif
-          if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
-
-          ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * m_to_H
-
-          ! Avoid moving dense water upslope from below the level of
-          ! the bottom on the receiving side.
-          if (Sfn_unlim > 0.0) then ! The flow below this interface is positive.
-            if (e(i,j,K) < e(i+1,j,nz+1)) then
-              Sfn_unlim = 0.0 ! This is not uhtot, because it may compensate for
-                              ! deeper flow in very unusual cases.
-            elseif (e(i+1,j,nz+1) > e(i,j,K+1)) then
-              ! Scale the transport with the fraction of the donor layer above
-              ! the bottom on the receiving side.
-              Sfn_unlim = Sfn_unlim * ((e(i,j,K) - e(i+1,j,nz+1)) / &
-                                       ((e(i,j,K) - e(i,j,K+1)) + dz_neglect))
+  
+            ! Adjust real slope by weights that bias towards slope of interfaces
+            ! that ignore density gradients along layers.
+            if (present_int_slope_u) then
+              Slope = (1.0 - int_slope_u(I,j,K)) * Slope + &
+                      int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
+              slope2_Ratio = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio
             endif
-          else
-            if (e(i+1,j,K) < e(i,j,nz+1)) then ; Sfn_unlim = 0.0
-            elseif (e(i,j,nz+1) > e(i+1,j,K+1)) then
-              Sfn_unlim = Sfn_unlim * ((e(i+1,j,K) - e(i,j,nz+1)) / &
-                                     ((e(i+1,j,K) - e(i+1,j,K+1)) + dz_neglect))
+            if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
+  
+            ! Estimate the streamfunction at each interface.
+            Sfn_unlim_u(I,K) = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * m_to_H
+  
+            ! Avoid moving dense water upslope from below the level of
+            ! the bottom on the receiving side.
+            if (Sfn_unlim_u(I,K) > 0.0) then ! The flow below this interface is positive.
+              if (e(i,j,K) < e(i+1,j,nz+1)) then
+                Sfn_unlim_u(I,K) = 0.0 ! This is not uhtot, because it may compensate for
+                                ! deeper flow in very unusual cases.
+              elseif (e(i+1,j,nz+1) > e(i,j,K+1)) then
+                ! Scale the transport with the fraction of the donor layer above
+                ! the bottom on the receiving side.
+                Sfn_unlim_u(I,K) = Sfn_unlim_u(I,K) * ((e(i,j,K) - e(i+1,j,nz+1)) / &
+                                         ((e(i,j,K) - e(i,j,K+1)) + dz_neglect))
+              endif
+            else
+              if (e(i+1,j,K) < e(i,j,nz+1)) then ; Sfn_unlim_u(I,K) = 0.0
+              elseif (e(i,j,nz+1) > e(i+1,j,K+1)) then
+                Sfn_unlim_u(I,K) = Sfn_unlim_u(I,K) * ((e(i+1,j,K) - e(i,j,nz+1)) / &
+                                       ((e(i+1,j,K) - e(i+1,j,K+1)) + dz_neglect))
+              endif
             endif
+  
+            if (uhtot(I,j) <= 0.0) then
+              ! The transport that must balance the transport below is positive.
+              Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
+            else !  (uhtot(I,j) > 0.0)
+              Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i+1,j,k))
+            endif
+  
+            ! The actual streamfunction at each interface.
+            Sfn_est = (Sfn_unlim_u(I,K) + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
+          else  ! With .not.use_EOS, the layers are constant density.
+            if (present_slope_x) then
+              Slope = slope_x(I,j,k)
+            else
+              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * m_to_H
+            endif
+            Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
+                    !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * m_to_H
+            if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
           endif
-
+  
+          ! Make sure that there is enough mass above to allow the streamfunction
+          ! to satisfy the boundary condition of 0 at the surface.
+          Sfn = min(max(Sfn_est, -h_avail_rsum(i,j,K)), h_avail_rsum(i+1,j,K))
+  
+          ! The actual transport is limited by the mass available in the two
+          ! neighboring grid cells.
+          uhD(I,j,k) = max(min((Sfn - uhtot(I,j)), h_avail(i,j,k)), &
+                           -h_avail(i+1,j,k))
+  
+!         sfn_x(I,j,K) = max(min(Sfn, uhtot(I,j)+h_avail(i,j,k)), &
+!                            uhtot(I,j)-h_avail(i+1,j,K))
+!         sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
+!                                  min(uhtot(I,j)+h_avail(i,j,k), &
+!               min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
+!               (KH_u(I,j,K)*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
+        else ! k <= nk_linear
+          ! Balance the deeper flow with a return flow uniformly distributed
+          ! though the remaining near-surface layers.  This is the same as
+          ! using Sfn_safe above.  There is no need to apply the limiters in
+          ! this case.
           if (uhtot(I,j) <= 0.0) then
-            ! The transport that must balance the transport below is positive.
-            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
+            uhD(I,j,k) = -uhtot(I,j) * h_frac(i,j,k)
           else !  (uhtot(I,j) > 0.0)
-            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i+1,j,k))
+            uhD(I,j,k) = -uhtot(I,j) * h_frac(i+1,j,k)
           endif
-
-          Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
-        else  ! With .not.use_EOS, the layers are constant density.
-          if (present_slope_x) then
-            Slope = slope_x(I,j,k)
-          else
-            Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * m_to_H
-          endif
-          Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
-                  !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * m_to_H
-          if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
+  
+!         sfn_x(I,j,K) = sfn_x(I,j,K+1) + uhD(I,j,k)
+!         if (sfn_slope_x(I,j,K+1) <= 0.0) then
+!           sfn_slope_x(I,j,K) = sfn_slope_x(I,j,K+1) * (1.0 - h_frac(i,j,k))
+!         else
+!           sfn_slope_x(I,j,K) = sfn_slope_x(I,j,K+1) * (1.0 - h_frac(i+1,j,k))
+!         endif
         endif
-
-        ! Make sure that there is enough mass above to allow the streamfunction
-        ! to satisfy the boundary condition of 0 at the surface.
-        Sfn = min(max(Sfn_est, -h_avail_rsum(i,j,K)), h_avail_rsum(i+1,j,K))
-
-        ! The actual transport is limited by the mass available in the two
-        ! neighboring grid cells.
-        uhD(I,j,k) = max(min((Sfn - uhtot(I,j)), h_avail(i,j,k)), &
-                         -h_avail(i+1,j,k))
-
- !       sfn_x(I,j,K) = max(min(Sfn, uhtot(I,j)+h_avail(i,j,k)), &
- !                          uhtot(I,j)-h_avail(i+1,j,K))
- !       sfn_slope_x(I,j,K) = max(uhtot(I,j)-h_avail(i+1,j,k), &
- !                                min(uhtot(I,j)+h_avail(i,j,k), &
- !             min(h_avail_rsum(i+1,j,K), max(-h_avail_rsum(i,j,K), &
- !             (KH_u(I,j,K)*G%dy_Cu(I,j)) * ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) )) ))
-      else ! k <= nk_linear
-        ! Balance the deeper flow with a return flow uniformly distributed
-        ! though the remaining near-surface layers.  This is the same as
-        ! using Sfn_safe above.  There is no need to apply the limiters in
-        ! this case.
-        if (uhtot(I,j) <= 0.0) then
-          uhD(I,j,k) = -uhtot(I,j) * h_frac(i,j,k)
-        else !  (uhtot(I,j) > 0.0)
-          uhD(I,j,k) = -uhtot(I,j) * h_frac(i+1,j,k)
+  
+        uhtot(I,j) = uhtot(I,j) + uhD(I,j,k)
+  
+        if (find_work) then
+          !   This is the energy tendency based on the original profiles, and does
+          ! not include any nonlinear terms due to a finite time step (which would
+          ! involve interactions between the fluxes through the different faces.
+          !   A second order centered estimate is used for the density transfered
+          ! between water columns.
+  
+          Work_u(I,j) = Work_u(I,j) + G_scale * &
+            ( uhtot(I,j) * (drdkR * e(i+1,j,K) - drdkL * e(i,j,K)) - &
+              (uhD(I,j,K) * drdiB) * 0.25 * &
+              ((e(i,j,K) + e(i,j,K+1)) + (e(i+1,j,K) + e(i+1,j,K+1))) )
         endif
-
- !       sfn_x(I,j,K) = sfn_x(I,j,K+1) + uhD(I,j,k)
- !       if (sfn_slope_x(I,j,K+1) <= 0.0) then
- !         sfn_slope_x(I,j,K) = sfn_slope_x(I,j,K+1) * (1.0 - h_frac(i,j,k))
- !       else
- !         sfn_slope_x(I,j,K) = sfn_slope_x(I,j,K+1) * (1.0 - h_frac(i+1,j,k))
- !       endif
-      endif
-
-      uhtot(I,j) = uhtot(I,j) + uhD(I,j,k)
-
-      if (find_work) then
-        !   This is the energy tendency based on the original profiles, and does
-        ! not include any nonlinear terms due to a finite time step (which would
-        ! involve interactions between the fluxes through the different faces.
-        !   A second order centered estimate is used for the density transfered
-        ! between water columns.
-
-        Work_u(I,j) = Work_u(I,j) + G_scale * &
-          ( uhtot(I,j) * (drdkR * e(i+1,j,K) - drdkL * e(i,j,K)) - &
-            (uhD(I,j,K) * drdiB) * 0.25 * &
-            ((e(i,j,K) + e(i,j,K+1)) + (e(i+1,j,K) + e(i+1,j,K+1))) )
-      endif
-
-    enddo
-  enddo ; enddo ! end of j-loop
+  
+      enddo
+    enddo ! end of k-loop
+  enddo ! end of j-loop
 
     ! Calculate the meridional fluxes and gradients.
 !$OMP parallel do default(none) shared(nz,is,ie,js,je,find_work,use_EOS,G,GV,pres,T,S, &
@@ -750,187 +756,191 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
 !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
 !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,Sfn_unlim, &
+!$OMP                                  drdy,mag_grad2,Slope,slope2_Ratio,           &
+!$OMP                                  Sfn_unlim_v,                                 &
 !$OMP                                  Sfn_safe,Sfn_est,Sfn,calc_derivatives)
-  do J=js-1,je ; do K=nz,2,-1
-    if (find_work .and. .not.(use_EOS)) then
-      drdjA = 0.0 ; drdjB = 0.0
-!       drdkL = GV%g_prime(k) ; drdkR = GV%g_prime(k)
-      drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
-    endif
+  do J=js-1,je
+    do K=nz,2,-1
+      if (find_work .and. .not.(use_EOS)) then
+        drdjA = 0.0 ; drdjB = 0.0
+!         drdkL = GV%g_prime(k) ; drdkR = GV%g_prime(k)
+        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
+      endif
 
-    calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
-                (find_work .or. .not. present_slope_x)
+      calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
+                  (find_work .or. .not. present_slope_x)
 
-    if (calc_derivatives) then
-      do i=is,ie
-        pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
-        T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
-        S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
-      enddo
-      call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
-                   drho_dS_v, is, ie-is+1, tv%eqn_of_state)
-    endif
-    do i=is,ie
       if (calc_derivatives) then
-        ! Estimate the horizontal density gradients along layers.
-        drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
-                drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
-        drdjB = drho_dT_v(i) * (T(i,j+1,k)-T(i,j,k)) + &
-                drho_dS_v(i) * (S(i,j+1,k)-S(i,j,k))
-
-        ! Estimate the vertical density gradients times the grid spacing.
-        drdkL = (drho_dT_v(i) * (T(i,j,k)-T(i,j,k-1)) + &
-                 drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
-        drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
-                 drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
+        do i=is,ie
+          pres_v(i) = 0.5*(pres(i,j,K) + pres(i,j+1,K))
+          T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
+          S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
+        enddo
+        call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, &
+                     drho_dS_v, is, ie-is+1, tv%eqn_of_state)
       endif
+      do i=is,ie
+        if (calc_derivatives) then
+          ! Estimate the horizontal density gradients along layers.
+          drdjA = drho_dT_v(i) * (T(i,j+1,k-1)-T(i,j,k-1)) + &
+                  drho_dS_v(i) * (S(i,j+1,k-1)-S(i,j,k-1))
+          drdjB = drho_dT_v(i) * (T(i,j+1,k)-T(i,j,k)) + &
+                  drho_dS_v(i) * (S(i,j+1,k)-S(i,j,k))
 
-      if (k > nk_linear) then
-        if (use_EOS) then
-          if (present_slope_y) then
-            Slope = slope_y(i,J,k)
-            slope2_Ratio = Slope**2 * I_slope_max2
-          else
-            hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
-            hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
-            hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
-            hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
-            haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
-            haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
-            haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
-            haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
-            if (GV%Boussinesq) then
-              dzaL = haL * H_to_m ; dzaR = haR * H_to_m
-            else
-              dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
-              dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
-            endif
-            ! Use the harmonic mean thicknesses to weight the horizontal gradients.
-            ! These unnormalized weights have been rearranged to minimize divisions.
-            wtA = hg2A*haB ; wtB = hg2B*haA
-            wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+          ! Estimate the vertical density gradients times the grid spacing.
+          drdkL = (drho_dT_v(i) * (T(i,j,k)-T(i,j,k-1)) + &
+                   drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
+          drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
+                   drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
+        endif
 
-            drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
-            ! The expression for drdz above is mathematically equivalent to:
-            !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
-            !          ((hg2L/haL) + (hg2R/haR))
-            ! This is the gradient of density along geopotentials.
-            drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
-                    drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
-
-            ! This estimate of slope is accurate for small slopes, but bounded
-            ! to be between -1 and 1.
-            mag_grad2 = drdy**2 + drdz**2
-            if (mag_grad2 > 0.0) then
-              Slope = drdy / sqrt(mag_grad2)
+        if (k > nk_linear) then
+          if (use_EOS) then
+            if (present_slope_y) then
+              Slope = slope_y(i,J,k)
               slope2_Ratio = Slope**2 * I_slope_max2
-            else ! Just in case mag_grad2 = 0 ever.
-              Slope = 0.0
-              slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+            else
+              hg2A = h(i,j,k-1)*h(i,j+1,k-1) + h_neglect2
+              hg2B = h(i,j,k)*h(i,j+1,k) + h_neglect2
+              hg2L = h(i,j,k-1)*h(i,j,k) + h_neglect2
+              hg2R = h(i,j+1,k-1)*h(i,j+1,k) + h_neglect2
+              haA = 0.5*(h(i,j,k-1) + h(i,j+1,k-1)) + h_neglect
+              haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
+              haL = 0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect
+              haR = 0.5*(h(i,j+1,k-1) + h(i,j+1,k)) + h_neglect
+              if (GV%Boussinesq) then
+                dzaL = haL * H_to_m ; dzaR = haR * H_to_m
+              else
+                dzaL = 0.5*(e(i,j,K-1) - e(i,j,K+1)) + dz_neglect
+                dzaR = 0.5*(e(i,j+1,K-1) - e(i,j+1,K+1)) + dz_neglect
+              endif
+              ! Use the harmonic mean thicknesses to weight the horizontal gradients.
+              ! These unnormalized weights have been rearranged to minimize divisions.
+              wtA = hg2A*haB ; wtB = hg2B*haA
+              wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
+
+              drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+              ! The expression for drdz above is mathematically equivalent to:
+              !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
+              !          ((hg2L/haL) + (hg2R/haR))
+              ! This is the gradient of density along geopotentials.
+              drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
+                      drdz * (e(i,j,K)-e(i,j+1,K))) * G%IdyCv(i,J)
+
+              ! This estimate of slope is accurate for small slopes, but bounded
+              ! to be between -1 and 1.
+              mag_grad2 = drdy**2 + drdz**2
+              if (mag_grad2 > 0.0) then
+                Slope = drdy / sqrt(mag_grad2)
+                slope2_Ratio = Slope**2 * I_slope_max2
+              else ! Just in case mag_grad2 = 0 ever.
+                Slope = 0.0
+                slope2_Ratio = 1.0e20  ! Force the use of the safe streamfunction.
+              endif
             endif
+
+            ! Adjust real slope by weights that bias towards slope of interfaces
+            ! that ignore density gradients along layers.
+            if (present_int_slope_v) then
+              Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
+                      int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
+              slope2_Ratio = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio
+            endif
+            if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
+
+            ! Estimate the streamfunction at each interface.
+            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * m_to_H
+
+            ! Avoid moving dense water upslope from below the level of
+            ! the bottom on the receiving side.
+            if (Sfn_unlim_v(i,K) > 0.0) then ! The flow below this interface is positive.
+              if (e(i,j,K) < e(i,j+1,nz+1)) then
+                Sfn_unlim_v(i,K) = 0.0 ! This is not vhtot, because it may compensate for
+                                ! deeper flow in very unusual cases.
+              elseif (e(i,j+1,nz+1) > e(i,j,K+1)) then
+                ! Scale the transport with the fraction of the donor layer above
+                ! the bottom on the receiving side.
+                Sfn_unlim_v(i,K) = Sfn_unlim_v(i,K) * ((e(i,j,K) - e(i,j+1,nz+1)) / &
+                                         ((e(i,j,K) - e(i,j,K+1)) + dz_neglect))
+              endif
+            else
+              if (e(i,j+1,K) < e(i,j,nz+1)) then ; Sfn_unlim_v(i,K) = 0.0
+              elseif (e(i,j,nz+1) > e(i,j+1,K+1)) then
+                Sfn_unlim_v(i,K) = Sfn_unlim_v(i,K) * ((e(i,j+1,K) - e(i,j,nz+1)) / &
+                                       ((e(i,j+1,K) - e(i,j+1,K+1)) + dz_neglect))
+              endif
+            endif
+
+            if (vhtot(i,J) <= 0.0) then
+              ! The transport that must balance the transport below is positive.
+              Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
+            else !  (vhtot(I,j) > 0.0)
+              Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j+1,k))
+            endif
+
+            ! The actual streamfunction at each interface.
+            Sfn_est = (Sfn_unlim_v(i,K) + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
+          else      ! With .not.use_EOS, the layers are constant density.
+            if (present_slope_y) then
+              Slope = slope_y(i,J,k)
+            else
+              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * m_to_H
+            endif
+            Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
+                    !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * m_to_H
+            if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
           endif
 
-          ! Adjust real slope by weights that bias towards slope of interfaces
-          ! that ignore density gradients along layers.
-          if (present_int_slope_v) then
-            Slope = (1.0 - int_slope_v(i,J,K)) * Slope + &
-                    int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
-            slope2_Ratio = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio
-          endif
-          if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
+          ! Make sure that there is enough mass above to allow the streamfunction
+          ! to satisfy the boundary condition of 0 at the surface.
+          Sfn = min(max(Sfn_est, -h_avail_rsum(i,j,K)), h_avail_rsum(i,j+1,K))
 
-          ! Estimate the streamfunction at each interface.
-          Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * m_to_H
+          ! The actual transport is limited by the mass available in the two
+          ! neighboring grid cells.
+          vhD(i,J,k) = max(min((Sfn - vhtot(i,J)), h_avail(i,j,k)), &
+                           -h_avail(i,j+1,k))
 
-          ! Avoid moving dense water upslope from below the level of
-          ! the bottom on the receiving side.
-          if (Sfn_unlim > 0.0) then ! The flow below this interface is positive.
-            if (e(i,j,K) < e(i,j+1,nz+1)) then
-              Sfn_unlim = 0.0 ! This is not vhtot, because it may compensate for
-                              ! deeper flow in very unusual cases.
-            elseif (e(i,j+1,nz+1) > e(i,j,K+1)) then
-              ! Scale the transport with the fraction of the donor layer above
-              ! the bottom on the receiving side.
-              Sfn_unlim = Sfn_unlim * ((e(i,j,K) - e(i,j+1,nz+1)) / &
-                                       ((e(i,j,K) - e(i,j,K+1)) + dz_neglect))
-            endif
-          else
-            if (e(i,j+1,K) < e(i,j,nz+1)) then ; Sfn_unlim = 0.0
-            elseif (e(i,j,nz+1) > e(i,j+1,K+1)) then
-              Sfn_unlim = Sfn_unlim * ((e(i,j+1,K) - e(i,j,nz+1)) / &
-                                     ((e(i,j+1,K) - e(i,j+1,K+1)) + dz_neglect))
-            endif
-          endif
-
+!         sfn_y(i,J,K) = max(min(Sfn, vhtot(i,J)+h_avail(i,j,k)), &
+!                            vhtot(i,J)-h_avail(i,j+1,k))
+!         sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
+!                                  min(vhtot(i,J)+h_avail(i,j,k), &
+!               min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
+!               (KH_v(i,J,K)*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
+        else  ! k <= nk_linear
+          ! Balance the deeper flow with a return flow uniformly distributed
+          ! though the remaining near-surface layers.
           if (vhtot(i,J) <= 0.0) then
-            ! The transport that must balance the transport below is positive.
-            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
-          else !  (vhtot(I,j) > 0.0)
-            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j+1,k))
+            vhD(i,J,k) = -vhtot(i,J) * h_frac(i,j,k)
+          else !  (vhtot(i,J) > 0.0)
+            vhD(i,J,k) = -vhtot(i,J) * h_frac(i,j+1,k)
           endif
 
-          ! Estimate the streamfunction at each interface.
-          Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
-        else      ! With .not.use_EOS, the layers are constant density.
-          if (present_slope_y) then
-            Slope = slope_y(i,J,k)
-          else
-            Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * m_to_H
-          endif
-          Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
-                  !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * m_to_H
-          if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
+!         sfn_y(i,J,K) = sfn_y(i,J,K+1) + vhD(i,J,k)
+!         if (sfn_slope_y(i,J,K+1) <= 0.0) then
+!           sfn_slope_y(i,J,K) = sfn_slope_y(i,J,K+1) * (1.0 - h_frac(i,j,k))
+!         else
+!           sfn_slope_y(i,J,K) = sfn_slope_y(i,J,K+1) * (1.0 - h_frac(i,j+1,k))
+!         endif
         endif
 
-        ! Make sure that there is enough mass above to allow the streamfunction
-        ! to satisfy the boundary condition of 0 at the surface.
-        Sfn = min(max(Sfn_est, -h_avail_rsum(i,j,K)), h_avail_rsum(i,j+1,K))
+        vhtot(i,J) = vhtot(i,J)  + vhD(i,J,k)
 
-        ! The actual transport is limited by the mass available in the two
-        ! neighboring grid cells.
-        vhD(i,J,k) = max(min((Sfn - vhtot(i,J)), h_avail(i,j,k)), &
-                         -h_avail(i,j+1,k))
+        if (find_work) then
+          !   This is the energy tendency based on the original profiles, and does
+          ! not include any nonlinear terms due to a finite time step (which would
+          ! involve interactions between the fluxes through the different faces.
+          !   A second order centered estimate is used for the density transfered
+          ! between water columns.
 
-  !      sfn_y(i,J,K) = max(min(Sfn, vhtot(i,J)+h_avail(i,j,k)), &
-  !                         vhtot(i,J)-h_avail(i,j+1,k))
-  !      sfn_slope_y(i,J,K) = max(vhtot(i,J)-h_avail(i,j+1,k), &
-  !                               min(vhtot(i,J)+h_avail(i,j,k), &
-  !            min(h_avail_rsum(i,j+1,K), max(-h_avail_rsum(i,j,K), &
-  !            (KH_v(i,J,K)*G%dx_Cv(i,J)) * ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) )) ))
-      else  ! k <= nk_linear
-        ! Balance the deeper flow with a return flow uniformly distributed
-        ! though the remaining near-surface layers.
-        if (vhtot(i,J) <= 0.0) then
-          vhD(i,J,k) = -vhtot(i,J) * h_frac(i,j,k)
-        else !  (vhtot(i,J) > 0.0)
-          vhD(i,J,k) = -vhtot(i,J) * h_frac(i,j+1,k)
+          Work_v(i,J) = Work_v(i,J) + G_scale * &
+            ( vhtot(i,J) * (drdkR * e(i,j+1,K) - drdkL * e(i,j,K)) - &
+             (vhD(i,J,K) * drdjB) * 0.25 * &
+             ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i,j+1,K+1))) )
         endif
 
-  !      sfn_y(i,J,K) = sfn_y(i,J,K+1) + vhD(i,J,k)
-  !      if (sfn_slope_y(i,J,K+1) <= 0.0) then
-  !        sfn_slope_y(i,J,K) = sfn_slope_y(i,J,K+1) * (1.0 - h_frac(i,j,k))
-  !      else
-  !        sfn_slope_y(i,J,K) = sfn_slope_y(i,J,K+1) * (1.0 - h_frac(i,j+1,k))
-  !      endif
-      endif
-
-      vhtot(i,J) = vhtot(i,J)  + vhD(i,J,k)
-
-      if (find_work) then
-        !   This is the energy tendency based on the original profiles, and does
-        ! not include any nonlinear terms due to a finite time step (which would
-        ! involve interactions between the fluxes through the different faces.
-        !   A second order centered estimate is used for the density transfered
-        ! between water columns.
-
-        Work_v(i,J) = Work_v(i,J) + G_scale * &
-          ( vhtot(i,J) * (drdkR * e(i,j+1,K) - drdkL * e(i,j,K)) - &
-           (vhD(i,J,K) * drdjB) * 0.25 * &
-           ((e(i,j,K) + e(i,j,K+1)) + (e(i,j+1,K) + e(i,j+1,K+1))) )
-      endif
-    enddo
-  enddo ; enddo! j-loop
+      enddo
+    enddo ! end of k-loop
+  enddo ! end of j-loop
 
   ! In layer 1, enforce the boundary conditions that Sfn(z=0) = 0.0
   if (.not.find_work .or. .not.(use_EOS)) then
