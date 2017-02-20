@@ -1,5 +1,7 @@
 /*! \page Horizontal_indexing Horizontal indexing and memory
 
+\brief Conventions for staggering of variables and loops over 2d/3d arrays
+
 MOM6 is written in Fortran90 and uses the `i,j,k` order of indexing.
 `i` corresponds to the fastest index (stride-1 in memory) and thus should be the inner-most loop variable.
 We often refer to the i-direction as the x- or zonal direction, and similarly to the j-direction as y- or meridional direction.

@@ -1,5 +1,7 @@
 /*! \page Advection Tracer Advection
 
+\brief Tracer transport schemes
+
 MOM6 implements a generalised tracer advection scheme, which is a combination of the modified flux advection scheme (Easter, 1993) with reconstructed tracer distributions. The tracer distributions may be piecewise linear (PLM) or piecewise parabolic (PPM), which may itself use either the Colella and Woodward (CW84) or Huynh (H3) reconstruction.
 
 \section Flux_advection Flux advection
