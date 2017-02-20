@@ -648,12 +648,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 
           ! Estimate the streamfunction at each interface.
           Sfn_unlim = -((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * m_to_H
-          if (uhtot(I,j) <= 0.0) then
-            ! The transport that must balance the transport below is positive.
-            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
-          else !  (uhtot(I,j) > 0.0)
-            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i+1,j,k))
-          endif
 
           ! Avoid moving dense water upslope from below the level of
           ! the bottom on the receiving side.
@@ -673,6 +667,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
               Sfn_unlim = Sfn_unlim * ((e(i+1,j,K) - e(i,j,nz+1)) / &
                                      ((e(i+1,j,K) - e(i+1,j,K+1)) + dz_neglect))
             endif
+          endif
+
+          if (uhtot(I,j) <= 0.0) then
+            ! The transport that must balance the transport below is positive.
+            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i,j,k))
+          else !  (uhtot(I,j) > 0.0)
+            Sfn_safe = uhtot(I,j) * (1.0 - h_frac(i+1,j,k))
           endif
 
           Sfn_est = (Sfn_unlim + slope2_Ratio*Sfn_safe) / (1.0 + slope2_Ratio)
@@ -841,11 +842,6 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
 
           ! Estimate the streamfunction at each interface.
           Sfn_unlim = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * m_to_H
-          if (vhtot(i,J) <= 0.0) then
-            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
-          else !  (vhtot(I,j) > 0.0)
-            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j+1,k))
-          endif
 
           ! Avoid moving dense water upslope from below the level of
           ! the bottom on the receiving side.
@@ -865,6 +861,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, dt, G, GV, MEK
               Sfn_unlim = Sfn_unlim * ((e(i,j+1,K) - e(i,j,nz+1)) / &
                                      ((e(i,j+1,K) - e(i,j+1,K+1)) + dz_neglect))
             endif
+          endif
+
+          if (vhtot(i,J) <= 0.0) then
+            ! The transport that must balance the transport below is positive.
+            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j,k))
+          else !  (vhtot(I,j) > 0.0)
+            Sfn_safe = vhtot(i,J) * (1.0 - h_frac(i,j+1,k))
           endif
 
           ! Estimate the streamfunction at each interface.
