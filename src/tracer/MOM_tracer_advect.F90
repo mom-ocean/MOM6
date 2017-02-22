@@ -95,9 +95,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
   landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
   stencil = 2                   ! The scheme's stencil; 2 for PLM and PPM:H3
 
-  ! increase stencil size for Colella & Woodward PPM
-  if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
-
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_advect: "// &
        "tracer_advect_init must be called before advect_tracer.")
   if (.not. associated(Reg)) call MOM_error(FATAL, "MOM_tracer_advect: "// &
@@ -105,6 +102,9 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
   if (Reg%ntr==0) return
   call cpu_clock_begin(id_clock_advect)
   x_first = (MOD(G%first_direction,2) == 0)
+
+  ! increase stencil size for Colella & Woodward PPM
+  if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
 
   ntr = Reg%ntr
   do m=1,ntr ; Tr(m) = Reg%Tr(m) ; enddo
@@ -327,9 +327,10 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM, useHuynh
 
-  real, dimension(SZIB_(G),ntr) :: &
-    slope_x, &          ! The concentration slope per grid point in units of
+  real, dimension(SZI_(G),ntr) :: &
+    slope_x             ! The concentration slope per grid point in units of
                         ! concentration (nondim.).
+  real, dimension(SZIB_(G),ntr) :: &
     flux_x              ! The tracer flux across a boundary in m3*conc or kg*conc.
   real :: maxslope      ! The maximum concentration slope per grid point
                         ! consistent with monotonicity, in conc. (nondim.).
@@ -348,11 +349,14 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                         ! in roundoff and can be neglected, in m.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, n, i_up
+  integer :: i, j, m, n, i_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
+  ! stencil for calculating slope values
+  stencil = 1
+  if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
@@ -366,7 +370,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     ! Calculate the i-direction profiles (slopes) of each tracer that
     ! is being advected.
     if (usePLMslope) then
-      do m=1,ntr ; do i=is-1,ie+1
+      do m=1,ntr ; do i=is-stencil,ie+stencil
        !if (ABS(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k)) < &
        !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i-1,j,k))) then
        !  maxslope = 4.0*(Tr(m)%t(i+1,j,k)-Tr(m)%t(i,j,k))
@@ -386,7 +390,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         dMn= Tc - min( Tp, Tc, Tm )
         slope_x(i,m) = G%mask2dCu(I,j)*G%mask2dCu(I-1,j) * &
             sign( min(0.5*abs(Tp-Tm), 2.0*dMx, 2.0*dMn), Tp-Tm )
-        enddo ; enddo
+      enddo ; enddo
     endif ! usePLMslope
 
     ! Calculate the i-direction fluxes of each tracer, using as much
@@ -443,8 +447,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
           aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
           aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
         else
-          aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)))
-          aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)))
+          aL = 0.5 * ((Tm + Tc) + (slope_x(i_up-1,m) - slope_x(i_up,m)) / 3.)
+          aR = 0.5 * ((Tc + Tp) + (slope_x(i_up,m) - slope_x(i_up+1,m)) / 3.)
         endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
@@ -587,9 +591,10 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer,                                   intent(in)    :: ntr, is, ie, js, je,k
   logical,                                   intent(in)    :: usePPM, useHuynh
 
-  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
-    slope_y, &                  ! The concentration slope per grid point in units of
+  real, dimension(SZI_(G),ntr,SZJ_(G)) :: &
+    slope_y                     ! The concentration slope per grid point in units of
                                 ! concentration (nondim.).
+  real, dimension(SZI_(G),ntr,SZJB_(G)) :: &
     flux_y                      ! The tracer flux across a boundary in m3 * conc or kg*conc.
   real :: maxslope              ! The maximum concentration slope per grid point
                                 ! consistent with monotonicity, in conc. (nondim.).
@@ -609,23 +614,37 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: do_j_tr(SZJ_(G))   ! If true, calculate the tracer profiles.
   logical :: do_i(SZIB_(G))     ! If true, work on given points.
   logical :: do_any_i
-  integer :: i, j, m, n, j_up
+  integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
+  ! stencil for calculating slope values
+  stencil = 1
+  if (usePPM .and. .not. useHuynh) stencil = 2
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
 
- !do i=is,ie ; ts2(i) = 0.0 ; enddo
-  do_j_tr(js-1) = domore_v(js-1,k) ; do_j_tr(je+1) = domore_v(je,k)
-  do j=js,je ; do_j_tr(j) = (domore_v(J-1,k) .or. domore_v(J,k)) ; enddo
+  !do i=is,ie ; ts2(i) = 0.0 ; enddo
 
-  !   Calculate the j-direction profiles (slopes) of each tracer that
+  ! We conditionally perform work on tracer points: calculating the PLM slope,
+  ! and updating tracer concentration within a cell
+  ! this depends on whether there is a flux which would affect this tracer point,
+  ! as indicated by domore_v. In the case of PPM reconstruction, a flux requires
+  ! slope calculations at the two tracer points on either side (as indicated by
+  ! the stencil variable), so we account for this with the do_j_tr flag array
+  !
+  ! Note: this does lead to unnecessary work in updating tracer concentrations,
+  ! since that doesn't need a wider stencil with the PPM advection scheme, but
+  ! this would require an additional loop, etc.
+  do_j_tr(:) = .false.
+  do J=js-1,je ; if (domore_v(J,k)) then ; do j2=1-stencil,stencil ; do_j_tr(j+j2) = .true. ; enddo ; endif ; enddo
+
+  ! Calculate the j-direction profiles (slopes) of each tracer that
   ! is being advected.
   if (usePLMslope) then
-    do j=js-1,je+1 ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
+    do j=js-stencil,je+stencil ; if (do_j_tr(j)) then ; do m=1,ntr ; do i=is,ie
       !if (ABS(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k)) < &
       !    ABS(Tr(m)%t(i,j,k)-Tr(m)%t(i,j-1,k))) then
       !  maxslope = 4.0*(Tr(m)%t(i,j+1,k)-Tr(m)%t(i,j,k))
@@ -704,8 +723,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           aR = ( 5.*Tc + ( 2.*Tp - Tm ) )/6. ! H3 estimate
           aR = max( min(Tc,Tp), aR) ; aR = min( max(Tc,Tp), aR) ! Bound
         else
-          aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)))
-          aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)))
+          aL = 0.5 * ((Tm + Tc) + (slope_y(i,m,j_up-1) - slope_y(i,m,j_up)) / 3.)
+          aR = 0.5 * ((Tc + Tp) + (slope_y(i,m,j_up) - slope_y(i,m,j_up+1)) / 3.)
         endif
 
         dA = aR - aL ; mA = 0.5*( aR + aL )
