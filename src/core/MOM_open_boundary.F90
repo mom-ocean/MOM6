@@ -1361,16 +1361,16 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       I=segment%HI%iscB
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
-          segment%grad_normal(J,1,k) = uvel(I-1,j+1,k)-uvel(I-1,j,k)
-          segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
+          segment%grad_normal(J,1,k) = (uvel(I-1,j+1,k)-uvel(I-1,j,k)) * G%mask2dBu(I-1,J)
+          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! western segment
       I=segment%HI%iscB
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
-          segment%grad_normal(J,1,k) = uvel(I+1,j+1,k)-uvel(I+1,j,k)
-          segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
+          segment%grad_normal(J,1,k) = (uvel(I+1,j+1,k)-uvel(I+1,j,k)) * G%mask2dBu(I+1,J)
+          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif
@@ -1384,16 +1384,16 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       J=segment%HI%jscB
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
-          segment%grad_normal(I,1,k) = vvel(i+1,J-1,k)-vvel(i,J-1,k)
-          segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
+          segment%grad_normal(I,1,k) = (vvel(i+1,J-1,k)-vvel(i,J-1,k)) * G%mask2dBu(I,J-1)
+          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! south segment
       J=segment%HI%jscB
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
-          segment%grad_normal(I,1,k) = vvel(i+1,J+1,k)-vvel(i,J+1,k)
-          segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
+          segment%grad_normal(I,1,k) = (vvel(i+1,J+1,k)-vvel(i,J+1,k)) * G%mask2dBu(I,J+1)
+          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif
