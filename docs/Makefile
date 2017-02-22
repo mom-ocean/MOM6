@@ -181,3 +181,5 @@ doxygen:
 doxygen/bin/doxygen: doxygen
 	(cd $(<); cmake -G "Unix Makefiles" .)
 	(cd $(<); make)
+nortd: doxygen/bin/doxygen
+	$< Doxyfile_nortd
