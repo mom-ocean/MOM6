@@ -1816,36 +1816,53 @@ end subroutine thickness_diffuse_end
 !> \namespace mom_thickness_diffuse
 !!
 !! Thickness diffusion is implemented via along-layer mass fluxes
+!! \f[
+!! h^\dagger \leftarrow h^n - \Delta t \nabla \cdot ( \vec{uh}^* )
+!! \f]
+!! where the mass fluxes are cast as the difference in vector streamfunction
 !!
 !! \f[
-!! h^\dagger \leftarrow h^n - \nabla \cdot ( \vec{uh}^* )
+!! \vec{uh}^* = \delta_k \vec{\psi} .
 !! \f]
 !!
-!! where the mass fluxes are cast as the difference in stream-functions proportional to the isoneutral slope
-!!
+!! The GM implementation of thickness diffusion made the streamfunction proportional to the potential density slope
 !! \f[
-!! \vec{uh}^* = \delta_k \vec{\psi} = \delta_k \left( \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} \right)
+!! \vec{\psi} = - \kappa_h \frac{\nabla_z \rho}{\partial_z \rho}
+!! = \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} = \kappa_h \frac{M^2}{N^2}
 !! \f]
+!! but for robustness the scheme is implemented as
+!! \f[
+!! \vec{\psi} = \kappa_h \frac{M^2}{\sqrt{N^4 + M^4}}
+!! \f]
+!! since the quantity \f$\frac{M^2}{\sqrt{N^2 + M^2}}\f$ is bounded between $-1$ and $1$ and does not change sign if \f$N^2<0\f$.
 !!
-!! \todo Check signs of GM stream function in documentation.
+!! Optionally, the method of Ferrari et al, 2010, can be used to obtain the streamfunction which solves the vertically elliptic
+!! equation:
+!! \f[
+!! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
+!! \f]
+!! which recovers the previous streamfunction relation in the limit that \f$ c \rightarrow 0 \f$.
+!! Here, \f$c=\max(c_{min},c_g)\f$ is the maximum of either \f$c_{min}\f$ and either the first baroclinic mode
+!! wave-speed or the equivalent barotropic mode wave-speed.
+!! \f$N_*^2 = \max(N^2,0)\f$ is a non-negative form of the square of the Brunt-Vaisala frequency.
+!! The parameter \f$\gamma_F\f$ is used to reduce the vertical smoothing length scale.
+!! This elliptic form for \f$ \psi \f$ is turned on with the logical <code>KHTH_USE_FGNV_STREAMFUNCTION</code>.
 !!
 !! Thickness diffusivities are calculated independently at u- and v-points using the following expression
-!!
 !! \f[
-!! \kappa_h = \left( \kappa_o + \alpha_{s} L_{s}^2 S N + \alpha_{M} \kappa_{M} \right) r(\Delta x,L_d)
+!! \kappa_h = \left( \kappa_o + \alpha_{s} L_{s}^2 < S N > + \alpha_{M} \kappa_{M} \right) r(\Delta x,L_d)
 !! \f]
-!!
 !! where \f$ S \f$ is the isoneutral slope magnitude, \f$ N \f$ is the square root of Brunt-Vaisala frequency,
 !! \f$\kappa_{M}\f$ is the diffusivity calculated by the MEKE parameterization (mom_meke module) and \f$ r(\Delta x,L_d) \f$ is
 !! a function of the local resolution (ratio of grid-spacing, \f$\Delta x\f$, to deformation radius, \f$L_d\f$).
 !! The length \f$L_s\f$ is provided by the mom_lateral_mixing_coeffs module (enabled with
-!! <code>USE_VARIABLE_MIXING=True</code>.
+!! <code>USE_VARIABLE_MIXING=True</code> and the term \f$<SN>\f$ is the vertical average slope times Brunt-Vaisala frequency
+!! prescribed by Visbeck et al., 1996.
 !!
 !! The result of the above expression is subsequently bounded by minimum and maximum values, including an upper
 !! diffusivity consistent with numerical stability (\f$ \kappa_{cfl} \f$ is calculated internally).
-!!
 !! \f[
-!! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)} f(c_g,z)
+!! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)}
 !! \f]
 !!
 !! where \f$f(c_g,z)\f$ is a vertical structure function.
@@ -1873,5 +1890,18 @@ end subroutine thickness_diffuse_end
 !! | \f$ \kappa_{smth} \f$ | <code>KD_SMOOTH</code> |
 !! | \f$ \alpha_{M} \f$    | <code>MEKE_KHTH_FAC</code> (from mom_meke module) |
 !! | -                     | <code>KHTH_USE_EBT_STRUCT</code> (from mom_lateral_mixing_coeffs module) |
+!! | -                     | <code>KHTH_USE_FGNV_STREAMFUNCTION</code> |
+!! | \f$ \gamma_F \f$      | <code>FGNV_FILTER_SCALE</code> |
+!! | \f$ c_{min} \f$       | <code>FGNV_C_MIN</code> |
+!!
+!! \subsection section_khth_module_reference References
+!!
+!! Ferrari, R., S.M. Griffies, A.J.G. Nurser and G.K. Vallis, 2010:
+!! A boundary-value problem for the parameterized mesoscale eddy transport.
+!! Ocean Modelling, 32, 143-156. http://doi.org/10.1016/j.ocemod.2010.01.004
+!!
+!! Viscbeck, M., J.C. Marshall, H. Jones, 1996:
+!! On he dynamics of convective "chimneys" in the ocean. J. Phys. Oceangr., 26, 1721-1734.
+!! http://dx.doi.org/10.1175/1520-0485(1996)026%3C1721:DOICRI%3E2.0.CO;2
 
 end module MOM_thickness_diffuse
