@@ -1862,7 +1862,7 @@ end subroutine thickness_diffuse_end
 !! The result of the above expression is subsequently bounded by minimum and maximum values, including an upper
 !! diffusivity consistent with numerical stability (\f$ \kappa_{cfl} \f$ is calculated internally).
 !! \f[
-!! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)}
+!! \kappa_h \leftarrow \min{\left( \kappa_{max}, \kappa_{cfl}, \max{\left( \kappa_{min}, \kappa_h \right)} \right)} f(c_g,z)
 !! \f]
 !!
 !! where \f$f(c_g,z)\f$ is a vertical structure function.
