@@ -734,6 +734,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do I=is-1,ie
         if (G%mask2dCu(I,j)>0.) then
+          Sfn_unlim_u(I,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_u(I,:)
           call streamfn_solver(nz, c2_h_u(I,:), hN2_u(I,:), Sfn_unlim_u(I,:))
         else
           Sfn_unlim_u(I,:) = 0.
@@ -975,6 +976,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
       ! Solve an elliptic equation for the streamfunction following Ferrari et al., 2010.
       do i=is,ie
         if (G%mask2dCv(i,J)>0.) then
+          Sfn_unlim_v(i,:) = ( 1. + CS%FGNV_scale ) * Sfn_unlim_v(i,:)
           call streamfn_solver(nz, c2_h_v(i,:), hN2_v(i,:), Sfn_unlim_v(i,:))
         else
           Sfn_unlim_v(i,:) = 0.
@@ -1839,7 +1841,7 @@ end subroutine thickness_diffuse_end
 !! Optionally, the method of Ferrari et al, 2010, can be used to obtain the streamfunction which solves the vertically elliptic
 !! equation:
 !! \f[
-!! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
+!! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = ( 1 + \gamma_F ) \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
 !! \f]
 !! which recovers the previous streamfunction relation in the limit that \f$ c \rightarrow 0 \f$.
 !! Here, \f$c=\max(c_{min},c_g)\f$ is the maximum of either \f$c_{min}\f$ and either the first baroclinic mode
