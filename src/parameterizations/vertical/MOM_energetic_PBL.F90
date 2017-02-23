@@ -178,6 +178,8 @@ type, public :: energetic_PBL_CS ; private
                                          ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
                                           !  length and velocity scale
+  logical :: Langmuir_Diagnostics = .false.
+  logical :: MSTAR_Diagnostics=.false.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
 
@@ -185,8 +187,12 @@ type, public :: energetic_PBL_CS ; private
   real, allocatable, dimension(:,:) :: &
     ML_depth, &        ! The mixed layer depth in m.
     ML_depth2, &       ! The mixed layer depth in m.
-    Enhance_V, &       ! The enhancement to the turbulent velocity scale (non-dim)
+    Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
+    EKMAN_Ratio, &
+    OBHUKOV_Ratio, &
+    LA, &
+    LA_mod, &
     diag_TKE_wind, &   ! The wind source of TKE.
     diag_TKE_MKE, &    ! The resolved KE source of TKE.
     diag_TKE_conv, &   ! The convective source of TKE.
@@ -205,6 +211,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_Hsfc_used = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_OSBL = -1, id_LT_Enhancement = -1, id_MSTAR_mix = -1
+  integer :: id_LA = -1, id_LA_MOD = -1, id_OBHUKOV_RATIO = -1, id_EKMAN_RATIO = -1
 end type energetic_PBL_CS
 
 integer :: num_msg = 0, max_msg = 2
@@ -375,7 +382,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: U_star    ! The surface friction velocity, in m s-1.
   real :: U_Star_Mean ! The surface friction without gustiness in m s-1.
   real :: vstar     ! An in-situ turbulent velocity, in m s-1.
-  real :: Enhance_V ! An enhancement factor for vstar, based here on Langmuir impact.
+  real :: Enhance_M ! An enhancement factor for vstar, based here on Langmuir impact.
   real :: LA        ! The Langmuir number (non-dim)
   real :: hbs_here  ! The local minimum of hb_hs and MixLen_shape, times a
                     ! conversion factor from H to M, in m H-1.
@@ -499,6 +506,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           wave_current_mis, LASQ
   integer ::b
   !/
+  REAL :: EKRATIO, MORATIO, LAmod
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
   real :: dPE_debug, mixing_debug, taux2, tauy2
@@ -723,8 +731,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
-      ! Initialize ENHANCE_V to 1
-      ENHANCE_V=1.e0
+      ! Initialize ENHANCE_M to 1
+      ENHANCE_M=1.e0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
         if (CS%Use_LA_windsea) then !Using Li et al. formula
           call get_LA_windsea( u_star_mean, MLD_guess, GV, LA)
@@ -762,11 +770,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         endif
         if (CS%LT_Enhance_Form==1) then
           !Original w'/ust scaling
-          ENHANCE_V = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
+          ENHANCE_M = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
         elseif (CS%LT_Enhance_Form==2) then
           !New Mix_LT/Mix_ST scaling
-          ENHANCE_V = (1.+CS%LT_ENHANCE_COEF*LA**CS%LT_ENHANCE_EXP)
+          ENHANCE_M = (1.+CS%LT_ENHANCE_COEF*LA**CS%LT_ENHANCE_EXP)
+        elseif (CS%LT_Enhance_Form==3) then
+          EKratio = abs(MLD_guess*absf(i)/u_star)
+          MOratio = abs(MLD_guess/u_star**3*buoy_Flux(i,j)*0.4)
+          LAmod = 0.75 + LA + 0.55*MOratio + -0.8*EKratio
+          ENHANCE_M = min(7.,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
         endif
+        
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
         !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
 
@@ -798,7 +812,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           endif
 
           !Reset mech_tke and conv_perel values (based on new mstar)
-          mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_V*GV%Rho0)*((U_Star**3))
+          mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_M*GV%Rho0)*((U_Star**3))
           conv_PErel(i) = 0.0
          if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
@@ -819,7 +833,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             conv_PErel(i) = conv_PErel(i) + TKE_forced(i,j,1)
           endif
         else
-          mech_TKE(i) = mech_TKE_top(i)*ENHANCE_V ; conv_PErel(i) = conv_PErel_top(i)
+          mech_TKE(i) = mech_TKE_top(i)*ENHANCE_M ; conv_PErel(i) = conv_PErel_top(i)
         endif
 
         if (CS%TKE_diagnostics) then
@@ -1445,9 +1459,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
         enddo
       endif
-      CS%Enhance_V(i,j) = Enhance_V
-      CS%MSTAR_MIX(i,j) = MSTAR_MIX
-    else
+      if (CS%MSTAR_diagnostics) then
+        CS%MSTAR_MIX(i,j) = MSTAR_MIX
+        CS%EKMAN_RATIO(i,j) = EKratio
+        CS%OBHUKOV_RATIO(i,j) = MOratio
+      endif
+      if (CS%Langmuir_diagnostics) then
+        CS%LA(i,j) = LA
+        CS%LA_MOD(i,j) = LAmod
+        CS%ENHANCE_M(i,j) = ENHANCE_M
+      endif
+   else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
         Kd(i,K) = 0.
@@ -1499,9 +1521,22 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     if (CS%id_OSBL >0) &
       call post_data(CS%id_OSBL, CS%ML_Depth2, CS%diag)
     if (CS%id_LT_Enhancement >0) &
-      call post_data(CS%id_LT_Enhancement, CS%Enhance_V, CS%diag)
+      call post_data(CS%id_LT_Enhancement, CS%Enhance_M, CS%diag)
     if (CS%id_MSTAR_MIX >0) &
       call post_data(CS%id_MSTAR_MIX, CS%MSTAR_MIX, CS%diag)
+    if (CS%id_LA >0) &
+      call post_data(CS%id_LA, CS%LA, CS%diag)
+    if (CS%id_LA_MOD >0) &
+      call post_data(CS%id_LA_MOD, CS%LA_MOD, CS%diag)
+    if (CS%id_EKMAN_RATIO >0) &
+      call post_data(CS%id_EKMAN_RATIO, CS%EKMAN_RATIO, CS%diag)
+    if (CS%id_OBHUKOV_RATIO >0) &
+      call post_data(CS%id_OBHUKOV_RATIO, CS%OBHUKOV_RATIO, CS%diag)
+
+
+
+
+
   endif
 
 end subroutine energetic_PBL
@@ -2160,17 +2195,24 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
       Time, 'Convective energy decay sink of mixed layer TKE', 'meter3 second-3')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
       Time, 'Surface region thickness that is used', 'meter')
+  CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
+      Time, 'Boundary layer depth from the iteration.', 'meter')
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
       Time, 'Mixing Length that is used', 'meter')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
       Time, 'Velocity Scale that is used.', 'meter second-1')
-  CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
-      Time, 'LT enhancement that is used.', 'non-dim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'MSTAR that is used.', 'non-dim')
-  CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
-
+  CS%id_EKMAN_RATIO = register_diag_field('ocean_model', 'EKMAN_RATIO', diag%axesT1, &
+      Time, 'MLD over Ekman Depth.', 'non-dim')
+  CS%id_OBHUKOV_RATIO = register_diag_field('ocean_model', 'OBHUKOV_RATIO', diag%axesT1, &
+      Time, 'MLD over Obhukov Depth.', 'non-dim')
+  CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
+      Time, 'Langmuir number', 'non-dim')
+  CS%id_LA_MOD = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
+      Time, 'Langmuir number for entrainment.', 'non-dim')
+ CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
+      Time, 'LT enhancement that is used.', 'non-dim')
 
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
@@ -2189,6 +2231,7 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 
     CS%TKE_diagnostics = .true.
   endif
+  
   if ((CS%id_Mixing_Length>0) .or. (CS%id_Velocity_Scale>0)) then
     call safe_alloc_alloc(CS%Velocity_Scale,isd,ied,jsd,jed,GV%ke+1)
     call safe_alloc_alloc(CS%Mixing_Length,isd,ied,jsd,jed,GV%ke+1)
@@ -2196,11 +2239,26 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
     CS%Mixing_Length(:,:,:) = 0.0
     CS%mixing_diagnostics = .true.
   endif
-  call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
-  call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
-  call safe_alloc_alloc(CS%Enhance_V, isd, ied, jsd, jed)
-  call safe_alloc_alloc(CS%MSTAR_MIX, isd, ied, jsd, jed)
+  
+!Allocating Langmuir outputs
+  if (max(CS%id_LA,CS%id_LA_mod,CS%id_LT_enhancement)>1) then
+    CS%Langmuir_diagnostics=.true.
+    call safe_alloc_alloc(CS%Enhance_M, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%LA, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%LA_MOD, isd, ied, jsd, jed)
+  endif
+  
+!Allocating Available energy outputs
+  if (max(CS%id_EKMAN_RATIO,CS%id_OBHUKOV_RATIO,CS%id_MSTAR_mix,&
+       CS%id_OSBL)) then
+    call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%EKMAN_RATIO, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%OBHUKOV_RATIO, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%MSTAR_MIX, isd, ied, jsd, jed)
+    CS%Mstar_diagnostics = .true.
+  endif
 
+  call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
 
   !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
   CS%MSTAR_A = CS%MSTAR_AT_XINT**(1./CS%MSTAR_N)
@@ -2222,8 +2280,12 @@ subroutine energetic_PBL_end(CS)
 
   if (allocated(CS%ML_depth))            deallocate(CS%ML_depth)
   if (allocated(CS%ML_depth2))           deallocate(CS%ML_depth2)
-  if (allocated(CS%Enhance_V))           deallocate(CS%Enhance_V)
+  if (allocated(CS%Enhance_M))           deallocate(CS%Enhance_M)
   if (allocated(CS%MSTAR_MIX))           deallocate(CS%MSTAR_MIX)
+  if (allocated(CS%LA))                  deallocate(CS%LA)
+  if (allocated(CS%LA_MOD))              deallocate(CS%LA_MOD)
+  if (allocated(CS%OBHUKOV_RATIO))       deallocate(CS%OBHUKOV_RATIO)
+  if (allocated(CS%EKMAN_RATIO))         deallocate(CS%EKMAN_RATIO)
   if (allocated(CS%diag_TKE_wind))       deallocate(CS%diag_TKE_wind)
   if (allocated(CS%diag_TKE_MKE))        deallocate(CS%diag_TKE_MKE)
   if (allocated(CS%diag_TKE_conv))       deallocate(CS%diag_TKE_conv)
