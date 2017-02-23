@@ -27,7 +27,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE, OBC_FLATHER
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
@@ -65,7 +65,7 @@ subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
    "Unmodified user routine called - you must edit the routine to use it")
   Rlay(:) = 0.0
   g_prime(:) = 0.0
-  
+
   if (first_call) call write_user_log(param_file)
 
 end subroutine USER_set_coord
@@ -205,7 +205,7 @@ subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
                                                   !! whether, where, and what open boundary
                                                   !! conditions are used.
   type(thermo_var_ptrs),      intent(in) :: tv    !< A structure containing pointers to any
-                                       !! available thermodynamic fields, including potential 
+                                       !! available thermodynamic fields, including potential
                                        !! temperature and salinity or mixed layer density. Absent
                                        !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure.

@@ -1,57 +1,7 @@
+!> Provides the Montgomery potential form of pressure gradient
 module MOM_PressureForce_Mont
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, April 1994 - June 2000                         *
-!*                                                                     *
-!*    This file contains the subroutine that calculates the hori-      *
-!*  zontal accelerations due to pressure gradients.  A second-order    *
-!*  accurate, centered scheme is used.  If a split time stepping       *
-!*  scheme is used, the vertical decomposition into barotropic and     *
-!*  baroclinic contributions described by Hallberg (J Comp Phys 1997)  *
-!*  is used.  With a nonlinear equation of state, compressibility is   *
-!*  added along the lines proposed by Sun et al. (JPO 1999), but with  *
-!*  compressibility coefficients based on a fit to a user-provided     *
-!*  reference profile.                                                 *
-!*                                                                     *
-!*    PressureForce takes 8 arguments, which are described below. If   *
-!*  a non-split time stepping scheme is used, the last three arguments *
-!*  are ignored.                                                       *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v, PFv                                   *
-!*    j    x ^ x ^ x   At >:  u, PFu                                   *
-!*    j    > o > o >   At o:  h, bathyT, M, e, p, pbce, T, S, rho_star *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1                                                  *
-!*           i  i+1                                                    *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, time_type
@@ -71,13 +21,16 @@ implicit none ; private
 public PressureForce_Mont_Bouss, PressureForce_Mont_nonBouss, Set_pbce_Bouss
 public Set_pbce_nonBouss, PressureForce_Mont_init, PressureForce_Mont_end
 
+!> Control structure for the Montgomery potential form of pressure gradient
 type, public :: PressureForce_Mont_CS ; private
-  logical :: tides          ! If true, apply tidal momentum forcing.
-  real    :: Rho0           !   The density used in the Boussinesq
-                            ! approximation, in kg m-3.
-  real    :: Rho_atm        !   The assumed atmospheric density, in kg m-3.
-                            ! By default, Rho_atm is 0.
-  real    :: GFS_scale
+  logical :: tides          !< If true, apply tidal momentum forcing.
+  real    :: Rho0           !< The density used in the Boussinesq
+                            !! approximation, in kg m-3.
+  real    :: Rho_atm        !< The assumed atmospheric density, in kg m-3.
+                            !! By default, Rho_atm is 0.
+  real    :: GFS_scale      !< Ratio between gravity applied to top interface
+                            !! and the gravitational acceleration of the planet.
+                            !! Usually this ratio is 1.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -90,44 +43,33 @@ end type PressureForce_Mont_CS
 
 contains
 
+!> \brief Non-Boussinesq Montgomery-potential form of pressure gradient
+!!
+!! Determines the acceleration due to pressure forces in a
+!! non-Boussinesq fluid using the compressibility compensated (if appropriate)
+!! Montgomery-potential form described in Hallberg (Ocean Mod., 2005).
+!!
+!! To work, the following fields must be set outside of the usual
+!! ie to ie, je to je range before this subroutine is called:
+!! h[ie+1] and h[je+1] and and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
+!! T[je+1], and S[je+1].
 subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
-  type(thermo_var_ptrs),                     intent(in)  :: tv
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
-  type(PressureForce_Mont_CS),               pointer     :: CS
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
-!    This subroutine determines the acceleration due to pressure forces in a
-!  non-Boussinesq fluid using the compressibility compensated (if appropriate)
-!  Montgomery-potential form described in Hallberg (Ocean Mod., 2005).
-!    To work, the following fields must be set outside of the usual
-!  ie to ie, je to je range before this subroutine is called:
-!  h[ie+1] and h[je+1] and and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
-!  T[je+1], and S[je+1].
-! Arguments: h - Layer thickness, in m.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (out)     PFu - Zonal acceleration due to pressure gradients
-!                  (equal to -dM/dx) in m s-2.
-!  (out)     PFv - Meridional acceleration due to pressure
-!                  gradients (equal to -dM/dy) in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (in)      p_atm - The pressure at the ice-ocean or atmosphere-ocean
-!                    interface in Pa.
-!  (out)     pbce - The baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
-!                   pbce points to a space with nz layers or NULL.
-!  (out)     eta - The free surface height used to calculate PFu and PFv, in m,
-!                  with any tidal contributions or compressibility compensation.
+  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure.
+  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, in kg/m2.
+  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
+                                                                !! (equal to -dM/dx) in m/s2.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
+                                                                !! (equal to -dM/dy) in m/s2.
+  type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
+  real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+                                                                !! atmosphere-ocean in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
+                                                                !! each layer due to free surface height anomalies,
+                                                                !! in m s-2.
+  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &          ! The Montgomery potential, M = (p/rho + gz) , in m2 s-2.
     alpha_star, & ! Compression adjusted specific volume, in m3 kg-1.
@@ -414,43 +356,31 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
 
 end subroutine PressureForce_Mont_nonBouss
 
+!> \brief Boussinesq Montgomery-potential form of pressure gradient
+!!
+!! Determines the acceleration due to pressure forces.
+!!
+!! To work, the following fields must be set outside of the usual
+!! ie to ie, je to je range before this subroutine is called:
+!!  h[ie+1] and h[je+1] and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
+!!  T[je+1], and S[je+1].
 subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
-  type(thermo_var_ptrs),                     intent(in)  :: tv
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv
-  type(PressureForce_Mont_CS),               pointer     :: CS
-  real, dimension(:,:),                     optional, pointer     :: p_atm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta
-
-!    This subroutine determines the acceleration due to pressure
-!  forces.
-!    To work, the following fields must be set outside of the usual
-!  ie to ie, je to je range before this subroutine is called:
-!   h[ie+1] and h[je+1] and (if tv%form_of_EOS is set) T[ie+1], S[ie+1],
-!   T[je+1], and S[je+1].
-! Arguments: h - Layer thickness, in m.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (out)     PFu - Zonal acceleration due to pressure gradients
-!                  (equal to -dM/dx) in m s-2.
-!  (out)     PFv - Meridional acceleration due to pressure
-!                  gradients (equal to -dM/dy) in m s-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (in)      p_atm - the pressure at the ice-ocean or atmosphere-ocean
-!                    interface in Pa.
-!  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
-!  (out)     eta - the free surface height used to calculate PFu and PFv, in m,
-!                  with any tidal contributions or compressibility compensation.
-
+  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure.
+  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness, in m.
+  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration due to pressure gradients
+                                                                !! (equal to -dM/dx) in m/s2.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration due to pressure gradients
+                                                                !! (equal to -dM/dy) in m/s2.
+  type(PressureForce_Mont_CS),               pointer     :: CS  !< Control structure for Montgomery potential PGF
+  real, dimension(:,:),                     optional, pointer     :: p_atm !< The pressure at the ice-ocean or
+                                                                !! atmosphere-ocean in Pa.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
+                                                                !! each layer due to free surface height anomalies,
+                                                                !! in m s-2.
+  real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     M, &        ! The Montgomery potential, M = (p/rho + gz) , in m2 s-2.
     rho_star    ! In-situ density divided by the derivative with depth of the
@@ -683,38 +613,23 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
 
 end subroutine PressureForce_Mont_Bouss
 
+!> Determines the partial derivative of the acceleration due
+!! to pressure forces with the free surface height.
 subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star)
-  type(ocean_grid_type),                intent(in)  :: G
-  type(verticalGrid_type),              intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: e
-  type(thermo_var_ptrs),                intent(in)  :: tv
-  real,                                 intent(in)  :: g_Earth
-  real,                                 intent(in)  :: Rho0
-  real,                                 intent(in)  :: GFS_scale
-!  type(PressureForce_Mont_CS),          pointer     :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: rho_star
-!    This subroutine determines the partial derivative of the acceleration due
-!  to pressure forces with the free surface height.
-! Arguments: e - Interface height, in H (m).
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      g_Earth - The gravitational acceleration, in m s-2.
-!  (in)      Rho0 - The "Boussinesq" ocean density, in kg m-3.
-!  (in)      Rho_atmos - The atmospheric density, in kg m-3.  Typically this
-!                        should be 0, but it could be set to a significant
-!                        fraction of the ocean density to use the model in a
-!                        reduced gravity mode.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m2 H-1 s-2.
-!  (in,opt)  rho_star - The layer densities (maybe compressibility compensated),
-!                       times g/rho_0, in m s-2.
-
+  type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e !< Interface height, in H.
+  type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
+  real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
+  real,                                 intent(in)  :: Rho0 !< The "Boussinesq" ocean density, in kg m-3.
+  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
+                                                                 !! and the gravitational acceleration of the planet.
+                                                                 !! Usually this ratio is 1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
+                                                                !! to free surface height anomalies, in m2 H-1 s-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: rho_star !< The layer densities (maybe
+                                                                !! compressibility compensated), times g/rho_0, in m s-2.
+  ! Local variables
   real :: Ihtot(SZI_(G))     ! The inverse of the sum of the layer
                              ! thicknesses, in m-1.
   real :: press(SZI_(G))     ! Interface pressure, in Pa.
@@ -800,35 +715,22 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, g_Earth, Rho0, GFS_scale, pbce, rho_star
 
 end subroutine Set_pbce_Bouss
 
+!> Determines the partial derivative of the acceleration due
+!! to pressure forces with the column mass.
 subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
-  type(ocean_grid_type),                intent(in)  :: G
-  type(verticalGrid_type),              intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in)  :: p
-  type(thermo_var_ptrs),                intent(in)  :: tv
-  real,                                 intent(in)  :: g_Earth
-  real,                                 intent(in)  :: GFS_scale
-!  type(PressureForce_Mont_CS),          pointer     :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: alpha_star
-!    This subroutine determines the partial derivative of the acceleration due
-!  to pressure forces with the column mass.
-! Arguments: p - Interface pressures, in Pa.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      g_Earth - The gravitational acceleration, in m s-2.
-!  (in)      Rho_atmos - The atmospheric density, in kg m-3.  Typically this
-!                        should be 0, but it could be set to a significant
-!                        fraction of the ocean density to use the model in a
-!                        reduced gravity mode.
-!  (in)      CS - The control structure returned by a previous call to
-!                 PressureForce_init.
-!  (out)     pbce - the baroclinic pressure anomaly in each layer
-!                   due to total thickness anomalies, in m4 s-2 kg-1.
-!  (in,opt)  alpha_star - The layer specific volumes (maybe compressibility
-!                         compensated), in m3 kg-1.
+  type(ocean_grid_type),                intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),              intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: p !< Interface pressures, in Pa.
+  type(thermo_var_ptrs),                intent(in)  :: tv !< Thermodynamic variables
+  real,                                 intent(in)  :: g_Earth !< The gravitational acceleration, in m s-2.
+  real,                                 intent(in)  :: GFS_scale !< Ratio between gravity applied to top interface
+                                                                 !! and the gravitational acceleration of the planet.
+                                                                 !! Usually this ratio is 1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: pbce !< The baroclinic pressure anomaly in each layer due
+                                                                !! to free surface height anomalies, in m2 H-1 s-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: alpha_star !< The layer specific volumes
+                                                          !! (maybe compressibility compensated), in m3 kg-1.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dpbce, &      !   A barotropic correction to the pbce to enable the use of
                   ! a reduced gravity form of the equations, in m4 s-2 kg-1.
@@ -932,24 +834,16 @@ subroutine Set_pbce_nonBouss(p, tv, G, GV, g_Earth, GFS_scale, pbce, alpha_star)
 
 end subroutine Set_pbce_nonBouss
 
-
+!> Initialize the Montgomery-potential form of PGF control structure
 subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(PressureForce_Mont_CS),  pointer  :: CS
-  type(tidal_forcing_CS), optional, pointer :: tides_CSp
-! Arguments: Time - The current model time.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module.
-!  (in)      tides_CSp - a pointer to the control structure of the tide module.
+  type(time_type), target, intent(in)    :: Time !< Current model time
+  type(ocean_grid_type),   intent(in)    :: G  !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
+  type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
+  type(PressureForce_Mont_CS),  pointer  :: CS !< Montgomery PGF control structure
+  type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tides control structure
+  ! Local variables
   logical :: use_temperature, use_EOS
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -1006,10 +900,21 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 
 end subroutine PressureForce_Mont_init
 
-
+!> Deallocates the Montgomery-potential form of PGF control structure
 subroutine PressureForce_Mont_end(CS)
   type(PressureForce_Mont_CS), pointer :: CS
   if (associated(CS)) deallocate(CS)
 end subroutine PressureForce_Mont_end
+
+!>\namespace mom_pressureforce_mont
+!!
+!! Provides the Boussunesq and non-Boussinesq forms of the horizontal
+!! accelerations due to pressure gradients using the Montgomery potential. A
+!! second-order accurate, centered scheme is used. If a split time stepping
+!! scheme is used, the vertical decomposition into barotropic and baroclinic
+!! contributions described by Hallberg (J Comp Phys 1997) is used.  With a
+!! nonlinear equation of state, compressibility is added along the lines proposed
+!! by Sun et al. (JPO 1999), but with compressibility coefficients based on a fit
+!! to a user-provided reference profile.
 
 end module MOM_PressureForce_Mont

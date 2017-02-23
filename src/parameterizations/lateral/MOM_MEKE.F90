@@ -3,7 +3,7 @@ module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,     only : hchksum, uchksum, vchksum
+use MOM_debugging,     only : hchksum
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -213,7 +213,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP do
       do J=js-1,je ; do i=is,ie
         drag_vel_v(i,J) = 0.0
-        if ((G%mask2dCu(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
+        if ((G%mask2dCv(i,J) > 0.0) .and. (visc%bbl_thick_v(i,J) > 0.0)) &
           drag_vel_v(i,J) = visc%kv_bbl_v(i,J) / visc%bbl_thick_v(i,J)
       enddo ; enddo
 
@@ -387,7 +387,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 !$OMP                               cdrag2,bottomFac2,MEKE_decay,barotrFac2,  &
 !$OMP                               use_drag_rate,dt,baroHu,baroHv) &
 !$OMP                       private(Kh_here,Inv_Kh_max,ldamping,advFac)
-    if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_advection_factor >0.) then
+    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_advection_factor >0.0) then
       ! Lateral diffusion of MEKE
       Kh_here = max(0.,CS%MEKE_Kh)
 !$OMP do
@@ -532,8 +532,18 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     if (CS%id_GM_src>0) call post_data(CS%id_GM_src, MEKE%GM_src, CS%diag)
     if (CS%id_mom_src>0) call post_data(CS%id_mom_src, MEKE%mom_src, CS%diag)
     if (CS%id_Le>0) call post_data(CS%id_Le, LmixScale, CS%diag)
-    if (CS%id_gamma_b>0) call post_data(CS%id_gamma_b, sqrt(bottomFac2), CS%diag)
-    if (CS%id_gamma_t>0) call post_data(CS%id_gamma_t, sqrt(barotrFac2), CS%diag)
+    if (CS%id_gamma_b>0) then
+      do j=js,je ; do i=is,ie
+        bottomFac2(i,j) = sqrt(bottomFac2(i,j))
+      enddo ; enddo
+      call post_data(CS%id_gamma_b, bottomFac2, CS%diag)
+    endif
+    if (CS%id_gamma_t>0) then
+      do j=js,je ; do i=is,ie
+        barotrFac2(i,j) = sqrt(barotrFac2(i,j))
+      enddo ; enddo
+      call post_data(CS%id_gamma_t, barotrFac2, CS%diag)
+    endif
 
 ! else ! if MEKE%MEKE
 !   call MOM_error(FATAL, "MOM_MEKE: MEKE%MEKE is not associated!")
@@ -1174,6 +1184,11 @@ end subroutine MEKE_end
 !! \f[
 !! \gamma_b^2  = \frac{E_b}{E} = \gamma_{d0}
 !!    + \left( 1 + c_{b} \frac{L_d}{L_f} \right)^{-\frac{4}{5}}
+!! ,
+!! \f]
+!! \f[
+!! \gamma_b^2  \leftarrow  \max{\left( \gamma_b^2, \gamma_{min}^2 \right)}
+!! .
 !! \f]
 !!
 !! \subsection section_MEKE_smoothing MEKE smoothing terms
@@ -1187,17 +1202,57 @@ end subroutine MEKE_end
 !! \subsection section_MEKE_diffusivity Diffusivity derived from MEKE
 !!
 !! The predicted eddy velocity scale, \f$ U_e \f$, can be combined with a
-!! mixing length scale to form a diffusivity:
+!! mixing length scale to form a diffusivity.
+!! The primary use of a MEKE derived diffusivity is for use in thickness
+!! diffusion (module mom_thickness_diffuse) and optionally in along
+!! isopycnal mixing of tracers (module mom_tracer_hor_diff).
+!! The original form used (enabled with MEKE_OLD_LSCALE=True):
 !!
-!! \f[  \kappa_M = \gamma_\kappa \sqrt{ \gamma_t U_e^2 A_\Delta } \f]
-!! where \f$ A_\Delta \f$ is the area of the grid cell
-!! and \f$ \gamma_\kappa \in [0,1] \f$ s a non-dimensional factor and,
-!! following Jansen et al., 2015, $\gamma_t^2$ is the ratio of barotropic
-!! eddy energy to column mean eddy energy,
+!! \f[  \kappa_M = \gamma_\kappa \sqrt{ \gamma_t^2 U_e^2 A_\Delta } \f]
+!!
+!! where \f$ A_\Delta \f$ is the area of the grid cell.
+!! Following Jansen et al., 2015, we now use
+!!
+!! \f[  \kappa_M = \gamma_\kappa l_M \sqrt{ \gamma_t^2 U_e^2 } \f]
+!!
+!! where \f$ \gamma_\kappa \in [0,1] \f$ is a non-dimensional factor and,
+!! following Jansen et al., 2015, \f$\gamma_t^2\f$ is the ratio of barotropic
+!! eddy energy to column mean eddy energy given by
 !! \f[
-!! \gamma_t^2  = \frac{E_t}{E} = \left( 1 + c_{t} \frac{L_d}{L_f} \right)^{-\frac{1}{1}}
+!! \gamma_t^2  = \frac{E_t}{E} = \left( 1 + c_{t} \frac{L_d}{L_f} \right)^{-\frac{1}{4}}
+!! ,
+!! \f]
+!! \f[
+!! \gamma_t^2  \leftarrow  \max{\left( \gamma_t^2, \gamma_{min}^2 \right)}
 !! .
 !! \f]
+!!
+!! The length-scale is a configurable combination of multiple length scales:
+!!
+!! \f[
+!! l_M = \left(
+!!       \frac{\alpha_d}{L_d}
+!!     + \frac{\alpha_f}{L_f}
+!!     + \frac{\alpha_R}{L_R}
+!!     + \frac{\alpha_e}{L_e}
+!!     + \frac{\alpha_\Delta}{L_\Delta}
+!!     + \frac{\delta[L_c]}{L_c}
+!!       \right)^{-1}
+!! \f]
+!!
+!! where
+!!
+!! \f{eqnarray*}{
+!! L_d & = & \sqrt{\frac{c_g^2}{f^2+2\beta c_g}} \sim \frac{ c_g }{f} \\\\
+!! L_R & = & \sqrt{\frac{U_e}{\beta}} \\\\
+!! L_e & = & \frac{U_e}{|S| N} \\\\
+!! L_f & = & \frac{H}{c_d} \\\\
+!! L_\Delta & = & \sqrt{A_\Delta} .
+!! \f}
+!!
+!! \f$L_c\f$ is a constant and \f$\delta[L_c]\f$ is the impulse function so that the term
+!! \f$\frac{\delta[L_c]}{L_c}\f$ evaluates to \f$\frac{1}{L_c}\f$ when \f$L_c\f$ is non-zero
+!! but is dropped if \f$L_c=0\f$.
 !!
 !! \subsection section_MEKE_viscosity Viscosity derived from MEKE
 !!
@@ -1220,8 +1275,8 @@ end subroutine MEKE_end
 !!
 !! In the nonlinear drag limit, where \f$ U_e >> \max(U_b, |u|_{z=-D}, C_d^{-1}\lambda) \f$,
 !! the equilibrium becomes
-!! \f$ \overline{E} \approx ( \frac{ \dot{E}_b + \gamma_\eta \dot{E}_\eta +
-!!               \gamma_v \dot{E}_v }{ \sqrt{2} C_d \gamma_b^3 } )^\frac{2}{3} \f$.
+!! \f$ \overline{E} \approx \left( \frac{ \dot{E}_b + \gamma_\eta \dot{E}_\eta +
+!!               \gamma_v \dot{E}_v }{ \sqrt{2} C_d \gamma_b^3 } \right)^\frac{2}{3} \f$.
 !!
 !! \subsubsection section_MEKE_module_parameters MEKE module parameters
 !!
@@ -1234,7 +1289,7 @@ end subroutine MEKE_end
 !! | \f$ \gamma_v \f$      | <code>MEKE_FrCOEFF</code> |
 !! | \f$ \lambda \f$       | <code>MEKE_DAMPING</code> |
 !! | \f$ U_b \f$           | <code>MEKE_USCALE</code> |
-!! | \f$ \gamma_b0 \f$     | <code>MEKE_CD_SCALE</code> |
+!! | \f$ \gamma_{d0} \f$   | <code>MEKE_CD_SCALE</code> |
 !! | \f$ c_{b} \f$         | <code>MEKE_CB</code> |
 !! | \f$ c_{t} \f$         | <code>MEKE_CT</code> |
 !! | \f$ \kappa_E \f$      | <code>MEKE_KH</code> |
@@ -1242,12 +1297,27 @@ end subroutine MEKE_end
 !! | \f$ \gamma_\kappa \f$ | <code>MEKE_KHCOEFF</code> |
 !! | \f$ \gamma_M \f$      | <code>MEKE_KHMEKE_FAC</code> |
 !! | \f$ \gamma_u \f$      | <code>MEKE_VISCOSITY_COEFF</code> |
+!! | \f$ \gamma_{min}^2 \f$| <code>MEKE_MIN_GAMMA2</code> |
+!! | \f$ \alpha_d \f$      | <code>MEKE_ALPHA_DEFORM</code> |
+!! | \f$ \alpha_f \f$      | <code>MEKE_ALPHA_FRICT</code> |
+!! | \f$ \alpha_R \f$      | <code>MEKE_ALPHA_RHINES</code> |
+!! | \f$ \alpha_e \f$      | <code>MEKE_ALPHA_EADY</code> |
+!! | \f$ \alpha_\Delta \f$ | <code>MEKE_ALPHA_GRID</code> |
+!! | \f$ L_c \f$           | <code>MEKE_FIXED_MIXING_LENGTH</code> |
 !! | -                     | <code>MEKE_KHTH_FAC</code> |
 !! | -                     | <code>MEKE_KHTR_FAC</code> |
 !!
 !! | Symbol                | Model parameter |
 !! | ------                | --------------- |
 !! | \f$ C_d \f$           | <code>CDRAG</code> |
+!!
+!! \subsection section_MEKE_references References
+!!
+!! Jansen, M. F., A. J. Adcroft, R. Hallberg, and I. M. Held, 2015: Parameterization of eddy fluxes based on a mesoscale energy
+!! budget. Ocean Modelling, 92, 28--41, http://doi.org/10.1016/j.ocemod.2015.05.007 .
+!!
+!! Marshall, D. P., and A. J. Adcroft, 2010: Parameterization of ocean eddies: Potential vorticity mixing, energetics and Arnold
+!! first stability theorem. Ocean Modelling, 32, 188--204, http://doi.org/10.1016/j.ocemod.2010.02.001 .
 
 end module MOM_MEKE
 

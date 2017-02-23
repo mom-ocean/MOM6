@@ -3,7 +3,7 @@ module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
@@ -24,20 +24,21 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query, set_Flather_data
+!use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : ALE_sponge_CS
-use MOM_string_functions, only : uppercase
+use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type, set_time
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
+use MOM_EOS, only : int_specific_vol_dp, convert_temp_salt_for_TEOS10
 use user_initialization, only : user_initialize_thickness, user_initialize_velocity
 use user_initialization, only : user_init_temperature_salinity
 use user_initialization, only : user_set_OBC_data
@@ -71,7 +72,6 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
-use supercritical_initialization, only : supercritical_initialize_velocity
 use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
 use soliton_initialization, only : soliton_initialize_thickness
@@ -82,7 +82,7 @@ use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
-use MOM_regridding, only : regridding_CS, set_regrid_params
+use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
@@ -341,7 +341,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
        case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
        case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
        case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-       case ("supercritical"); call supercritical_initialize_velocity(u, v, h, G, PF)
        case ("USER"); call user_initialize_velocity(u, v, G, PF)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
             "Unrecognized velocity configuration "//trim(config))
@@ -443,29 +442,38 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   ! Reads OBC parameters not pertaining to the location of the boundaries
   call open_boundary_init(G, PF, OBC)
 
-  ! This is the legacy approach to turning on open boundaries
-  call get_param(PF, mod, "OBC_CONFIG", config, default="none", do_not_log=.true.)
-  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    if (trim(config) == "DOME") then
-      call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
-    elseif (trim(config) == "USER") then
-      call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
-    elseif (.not. trim(config) == "none") then
-      call MOM_error(FATAL, "The open boundary conditions specified by "//&
-              "OBC_CONFIG = "//trim(config)//" have not been fully implemented.")
+  ! This controls user code for setting open boundary data
+  if (associated(OBC)) then
+    call get_param(PF, mod, "OBC_USER_CONFIG", config, &
+                 "A string that sets how the user code is invoked to set open\n"//&
+                 " boundary data: \n"//&
+                 "   DOME - specified inflow on northern boundary\n"//&
+                 "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
+                 "   supercritical - now only needed here for the allocations\n"//&
+                 "   USER - user specified", default="none")
+    if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
+    if (open_boundary_query(OBC, apply_specified_OBC=.true.)) then
+      if (trim(config) == "DOME") then
+        call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
+      elseif (lowercase(trim(config)) == "supercritical") then
+        call supercritical_set_OBC_data(OBC, G, PF)
+      elseif (trim(config) == "tidal_bay") then
+        OBC%update_OBC = .true.
+      elseif (trim(config) == "USER") then
+        call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
+      elseif (.not. trim(config) == "none") then
+        call MOM_error(FATAL, "The open boundary conditions specified by "//&
+                "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
+      endif
+    endif
+    if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
+      call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     endif
   endif
-  if (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
-  endif
+! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
+!   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
+! endif
   ! Still need a way to specify the boundary values
-  call get_param(PF, mod, "OBC_VALUES_CONFIG", config, default="none", do_not_log=.true.)
-  if (trim(config) == "tidal_bay") then
-    OBC%update_OBC = .true.
-    OBC%OBC_values_config = "tidal_bay"
-  elseif (trim(config) == "supercritical") then
-    call supercritical_set_OBC_data(OBC, G, PF)
-  endif
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
     call uchksum(G%mask2dCu, 'MOM_initialize_state: mask2dCu ', G%HI)
@@ -528,7 +536,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
 
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
-    if (correct_thickness) then 
+    if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, eta, h)
     else
       do k=nz,1,-1 ; do j=js,je ; do i=is,ie
@@ -815,7 +823,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
 
   ! Convert thicknesses to interface heights.
   call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-  
+
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
       ! Issue a warning?
@@ -1347,13 +1355,13 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
   ! number, not the physical position).
-  integer :: k;                             
+  integer :: k;
   real  :: delta_S, delta_T
   real  :: S_top, T_top ! Reference salinity and temerature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
   real  :: delta
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
-  
+
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
   call get_param(param_file, mod, "T_TOP", T_top, &
                  "Initial temperature of the top surface.", &
@@ -1367,27 +1375,27 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   call get_param(param_file, mod, "S_RANGE", S_range, &
                  "Initial salinity difference (top-bottom).", &
                  units="PSU", fail_if_missing=.true.)
-  
+
 ! ! Prescribe salinity
 ! delta_S = S_range / ( G%ke - 1.0 );
 ! S(:,:,1) = S_top;
 ! do k = 2,G%ke
 !   S(:,:,k) = S(:,:,k-1) + delta_S;
-! end do  
+! end do
   do k = 1,G%ke
     S(:,:,k) = S_top - S_range*((real(k)-0.5)/real(G%ke))
     T(:,:,k) = T_top - T_range*((real(k)-0.5)/real(G%ke))
-  end do  
-  
+  end do
+
 ! ! Prescribe temperature
 ! delta_T = T_range / ( G%ke - 1.0 );
 ! T(:,:,1) = T_top;
 ! do k = 2,G%ke
 !   T(:,:,k) = T(:,:,k-1) + delta_T;
-! end do  
+! end do
 ! delta = 1;
 ! T(:,:,G%ke/2 - (delta-1):G%ke/2 + delta) = 1.0;
-  
+
   call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
@@ -1558,7 +1566,7 @@ subroutine compute_global_grid_integrals(G)
     G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
   enddo ; enddo
   call sum_across_PEs( G%areaT_global )
-  G%IareaT_global = 1. / G%areaT_global 
+  G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
@@ -1589,7 +1597,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 ! This subroutine was written by M. Harrison, with input from R. Hallberg.
 ! and A. Adcroft.
 !
-! Arguments: 
+! Arguments:
 !  (out)     h  - Layer thickness, in m.
 !  (out)     tv - A structure containing pointers to any available
 !                 thermodynamic fields, including potential temperature and
@@ -1601,7 +1609,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
   type(ocean_grid_type),                 intent(inout) :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(verticalGrid_type),               intent(in)    :: GV
   type(param_file_type),                 intent(in)    :: PF
@@ -1633,7 +1641,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   real, dimension(:,:), pointer :: shelf_area
   real    :: min_depth
   real    :: dilate
-  real    :: missing_value_temp, missing_value_salt    
+  real    :: missing_value_temp, missing_value_salt
   logical :: new_sim
   logical :: correct_thickness
   character(len=40) :: potemp_var, salin_var
@@ -1659,7 +1667,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget
   real, dimension(:,:), allocatable :: area_shelf_h
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h  
+  real, dimension(:,:), allocatable, target  :: frac_shelf_h
   real, dimension(:,:,:), allocatable :: tmpT1dIn, tmpS1dIn, h1, tmp_mask_in
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
@@ -1691,7 +1699,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
        (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
 
   inputdir = "." ;  call get_param(PF, mod, "INPUTDIR", inputdir)
-  inputdir = slasher(inputdir)    
+  inputdir = slasher(inputdir)
 
   eos => tv%eqn_of_state
 
@@ -1702,7 +1710,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, default=0.0)
 
   call get_param(PF, mod, "NKML",nkml,default=0)
-  call get_param(PF, mod, "NKBL",nkbl,default=0)    
+  call get_param(PF, mod, "NKBL",nkbl,default=0)
 
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
@@ -1750,7 +1758,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !   The first record will be read if there are multiple time levels.
 !   The observation grid MUST tile the model grid. If the model grid extends
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
-!   value at the northernmost/southernmost latitude.      
+!   value at the northernmost/southernmost latitude.
 
 
   call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
@@ -1767,6 +1775,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   press(:)=tv%p_ref
 
+  !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
+  call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
+
   do k=1, kd
     do j=js,je
       call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
@@ -1779,11 +1790,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call pass_var(rho_z,G%Domain)
 
   ! This is needed for building an ALE grid under ice shelves
-  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
+  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
      call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
                     "The file from which the ice bathymetry and area are read.", &
                     fail_if_missing=.true.)
+     filename = trim(inputdir)//trim(ice_shelf_file)
      call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
      call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
                     "The name of the area variable in ICE_THICKNESS_FILE.", &
@@ -1794,7 +1806,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
      call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
      ! initialize frac_shelf_h with zeros (open water everywhere)
-     frac_shelf_h(:,:) = 0.0 
+     frac_shelf_h(:,:) = 0.0
      ! compute fractional ice shelf coverage of h
      do j=jsd,jed ; do i=isd,ied
          if (G%areaT(i,j) > 0.0) &
@@ -1805,7 +1817,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   endif
 
-! Done with horizontal interpolation.    
+! Done with horizontal interpolation.
 ! Now remap to model coordinates
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
@@ -1829,7 +1841,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
-            zBottomOfCell = -G%bathyT(i,j) 
+            zBottomOfCell = -G%bathyT(i,j)
             tmpT1dIn(i,j,k) = tmpT1dIn(i,j,k-1)
             tmpS1dIn(i,j,k) = tmpS1dIn(i,j,k-1)
           else ! This next block should only ever be reached over land
@@ -1849,12 +1861,13 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     call pass_var(tmpS1dIn, G%Domain)
 
     ! Build the target grid (and set the model thickness to it)
-    allocate( hTarget(nz) )
     ! This call can be more general but is hard-coded for z* coordinates...  ????
-    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS, hTarget ) ! sets regridCS and hTarget(1:nz)
+    call ALE_initRegridding( GV, G%max_depth, PF, mod, regridCS ) ! sets regridCS
 
     if (.not. remap_general) then
       ! This is the old way of initializing to z* coordinates only
+      allocate( hTarget(nz) )
+      hTarget = getCoordinateResolution( regridCS )
       do j = js, je ; do i = is, ie
         h(i,j,:) = 0.
         if (G%mask2dT(i,j)>0.) then

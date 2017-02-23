@@ -36,49 +36,62 @@ private
   logical, public :: LagrangianMixing
   !^ True if Stokes drift is present and mixing
   !  should be applied to Lagrangian current
-  !  (mean current + Stokes drift) 
+  !  (mean current + Stokes drift)
+  !  This option should be treated as preliminary
   logical, public :: StokesMixing
   !^ True if Stokes drift is present and mixing
   !  should be applied directly to Stokes current
   !  (with separate mixing parameter for Eulerian
-  !  mixing contribution)
+  !  mixing contribution).
+  !  This option should be treated as preliminary.
   logical, public :: CoriolisStokes
   !^ True if Stokes drift is present and Coriolis
-  !  Stokes acceleration of mean current 
+  !  Stokes acceleration of mean current
   !  should be applied.
-  logical, public :: StokesInKappaShear=.false.!This doesn't work well.
-  !^ True if Stokes drift is present and 
+  !  This option should be treated as preliminary.
+  logical, public :: StokesInKappaShear=.false.
+  !^ True if Stokes drift is present and
   !  should be added into Kappa Shear mixing.
-  logical, public :: LangmuirEnhanceW   
+  !  This doesn't work well and should probably be removed
+  !  prior to submitting this code.
+  logical, public :: LangmuirEnhanceW
   !^ True if turbulent velocity scales should be
   !  enhanced due to Langmuir mixing.
-  logical, public :: LangmuirEnhanceVt2 
+  !  This option is for KPP and should probably
+  !  be moved to the KPP CS.
+  logical, public :: LangmuirEnhanceVt2
   !^ True if unresolved turbulent velocity scale
   ! should be enhanced due to Langmuir mixing.
-  logical, public :: LangmuirEnhanceK   
+  !  This option is for KPP and should probably
+  !  be moved to the KPP CS.
+  logical, public :: LangmuirEnhanceK
   !^ True if diffusivity and viscosity should be
   !  enhanced due to presence of Langmuir mixing.
-  logical, public :: StokesShearInRIb   
+  !  This option is for KPP and should probably be moved
+  !  to the KPP CS.
+  logical, public :: StokesShearInRIb
   !^ True if Stokes drift profile should be included
   !  in current shear calculation for bulk Richardson number.
-  logical, public ::SurfaceStokesInRIb  
+  !  This option is for KPP and should probably
+  !  be moved to the KPP CS.
+  logical, public ::SurfaceStokesInRIb
   !^ True if surface Stokes drift should be used
   !  to enhance the denominator of bulk Richardson number.
-  integer :: WaveMethod                 
+  integer :: WaveMethod
   !^ Options for various wave methods
   !    Valid (tested) choices are:
   !     - TEST_PROF
   !     - DATA_OVERRIDE
   !    In prep include:
   !     - Parametric (See SpecMethod)
-  integer :: SpecMethod  
+  integer :: SpecMethod
   !^ Options for various Parametric wave spectra
-  !     IN PREP
-  integer, public :: NumBands    
+  !     IN PREP (perhaps not needed thanks to Qing Li's formula.)
+  integer, public :: NumBands
   !^ Number of wavenumber/frequency partitions to receive
   !   - This needs to match the number of bands provided
   !     via the either coupling or file.
-  !   - A check will be added to be sure it is correct 
+  !   - A check will be added to be sure it is correct
   !     as this module nears completion.
   integer, public :: PartitionMode
   ! = 0 if partitions are described by wavenumber
@@ -90,9 +103,9 @@ private
    WaveNum_Cen,&   !< Wavenumber bands for read/coupled
    Freq_Cen        !< Frequency bands for read/coupled
   real ALLOCABLE_, dimension( NIMEMB_, NJMEM_,NKMEM_), public :: &
-       Us_x !< Stokes drift profile (zonal) 
+       Us_x !< Stokes drift profile (zonal)
   real ALLOCABLE_, dimension( NIMEM_, NJMEMB_,NKMEM_), public :: &
-       Us_y !< Stokes drift profile (meridional) 
+       Us_y !< Stokes drift profile (meridional)
   real ALLOCABLE_, dimension( NIMEM_, NJMEM_), public ::         &
        LangNum, & !< Langmuir number (directionality factored later)
        US0_x,   & !< Surface Stokes Drift in x
@@ -100,9 +113,9 @@ private
   real ALLOCABLE_, dimension( NIMEMB_, NJMEM_,NKMEM_), public :: &
        STKx0 !< Stokes Drift spectrum in x
   real ALLOCABLE_, dimension( NIMEM_, NJMEMB_,NKMEM_), public :: &
-       STKy0 !< Stokes Drift spectrum in y 
+       STKy0 !< Stokes Drift spectrum in y
   real ALLOCABLE_, dimension( NIMEM_, NJMEM_,NKMEM_), public :: &
-       KvS !< Viscosity for Stokes Drift shear 
+       KvS !< Viscosity for Stokes Drift shear
   logical :: dataoverrideisinitialized
 
   type(time_type), pointer, public :: Time ! A pointer to the ocean model's clock.
@@ -142,7 +155,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   ! I/O
   character*(13) :: TMPSTRING1,TMPSTRING2
   character*(10), parameter :: NULL_STRING = "EMPTYEMPTY"
-  character*(10), parameter :: PARAMETRIC_STRING = "PARAMETRIC" 
+  character*(10), parameter :: PARAMETRIC_STRING = "PARAMETRIC"
   character*(10), parameter :: FROMFILE_STRING = "FROM_FILE"
   character*(13), parameter :: DATAOVERRIDE_STRING = "DATA_OVERRIDE"
   character*(10), parameter :: TESTPROF_STRING = "TEST_PROF"
@@ -153,7 +166,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
                              "control structure.")
      return
   endif
-  
+
   allocate(CS)
 
   CS%diag => diag
@@ -171,25 +184,25 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
        Default=.false.)
   call get_param(param_file, mod, "STOKES_MIXING", CS%StokesMixing, &
        "Flag to use Stokes Mixing of momentum", units="", &
-       Default=.false.)  
+       Default=.false.)
   call get_param(param_file, mod, "CORIOLIS_STOKES", CS%CoriolisStokes, &
        "Flag to use Coriolis Stokes acceleration", units="", &
-       Default=.false.)  
+       Default=.false.)
   call get_param(param_file, mod, "LANGMUIR_ENHANCE_W", CS%LangmuirEnhanceW, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
-       'velocity scale.', units="", Default=.false.) 
+       'velocity scale.', units="", Default=.false.)
   call get_param(param_file, mod, "LANGMUIR_ENHANCE_VT2", CS%LangmuirEnhanceVt2, &
        'Flag for Langmuir turbulence enhancement of Vt2 in KPP'//&
-       'bulk Richardson Number.', units="", Default=.false.) 
+       'bulk Richardson Number.', units="", Default=.false.)
   call get_param(param_file, mod, "LANGMUIR_ENHANCE_K", CS%LangmuirEnhanceK, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
-       'mixing coefficients.', units="", Default=.false.) 
+       'mixing coefficients.', units="", Default=.false.)
  call get_param(param_file, mod, "STOKES_IN_RIB", CS%StokesShearInRIb, &
        'Flag for using Stokes drift profile in RIb calculation.'&
-       , units="", Default=.false.) 
+       , units="", Default=.false.)
  call get_param(param_file, mod, "SURFACE_STOKES_IN_RIB", CS%SurfaceStokesInRIb, &
        'Flag for using surface Stokes drift in RIb calculation.'&
-       , units="", Default=.false.) 
+       , units="", Default=.false.)
   if ( (CS%LagrangianMixing.or.CS%LangmuirEnhanceW) .and. (.not.CS%UseWaves)) then
      call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
           "LagrangianMixing and WaveEnhancedDiff cannot"//&
@@ -247,7 +260,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   !    Langmuir number
   ALLOC_ (CS%LangNum(G%isc:G%iec,G%jsc:G%jec)) ; CS%LangNum(:,:) = 1e10
   ALLOC_ (CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed)) ; CS%US0_x(:,:) = 0.
-  ALLOC_ (CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB)) ; CS%US0_y(:,:) = 0.  
+  ALLOC_ (CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB)) ; CS%US0_y(:,:) = 0.
   ! Viscosity for Stokes drift
   ALLOC_ (CS%KvS(G%isd:G%Ied,G%jsd:G%jed,G%ke)) ; CS%KvS(:,:,:) = 1.e-6
 
@@ -276,7 +289,7 @@ end subroutine MOM_wave_interface_init
 !/
 !/
 !/
-! Constructs the Stokes Drift profile on the model grid based on 
+! Constructs the Stokes Drift profile on the model grid based on
 ! desired coupling options
 subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
   type(wave_parameters_CS),              pointer        :: CS
@@ -297,9 +310,6 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
 
   Day_Center = Day + DT/2
 
-  !print*,' '
-  !print*,'Into Import_Stokes_Drift'
-  !print*,time_type_to_real(Day),time_type_to_real(Day_center)
   if (CS%WaveMethod==TESTPROF) then
      DecayScale = 4.*PI/TP_WVL !4pi
      do ii=G%isdB,G%iedB
@@ -334,8 +344,11 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
      CS%Us_y(:,:,:) = 0.0
      CS%Us0_x(:,:) = 0.0
      CS%Us0_y(:,:) = 0.0
+     ! Computing X direction Stokes drift
      do ii=G%isdB,G%iedB
         do jj=G%jsd,G%jed
+           ! 1. First compute the surface Stokes drift
+           !    by integrating over the partitionas.
            do b=1,CS%NumBands
               if (CS%PartitionMode==0) then
                  !In wavenumber we are averaging over (small) level
@@ -347,7 +360,7 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
               endif
               CS%US0_x(ii,jj)=CS%US0_x(ii,jj) + CS%STKx0(ii,jj,b) * CMN_FAC
            enddo
-
+           ! 2. Second compute the level averaged Stokes drift
            bottom = 0.0
            do kk=1, G%ke
               Top = Bottom
@@ -379,9 +392,10 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
            enddo
         enddo
      enddo
-
+     ! Computing Y direction Stokes drift
      do ii=G%isd,G%ied
         do jj=G%jsdB,G%jedB
+           ! Compute the surface values.
            do b=1,CS%NumBands
                if (CS%PartitionMode==0) then
                  !In wavenumber we are averaging over (small) level
@@ -393,7 +407,7 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
               endif
               CS%US0_y(ii,jj)=CS%US0_y(ii,jj) + CS%STKy0(ii,jj,b) * CMN_FAC
            enddo
-
+           ! Compute the level averages.
            bottom = 0.0
            do kk=1, G%ke
               Top = Bottom
@@ -439,12 +453,6 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
         enddo
   endif
 
-!  print*,'USx'
-!  print*,CS%US0_x(3,3),CS%Us_x(3,3,1)
-!  print*,'USyx'
-!  print*,CS%US0_x(3,3),CS%Us_x(3,3,1)
-
-
 end subroutine Import_Stokes_Drift
 !
 subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
@@ -461,7 +469,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
   integer :: b
   integer :: i, j
 
-  integer, dimension(4) :: start, count, dims, dim_id 
+  integer, dimension(4) :: start, count, dims, dim_id
   character(len=12)  :: dim_name(4)
   character(20) :: varname, filename, varread1, varread2
   integer :: rcode_fr, rcode_wn, ncid, varid_fr, varid_wn, id, ndims
@@ -472,7 +480,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
 
     ! Read in number of wavenumber bands in file to set number to be read in
     ! Hardcoded filename/variables
-    filename = 'StkSpec.nc'
+    filename = 'StkSpec.nc' !Hard-coded filenames variables needs changed.
     varread1 = 'wavenumber' !Old method gives wavenumber
     varread2 = 'frequency'  !New method gives frequency
     rcode_wn = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid)
@@ -487,7 +495,7 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
     if (rcode_wn .ne. 0 .and. rcode_fr .ne. 0) then
        call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
          " or "//trim(varread2)//" in file "//trim(filename)//" in MOM_wave_interface.")
-    
+
     elseif (rcode_wn.eq.0) then
        ! wavenumbers found:
        CS%PartitionMode=0
@@ -536,10 +544,10 @@ subroutine Stokes_Drift_by_data_override(day_center,G,GV,CS)
 
 
     ! Allocating size of wavenumber bins
-    
+
     ALLOC_ ( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:id)) ; CS%STKx0(:,:,:) = 0.0
     ALLOC_ ( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:id)) ; CS%STKy0(:,:,:) = 0.0
-    
+
 
     ! Reading wavenumber bins/Frequencies
     start = 1; count = 1; count(1) = id
@@ -649,7 +657,7 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES, FLUXES)
         enddo
      enddo
   enddo
-     
+
 
   do k = 1, G%ke
      do j = G%jscB, G%jecB
@@ -705,7 +713,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
         enddo
      enddo
   enddo
-     
+
   do k = 1, G%ke
      do j = G%jscB, G%jecB
         do i = G%iscB, G%iecB

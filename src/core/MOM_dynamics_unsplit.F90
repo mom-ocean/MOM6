@@ -78,7 +78,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator, only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator, only : register_diag_field, register_static_field
-use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl, diag_update_target_grids
+use MOM_diag_mediator, only : set_diag_mediator_grid, diag_ctrl, diag_update_remap_grids
 use MOM_domains, only : MOM_domains_init, pass_var, pass_vector
 use MOM_domains, only : pass_var_start, pass_var_complete
 use MOM_domains, only : pass_vector_start, pass_vector_complete
@@ -95,7 +95,7 @@ use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 use MOM_ALE, only : ALE_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_error_checking, only : check_redundant
+use MOM_debugging, only : check_redundant
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
@@ -103,7 +103,7 @@ use MOM_interface_heights, only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_open_boundary, only : Radiation_Open_Bdry_Conds
+use MOM_open_boundary, only : radiation_open_bdry_conds
 use MOM_boundary_update, only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
@@ -296,10 +296,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
       h_av(i,j,k) = (h(i,j,k) + hp(i,j,k)) * 0.5
     enddo ; enddo
     do j=js,je ; do I=Isq,Ieq
-      u(i,j,k) = u(i,j,k) + dt * CS%diffu(i,j,k) * G%mask2dCu(i,j)
+      u(I,j,k) = u(I,j,k) + dt * CS%diffu(I,j,k) * G%mask2dCu(I,j)
     enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie
-      v(i,j,k) = v(i,j,k) + dt * CS%diffv(i,j,k) * G%mask2dCv(i,j)
+      v(i,J,k) = v(i,J,k) + dt * CS%diffv(i,J,k) * G%mask2dCv(i,J)
     enddo ; enddo
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
       uhtr(i,j,k) = uhtr(i,j,k) + 0.5*dt*uh(i,j,k)
@@ -329,18 +329,18 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
   endif; endif
 
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    up(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt_pred * &
-                               (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt_pred * &
+                               (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt_pred * &
-                               (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt_pred * &
+                               (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -416,18 +416,18 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
   endif; endif
 
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    upp(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt * 0.5 * &
-            (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    upp(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * 0.5 * &
+            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    vpp(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * 0.5 * &
-            (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    vpp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * 0.5 * &
+            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
 
@@ -459,7 +459,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
   call enable_averaging(0.5*dt, Time_local, CS%diag)
 !   Here the second half of the thickness fluxes are offered for averaging.
@@ -494,17 +494,17 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
   endif; endif
 
 ! u = u + dt * ( PFu + CAu )
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-    u(i,j,k) = G%mask2dCu(i,j) * (u(i,j,k) + dt * &
-            (CS%PFu(i,j,k) + CS%CAu(i,j,k)))
+    u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
+            (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
   enddo ; enddo ; enddo
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-    v(i,j,k) = G%mask2dCv(i,j) * (v(i,j,k) + dt * &
-            (CS%PFv(i,j,k) + CS%CAv(i,j,k)))
+    v(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * &
+            (CS%PFv(i,J,k) + CS%CAv(i,J,k)))
   enddo ; enddo ; enddo
 
 ! u <- u + dt d/dz visc d/dz u
@@ -697,9 +697,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 
   flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true.)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units)
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'meter second-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &

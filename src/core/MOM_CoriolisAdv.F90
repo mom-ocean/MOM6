@@ -149,6 +149,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
                 ! discretization, in m-1 s-1 or m2 kg-1 s-1.
   real, dimension(SZIB_(G),SZJB_(G)) :: &
+    dvdx,dudy, &! Contributions to the circulation around q-points (m2 s-1)
     abs_vort, & ! Absolute vorticity at q-points, in s-1.
     q2, &       ! Relative vorticity over thickness.
     max_fvq, &  ! The maximum or minimum of the
@@ -195,7 +196,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real :: h_tiny        ! A very small thickness, in m or kg m-2.
   real :: UHeff, VHeff  ! More temporary variables, in m3 s-1 or kg s-1.
   real :: QUHeff,QVHeff ! More temporary variables, in m3 s-2 or kg s-2.
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
 
 ! To work, the following fields must be set outside of the usual
 ! is to ie range before this subroutine is called:
@@ -237,16 +238,43 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! are calculated.  hq is  second order accurate in space.  Relative
     ! vorticity is second order accurate everywhere with free slip b.c.s,
     ! but only first order accurate at boundaries with no slip b.c.s.
+    ! First calculate the contributions to the circulation around the q-point.
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+      dvdx(I,J) = v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)
+      dudy(I,J) = u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)
+    enddo ; enddo
+    ! Adjust circulation components to relative vorticity on open boundaries.
+    if (associated(OBC)) then ; if (OBC%zero_vorticity .or. OBC%freeslip_vorticity) then
+      do n=1,OBC%number_of_segments
+        if (OBC%segment(n)%is_N_or_S) then
+          J = OBC%segment(n)%HI%JsdB
+          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            if (OBC%zero_vorticity) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_vorticity) then
+              dudy(I,J) = 0.
+            endif
+          enddo
+        elseif (OBC%segment(n)%is_E_or_W) then
+          I = OBC%segment(n)%HI%IsdB
+          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            if (OBC%zero_vorticity) then
+              dvdx(I,J) = 0.
+              dudy(I,J) = 0.
+            elseif (OBC%freeslip_vorticity) then
+              dvdx(I,J) = 0.
+            endif
+          enddo
+        endif
+      enddo
+    endif ; endif
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
-        relative_vorticity = (2.0-G%mask2dBu(I,J)) * &
-           ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
-            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))) * &
+        relative_vorticity = (2.0-G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * &
             (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
       else
-        relative_vorticity = G%mask2dBu(I,J) * &
-           ((v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)) - &
-            (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))) * &
+        relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * &
             (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
@@ -435,12 +463,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         do j=js,je ; do I=Isq,Ieq
           CAu(I,j,k) = 0.25 * &
             (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(i,j)
+             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = 0.125 * (G%IdxCu(i,j) * (q(I,J) + q(I,J-1))) * &
+        CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
@@ -448,10 +476,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do j=js,je ; do I=Isq,Ieq
-        CAu(i,j,k) = ((a(I,j) * vh(i+1,J,k) + &
+        CAu(I,j,k) = ((a(I,j) * vh(i+1,J,k) + &
                        c(I,j) * vh(i,J-1,k))  &
                     + (b(I,j) * vh(i,J,k) +   &
-                       d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(i,j)
+                       d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(I,j)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
@@ -474,14 +502,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
                        ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                         (vh(i  ,J-1,k)+vh(i+1,J  ,k)) ) /    &
-                       (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
+                       (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(I,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i  ,J  ,k)+vh(i+1,J-1,k)) +      &
                    (vh(i  ,J-1,k)+vh(i+1,J  ,k)) )
           QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
                         -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
           CAu(I,j,k) = QVHeff / &
-                     (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(i,j)
+                     (h_tiny +((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdxCu(I,j)
         endif
       enddo ; enddo
     endif
@@ -624,7 +652,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (ASSOCIATED(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
-            AD%rv_x_u(i,j,k) = - 0.25* &
+            AD%rv_x_u(i,J,k) = - 0.25* &
               (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
                q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
           enddo ; enddo
@@ -696,7 +724,7 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   real :: um, up, vm, vp         ! Temporary variables with units of m s-1.
   real :: um2, up2, vm2, vp2     ! Temporary variables with units of m2 s-2.
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables with units of m4 s-2.
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -738,7 +766,7 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
 
   ! Term - d(KE)/dx.
   do j=js,je ; do I=Isq,Ieq
-    KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(i,j)
+    KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
   enddo ; enddo
 
   ! Term - d(KE)/dy.
@@ -747,12 +775,17 @@ subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
   enddo ; enddo
 
   if (associated(OBC)) then
-    do j=js,je ; do I=Isq,Ieq
-      if (OBC%OBC_segment_u(I,j)>0) KEx(I,j) = 0.
-    enddo ; enddo
-    do J=Jsq,Jeq ; do i=is,ie
-      if (OBC%OBC_segment_v(i,J)>0) KEy(i,J) = 0.
-    enddo ; enddo
+    do n=1,OBC%number_of_segments
+      if (OBC%segment(n)%is_N_or_S) then
+        do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+          KEy(i,OBC%segment(n)%HI%JsdB) = 0.
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W) then
+        do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
+          KEx(OBC%segment(n)%HI%IsdB,j) = 0.
+        enddo
+      endif
+    enddo
   endif
 
 end subroutine gradKE

@@ -4,7 +4,7 @@ module MOM_fixed_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
 use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -33,7 +33,6 @@ use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
-use supercritical_initialization, only : supercritical_initialize_topography
 
 use netcdf
 
@@ -83,21 +82,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 ! Determine the position of any open boundaries
   call open_boundary_config(G, PF, OBC)
-  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n", default="none")
-    select case ( trim(config) )
-      case ("none")
-      case ("DOME") ! Avoid FATAL when using segments
-      case ("tidal_bay") ; !Using segments now
-      case ("supercritical") ; !Using segments now
-      case ("USER") ! Avoid FATAL when using segments
-      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
-                       "The open boundary positions specified by OBC_CONFIG="//&
-                       trim(config)//" have not been fully implemented.")
-    end select
-  endif
 
   ! Make bathymetry consistent with open boundaries
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
@@ -207,7 +191,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
-                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
@@ -225,7 +208,6 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
-    case ("supercritical"); call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
@@ -241,7 +223,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
   if (trim(config) .ne. "DOME") then
     call limit_topography(D, G, PF, max_depth)
   endif
-  
+
 end subroutine MOM_initialize_topography
 
 end module MOM_fixed_initialization

@@ -55,7 +55,7 @@ module MOM_bulk_mixed_layer
 
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_alloc
-use MOM_diag_mediator, only : time_type, diag_ctrl, diag_update_target_grids
+use MOM_diag_mediator, only : time_type, diag_ctrl, diag_update_remap_grids
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
@@ -65,7 +65,6 @@ use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
@@ -731,8 +730,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                       fluxes%frac_shelf_h(i,j) * (0.41*fluxes%ustar_shelf(i,j))
         endif
         absf_x_H = 0.25 * h(i,0) * &
-            ((abs(G%CoriolisBu(i,j)) + abs(G%CoriolisBu(i-1,j-1))) + &
-             (abs(G%CoriolisBu(i,j-1)) + abs(G%CoriolisBu(i-1,j))))
+            ((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
+             (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I-1,J))))
         ! If the mixed layer vertical viscosity specification is changed in
         ! MOM_vert_friction.F90, this line will have to be modified accordingly.
         h_3d(i,j,1) = h(i,0) / (3.0 + sqrt(absf_x_H*(absf_x_H + 2.0*kU_star) / &
@@ -811,7 +810,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   ! This needs to happen after the H update and before the next post_data.
-  call diag_update_target_grids(CS%diag)
+  call diag_update_remap_grids(CS%diag)
 
 !$OMP end parallel
 

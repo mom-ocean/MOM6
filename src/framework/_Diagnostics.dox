@@ -1,0 +1,226 @@
+/*! \page Diagnostics Diagnostics
+
+MOM6 diagnostics are orchestrated via the FMS diag_manager, as for previous versions of MOM.
+However, because MOM6 is a general coordinate model, the model native-coordinae output can be less familiar to users of earlier generations of MOM.
+To alleviate this problem, MOM6 provides both "native" and "remapped" diagnostics;
+the former being diagnostics in the actual model coordinate space, and the latter in user-defined coordinates.
+
+\section diag_table The "diag_table"
+
+At run-time, diagnostics are controlled by the input file `diag_table` which is interpreted but the FMS package diag_manager.
+The diag_table syntax is documented at http://data1.gfdl.noaa.gov/~nnz/MOM/mom5_pubrel_August2012/src/shared/diag_manager/diag_table.html.
+
+The diag_table file has three kinds of section: Title, File and Field. The title section is mandatory and always the first.
+There can be multiple file and field sections, typically either in pairs or grouped in to all files and all fields,
+but always with the file section preceding the corresponding field section.
+
+\subsection diag_table_title Title section
+
+The first two lines are mandatory and comprise a line with a title and a line with six integers defining a base date against which time will be referenced.
+
+```
+"My ocean-only test case"
+1900 1 1 0 0 0
+```
+
+
+\subsection diag_table_files File section
+
+This section defines an arbitrary number of files that will be created.
+Each file is limited to a single rate of either sampling or time-averaging.
+
+```
+"file_name", output_freq, "output_freq_units", file_format, "time_axis_units", "time_axis_name"
+```
+
+- `file_name` : The name of the file that contains diagnostics at the given frequency (excluding the ".nc" extension).
+
+- `output_freq` : The period between records in `file_name`, if positive.
+  Special values of 0 mean write every time step and -1 write only at the end of the run.
+
+- `output_freq_units` : The units in which `output_freq` is given.
+  Valid values are "years", "months", "days", "hours", "minutes" or "seconds".
+
+- `file_format` : Always set to 1, meaning netcdf.
+
+- `time_axis_units` : The units to use for the time-axis in the file.
+  Valid values are "years", "months", "days", "hours", "minutes" or "seconds".
+
+- `time_axis_name` : The name of the time-axis (usually "Time").
+
+Optional entries in the file line allow the generation of multiple files are intervals:
+
+```
+"file_name", output_freq, "output_freq_units", file_format, "time_axis_units", "time_axis_name"[, new_file_freq, "new_file_freq_units"[, "start_time"[, file_duration, "file_duration_units"]]]
+```
+
+- file_name : The base name of the file that contains diagnostics at the given frequency (excluding the ".nc" extension).
+  The strings %%yr, %%mo, %%dy, %%hr %%mi, %%sc are expanded to the current year, month, day, hour, minute and second respectively, with new files created every new_file_freq.
+
+- `new_file_freq` : The period between generation of new files.
+
+- `new_file_freq_units` : The units in which `new_file_freq` is given.
+
+- `start_time`, `file_duration`, `file_duration_units` : Even finer grain control of output files.
+
+
+\subsection diag_table_fields Field section
+
+An arbitrary number of lines, one per diagnostic field:
+
+```
+"module_name", "field_name", "output_name", "file_name", "time_sampling", "reduction_method", "regional_section", packing
+```
+
+- `module_name` : Name of the component model.
+  For native ocean variables this should be "ocean_model".
+  See \ref remapped_diagnostics for non-native vertical-grid diagnostics in the ocean model.
+
+- `field_name` : The name of the variable as registered in the model.
+
+- `output_name` " The name of the variable as it will appear in the file.
+  This is usually the same as the `field_name` but can be used to rename a diagnostic.
+
+- `file_name` : One of the files defined above in the section \ref diag_table_files.
+
+- `time_sampling` : Always set to "all".
+
+- `reduction_method` : "none" means sample or snapshot.
+  "average" or "mean" performs a time-average.
+  "min" or "max" diagnose the minium or maxium over each time period.
+
+- `regional_section` : "none" means global output. A string of six space separated numbers, "lat_min, lat_max, lon_min, lon_max, vert_min, vert_max", limits the diagnostic to a region.
+
+- `packing` : Data representation in the file. 1 means "real*8", 2 means "real*4", 4 mean 16-bit integers, 8 means 1-byte.
+
+
+\subsection diag_table_example Example
+
+
+```
+"OM4 1/4 degree"
+1900 1 1 0 0 0
+
+# Static file
+"ocean_static", -1, "months", 1, "days", "time" # ocean_static is a protected name. Do not change this line.
+"ocean_model", "deptho",    "deptho",    "ocean_static", "all", "none", "none", 2
+"ocean_model", "geolon",    "geolon",    "ocean_static", "all", "none", "none", 2
+"ocean_model", "geolat",    "geolat",    "ocean_static", "all", "none", "none", 2
+"ocean_model", "wet",       "wet",       "ocean_static", "all", "none", "none", 2
+
+# High-frequency file
+"surf_%4yr_%3dy", 1, "hours", 1, "days", "time", 1, "months"
+"ocean_model","SSH","SSH","surf_%4yr_%3dy","all","none","none",2
+
+# Daily averages
+"ocean_daily", 1, "days", 1, "days", "time"
+"ocean_model", "tos", "tos", "ocean_daily", "all", "mean", "none",2
+
+# Monthly averages
+"ocean_month", 1, "months", 1, "days", "time"
+"ocean_model", "thetao", "thetao", "ocean_month", "all", "mean", "none",2
+
+# Annual averages
+"ocean_annual", 12, "months", 1, "days", "time"
+"ocean_model", "thetao", "thetao", "ocean_annual", "all", "mean", "none",2
+
+# Vertical section
+"ocean_Bering_Strait", 5, "days", 1, "days", "time"
+"ocean_model", "thetao","thetao", "ocean_Bering_Strait", "all", "mean", "-171.4 -168.7  66.1 66.1 -1 -1",2
+```
+
+
+\section native_diagnostics Native diagnostics
+
+The list of available diagnostics is dependent on the particular configuration of the model.
+For this reason the model writes a record of the available diagnostic fields at run-time into a file "available_diags.*".
+See, for example, [available_diags.000000](https://github.com/NOAA-GFDL/MOM6-examples/blob/dev/master/ocean_only/global_ALE/z/available_diags.000000) for the global_ALE z-coordinate ocean-only test case.
+
+Diagnostic fields in the module "ocean_model" refer to the native variables or diagnostics in the native grid.
+Since the model can be run in arbitrary coordinates, say in hybrid-coordinate mode, then native-space diagnostics can be potentially confusing.
+Native diagnostics are useful when examining exactly what the model is doing,
+or if the vertical coordinate of the model is configured to be a natural coordinate such as pure isopycnal or z* geopotential.
+
+
+\section remapped_diagnostics Vertically remapped diagnostics
+
+Alternative vertical coordinates can be configured for diagnostic purposes only.
+
+The run-time parameter `NUM_DIAG_COORDS` controls how many diagnostic coordinates to use.
+
+The run-time parameter `DIAG_COORDS` defines the mapping between each coordinate, the name of the module in the diag_table and run-time parameter names that define the coordinate.
+A list of string tuples, separated by commas, with each tuple in the form of MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME.
+`MODULE_SUFFIX` is the string appended to "ocean_model_" to create a module in the diag_table.
+`PARAMETER_SUFFIX` is the string appended to "DiAG_COORD_DEF_", and other paramaters, used to control the generation of the named coordinate.
+`COORDINATE_NAME` is a name understood by the MOM6 regridding module. Valid examples are "ZSTAR", "SIGMA", "RHO", etc.
+
+By default, `NUM_DIAG_COORDS=1` and `DIAG_COORDS="z Z ZSTAR"`, meaning the module "ocean_model_z" provides diagnostics in "z*" coordinates and uses the parameter `DIAG_COORD_DEF_Z`.
+
+For example, multiple z*-coordinates could be used for diagnostics with
+```
+NUM_DIAG_COORDS = 2
+DIAG_COORDS = "z 01 ZSTAR,abc 02 ZSTAR"
+DIAG_COORD_DEF_01 = "WOA09"
+DIAG_COORD_DEF_02 = "UNIFORM:10,20."
+```
+would create the diag_manager modules "ocean_model_z" and "ocean_model_abc".
+
+The above is equivalent to
+```
+NUM_DIAG_COORDS = 2
+DIAG_COORDS = "z ZA ZSTAR,abc ZB ZSTAR"
+DIAG_COORD_DEF_ZA = "WOA09"
+DIAG_COORD_DEF_ZB = "UNIFORM:10,20."
+```
+
+To obtain a diagnostic of monthly-averaged potential temperature in both these coordinate systems the diag_table must include the lines
+
+```
+"ocean_month_z", 1, "months", 1, "days", "time"
+"ocean_month_abc", 1, "months", 1, "days", "time"
+"ocean_model", "temp", "temp", "ocean_month_z", "all", "mean", "none",2
+"ocean_model", "temp", "temp", "ocean_month_abc", "all", "mean", "none",2
+```
+
+
+\subsection diag_table_vertical_coords Diagnostic vertical coordinates
+
+For each of the `NUM_DIAG_COORDS` vertical coordinates listed in `DIAG_COORDS` the corresponding `DIAG_COORD_DEF_%` parameter must be provided.
+It can take the following values:
+- PARAM : In this case, a corresponding parameter `DIAG_COORD_RES_%` is read that lists the deltas for each level in the coordinate.
+  For example, DIAG_COODS="z Z ZTAR", DIAG_COORD_DEF_Z="PARAM", DIAG_COORD_RES_Z=5,10,10,15 creates z*-level with 5,10,10,15 meters thicknesses.
+- UNIFORM : Uniform distribution down to the maximum depth of the model using the same number of levels as he model.
+- UNIFORM:N : Uniform distribution down to the maximum depth of the model using `N` levels.
+- UNIFORM:N,D : Uniform distribution of `N` levels with thickness `D`.
+- FILE:filename,varname : Reads vector of coordinate thicknesses from field "varname" from file "filename".
+- FILE:filename,interfaces=varname : Reads vector of coordinate positions from field "varname" from file "filename".
+- WOA09 : Z-levels that correspond to the World Ocean Atlas, 2009, standard levels down to and including the maximum depth of the model.
+- WOA09:N : The first `N` levels of the World Ocean Atlas, 2009, standard levels.
+
+
+
+\section diagnostics_implementation APIs for diagnostics
+
+The multiple diagnostic-coordinates are implemented in a layer that sits on top of the FMS diag_manager known as the mom6_diag_mediator.
+
+A diagnostic is registered with register_diag_field() which is an API that looks similar to the FMS diag_manager routine of the same name:
+```
+diag_id = register_diag_field(module_name, diag_name, axes, ...)
+```
+
+The MOM6 version of this routine optionally allows the specification of CMOR names in addition to the native names which then registers the diagnostic twice, once with each name.
+
+For each of the native and CMOR names, the diagnostic is registered in the native module "ocean_model", corresponding to the native model coordinate, and a module associated with each of the diagnostic coordinates.
+
+For each diagnostic coordinate, a horizontally-averaged diagnostic is also registered.
+
+In all, for each 3D diagnostic, the are 2 + 4N diagnostics registered, where N is the number of diagnostic coordinates.
+As a result, the global_ALE examples have of order 900 total diagnostics available in the shipped configuration.
+
+
+The data is made available to the diag_manager via a call to post_data() which is a wrapper that does all the vertical remapping before calling FMS's send_data():
+```
+call post_data(diag_id, data, diag_control)
+```
+
+*/
