@@ -3,7 +3,7 @@ module MOM_forcing_type
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums,     only : hchksum, qchksum, uchksum, vchksum, is_NaN
+use MOM_debugging,     only : hchksum, uchksum, vchksum
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
 use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_alloc, query_averaging_enabled
@@ -196,6 +196,7 @@ type, public :: forcing_diags
   integer :: id_net_heat_coupler    = -1, id_net_heat_surface      = -1
   integer :: id_sens                = -1, id_LwLatSens             = -1
   integer :: id_sw                  = -1, id_lw                    = -1
+  integer :: id_sw_vis              = -1, id_sw_nir                = -1
   integer :: id_lat_evap            = -1, id_lat_frunoff           = -1
   integer :: id_lat                 = -1, id_lat_fprec             = -1
   integer :: id_heat_content_lrunoff= -1, id_heat_content_frunoff  = -1
@@ -1036,7 +1037,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
   handles%id_lprec = register_diag_field('ocean_model', 'lprec', diag%axesT1, Time,       &
         'Liquid precipitation into ocean', 'kilogram/(meter^2 * second)',                 &
         standard_name='rainfall_flux',                                                    &
-        cmor_field_name='pr', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
+        cmor_field_name='prlq', cmor_units='kg m-2 s-1', cmor_standard_name='rainfall_flux',&
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
@@ -1235,6 +1236,12 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
         cmor_field_name='rsntds', cmor_units='W m-2',                          &
         cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface', &
         cmor_long_name='Net Downward Shortwave Radiation at Sea Water Surface')
+  handles%id_sw_vis = register_diag_field('ocean_model', 'sw_vis', diag%axesT1, Time,     &
+        'Shortwave radiation direct and diffuse flux into the ocean in the visible band', &
+        'Watt/m^2')
+  handles%id_sw_nir = register_diag_field('ocean_model', 'sw_nir', diag%axesT1, Time,     &
+        'Shortwave radiation direct and diffuse flux into the ocean in the near-infrared band', &
+        'Watt/m^2')
 
   handles%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
         'Combined longwave, latent, and sensible heating at ocean surface', 'Watt/m^2')
@@ -1248,7 +1255,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 
   handles%id_lat = register_diag_field('ocean_model', 'latent', diag%axesT1, Time,                    &
         'Latent heat flux into ocean due to fusion and evaporation (negative means ocean heat loss)', &
-        'Watt meter-2', cmor_field_name='hfls', cmor_units='W m-2',                                   &
+        'Watt meter-2', cmor_field_name='hflso', cmor_units='W m-2',                                  &
         cmor_standard_name='surface_downward_latent_heat_flux',                                       &
         cmor_long_name='Surface Downward Latent Heat Flux due to Evap + Melt Snow/Ice')
 
@@ -1270,7 +1277,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
   handles%id_sens = register_diag_field('ocean_model', 'sensible', diag%axesT1, Time,&
         'Sensible heat flux into ocean', 'Watt meter-2',                             &
         standard_name='surface_downward_sensible_heat_flux',                         &
-        cmor_field_name='hfss', cmor_units='W m-2',                                  &
+        cmor_field_name='hfsso', cmor_units='W m-2',                                 &
         cmor_standard_name='surface_downward_sensible_heat_flux',                    &
         cmor_long_name='Surface Downward Sensible Heat Flux')
 
@@ -1383,7 +1390,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'total_lat', Time, diag,                                               &
       long_name='Area integrated surface downward latent heat flux',         &
       units='Watt',                                                          &
-      cmor_field_name='total_hfls', cmor_units='W',                          &
+      cmor_field_name='total_hflso', cmor_units='W',                         &
       cmor_standard_name='surface_downward_latent_heat_flux_area_integrated',&
       cmor_long_name=                                                        &
       'Surface Downward Latent Heat Flux Area Integrated')
@@ -1415,7 +1422,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'total_sens', Time, diag,                                                &
       long_name='Area integrated downward sensible heat flux',                 &
       units='Watt',                                                            &
-      cmor_field_name='total_hfss', cmor_units='W',                            &
+      cmor_field_name='total_hfsso', cmor_units='W',                           &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_integrated',&
       cmor_long_name=                                                          &
       'Surface Downward Sensible Heat Flux Area Integrated')
@@ -1470,7 +1477,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'lat_ga', Time, diag,                                                &
       long_name='Area averaged surface downward latent heat flux',         &
       units='W m-2',                                                       &
-      cmor_field_name='ave_hfls', cmor_units='W m-2',                      &
+      cmor_field_name='ave_hflso', cmor_units='W m-2',                     &
       cmor_standard_name='surface_downward_latent_heat_flux_area_averaged',&
       cmor_long_name=                                                      &
       'Surface Downward Latent Heat Flux Area Averaged')
@@ -1479,7 +1486,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
       'sens_ga', Time, diag,                                                 &
       long_name='Area averaged downward sensible heat flux',                 &
       units='W m-2',                                                         &
-      cmor_field_name='ave_hfss', cmor_units='W m-2',                        &
+      cmor_field_name='ave_hfsso', cmor_units='W m-2',                       &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_averaged',&
       cmor_long_name=                                                        &
       'Surface Downward Sensible Heat Flux Area Averaged')
@@ -1807,7 +1814,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massout, total_transport, diag)
       endif
     endif
-    
+
     if(handles%id_massout_flux > 0) call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
 
     if(handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
@@ -1825,7 +1832,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         call post_data(handles%id_total_net_massin, total_transport, diag)
       endif
     endif
-    
+
     if(handles%id_massin_flux > 0) call post_data(handles%id_massin_flux,fluxes%netMassIn,diag)
 
     if ((handles%id_evap > 0) .and. ASSOCIATED(fluxes%evap)) &
@@ -2080,6 +2087,14 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
 
     if ((handles%id_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       call post_data(handles%id_sw, fluxes%sw, diag)
+    endif
+    if ((handles%id_sw_vis > 0) .and. ASSOCIATED(fluxes%sw_vis_dir) .and. &
+        ASSOCIATED(fluxes%sw_vis_dif)) then
+      call post_data(handles%id_sw_vis, fluxes%sw_vis_dir+fluxes%sw_vis_dif, diag)
+    endif
+    if ((handles%id_sw_nir > 0) .and. ASSOCIATED(fluxes%sw_nir_dir) .and. &
+        ASSOCIATED(fluxes%sw_nir_dif)) then
+      call post_data(handles%id_sw_nir, fluxes%sw_nir_dir+fluxes%sw_nir_dif, diag)
     endif
     if ((handles%id_total_sw > 0) .and. ASSOCIATED(fluxes%sw)) then
       total_transport = global_area_integral(fluxes%sw,G)

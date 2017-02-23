@@ -29,7 +29,7 @@ use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-public :: hchksum, Bchksum, uchksum, vchksum, qchksum, chksum, is_NaN
+public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 public :: MOM_checksums_init
 
 interface hchksum
@@ -846,7 +846,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
   elseif (is_root_pe()) then
     if (sum1 /= nPEs*sum_bc) &
       write(0, '(A40," bitcounts do not match across PEs: ",I12,1X,I12)') &
-            mesg, sum1, nPEs*sum_bc 
+            mesg, sum1, nPEs*sum_bc
     do i=1,nPEs ; if (sum /= sum_here(i)) then
       write(0, '(A40," PE ",i4," sum mismatches root_PE: ",3(ES22.13,1X))') &
             mesg, i, sum_here(i), sum, sum_here(i)-sum
@@ -863,11 +863,11 @@ end subroutine chksum1d
 !   These are the older version of chksum that do not take the grid staggering
 ! into account.
 
-subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
+!> chksum2d does a checksum of all data in a 2-d array.
+subroutine chksum2d(array, mesg)
 
   real, dimension(:,:) :: array
   character(len=*) :: mesg
-  integer, optional :: start_x, end_x, start_y, end_y
 
   integer :: bitcount
   integer :: xs,xe,ys,ye,i,j,sum1,bc
@@ -875,10 +875,6 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
-  if (present(start_x)) xs = start_x
-  if (present(end_x  )) xe = end_x
-  if (present(start_y)) ys = start_y
-  if (present(end_y  )) ye = end_y
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye
@@ -887,7 +883,7 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
   enddo ; enddo
   call sum_across_PEs(sum1)
 
-  sum = reproducing_sum(array(xs:xe,ys:ye))
+  sum = reproducing_sum(array(:,:))
 
   if (is_root_pe()) &
     write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
@@ -896,11 +892,11 @@ subroutine chksum2d(array, mesg, start_x, end_x, start_y, end_y)
 
 end subroutine chksum2d
 
-subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
+!> chksum3d does a checksum of all data in a 2-d array.
+subroutine chksum3d(array, mesg)
 
   real, dimension(:,:,:) :: array
   character(len=*) :: mesg
-  integer, optional :: start_x, end_x, start_y, end_y, start_z, end_z
 
   integer :: bitcount
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
@@ -909,12 +905,6 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
   zs = LBOUND(array,3) ; ze = UBOUND(array,3)
-  if (present(start_x)) xs = start_x
-  if (present(end_x  )) xe = end_x
-  if (present(start_y)) ys = start_y
-  if (present(end_y  )) ye = end_y
-  if (present(start_z)) zs = start_z
-  if (present(end_z  )) ze = end_z
 
   sum = 0.0 ; sum1 = 0
   do i=xs,xe ; do j=ys,ye ; do k=zs,ze
@@ -923,7 +913,7 @@ subroutine chksum3d(array, mesg, start_x, end_x, start_y, end_y, start_z, end_z)
   enddo ; enddo ; enddo
 
   call sum_across_PEs(sum1)
-  sum = reproducing_sum(array(xs:xe,ys:ye,zs:ze))
+  sum = reproducing_sum(array(:,:,:))
 
   if (is_root_pe()) &
     write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1

@@ -91,7 +91,7 @@ module MOM_legacy_barotropic
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, uchksum, vchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
@@ -2225,12 +2225,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
   if (apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
         uhbt(I,j) = BT_OBC%uhbt(I,j)
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+      elseif (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2242,7 +2242,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (h_in-BT_OBC%eta_outer_u(I,j)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2254,14 +2254,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (BT_OBC%eta_outer_u(I,j)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_N) then
           if ((vbt(i,J-1)+vbt(i+1,J-1)) > 0.0) then
             ubt(I,j) = 2.0*ubt(I,j-1)-ubt(I,j-2)
           else
             ubt(I,j) = BT_OBC%ubt_outer(I,j)
           endif
           vel_trans = ubt(I,j)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_S) then
           if ((vbt(i,J)+vbt(i+1,J)) < 0.0) then
             ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
           else
@@ -2271,7 +2271,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       endif
 
-      if (.not. OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
+      if (.not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
         if (use_BT_cont) then
           uhbt(I,j) = find_uhbt(vel_trans,BTCL_u(I,j)) + uhbt0(I,j)
         else
@@ -2285,12 +2285,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
   if (apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%specified) then
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
         vhbt(i,J) = BT_OBC%vhbt(i,J)
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
-      elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+      elseif (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2302,7 +2302,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (h_in-BT_OBC%eta_outer_v(i,J)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
         !  h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2314,7 +2314,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (BT_OBC%eta_outer_v(i,J)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_E) then
           if ((ubt(I-1,j)+ubt(I-1,j+1)) > 0.0) then
             vbt(i,J) = 2.0*vbt(i-1,J)-vbt(i-2,J)
           else
@@ -2325,7 +2325,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 !       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)           !
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_W) then
           if ((ubt(I,j)+ubt(I,j+1)) < 0.0) then
             vbt(i,J) = 2.0*vbt(i+1,J)-vbt(i+2,J)
           else
@@ -2387,8 +2387,8 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
 
   if ((OBC%Flather_u_BCs_exist_globally) .and. apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2397,7 +2397,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_u = BT_OBC%H_u(I,j)
           eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
               (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
           u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2413,8 +2413,8 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
 
   if ((OBC%Flather_v_BCs_exist_globally) .and. apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%Flather) then
-        if (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2423,7 +2423,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_v = BT_OBC%H_v(i,J)
           eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
               (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
-        elseif (OBC%OBC_segment_number(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2504,7 +2504,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
       enddo ; enddo ; enddo
     endif
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-      if (OBC%OBC_segment_number(OBC%OBC_segment_u(I,j))%specified) then
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
         if (use_BT_cont) then
           BT_OBC%ubt_outer(I,j) = uhbt_to_ubt(BT_OBC%uhbt(I,j),BTCL_u(I,j))
         else
@@ -2652,13 +2652,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith)
   do j=js-1,je+1
     if (present(h_u)) then
-      do I=is-2,ie+1 ; hatutot(I) = h_u(i,j,1) ; enddo
+      do I=is-2,ie+1 ; hatutot(I) = h_u(I,j,1) ; enddo
       do k=2,nz ; do I=is-2,ie+1
-        hatutot(I) = hatutot(I) + h_u(i,j,k)
+        hatutot(I) = hatutot(I) + h_u(I,j,k)
       enddo ; enddo
       do I=is-2,ie+1 ; Ihatutot(I) = 1.0 / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
-        CS%frhatu(I,j,k) = h_u(i,j,k) * Ihatutot(I)
+        CS%frhatu(I,j,k) = h_u(I,j,k) * Ihatutot(I)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -2715,13 +2715,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
-      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,j,1) ; enddo
+      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,J,1) ; enddo
       do k=2,nz ; do i=is-1,ie+1
-        hatvtot(i) = hatvtot(i) + h_v(i,j,k)
+        hatvtot(i) = hatvtot(i) + h_v(i,J,k)
       enddo ; enddo
       do i=is-1,ie+1 ; Ihatvtot(i) = 1.0 / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        CS%frhatv(i,J,k) = h_v(i,j,k) * Ihatvtot(i)
+        CS%frhatv(i,J,k) = h_v(i,J,k) * Ihatvtot(i)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -3759,7 +3759,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
     CS%debug_BT_HI%IedB=CS%iedw
     CS%debug_BT_HI%JsdB=CS%jsdw-1
     CS%debug_BT_HI%JedB=CS%jedw
-    
+
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
@@ -3917,7 +3917,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
       CS%ubtav(I,j) = 0.0 ; CS%vbtav(i,J) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(i,J,k) * u(i,J,k)
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
       CS%vbtav(I,j) = CS%vbtav(I,j) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   endif
@@ -3933,17 +3933,17 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
   ! The following is only valid with the Boussinesq approximation.
 ! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 

@@ -853,7 +853,7 @@ end subroutine complete_group_pass
 
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
-                            min_halo, domain_name, include_name)
+                            min_halo, domain_name, include_name, param_suffix)
   type(MOM_domain_type),           pointer       :: MOM_dom
   type(param_file_type),           intent(in)    :: param_file
   logical, optional,               intent(in)    :: symmetric
@@ -864,6 +864,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, dimension(2), optional, intent(inout) :: min_halo
   character(len=*),      optional, intent(in)    :: domain_name
   character(len=*),      optional, intent(in)    :: include_name
+  character(len=*),      optional, intent(in)    :: param_suffix
+
 
 ! Arguments: MOM_dom - A pointer to the MOM_domain_type being defined here.
 !  (in)      param_file - A structure indicating the open file to parse for
@@ -882,13 +884,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !                       actual halo size used.
 !  (in,opt)  domain_name - A name for this domain, "MOM" if missing.
 !  (in,opt)  include_name - A name for model's include file, "MOM_memory.h" if missing.
+!  (in,opt)  param_suffix - A suffix to apply to layout-specific parameters.
 
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)
   integer, dimension(4) :: global_indices
 !$ integer :: ocean_nthreads       ! Number of Openmp threads
-!$ integer :: get_cpu_affinity, base_cpu
-!$ integer :: omp_get_thread_num
+!$ integer :: get_cpu_affinity, omp_get_thread_num, omp_get_num_threads
+!$ integer :: omp_cores_per_node, adder, base_cpu
+!$ logical :: ocean_omp_hyper_thread
   integer :: nihalo_dflt, njhalo_dflt
   integer :: pe, proc_used
   integer :: X_FLAGS, Y_FLAGS
@@ -901,10 +905,12 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer :: xsiz, ysiz, nip_parsed, njp_parsed
   integer :: isc,iec,jsc,jec ! The bounding indices of the computational domain.
   character(len=8) :: char_xsiz, char_ysiz, char_niglobal, char_njglobal
+  character(len=40) :: nihalo_nm, njhalo_nm, layout_nm, io_layout_nm, masktable_nm
+  character(len=40) :: niproc_nm, njproc_nm
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod ! This module's name.
+  character(len=40)  :: mdl ! This module's name.
 
   if (.not.associated(MOM_dom)) then
     allocate(MOM_dom)
@@ -914,15 +920,28 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   pe = PE_here()
   proc_used = num_PEs()
 
-  mod = "MOM_domains"
+  mdl = "MOM_domains"
 
   MOM_dom%symmetric = .true.
   if (present(symmetric)) then ; MOM_dom%symmetric = symmetric ; endif
-  if (present(min_halo)) mod = trim(mod)//" min_halo"
+  if (present(min_halo)) mdl = trim(mdl)//" min_halo"
 
   dom_name = "MOM" ; inc_nm = "MOM_memory.h"
   if (present(domain_name)) dom_name = trim(domain_name)
   if (present(include_name)) inc_nm = trim(include_name)
+
+  nihalo_nm = "NIHALO" ; njhalo_nm = "NJHALO"
+  layout_nm = "LAYOUT" ; io_layout_nm = "IO_LAYOUT" ; masktable_nm = "MASKTABLE"
+  niproc_nm = "NIPROC" ; njproc_nm = "NJPROC"
+  if (present(param_suffix)) then ; if (len(trim(adjustl(param_suffix))) > 0) then
+    nihalo_nm = "NIHALO"//(trim(adjustl(param_suffix)))
+    njhalo_nm = "NJHALO"//(trim(adjustl(param_suffix)))
+    layout_nm = "LAYOUT"//(trim(adjustl(param_suffix)))
+    io_layout_nm = "IO_LAYOUT"//(trim(adjustl(param_suffix)))
+    masktable_nm = "MASKTABLE"//(trim(adjustl(param_suffix)))
+    niproc_nm = "NIPROC"//(trim(adjustl(param_suffix)))
+    njproc_nm = "NJPROC"//(trim(adjustl(param_suffix)))
+  endif ; endif
 
   is_static = .false. ; if (present(static_memory)) is_static = static_memory
   if (is_static) then
@@ -941,29 +960,47 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "REENTRANT_X", reentrant_x, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, &
                  "If true, the domain is zonally reentrant.", default=.true.)
-  call get_param(param_file, mod, "REENTRANT_Y", reentrant_y, &
+  call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
                  "If true, the domain is meridionally reentrant.", &
                  default=.false.)
-  call get_param(param_file, mod, "TRIPOLAR_N", tripolar_N, &
+  call get_param(param_file, mdl, "TRIPOLAR_N", tripolar_N, &
                  "Use tripolar connectivity at the northern edge of the \n"//&
                  "domain.  With TRIPOLAR_N, NIGLOBAL must be even.", &
                  default=.false.)
 
 #ifndef NOT_SET_AFFINITY
-!$    call get_param(param_file, mod, "OCEAN_OMP_THREADS", ocean_nthreads, &
-!$               "The number of OpenMP threads that MOM6 will use.", &
-!$               default = 1, layoutParam=.true.)
-!$    call omp_set_num_threads(ocean_nthreads)
-!$    base_cpu = get_cpu_affinity()
-!$OMP PARALLEL
-!$    call set_cpu_affinity( base_cpu + omp_get_thread_num() )
+!$ call get_param(param_file, mdl, "OCEAN_OMP_THREADS", ocean_nthreads, &
+!$            "The number of OpenMP threads that MOM6 will use.", &
+!$            default = 1, layoutParam=.true.)
+!$ call get_param(param_file, mdl, "OCEAN_OMP_HYPER_THREAD", ocean_omp_hyper_thread, &
+!$            "If True, use hyper-threading.", default = .false., layoutParam=.true.)
+!$ if (ocean_omp_hyper_thread) then
+!$   call get_param(param_file, mdl, "OMP_CORES_PER_NODE", omp_cores_per_node, &
+!$            "Number of cores per node needed for hyper-threading.", &
+!$            fail_if_missing=.true., layoutParam=.true.)
+!$ endif
+!$ call omp_set_num_threads(ocean_nthreads)
+!$OMP PARALLEL private(adder)
+!$ base_cpu = get_cpu_affinity()
+!$ if (ocean_omp_hyper_thread) then
+!$   if (mod(omp_get_thread_num(),2) == 0) then
+!$     adder = omp_get_thread_num()/2
+!$   else
+!$     adder = omp_cores_per_node + omp_get_thread_num()/2
+!$   endif
+!$ else
+!$   adder = omp_get_thread_num()
+!$ endif
+!$ call set_cpu_affinity(base_cpu + adder)
+!!$     write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!!$     call flush(6)
 !$OMP END PARALLEL
 #endif
 
-  call log_param(param_file, mod, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
+  call log_param(param_file, mdl, "!SYMMETRIC_MEMORY_", MOM_dom%symmetric, &
                  "If defined, the velocity point data domain includes \n"//&
                  "every face of the thickness points. In other words, \n"//&
                  "some arrays are larger than others, depending on where \n"//&
@@ -971,7 +1008,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "index of the velocity-point arrays is usually 0, not 1. \n"//&
                  "This can only be set at compile time.",&
                  layoutParam=.true.)
-  call get_param(param_file, mod, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
+  call get_param(param_file, mdl, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
 
@@ -979,7 +1016,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (present(NIHALO)) nihalo_dflt = NIHALO
   if (present(NJHALO)) njhalo_dflt = NJHALO
 
-  call log_param(param_file, mod, "!STATIC_MEMORY_", is_static, &
+  call log_param(param_file, mdl, "!STATIC_MEMORY_", is_static, &
                  "If STATIC_MEMORY_ is defined, the principle variables \n"//&
                  "will have sizes that are statically determined at \n"//&
                  "compile time.  Otherwise the sizes are not determined \n"//&
@@ -988,13 +1025,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                  "at run time.  This can only be set at compile time.",&
                  layoutParam=.true.)
 
-  call get_param(param_file, mod, "NIHALO", MOM_dom%nihalo, &
+  call get_param(param_file, mdl, trim(nihalo_nm), MOM_dom%nihalo, &
                  "The number of halo points on each side in the \n"//&
                  "x-direction.  With STATIC_MEMORY_ this is set as NIHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
                  "the default is NIHALO_ in "//trim(inc_nm)//" (if defined) or 2.", &
                  default=4, static_value=nihalo_dflt, layoutParam=.true.)
-  call get_param(param_file, mod, "NJHALO", MOM_dom%njhalo, &
+  call get_param(param_file, mdl, trim(njhalo_nm), MOM_dom%njhalo, &
                  "The number of halo points on each side in the \n"//&
                  "y-direction.  With STATIC_MEMORY_ this is set as NJHALO_ \n"//&
                  "in "//trim(inc_nm)//" at compile time; without STATIC_MEMORY_ \n"//&
@@ -1005,16 +1042,16 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     min_halo(1) = MOM_dom%nihalo
     MOM_dom%njhalo = max(MOM_dom%njhalo, min_halo(2))
     min_halo(2) = MOM_dom%njhalo
-    call log_param(param_file, mod, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
-    call log_param(param_file, mod, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NIHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
+    call log_param(param_file, mdl, "!NJHALO min_halo", MOM_dom%nihalo, layoutParam=.true.)
   endif
   if (is_static) then
-    call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
+    call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  static_value=NIGLOBAL)
-    call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
@@ -1026,17 +1063,17 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
     if (.not.present(min_halo)) then
       if (MOM_dom%nihalo /= NIHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for NIHALO domain size")
+             "static mismatch for "//trim(nihalo_nm)//" domain size")
       if (MOM_dom%njhalo /= NJHALO) call MOM_error(FATAL,"MOM_domains_init: " // &
-             "static mismatch for NJHALO domain size")
+             "static mismatch for "//trim(njhalo_nm)//" domain size")
     endif
   else
-    call get_param(param_file, mod, "NIGLOBAL", MOM_dom%niglobal, &
+    call get_param(param_file, mdl, "NIGLOBAL", MOM_dom%niglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "x-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "NJGLOBAL", MOM_dom%njglobal, &
+    call get_param(param_file, mdl, "NJGLOBAL", MOM_dom%njglobal, &
                  "The total number of thickness grid points in the \n"//&
                  "y-direction in the physical domain. With STATIC_MEMORY_ \n"//&
                  "this is set in "//trim(inc_nm)//" at compile time.", &
@@ -1046,10 +1083,10 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   global_indices(1) = 1 ; global_indices(2) = MOM_dom%niglobal
   global_indices(3) = 1 ; global_indices(4) = MOM_dom%njglobal
 
-  call get_param(param_file, mod, "INPUTDIR", inputdir, do_not_log=.true., default=".")
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, do_not_log=.true., default=".")
   inputdir = slasher(inputdir)
 
-  call get_param(param_file, mod, "MASKTABLE", mask_table, &
+  call get_param(param_file, mdl, trim(masktable_nm), mask_table, &
                  "A text file to specify n_mask, layout and mask_list. \n"//&
                  "This feature masks out processors that contain only land points. \n"//&
                  "The first line of mask_table is the number of regions to be masked out.\n"//&
@@ -1068,31 +1105,31 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   if (is_static) then
     layout(1) = NIPROC ; layout(2) = NJPROC
   else
-    call get_param(param_file, mod, "LAYOUT", layout, &
+    call get_param(param_file, mdl, trim(layout_nm), layout, &
                  "The processor layout to be used, or 0, 0 to automatically \n"//&
                  "set the layout based on the number of processors.", default=0, &
                  do_not_log=.true.)
-    call get_param(param_file, mod, "NIPROC", nip_parsed, &
+    call get_param(param_file, mdl, trim(niproc_nm), nip_parsed, &
                  "The number of processors in the x-direction.", default=-1, &
                  do_not_log=.true.)
-    call get_param(param_file, mod, "NJPROC", njp_parsed, &
+    call get_param(param_file, mdl, trim(njproc_nm), njp_parsed, &
                  "The number of processors in the y-direction.", default=-1, &
                  do_not_log=.true.)
     if (nip_parsed > -1) then
       if ((layout(1) > 0) .and. (layout(1) /= nip_parsed)) &
-        call MOM_error(FATAL, "LAYOUT and NIPROC set inconsistently. "//&
+        call MOM_error(FATAL, trim(layout_nm)//" and "//trim(niproc_nm)//" set inconsistently. "//&
                               "Only LAYOUT should be used.")
       layout(1) = nip_parsed
-      call MOM_mesg("NIPROC used to set LAYOUT in dynamic mode.  "//&
-                    "Shift to using LAYOUT instead.")
+      call MOM_mesg(trim(niproc_nm)//" used to set "//trim(layout_nm)//" in dynamic mode.  "//&
+                    "Shift to using "//trim(layout_nm)//" instead.")
     endif
     if (njp_parsed > -1) then
       if ((layout(2) > 0) .and. (layout(2) /= njp_parsed)) &
-        call MOM_error(FATAL, "LAYOUT and NJPROC set inconsistently. "//&
-                              "Only LAYOUT should be used.")
+        call MOM_error(FATAL, trim(layout_nm)//" and "//trim(njproc_nm)//" set inconsistently. "//&
+                              "Only "//trim(layout_nm)//" should be used.")
       layout(2) = njp_parsed
-      call MOM_mesg("NJPROC used to set LAYOUT in dynamic mode.  "//&
-                    "Shift to using LAYOUT instead.")
+      call MOM_mesg(trim(njproc_nm)//" used to set "//trim(layout_nm)//" in dynamic mode.  "//&
+                    "Shift to using "//trim(layout_nm)//" instead.")
     endif
 
     if ( layout(1)==0 .and. layout(2)==0 ) &
@@ -1107,15 +1144,15 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
       call MOM_error(FATAL, mesg)
     endif
   endif
-  call log_param(param_file, mod, "NIPROC", layout(1), &
+  call log_param(param_file, mdl, trim(niproc_nm), layout(1), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
-  call log_param(param_file, mod, "NJPROC", layout(2), &
+  call log_param(param_file, mdl, trim(njproc_nm), layout(2), &
                  "The number of processors in the x-direction. With \n"//&
                  "STATIC_MEMORY_ this is set in "//trim(inc_nm)//" at compile time.",&
                  layoutParam=.true.)
-  call log_param(param_file, mod, "LAYOUT", layout, &
+  call log_param(param_file, mdl, trim(layout_nm), layout, &
                  "The processor layout that was acutally used.",&
                  layoutParam=.true.)
 
@@ -1135,16 +1172,16 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   !   Set up the I/O lay-out, and check that it uses an even multiple of the
   ! number of PEs in each direction.
-  io_layout(:) = (/ 0, 0 /)
-  call get_param(param_file, mod, "IO_LAYOUT", io_layout, &
+  io_layout(:) = (/ 1, 1 /)
+  call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
                  "The processor layout to be used, or 0,0 to automatically \n"//&
-                 "set the io_layout to be the same as the layout.", default=0, &
+                 "set the io_layout to be the same as the layout.", default=1, &
                  layoutParam=.true.)
 
   if (io_layout(1) < 0) then
-    write(mesg,'("MOM_domains_init: IO_LAYOUT(1) = ",i4,".  Negative values of "//&
-         &" of IO_LAYOUT(1) are not allowed.")') io_layout(1)
-    call MOM_error(FATAL, mesg)
+    write(mesg,'("MOM_domains_init: IO_LAYOUT(1) = ",i4,".  Negative values "//&
+         &"are not allowed in ")') io_layout(1)
+    call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(1) > 0) then ; if (modulo(layout(1), io_layout(1)) /= 0) then
     write(mesg,'("MOM_domains_init: The x-direction I/O-layout, IO_LAYOUT(1)=",i4, &
          &", does not evenly divide the x-direction layout, NIPROC=,",i4,".")') &
@@ -1153,9 +1190,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   endif ; endif
 
   if (io_layout(2) < 0) then
-    write(mesg,'("MOM_domains_init: IO_LAYOUT(2) = ",i4,".  Negative values of "//&
-         &" of IO_LAYOUT(2) are not allowed.")') io_layout(2)
-    call MOM_error(FATAL, mesg)
+    write(mesg,'("MOM_domains_init: IO_LAYOUT(2) = ",i4,".  Negative values "//&
+         &"are not allowed in ")') io_layout(2)
+    call MOM_error(FATAL, mesg//trim(IO_layout_nm))
   elseif (io_layout(2) /= 0) then ; if (modulo(layout(2), io_layout(2)) /= 0) then
     write(mesg,'("MOM_domains_init: The y-direction I/O-layout, IO_LAYOUT(2)=",i4, &
          &", does not evenly divide the y-direction layout, NJPROC=,",i4,".")') &

@@ -60,7 +60,7 @@ use MOM_spatial_means,     only : global_area_mean, global_layer_mean, global_vo
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
-use MOM_wave_speed,        only : wave_speed, wave_speed_CS
+use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
 
 implicit none ; private
 
@@ -74,7 +74,11 @@ public MOM_diagnostics_end
 
 
 type, public :: diagnostics_CS ; private
-  logical :: split                 ! If true, use split time stepping scheme.
+  real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
+                                       !! monotonic for the purposes of calculating the equivalent barotropic wave speed.
+  real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
+                                       !! calculating the equivalent barotropic wave speed. (m)
+
   type(diag_ctrl), pointer :: diag ! structure to regulate diagnostics timing
 
   ! following arrays store diagnostics calculated here and unavailable outside.
@@ -92,10 +96,11 @@ type, public :: diagnostics_CS ; private
 
     h_Rlay => NULL(),    & ! layer thicknesses in layered potential density
                            ! coordinates, in m (Bouss) or kg/m2 (non-Bouss)
-    uh_Rlay   => NULL(), & ! zonal and meridional transports in layered 
+    uh_Rlay   => NULL(), & ! zonal and meridional transports in layered
     vh_Rlay   => NULL(), & ! potential rho coordinates: m3/s(Bouss) kg/s(non-Bouss)
-    uhGM_Rlay => NULL(), & ! zonal and meridional Gent-McWilliams transports in layered 
-    vhGM_Rlay => NULL()    ! potential density coordinates, m3/s (Bouss) kg/s(non-Bouss)
+    uhGM_Rlay => NULL(), & ! zonal and meridional Gent-McWilliams transports in layered
+    vhGM_Rlay => NULL(), & ! potential density coordinates, m3/s (Bouss) kg/s(non-Bouss)
+    p_ebt     => NULL()    ! Equivalent barotropic modal structure
 
   ! following fields are 2-D.
   real, pointer, dimension(:,:) :: &
@@ -132,10 +137,12 @@ type, public :: diagnostics_CS ; private
   integer :: id_KE_horvisc     = -1, id_KE_dia         = -1
   integer :: id_uh_Rlay        = -1, id_vh_Rlay        = -1
   integer :: id_uhGM_Rlay      = -1, id_vhGM_Rlay      = -1
-  integer :: id_h_Rlay         = -1, id_Rd1            = -1     
+  integer :: id_h_Rlay         = -1, id_Rd1            = -1
   integer :: id_Rml            = -1, id_Rcv            = -1
   integer :: id_cg1            = -1, id_cfl_cg1        = -1
   integer :: id_cfl_cg1_x      = -1, id_cfl_cg1_y      = -1
+  integer :: id_cg_ebt         = -1, id_Rd_ebt         = -1
+  integer :: id_p_ebt          = -1
   integer :: id_temp_int       = -1, id_salt_int       = -1
   integer :: id_mass_wt        = -1, id_col_mass       = -1
   integer :: id_masscello      = -1, id_masso          = -1
@@ -146,7 +153,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
 
-  type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()  
+  type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
 
   ! pointers used in calculation of time derivatives
   type(p3d) :: var_ptr(MAX_FIELDS_)
@@ -154,9 +161,9 @@ type, public :: diagnostics_CS ; private
   type(p3d) :: prev_val(MAX_FIELDS_)
   integer   :: nlay(MAX_FIELDS_)
   integer   :: num_time_deriv = 0
-  
+
   ! for group halo pass
-  type(group_pass_type) :: pass_KE_uv 
+  type(group_pass_type) :: pass_KE_uv
 
 end type diagnostics_CS
 
@@ -179,9 +186,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   type(diagnostics_CS),                      intent(inout) :: CS
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: eta_bt
 
-! Diagnostics not more naturally calculated elsewhere are computed here. 
+! Diagnostics not more naturally calculated elsewhere are computed here.
 
-! Arguments: 
+! Arguments:
 !  (in)      u   - zonal velocity component (m/s)
 !  (in)      v   - meridional velocity component (m/s)
 !  (in)      h   - layer thickness,  meter(Bouss)  kg/m^2(non-Bouss)
@@ -203,23 +210,23 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
   ! coordinate variable potential density, in kg m-3.
-  real :: Rcv(SZI_(G),SZJ_(G),SZK_(G)) 
-                                   
-  ! tmp array for surface properties 
-  real :: surface_field(SZI_(G),SZJ_(G)) 
+  real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))
+
+  ! tmp array for surface properties
+  real :: surface_field(SZI_(G),SZJ_(G))
   real :: pressure_1d(SZI_(G)) ! Temporary array for pressure when calling EOS
   real :: wt, wt_p
 
   ! squared Coriolis parameter at to h-points (1/s2)
-  real :: f2_h      
+  real :: f2_h
 
   ! magnitude of the gradient of f (1/(m*s))
   real :: mag_beta
- 
+
   ! frequency squared used to avoid division by 0 (1/s2)
   ! value is roughly (pi / (the age of the universe) )^2.
-  real, parameter :: absurdly_small_freq2 = 1e-34 
-    
+  real, parameter :: absurdly_small_freq2 = 1e-34
+
   integer :: k_list
 
   real, dimension(SZK_(G)) :: temp_layer_ave, salt_layer_ave
@@ -229,7 +236,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz  = G%ke   ; nkmb = GV%nk_rho_varies
 
-  ! smg: is the following robust to ALE? It seems a bit opaque.   
+  ! smg: is the following robust to ALE? It seems a bit opaque.
   ! If the model is NOT in isopycnal mode then nkmb=0. But we need all the
   ! following diagnostics to treat all layers as variable density, so we set
   ! nkmb = nz, on the expectation that loops nkmb+1,nz will not iterate.
@@ -264,7 +271,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
-    do k=1,nz; do j=js,je ; do i=is,ie 
+    do k=1,nz; do j=js,je ; do i=is,ie
        CS%diag_tmp3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
     call post_data(CS%id_masscello, CS%diag_tmp3d, CS%diag)
@@ -282,24 +289,24 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! diagnose thickness of grid cells (meter)
   if (CS%id_thkcello > 0) then
 
-    ! thkcello = h for Boussinesq 
-    if (GV%Boussinesq) then 
+    ! thkcello = h for Boussinesq
+    if (GV%Boussinesq) then
       call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
 
     ! thkcello = dp/(rho*g) for non-Boussinesq
-    else 
+    else
       do j=js,je
 
-        ! pressure loading at top of surface layer (Pa) 
+        ! pressure loading at top of surface layer (Pa)
         if(ASSOCIATED(fluxes%p_surf)) then
           do i=is,ie
-            pressure_1d(i) = fluxes%p_surf(i,j) 
+            pressure_1d(i) = fluxes%p_surf(i,j)
           enddo
         else
           do i=is,ie
             pressure_1d(i) = 0.0
           enddo
-        endif 
+        endif
 
         do k=1,nz
           ! pressure for EOS at the layer center (Pa)
@@ -324,43 +331,43 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     endif
   endif
 
-  ! volume mean potential temperature 
+  ! volume mean potential temperature
   if (CS%id_thetaoga>0) then
     thetaoga = global_volume_mean(tv%T, h, G, GV)
     call post_data(CS%id_thetaoga, thetaoga, CS%diag)
   endif
 
-  ! area mean SST 
+  ! area mean SST
   if (CS%id_tosga > 0) then
-    do j=js,je ; do i=is,ie 
+    do j=js,je ; do i=is,ie
        surface_field(i,j) = tv%T(i,j,1)
-    enddo ; enddo 
+    enddo ; enddo
     tosga = global_area_mean(surface_field, G)
     call post_data(CS%id_tosga, tosga, CS%diag)
   endif
 
-  ! volume mean salinity 
+  ! volume mean salinity
   if (CS%id_soga>0) then
     soga = global_volume_mean(tv%S, h, G, GV)
     call post_data(CS%id_soga, soga, CS%diag)
   endif
 
-  ! area mean SSS 
+  ! area mean SSS
   if (CS%id_sosga > 0) then
-    do j=js,je ; do i=is,ie 
+    do j=js,je ; do i=is,ie
        surface_field(i,j) = tv%S(i,j,1)
-    enddo ; enddo 
+    enddo ; enddo
     sosga = global_area_mean(surface_field, G)
     call post_data(CS%id_sosga, sosga, CS%diag)
   endif
 
-  ! layer mean potential temperature 
+  ! layer mean potential temperature
   if (CS%id_temp_layer_ave>0) then
     temp_layer_ave = global_layer_mean(tv%T, h, G, GV)
     call post_data_1d_k(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
   endif
 
-  ! layer mean salinity 
+  ! layer mean salinity
   if (CS%id_salt_layer_ave>0) then
     salt_layer_ave = global_layer_mean(tv%S, h, G, GV)
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
@@ -391,18 +398,18 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       k_list = nz/2
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,nkmb,CS,Rcv,h,GV) &
 !$OMP                          private(wt,wt_p) firstprivate(k_list)
-      do j=js,je 
+      do j=js,je
         do k=1,nkmb ; do i=is,ie
           CS%h_Rlay(i,j,k) = 0.0
         enddo ; enddo
         do k=nkmb+1,nz ; do i=is,ie
           CS%h_Rlay(i,j,k) = h(i,j,k)
-        enddo ; enddo 
+        enddo ; enddo
         do k=1,nkmb ; do i=is,ie
           call find_weights(GV%Rlay, Rcv(i,j,k), k_list, nz, wt, wt_p)
           CS%h_Rlay(i,j,k_list)   = CS%h_Rlay(i,j,k_list)   + h(i,j,k)*wt
           CS%h_Rlay(i,j,k_list+1) = CS%h_Rlay(i,j,k_list+1) + h(i,j,k)*wt_p
-        enddo ; enddo 
+        enddo ; enddo
       enddo
 
       if (CS%id_h_Rlay > 0) call post_data(CS%id_h_Rlay, CS%h_Rlay, CS%diag)
@@ -418,13 +425,13 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
         enddo ; enddo
         do k=nkmb+1,nz ; do I=Isq,Ieq
           CS%uh_Rlay(I,j,k) = uh(I,j,k)
-        enddo ; enddo 
+        enddo ; enddo
         k_list = nz/2
         do k=1,nkmb ; do I=Isq,Ieq
           call find_weights(GV%Rlay, 0.5*(Rcv(i,j,k)+Rcv(i+1,j,k)), k_list, nz, wt, wt_p)
           CS%uh_Rlay(I,j,k_list)   = CS%uh_Rlay(I,j,k_list)   + uh(I,j,k)*wt
           CS%uh_Rlay(I,j,k_list+1) = CS%uh_Rlay(I,j,k_list+1) + uh(I,j,k)*wt_p
-        enddo ; enddo 
+        enddo ; enddo
       enddo
 
       if (CS%id_uh_Rlay > 0) call post_data(CS%id_uh_Rlay, CS%uh_Rlay, CS%diag)
@@ -437,7 +444,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       do J=Jsq,Jeq
         do k=1,nkmb ; do i=is,ie
           CS%vh_Rlay(i,J,k) = 0.0
-        enddo ; enddo 
+        enddo ; enddo
         do k=nkmb+1,nz ; do i=is,ie
           CS%vh_Rlay(i,J,k) = vh(i,J,k)
         enddo ; enddo
@@ -569,6 +576,37 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       call post_data(CS%id_cfl_cg1_y, CS%cfl_cg1_y, CS%diag)
     endif
   endif
+  if ((CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
+    if (CS%id_p_ebt>0) then
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+                      mono_N2_column_fraction=CS%mono_N2_column_fraction, &
+                      mono_N2_depth=CS%mono_N2_depth, modal_structure=CS%p_ebt)
+      call post_data(CS%id_p_ebt, CS%p_ebt, CS%diag)
+    else
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, use_ebt_mode=.true., &
+                      mono_N2_column_fraction=CS%mono_N2_column_fraction, &
+                      mono_N2_depth=CS%mono_N2_depth)
+    endif
+    if (CS%id_cg_ebt>0) call post_data(CS%id_cg_ebt, CS%cg1, CS%diag)
+    if (CS%id_Rd_ebt>0) then
+!$OMP parallel do default(none) shared(is,ie,js,je,G,CS) &
+!$OMP                          private(f2_h,mag_beta)
+      do j=js,je ; do i=is,ie
+        ! Blend the equatorial deformation radius with the standard one.
+        f2_h = absurdly_small_freq2 + 0.25 * &
+            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+        mag_beta = sqrt(0.5 * ( &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ))
+        CS%Rd1(i,j) = CS%cg1(i,j) / sqrt(f2_h + CS%cg1(i,j) * mag_beta)
+
+      enddo ; enddo
+      call post_data(CS%id_Rd_ebt, CS%Rd1, CS%diag)
+    endif
+  endif
 
   if (dt > 0.0) then
     if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag)
@@ -655,7 +693,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
 ! with the mass-weight of these tracers, the total column mass, and the
 ! carefully calculated column height.
 
-! Arguments: 
+! Arguments:
 !  (in)      h  - layer thickness: metre (Bouss) or kg/ m2 (non-Bouss)
 !  (in)      tv - structure pointing to thermodynamic variables
 !  (in)      fluxes - a structure containing the surface fluxes.
@@ -681,7 +719,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
 
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  
+
   if (CS%id_mass_wt > 0) then
     do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -831,7 +869,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       do j=js,je ; do i=is,ie
         KE_h(i,j) = CS%KE(i,j,k)*CS%dh_dt(i,j,k)
       enddo ; enddo
-      if (.not.G%symmetric) &      
+      if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
@@ -969,7 +1007,7 @@ subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
   type(diagnostics_CS),  pointer :: CS
 
 ! This subroutine registers fields to calculate a diagnostic time derivative.
-! Arguments: 
+! Arguments:
 !  (target)  f_ptr     - field whose derivative is taken
 !  (in)      deriv_ptr - field in which the calculated time derivatives placed
 !  (in)      num_lay   - number of layers in this field
@@ -1004,7 +1042,7 @@ subroutine calculate_derivs(dt, G, CS)
   type(diagnostics_CS),  intent(inout) :: CS
 
 ! This subroutine calculates all registered time derivatives.
-! Arguments: 
+! Arguments:
 !  (in)      dt - time interval in s over which differences occur
 !  (in)      G  - ocean grid structure.
 !  (in)      CS - control structure returned by previous call to diagnostics_init
@@ -1024,8 +1062,7 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS, &
-                                wave_speed_CSp)
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS)
   type(ocean_internal_state), intent(in)    :: MIS
   type(accel_diag_ptrs),      intent(inout) :: ADp
   type(cont_diag_ptrs),       intent(inout) :: CDp
@@ -1035,13 +1072,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(param_file_type),      intent(in)    :: param_file
   type(diag_ctrl), target,    intent(inout) :: diag
   type(diagnostics_CS),       pointer       :: CS
-  type(wave_speed_CS),        pointer       :: wave_speed_CSp
 
 ! Arguments
 !  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
 !                    accelerations that make up the ocean's internal physical
 !                    state.
-!  (inout)  ADp    - structure with pointers to momentum equation terms 
+!  (inout)  ADp    - structure with pointers to momentum equation terms
 !  (inout)  CDp    - structure with pointers to continuity equation terms
 !  (in)     Time   - current model time
 !  (in)     G      - ocean grid structure
@@ -1076,8 +1112,14 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "SPLIT", CS%split, &
-                 "Use the split time stepping if true.", default=.true.)
+  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
+                 "The lower fraction of water column over which N2 is limited as monotonic\n"// &
+                 "for the purposes of calculating the equivalent barotropic wave speed.", &
+                 units='nondim', default=0.)
+  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
+                 "The depth below which N2 is limited as monotonic for the\n"// &
+                 "purposes of calculating the equivalent barotropic wave speed.", &
+                 units='m', default=-1.)
 
   if (GV%Boussinesq) then
     thickness_units = "meter" ; flux_units = "meter3 second-1"
@@ -1093,13 +1135,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2',           &
-      standard_name='sea_water_mass_per_unit_area')
+      standard_name='sea_water_mass_per_unit_area', v_extensive=.true.)
 
   CS%id_masso = register_scalar_field('ocean_model', 'masso', Time,  &
       diag, 'Mass of liquid ocean', 'kg', standard_name='sea_water_mass')
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
-      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m')
+      long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
 
   if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
@@ -1116,13 +1158,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_tosga = register_scalar_field('ocean_model', 'sst_global', Time, diag,&
       long_name='Global Area Average Sea Surface Temperature',                &
-      units='degC', standard_name='sea_surface_temperature',                  &   
+      units='degC', standard_name='sea_surface_temperature',                  &
       cmor_field_name='tosga', cmor_standard_name='sea_surface_temperature',  &
       cmor_units='degC', cmor_long_name='Sea Surface Temperature')
 
   CS%id_sosga = register_scalar_field('ocean_model', 'sss_global', Time, diag,&
       long_name='Global Area Average Sea Surface Salinity',                   &
-      units='ppt', standard_name='sea_surface_salinity',                      &    
+      units='ppt', standard_name='sea_surface_salinity',                      &
       cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity',     &
       cmor_units='ppt', cmor_long_name='Sea Surface Salinity')
 
@@ -1168,7 +1210,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
     call register_time_deriv(MIS%h, CS%dh_dt, CS)
   endif
 
-  ! layer thickness variables 
+  ! layer thickness variables
   !if (GV%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
         'Layer thicknesses in pure potential density coordinates', thickness_units)
@@ -1228,7 +1270,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
 
 
-  ! gravity wave CFLs 
+  ! gravity wave CFLs
   CS%id_cg1 = register_diag_field('ocean_model', 'cg1', diag%axesT1, Time, &
       'First baroclinic gravity wave speed', 'meter second-1')
   CS%id_Rd1 = register_diag_field('ocean_model', 'Rd1', diag%axesT1, Time, &
@@ -1239,15 +1281,24 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'i-component of CFL of first baroclinic gravity wave = dt*cg1*/dx', 'nondim')
   CS%id_cfl_cg1_y = register_diag_field('ocean_model', 'CFL_cg1_y', diag%axesT1, Time, &
       'j-component of CFL of first baroclinic gravity wave = dt*cg1*/dy', 'nondim')
+  CS%id_cg_ebt = register_diag_field('ocean_model', 'cg_ebt', diag%axesT1, Time, &
+      'Equivalent barotropic gravity wave speed', 'meter second-1')
+  CS%id_Rd_ebt = register_diag_field('ocean_model', 'Rd_ebt', diag%axesT1, Time, &
+      'Equivalent barotropic deformation radius', 'meter')
+  CS%id_p_ebt = register_diag_field('ocean_model', 'p_ebt', diag%axesTL, Time, &
+      'Equivalent barotropic modal strcuture', 'nondim')
 
-  CS%wave_speed_CSp => wave_speed_CSp
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
-      (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0)) then
+      (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
+      (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
+    call wave_speed_init(CS%wave_speed_CSp)
     call safe_alloc_ptr(CS%cg1,isd,ied,jsd,jed)
     if (CS%id_Rd1>0)       call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
+    if (CS%id_Rd_ebt>0)    call safe_alloc_ptr(CS%Rd1,isd,ied,jsd,jed)
     if (CS%id_cfl_cg1>0)   call safe_alloc_ptr(CS%cfl_cg1,isd,ied,jsd,jed)
     if (CS%id_cfl_cg1_x>0) call safe_alloc_ptr(CS%cfl_cg1_x,isd,ied,jsd,jed)
     if (CS%id_cfl_cg1_y>0) call safe_alloc_ptr(CS%cfl_cg1_y,isd,ied,jsd,jed)
+    if (CS%id_p_ebt>0) call safe_alloc_ptr(CS%p_ebt,isd,ied,jsd,jed,nz)
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,  &
@@ -1287,7 +1338,7 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   type(diagnostics_CS),       pointer       :: CS
 
 ! This subroutine sets up diagnostics upon which other diagnostics depend.
-! Arguments: 
+! Arguments:
 !  (in)      MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations making up ocean internal physical state.
 !  (inout)   ADp - structure pointing to accelerations in momentum equation

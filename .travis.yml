@@ -1,0 +1,10 @@
+# This Travis-CI file is for testing the state of the MOM6 source code.
+# It does NOT test MOM6 solutions.
+
+# This is a not a c-language project but we use the same environment.
+language: c
+
+# Tests to run
+script:
+ - git clone https://github.com/adcroft/house_cleaning.git
+ - ./house_cleaning/trailer.py -e TEOS10 src config_src

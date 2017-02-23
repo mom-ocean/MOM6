@@ -66,25 +66,21 @@ module MOM_diabatic_aux
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums,         only : hchksum, uchksum, vchksum
-use MOM_checksum_packages, only : MOM_state_chksum, MOM_state_stats
-use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,     only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator,     only : diag_ctrl, time_type! , diag_update_target_grids
-use MOM_EOS,               only : calculate_density, calculate_TFreeze
-use MOM_EOS,               only : calculate_specific_vol_derivs
-use MOM_error_handler,     only : MOM_error, FATAL, WARNING, callTree_showQuery
-use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser,       only : get_param, log_version, param_file_type
-use MOM_forcing_type,      only : forcing, MOM_forcing_chksum
-use MOM_forcing_type,      only : extractFluxes1d, forcing_SinglePointPrint
-use MOM_grid,              only : ocean_grid_type
-use MOM_io,                only : vardesc
-use MOM_shortwave_abs,     only : absorbRemainingSW, optics_type
-use MOM_variables,         only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
-use MOM_verticalGrid,      only : verticalGrid_type
-! use MOM_variables,         only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,     only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator, only : diag_ctrl, time_type
+use MOM_EOS,           only : calculate_density, calculate_TFreeze
+use MOM_EOS,           only : calculate_specific_vol_derivs
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : vardesc
+use MOM_shortwave_abs, only : absorbRemainingSW, optics_type
+use MOM_variables,     only : thermo_var_ptrs, vertvisc_type! , accel_diag_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 implicit none ; private
 
@@ -652,20 +648,20 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
 !$OMP                          private(s,Idenom,a_w,a_e,a_s,a_n,b_denom_1,b1,d1,c1)
   do j=js,je
     do i=is,ie
-      s = G%areaCu(i-1,j)+G%areaCu(i,j)
+      s = G%areaCu(I-1,j)+G%areaCu(I,j)
       if (s>0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j)/s)
-        a_w(i) = G%areaCu(i-1,j)*Idenom
-        a_e(i) = G%areaCu(i,j)*Idenom
+        a_w(i) = G%areaCu(I-1,j)*Idenom
+        a_e(i) = G%areaCu(I,j)*Idenom
       else
         a_w(i) = 0.0 ; a_e(i) = 0.0
       endif
 
-      s = G%areaCv(i,j-1)+G%areaCv(i,j)
+      s = G%areaCv(i,J-1)+G%areaCv(i,J)
       if (s>0.0) then
         Idenom = sqrt(0.5*G%IareaT(i,j)/s)
-        a_s(i) = G%areaCv(i,j-1)*Idenom
-        a_n(i) = G%areaCv(i,j)*Idenom
+        a_s(i) = G%areaCv(i,J-1)*Idenom
+        a_n(i) = G%areaCv(i,J)*Idenom
       else
         a_s(i) = 0.0 ; a_n(i) = 0.0
       endif
@@ -676,17 +672,17 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
         b_denom_1 = h(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(i,j,1) + a_w(i)*u(i-1,j,1))
-        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,j,1) + a_s(i)*v(i,j-1,1))
+        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(I,j,1) + a_w(i)*u(I-1,j,1))
+        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,J,1) + a_s(i)*v(i,J-1,1))
       enddo
       do k=2,nz ; do i=is,ie
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h(i,j,k) + d1(i)*ea(i,j,k) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(i,j,k) + a_w(i)*u(i-1,j,k)) + &
+        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)) + &
                       ea(i,j,k)*u_h(i,j,k-1))*b1(i)
-        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,j,k) + a_s(i)*v(i,j-1,k)) + &
+        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)) + &
                       ea(i,j,k)*v_h(i,j,k-1))*b1(i)
       enddo ; enddo
       do k=nz-1,1,-1 ; do i=is,ie
@@ -695,8 +691,8 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, ea, eb)
       enddo ; enddo
     else
       do k=1,nz ; do i=is,ie
-        u_h(i,j,k) = a_e(i)*u(i,j,k) + a_w(i)*u(i-1,j,k)
-        v_h(i,j,k) = a_n(i)*v(i,j,k) + a_s(i)*v(i,j-1,k)
+        u_h(i,j,k) = a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)
+        v_h(i,j,k) = a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)
       enddo ; enddo
     endif
   enddo
@@ -950,8 +946,13 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       else
         netMassIn(i) = netMassInOut(i) - netMassOut(i)
       endif
-      fluxes%netMassOut(i,j) = netMassOut(i)
-      fluxes%netMassIn(i,j) = netMassIn(i)
+      if (G%mask2dT(i,j)>0.0) then
+        fluxes%netMassOut(i,j) = netMassOut(i)
+        fluxes%netMassIn(i,j) = netMassIn(i)
+      else
+        fluxes%netMassOut(i,j) = 0.0
+        fluxes%netMassIn(i,j) = 0.0
+      endif
     enddo
 
     ! Apply the surface boundary fluxes in three steps:
@@ -1129,7 +1130,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     ! SW penetrative heating uses the updated thickness from above.
 
     ! Save temperature before increment with SW heating
-    ! and initialize CS%penSWflux_diag to zero.  
+    ! and initialize CS%penSWflux_diag to zero.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k)     = T2d(i,k)
@@ -1161,25 +1162,25 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
-    ! Also diagnose the penetrative SW heat flux at base of layer.  
+    ! Also diagnose the penetrative SW heat flux at base of layer.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
-      ! convergence of SW into a layer 
+      ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
 
-      ! Perform a cumulative sum upwards from bottom to 
-      ! diagnose penetrative SW flux at base of tracer cell. 
-      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.  
-      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock. 
+      ! Perform a cumulative sum upwards from bottom to
+      ! diagnose penetrative SW flux at base of tracer cell.
+      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.
+      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock.
       ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
       ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
       if(CS%id_penSWflux_diag > 0) then
         do k=nz,1,-1 ; do i=is,ie
           CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
         enddo ; enddo
-      endif 
+      endif
 
     endif
 
