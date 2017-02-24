@@ -53,7 +53,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'MOM6'
-copyright = u'2017, Alistair Adcroft, Robert Hallberg, Stephen Griffies, Matthew Harrison, Brandon Reichl, Niki Zadeh, John Krasting, Nic Hannah'
+copyright = u'2017, MOM6 developers'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
