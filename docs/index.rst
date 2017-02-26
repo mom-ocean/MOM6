@@ -12,7 +12,7 @@ Contents:
   :maxdepth: 2
 
   about
-  equations
+  equations/overview
   parameterizations
   working_with_MOM6
   tutorials
