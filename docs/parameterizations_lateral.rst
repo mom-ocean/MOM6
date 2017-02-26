@@ -8,8 +8,8 @@ Lateral viscosity
 
 Laplacian and bi-harmonic viscosities with linear and Smagorinsky options are implemented in MOM_hor_visc.
 
-Gent-McWilliams isopycnal height diffusion
-------------------------------------------
+Gent-McWilliams/TEM/isopycnal height diffusion
+----------------------------------------------
 
 Lagrangian mean eddy mass transport is parameterized following Gent and McWilliams, XXXX, in MOM_thickness_diffuse.
 
