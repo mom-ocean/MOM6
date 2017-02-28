@@ -10,7 +10,7 @@ use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,            only : create_file, write_field, close_file, slasher
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : EOS_type, calculate_density
+use MOM_EOS,           only : EOS_type, calculate_density, calculate_density_derivs
 use MOM_string_functions,only : uppercase, extractWord, extract_integer, extract_real
 
 use MOM_remapping, only : remapping_CS
@@ -1368,6 +1368,117 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
 
 end subroutine build_grid_HyCOM1
 
+subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
+  type(ocean_grid_type),                       intent(in)    :: G
+  type(verticalGrid_type),                     intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h
+  type(thermo_var_ptrs),                       intent(in)    :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface
+  type(remapping_CS),                          intent(in)    :: remapCS
+  type(regridding_CS),                         intent(in)    :: CS
+
+  ! local variables
+  integer :: i, j, k, nz ! indices and dimension lengths
+  real :: h_up
+  ! temperature, salinity and pressure on interfaces
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)-1) :: tInt, sInt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))   :: zInt
+  real, dimension(SZK_(GV)-1) :: alpha, beta
+
+  nz = GV%ke
+
+  ! position surface at z = 0.
+  ! XXX maybe we should work bottom-up here?
+  zInt(:,:,1) = 0.
+
+  ! work on interior interfaces
+  do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    tInt(i,j,K-1) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
+    sInt(i,j,K-1) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
+    zInt(i,j,K)   = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
+  enddo ; enddo ; enddo
+
+  ! calculate horizontal density derivatives (alpha/beta)
+  ! between cells in a 5-point stencil, columnwise
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    dzInterface(i,j,:) = 0. ! initially no change in interface position
+
+    ! land point, don't bother!
+    if (G%mask2dT(i,j) < 0.5) cycle
+
+    ! up (j-1)
+    if (G%mask2dT(i,j-1) > 0.) then
+      call calculate_density_derivs( &
+           0.5 * (tInt(i,j,:)    + tInt(i,j-1,:)), &
+           0.5 * (sInt(i,j,:)    + sInt(i,j-1,:)), &
+           0.5 * (zInt(i,j,2:nz) + zInt(i,j-1,2:nz)) * GV%H_to_Pa, &
+           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+
+      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
+                 (beta  * (sInt(i,j-1,:) - sInt(i,j,:)) + &
+                  alpha * (tInt(i,j-1,:) - tInt(i,j,:)))
+    endif
+    ! down (j+1)
+    if (G%mask2dT(i,j+1) > 0.) then
+      call calculate_density_derivs( &
+           0.5 * (tInt(i,j,:)    + tInt(i,j+1,:)), &
+           0.5 * (sInt(i,j,:)    + sInt(i,j+1,:)), &
+           0.5 * (zInt(i,j,2:nz) + zInt(i,j+1,2:nz)) * GV%H_to_Pa, &
+           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+
+      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
+                 (beta  * (sInt(i,j+1,:) - sInt(i,j,:)) + &
+                  alpha * (tInt(i,j+1,:) - tInt(i,j,:)))
+    endif
+    ! left (i-1)
+    if (G%mask2dT(i-1,j) > 0.) then
+      call calculate_density_derivs( &
+           0.5 * (tInt(i,j,:)    + tInt(i-1,j,:)), &
+           0.5 * (sInt(i,j,:)    + sInt(i-1,j,:)), &
+           0.5 * (zInt(i,j,2:nz) + zInt(i-1,j,2:nz)) * GV%H_to_Pa, &
+           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+
+      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
+                 (beta  * (sInt(i-1,j,:) - sInt(i,j,:)) + &
+                  alpha * (tInt(i-1,j,:) - tInt(i,j,:)))
+    endif
+    ! right (i+1)
+    if (G%mask2dT(i+1,j) > 0.) then
+      call calculate_density_derivs( &
+           0.5 * (tInt(i,j,:)    + tInt(i+1,j,:)), &
+           0.5 * (sInt(i,j,:)    + sInt(i+1,j,:)), &
+           0.5 * (zInt(i,j,2:nz) + zInt(i+1,j,2:nz)) * GV%H_to_Pa, &
+           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+
+      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
+                 (beta  * (sInt(i+1,j,:) - sInt(i,j,:)) + &
+                  alpha * (tInt(i+1,j,:) - tInt(i,j,:)))
+    endif
+
+    ! at this point, dzInterface contains the local neutral density curvature at
+    ! h-points, on interfaces
+    ! we need to divide by drho/dz to give an interfacial displacement
+    call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,2:nz) * GV%H_to_Pa, &
+         alpha, beta, 1, nz - 1, tv%eqn_of_state)
+    do K = 2, nz
+      ! TODO make lower bound here configurable
+      dzInterface(i,j,K) = dzInterface(i,j,K) * (0.5 * (h(i,j,k-1) + h(i,j,k))) / &
+           max(alpha(K-1) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
+               beta(K-1)  * (tv%S(i,j,k) - tv%S(i,j,k-1)), 1e-20)
+
+      ! don't move the interface so far that it would tangle with another
+      ! interface in the direction we're moving (or exceed a CFL limit
+      ! that could cause oscillations of the interface)
+      h_up = merge(h(i,j,k), h(i,j,k-1), dzInterface(i,j,K) > 0.)
+      dzInterface(i,j,K) = 0.5 * sign(min(abs(dzInterface(i,j,K)), 0.5 * h_up), &
+           dzInterface(i,j,K))
+    enddo
+
+    call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext(i,j,:), dzInterface(i,j,:))
+    do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
+    call adjust_interface_motion(nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:))
+  enddo ; enddo
+end subroutine build_grid_adaptive
 
 !> Builds a grid that tracks density interfaces for water that is denser than
 !! the surface density plus an increment of some number of layers, and uses all
