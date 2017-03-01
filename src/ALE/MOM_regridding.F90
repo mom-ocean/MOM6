@@ -104,6 +104,10 @@ type, public :: regridding_CS
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
+  real :: adaptTimeRatio = 1e-1
+  real :: adaptZoom      = 200.0
+  real :: adaptZoomCoeff = 1.0
+
   type(zlike_CS),  pointer :: zlike_CS  => null()
   type(sigma_CS),  pointer :: sigma_CS  => null()
   type(rho_CS),    pointer :: rho_CS    => null()
@@ -1385,17 +1389,19 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! local variables
   integer :: i, j, k, nz ! indices and dimension lengths
-  real :: h_up
+  real :: h_up, b1, b_denom_1, d1, depth
   ! temperature, salinity and pressure on interfaces
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)-1) :: tInt, sInt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))   :: zInt
-  real, dimension(SZK_(GV)-1) :: alpha, beta
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zInt, zNext
+  real, dimension(SZK_(GV)-1) :: alpha, beta ! drho/dT and drho/dS
+  real, dimension(SZK_(GV)) :: kGrid, c1 ! grid diffusivity on layers
 
   nz = GV%ke
 
   ! position surface at z = 0.
   ! XXX maybe we should work bottom-up here?
   zInt(:,:,1) = 0.
+  zNext(:,:,1) = 0.
 
   ! work on interior interfaces
   do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -1403,6 +1409,9 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
     sInt(i,j,K-1) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
     zInt(i,j,K)   = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
   enddo ; enddo ; enddo
+  ! set the bottom interface too
+  zInt(:,:,nz+1)  = zInt(:,:,nz) + h(:,:,nz)
+  zNext(:,:,nz+1) = zInt(:,:,nz+1)
 
   ! calculate horizontal density derivatives (alpha/beta)
   ! between cells in a 5-point stencil, columnwise
@@ -1478,9 +1487,52 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
       h_up = merge(h(i,j,k), h(i,j,k-1), dzInterface(i,j,K) > 0.)
       dzInterface(i,j,K) = 0.5 * sign(min(abs(dzInterface(i,j,K)), 0.5 * h_up), &
            dzInterface(i,j,K))
+
+      ! update interface positions so we can diffuse them
+      zNext(i,j,K) = zInt(i,j,K) + dzInterface(i,j,K)
+    enddo
+
+
+    ! solve diffusivity equation to smooth grid
+    ! upper diagonal coefficients: -kGrid(2:nz)
+    ! lower diagonal coefficients: -kGrid(1:nz-1)
+    ! diagonal coefficients:       1 + (kGrid(1:nz-1) + kGrid(2:nz))
+    do k = 1, nz
+      ! local depth for scaling diffusivity
+      depth = G%bathyT(i,j) * GV%m_to_H
+
+      ! set vertical grid diffusivity
+      kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
+           (CS%adaptZoomCoeff / (CS%adaptZoom * GV%m_to_H + 0.5*(zNext(i,j,K) + zNext(i,j,K+1))) + &
+           (1.0 - CS%adaptZoomCoeff) / depth)
+    enddo
+    !
+    ! initial denominator (first diagonal element)
+    b1 = 1.0
+    ! initial Q_1 = 1 - q_1 = 1 - 0/1
+    d1 = 1.0
+    ! work on all interior interfaces
+    do K = 2, nz
+      ! calculate numerator of Q_k
+      b_denom_1 = 1. + d1 * kGrid(k-1)
+      ! update denominator for k
+      b1 = 1.0 / (b_denom_1 + kGrid(k))
+
+      ! calculate q_k
+      c1(K) = kGrid(k) * b1
+      ! update Q_k = 1 - q_k
+      d1 = b_denom_1 * b1
+
+      ! update RHS
+      zNext(i,j,K) = b1 * (zNext(i,j,K) + kGrid(k-1)*zNext(i,j,K-1))
+    enddo
+    ! final substitution
+    do K = nz, 2, -1
+      zNext(i,j,K) = zNext(i,j,K) + c1(K)*zNext(i,j,K+1)
     enddo
 
     call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext(i,j,:), dzInterface(i,j,:))
+    ! convert from depth to z
     do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
     call adjust_interface_motion(nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:))
   enddo ; enddo
