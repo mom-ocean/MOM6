@@ -183,6 +183,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   logical :: coord_is_state_dependent, ierr
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
+  real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff
   integer :: nz_fixed_sfc, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
@@ -526,6 +527,19 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                              halocline_strat_tol=strat_tol)
     endif
 
+  endif
+
+  if (coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
+    call get_param(param_file, mod, "ADAPT_TIME_RATIO", adaptTimeRatio, &
+         "Ratio of ALE timestep to grid timescale.", units="s", default=1e-1)
+    call get_param(param_file, mod, "ADAPT_ZOOM_DEPTH", adaptZoom, &
+         "Depth of near-surface zooming region.", units="m", default=200.0)
+    call get_param(param_file, mod, "ADAPT_ZOOM_COEFF", adaptZoomCoeff, &
+         "Coefficient of near-surface zooming versus background diffusivity.", &
+         units="nondim", default=1.0)
+
+    call set_regrid_params(CS, adaptTimeRatio=adaptTimeRatio, adaptZoom=adaptZoom, &
+         adaptZoomCoeff=adaptZoomCoeff)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -2119,7 +2133,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol, integrate_downward_for_e)
+             halocline_strat_tol, integrate_downward_for_e, &
+             adaptTimeRatio, adaptZoom, adaptZoomCoeff)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2136,6 +2151,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
+  real, optional, intent(in) :: adaptTimeRatio, adaptZoom, adaptZoomCoeff
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
@@ -2155,6 +2171,9 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(adaptTimeRatio)) CS%adaptTimeRatio = adaptTimeRatio
+  if (present(adaptZoom)) CS%adaptZoom = adaptZoom
+  if (present(adaptZoomCoeff)) CS%adaptZoomCoeff = adaptZoomCoeff
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
