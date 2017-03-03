@@ -1273,7 +1273,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
 
-      call post_diags_TS_tendency(G,GV,CS,dtdia)
+      call post_diags_TS_tendency(G,GV,CS,CS%dt_trans)
 
       call disable_averaging(CS%diag)
 
