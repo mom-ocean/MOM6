@@ -1088,6 +1088,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
 
+        if (thermo_does_span_coupling) then
+          dtdia = dt_therm
+        else
+          dtdia = dt*min(ntstep,n_max-(n-1))
+        endif
+
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G%HI, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G%HI, haloshift=2)
