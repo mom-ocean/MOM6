@@ -48,6 +48,8 @@ type, public :: mixedlayer_restrat_CS ; private
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
                                    !! depth used for a smoother stream function at the base of
                                    !! the mixed-layer.
+  real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD
+                                   !! used in the MLE scheme. This simply multiplies MLD wherever used.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -197,6 +199,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
         enddo ! i-loop
       enddo ! k-loop
       do i = is-1, ie+1
+        CS%MLD(i,j) = CS%MLE_MLD_stretch * CS%MLD(i,j)
         if ((CS%MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) CS%MLD(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
@@ -210,10 +213,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
+      CS%MLD(i,j) = CS%MLE_MLD_stretch * MLD(i,j)
       ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
-      CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
+      CS%MLD_filtered(i,j) = max( CS%MLD(i,j), bFac*CS%MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
       CS%MLD(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
   else
@@ -671,6 +675,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   CS%MLE_density_diff = -9.e9
   CS%MLE_tail_dh = -9.e9
   CS%MLE_use_PBL_MLD = .false.
+  CS%MLE_MLD_stretch = -9.e9
 
   call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
@@ -706,6 +711,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
              "Fraction by which to extend the mixed-layer restratification\n"//&
              "depth used for a smoother stream function at the base of\n"//&
              "the mixed-layer.", units="nondim", default=0.0)
+    call get_param(param_file, mod, "MLE_MLD_STRETCH", CS%MLE_MLD_stretch, &
+             "A scaling coefficient for stretching/shrinking the MLD\n"//&
+             "used in the MLE scheme. This simply multiplies MLD wherever used.",&
+             units="nondim", default=1.0)
   endif
 
   CS%diag => diag
