@@ -2849,7 +2849,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! heat tendencies from lateral advection
   CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2')
+      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2',v_extensive=.true.)
   CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
       'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W/m2')
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
@@ -3076,6 +3076,10 @@ subroutine post_diags_TS_tendency(G, GV, CS, dt)
       work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * GV%H_to_kg_m2 * CS%tv%C_p
       CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
+!    if (is_root_pe()) print *,'Idt= ',Idt
+!    call hchksum(work3d,"******Th tendency*****", G%HI, haloshift=0)
+!    call hchksum(CS%Th_prev,"******Th_prev*****", G%HI, haloshift=0)
+
     if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, CS%diag)
     if (CS%id_Th_tendency_2d > 0) then
       do j=js,je ; do i=is,ie
