@@ -1318,7 +1318,7 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
     CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
           diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-          'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer')
+          'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
 
     ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
     ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).

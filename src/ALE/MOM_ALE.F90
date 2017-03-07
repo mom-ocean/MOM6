@@ -296,7 +296,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
         'Tendency from vertical remapping for heat',                        &
-         'W/m2')
+         'W/m2',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
@@ -313,7 +313,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
         'Tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
-        'kg m-2 s-1')
+        'kg m-2 s-1',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',                      &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,                         &
