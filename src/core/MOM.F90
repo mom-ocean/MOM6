@@ -3082,10 +3082,6 @@ subroutine post_diags_TS_tendency(G, GV, CS, dt)
       work3d(i,j,k)     = (CS%tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * GV%H_to_kg_m2 * CS%tv%C_p
       CS%Th_prev(i,j,k) =  CS%tv%T(i,j,k)*CS%h(i,j,k)
     enddo ; enddo ; enddo
-!    if (is_root_pe()) print *,'Idt= ',Idt
-!    call hchksum(work3d,"******Th tendency*****", G%HI, haloshift=0)
-!    call hchksum(CS%Th_prev,"******Th_prev*****", G%HI, haloshift=0)
-
     if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, CS%diag)
     if (CS%id_Th_tendency_2d > 0) then
       do j=js,je ; do i=is,ie
