@@ -141,6 +141,7 @@ type, public :: ocean_OBC_type
                                                       !! in the strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
+  logical :: extend_segments = .false.                !< If True, extend OBC segments (for testing)
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -229,6 +230,10 @@ subroutine open_boundary_config(G, param_file, OBC)
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
   ! Should this be set in MOM_input instead?
   if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
+
+  call get_param(param_file, mod, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
+                   "If true, extend OBC segments.", &
+                   default=.false.)
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
@@ -544,17 +549,19 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   this_kind = OBC_NONE
 
   ! Hack to extend segment by one point
-  if (Js_obc<Je_obc) then
-    Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
-  else
-    Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+  if (OBC%extend_segments) then
+    if (Js_obc<Je_obc) then
+      Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
+    else
+      Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+    endif
   endif
 
   if (Je_obc>Js_obc) then
-     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
+    OBC%segment(l_seg)%direction = OBC_DIRECTION_E
   else if (Je_obc<Js_obc) then
-     OBC%segment(l_seg)%direction = OBC_DIRECTION_W
-     j=js_obc;js_obc=je_obc;je_obc=j
+    OBC%segment(l_seg)%direction = OBC_DIRECTION_W
+    j=js_obc;js_obc=je_obc;je_obc=j
   endif
 
   OBC%segment(l_seg)%on_pe = .false.
@@ -595,7 +602,8 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+      if (OBC%extend_segments) &
+        Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -644,10 +652,12 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   this_kind = OBC_NONE
 
   ! Hack to extend segment by one point
-  if (Is_obc<Ie_obc) then
-    Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
-  else
-    Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+  if (OBC%extend_segments) then
+    if (Is_obc<Ie_obc) then
+      Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
+    else
+      Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+    endif
   endif
 
   if (Ie_obc>Is_obc) then
@@ -695,7 +705,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+      if (OBC%extend_segments) &
+        Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
