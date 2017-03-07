@@ -846,11 +846,11 @@ function set_v_at_u(v, h, G, i, j, k, OBC)
         segment=>OBC%segment(n)
         if (segment%on_pe) then
            if (segment%direction == OBC_DIRECTION_E) then
-              if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
+              if (i==segment%HI%IscB .and. j>=segment%HI%jsd .and. j<=segment%HI%jed) then
                  hwt(2) = 0.0; hwt(4) = 0.0
               endif
            endif
-           if (segment%direction == OBC_DIRECTION_W) then
+           if (i==segment%HI%IscB .and. segment%direction == OBC_DIRECTION_W) then
               if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
                  hwt(1) = 0.0; hwt(3) = 0.0
               endif
@@ -891,12 +891,12 @@ function set_u_at_v(u, h, G, i, j, k, OBC)
         segment=>OBC%segment(n)
         if (segment%on_pe) then
            if (segment%direction == OBC_DIRECTION_N) then
-              if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
+              if (j==segment%HI%JscB .and. i>=segment%HI%isd .and. i<=segment%HI%ied) then
                  hwt(3) = 0.0; hwt(4) = 0.0
               endif
            endif
            if (segment%direction == OBC_DIRECTION_S) then
-              if (i>=segment%HI%isd .and. i<=segment%HI%ied) then
+              if (j==segment%HI%JscB .and. i>=segment%HI%isd .and. i<=segment%HI%ied) then
                  hwt(1) = 0.0; hwt(2) = 0.0
               endif
            endif
