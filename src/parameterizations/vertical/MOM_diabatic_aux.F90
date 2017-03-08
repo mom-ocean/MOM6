@@ -960,7 +960,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
         fluxes%netMassIn(i,j) = 0.0
       endif
     enddo
- 
+
     ! Apply the surface boundary fluxes in three steps:
     ! A/ update mass, temp, and salinity due to all terms except mass leaving
     !    ocean (and corresponding outward heat content), and ignoring penetrative SW.
@@ -1108,7 +1108,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
       ! Check if trying to apply fluxes over land points
       elseif((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
-        
+
         if (.not. CS%ignore_fluxes_over_land) then
            call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
            write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
@@ -1117,7 +1117,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
            call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
                                  "Mass loss over land?")
-        endif   
+        endif
 
       endif
 
@@ -1141,7 +1141,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     ! SW penetrative heating uses the updated thickness from above.
 
     ! Save temperature before increment with SW heating
-    ! and initialize CS%penSWflux_diag to zero.  
+    ! and initialize CS%penSWflux_diag to zero.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k)     = T2d(i,k)
@@ -1173,25 +1173,25 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
-    ! Also diagnose the penetrative SW heat flux at base of layer.  
+    ! Also diagnose the penetrative SW heat flux at base of layer.
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
-      ! convergence of SW into a layer 
+      ! convergence of SW into a layer
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
 
-      ! Perform a cumulative sum upwards from bottom to 
-      ! diagnose penetrative SW flux at base of tracer cell. 
-      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.  
-      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock. 
+      ! Perform a cumulative sum upwards from bottom to
+      ! diagnose penetrative SW flux at base of tracer cell.
+      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.
+      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock.
       ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
       ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
       if(CS%id_penSWflux_diag > 0) then
         do k=nz,1,-1 ; do i=is,ie
           CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
         enddo ; enddo
-      endif 
+      endif
 
     endif
 
