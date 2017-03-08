@@ -108,6 +108,10 @@ type, public :: diabatic_aux_CS ; private
                              !! freezing temperature when making frazil.  The
                              !! default is false, which will be faster but is
                              !! inappropriate with ice-shelf cavities.
+  logical :: ignore_fluxes_over_land    !< If true, the model does not check
+                             !! if fluxes are applied over land points. This
+                             !! flag must be used when the ocean is coupled with
+                             !! sea ice and ice shelves and use_ePBL = true.
   logical :: use_river_heat_content !< If true, assumes that ice-ocean boundary
                              !! has provided a river heat content. Otherwise, runoff
                              !! is added with a temperature of the local SST.
@@ -491,7 +495,9 @@ subroutine insert_brine(h, tv, G, GV, fluxes, nkmb, CS, dt, id_brine_lay)
 
     do k=1,nz
       do i=is,ie
-        T(i,k)=tv%T(i,j,k); S(i,k)=tv%S(i,j,k); h_2d(i,k)=h(i,j,k)
+        T(i,k)=tv%T(i,j,k); S(i,k)=tv%S(i,j,k)
+        ! avoid very small thickness
+        h_2d(i,k)=MAX(h(i,j,k), GV%Angstrom)
       enddo
 
       call calculate_density(T(:,k), S(:,k), p_ref_cv, Rcv(:,k), is, &
@@ -954,7 +960,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
         fluxes%netMassIn(i,j) = 0.0
       endif
     enddo
-
+ 
     ! Apply the surface boundary fluxes in three steps:
     ! A/ update mass, temp, and salinity due to all terms except mass leaving
     !    ocean (and corresponding outward heat content), and ignoring penetrative SW.
@@ -1102,12 +1108,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 
       ! Check if trying to apply fluxes over land points
       elseif((abs(netHeat(i))+abs(netSalt(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
-        call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
-        write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
+        
+        if (.not. CS%ignore_fluxes_over_land) then
+           call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (land)')
+           write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
+           write(0,*) 'applyBoundaryFluxesInOut(): netHeat,netSalt,netMassIn,netMassOut=',&
                    netHeat(i),netSalt(i),netMassIn(i),netMassOut(i)
-        call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
-                              "Mass loss over land?")
+
+           call MOM_error(FATAL, "MOM_diabatic_driver.F90, applyBoundaryFluxesInOut(): "//&
+                                 "Mass loss over land?")
+        endif   
+
       endif
 
       ! If anything remains after the k-loop, then we have grounded out, which is a problem.
@@ -1130,7 +1141,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     ! SW penetrative heating uses the updated thickness from above.
 
     ! Save temperature before increment with SW heating
-    ! and initialize CS%penSWflux_diag to zero.
+    ! and initialize CS%penSWflux_diag to zero.  
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k)     = T2d(i,k)
@@ -1162,25 +1173,25 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     enddo ; enddo
 
     ! Diagnose heating (W/m2) applied to a grid cell from SW penetration
-    ! Also diagnose the penetrative SW heat flux at base of layer.
+    ! Also diagnose the penetrative SW heat flux at base of layer.  
     if(CS%id_penSW_diag > 0 .or. CS%id_penSWflux_diag > 0) then
 
-      ! convergence of SW into a layer
+      ! convergence of SW into a layer 
       do k=1,nz ; do i=is,ie
         CS%penSW_diag(i,j,k) = (T2d(i,k)-CS%penSW_diag(i,j,k))*h(i,j,k) * Idt * tv%C_p * GV%H_to_kg_m2
       enddo ; enddo
 
-      ! Perform a cumulative sum upwards from bottom to
-      ! diagnose penetrative SW flux at base of tracer cell.
-      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.
-      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock.
+      ! Perform a cumulative sum upwards from bottom to 
+      ! diagnose penetrative SW flux at base of tracer cell. 
+      ! CS%penSWflux_diag(i,j,k=1)    is penetrative shortwave at top of ocean.  
+      ! CS%penSWflux_diag(i,j,k=kbot+1) is zero, since assume no SW penetrates rock. 
       ! CS%penSWflux_diag = rsdo  and CS%penSW_diag = rsdoabsorb
       ! rsdoabsorb(k) = rsdo(k) - rsdo(k+1), so that rsdo(k) = rsdo(k+1) + rsdoabsorb(k)
       if(CS%id_penSWflux_diag > 0) then
         do k=nz,1,-1 ; do i=is,ie
           CS%penSWflux_diag(i,j,k) = CS%penSW_diag(i,j,k) + CS%penSWflux_diag(i,j,k+1)
         enddo ; enddo
-      endif
+      endif 
 
     endif
 
@@ -1199,7 +1210,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   if (CS%id_penSWflux_diag > 0) call post_data(CS%id_penSWflux_diag, CS%penSWflux_diag, CS%diag)
   if (CS%id_nonpenSW_diag  > 0) call post_data(CS%id_nonpenSW_diag , CS%nonpenSW_diag , CS%diag)
 
-  if (numberOfGroundings>0) then
+! The following check will be ignored if ignore_fluxes_over_land = true
+  if (numberOfGroundings>0 .and. .not. CS%ignore_fluxes_over_land) then
     do i = 1, min(numberOfGroundings, maxGroundings)
       call forcing_SinglePointPrint(fluxes,G,iGround(i),jGround(i),'applyBoundaryFluxesInOut (grounding)')
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
@@ -1286,6 +1298,12 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
                  units="nondim", default=0.8)
 
   if (use_ePBL) then
+    call get_param(param_file, mod, "IGNORE_FLUXES_OVER_LAND", CS%ignore_fluxes_over_land,&
+         "If true, the model does not check if fluxes are being applied\n"//&
+         "over land points. This is needed when the ocean is coupled \n"//&
+         "with ice shelves and sea ice, since the sea ice mask needs to \n"//&
+         "be different than the ocean mask to avoid sea ice formation \n"//&
+         "under ice shelves. This flag only works when use_ePBL = True.", default=.false.)
     call get_param(param_file, mod, "DO_RIVERMIX", CS%do_rivermix, &
                  "If true, apply additional mixing whereever there is \n"//&
                  "runoff, so that it is mixed down to RIVERMIX_DEPTH \n"//&

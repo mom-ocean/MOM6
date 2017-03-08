@@ -213,11 +213,11 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 !       flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
 
   type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
+  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure  
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
-  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
+  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)  
   type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units 
   real,                                       intent(in)  :: evap_CFL_limit
   real,                                       intent(in)  :: minimum_forcing_depth
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: in_flux_optional ! The total time-integrated amount of tracer!
@@ -256,13 +256,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
     do j=js,je ; do i=is,ie
       in_flux(i,j) = in_flux_optional(i,j)
     enddo; enddo
-  endif
+  endif    
   if(present(out_flux_optional)) then
-    do j=js,je ; do i=is,ie
+    do j=js,je ; do i=is,ie 
       out_flux(i,j) = out_flux_optional(i,j)
     enddo ; enddo
-  endif
-
+  endif    
+  
   Idt = 1.0/dt
   numberOfGroundings = 0
 
@@ -317,7 +317,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
 
           ! Update the forcing by the part to be consumed within the present k-layer.
           ! If fractionOfForcing = 1, then updated netMassIn, netHeat, and netSalt vanish.
-          netMassIn(i) = netMassIn(i) - dThickness
+          netMassIn(i) = netMassIn(i) - dThickness          
           dTracer = dTracer + in_flux_1d(i)
           in_flux_1d(i) = 0.0
 
@@ -365,23 +365,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
           if (h2d(i,k) > 0.) then
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             Tr2d(i,k)    = (hOld*Tr2d(i,k) + dTracer)*Ithickness
-          elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): netTr,netH=',in_flux_1d(i)-out_flux_1d(i),netMassInOut(i)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
-            call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
-                           "Complete mass loss in column!")
           endif
 
         enddo ! k
 
-      ! Check if trying to apply fluxes over land points
-      elseif((abs(in_flux_1d(i))+abs(out_flux_1d(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): in_flux, out_flux, netMassIn,netMassOut=',&
-                   in_flux_1d(i), out_flux_1d(i),netMassIn(i),netMassOut(i)
-        call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
-                              "Mass loss over land?")
       endif
 
       ! If anything remains after the k-loop, then we have grounded out, which is a problem.
