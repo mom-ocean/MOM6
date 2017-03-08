@@ -107,7 +107,9 @@ type, public :: regridding_CS
   real :: adaptTimeRatio = 1e-1
   real :: adaptAlpha     = 1.0
   real :: adaptZoom      = 200.0
-  real :: adaptZoomCoeff = 1.0
+  real :: adaptZoomCoeff = 0.0
+  real :: adaptBuoyCoeff = 0.0
+  real :: adaptDrho0     = 0.5
 
   type(zlike_CS),  pointer :: zlike_CS  => null()
   type(sigma_CS),  pointer :: sigma_CS  => null()
@@ -184,7 +186,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   logical :: coord_is_state_dependent, ierr
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
-  real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptAlpha
+  real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
   integer :: nz_fixed_sfc, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
@@ -538,12 +540,15 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call get_param(param_file, mod, "ADAPT_ZOOM_COEFF", adaptZoomCoeff, &
          "Coefficient of near-surface zooming diffusivity.", &
          units="nondim", default=0.2)
+    call get_param(param_file, mod, "ADAPT_BUOY_COEFF", adaptBuoyCoeff, &
+         "Coefficient of buoyancy diffusivity.", &
+         units="nondim", default=0.8)
     call get_param(param_file, mod, "ADAPT_ALPHA", adaptAlpha, &
          "Scaling on optimisation tendency.", &
          units="nondim", default=1.0)
 
     call set_regrid_params(CS, adaptTimeRatio=adaptTimeRatio, adaptZoom=adaptZoom, &
-         adaptZoomCoeff=adaptZoomCoeff, adaptAlpha=adaptAlpha)
+         adaptZoomCoeff=adaptZoomCoeff, adaptBuoyCoeff=adaptBuoyCoeff, adaptAlpha=adaptAlpha)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -1407,27 +1412,34 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! local variables
   integer :: i, j, k, nz ! indices and dimension lengths
-  real :: h_up, b1, b_denom_1, d1, depth
+  real :: h_up, b1, b_denom_1, d1, depth, drdz
   ! temperature, salinity and pressure on interfaces
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)-1) :: tInt, sInt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: tInt, sInt
+  ! current interface positions and after tendency term is applied
+  ! positive downward
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zInt, zNext
-  real, dimension(SZK_(GV)-1) :: alpha, beta ! drho/dT and drho/dS
-  real, dimension(SZK_(GV)) :: kGrid, c1 ! grid diffusivity on layers
+  real, dimension(SZK_(GV)+1) :: alpha, beta ! drho/dT and drho/dS
+  real, dimension(SZK_(GV)) :: kGrid, c1 ! grid diffusivity on layers, and tridiagonal work array
 
   nz = GV%ke
 
   ! position surface at z = 0.
-  ! XXX maybe we should work bottom-up here?
   zInt(:,:,1) = 0.
   zNext(:,:,1) = 0.
 
   ! work on interior interfaces
   do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-    tInt(i,j,K-1) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
-    sInt(i,j,K-1) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
-    zInt(i,j,K)   = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
+    tInt(i,j,K) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
+    sInt(i,j,K) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
+    zInt(i,j,K) = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
   enddo ; enddo ; enddo
-  ! set the bottom interface too
+
+  ! top and bottom temp/salt interfaces are just the layer
+  ! average values
+  tInt(:,:,1) = tv%T(:,:,1) ; tInt(:,:,nz+1) = tv%T(:,:,nz)
+  sInt(:,:,1) = tv%S(:,:,1) ; sInt(:,:,nz+1) = tv%S(:,:,nz)
+
+  ! set the bottom interface depth
   zInt(:,:,nz+1)  = zInt(:,:,nz) + h(:,:,nz)
   zNext(:,:,nz+1) = zInt(:,:,nz+1)
 
@@ -1442,62 +1454,65 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
     ! up (j-1)
     if (G%mask2dT(i,j-1) > 0.) then
       call calculate_density_derivs( &
-           0.5 * (tInt(i,j,:)    + tInt(i,j-1,:)), &
-           0.5 * (sInt(i,j,:)    + sInt(i,j-1,:)), &
+           0.5 * (tInt(i,j,2:nz) + tInt(i,j-1,2:nz)), &
+           0.5 * (sInt(i,j,2:nz) + sInt(i,j-1,2:nz)), &
            0.5 * (zInt(i,j,2:nz) + zInt(i,j-1,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+           alpha, beta, 2, nz - 1, tv%eqn_of_state)
 
       dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (beta  * (sInt(i,j-1,:) - sInt(i,j,:)) + &
-                  alpha * (tInt(i,j-1,:) - tInt(i,j,:)))
+                 (alpha(2:nz) * (tInt(i,j-1,2:nz) - tInt(i,j,2:nz)) + &
+                  beta(2:nz)  * (sInt(i,j-1,2:nz) - sInt(i,j,2:nz)))
     endif
     ! down (j+1)
     if (G%mask2dT(i,j+1) > 0.) then
       call calculate_density_derivs( &
-           0.5 * (tInt(i,j,:)    + tInt(i,j+1,:)), &
-           0.5 * (sInt(i,j,:)    + sInt(i,j+1,:)), &
+           0.5 * (tInt(i,j,2:nz) + tInt(i,j+1,2:nz)), &
+           0.5 * (sInt(i,j,2:nz) + sInt(i,j+1,2:nz)), &
            0.5 * (zInt(i,j,2:nz) + zInt(i,j+1,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+           alpha, beta, 2, nz - 1, tv%eqn_of_state)
 
       dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (beta  * (sInt(i,j+1,:) - sInt(i,j,:)) + &
-                  alpha * (tInt(i,j+1,:) - tInt(i,j,:)))
+                 (alpha(2:nz) * (tInt(i,j+1,2:nz) - tInt(i,j,2:nz)) + &
+                  beta(2:nz)  * (sInt(i,j+1,2:nz) - sInt(i,j,2:nz)))
     endif
     ! left (i-1)
     if (G%mask2dT(i-1,j) > 0.) then
       call calculate_density_derivs( &
-           0.5 * (tInt(i,j,:)    + tInt(i-1,j,:)), &
-           0.5 * (sInt(i,j,:)    + sInt(i-1,j,:)), &
+           0.5 * (tInt(i,j,2:nz) + tInt(i-1,j,2:nz)), &
+           0.5 * (sInt(i,j,2:nz) + sInt(i-1,j,2:nz)), &
            0.5 * (zInt(i,j,2:nz) + zInt(i-1,j,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+           alpha, beta, 2, nz - 1, tv%eqn_of_state)
 
       dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (beta  * (sInt(i-1,j,:) - sInt(i,j,:)) + &
-                  alpha * (tInt(i-1,j,:) - tInt(i,j,:)))
+                 (alpha(2:nz) * (tInt(i-1,j,2:nz) - tInt(i,j,2:nz)) + &
+                  beta(2:nz)  * (sInt(i-1,j,2:nz) - sInt(i,j,2:nz)))
     endif
     ! right (i+1)
     if (G%mask2dT(i+1,j) > 0.) then
       call calculate_density_derivs( &
-           0.5 * (tInt(i,j,:)    + tInt(i+1,j,:)), &
-           0.5 * (sInt(i,j,:)    + sInt(i+1,j,:)), &
+           0.5 * (tInt(i,j,2:nz) + tInt(i+1,j,2:nz)), &
+           0.5 * (sInt(i,j,2:nz) + sInt(i+1,j,2:nz)), &
            0.5 * (zInt(i,j,2:nz) + zInt(i+1,j,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 1, nz - 1, tv%eqn_of_state)
+           alpha, beta, 2, nz - 1, tv%eqn_of_state)
 
       dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (beta  * (sInt(i+1,j,:) - sInt(i,j,:)) + &
-                  alpha * (tInt(i+1,j,:) - tInt(i,j,:)))
+                 (alpha(2:nz) * (tInt(i+1,j,2:nz) - tInt(i,j,2:nz)) + &
+                  beta(2:nz)  * (sInt(i+1,j,2:nz) - sInt(i,j,2:nz)))
     endif
 
     ! at this point, dzInterface contains the local neutral density curvature at
     ! h-points, on interfaces
     ! we need to divide by drho/dz to give an interfacial displacement
-    call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,2:nz) * GV%H_to_Pa, &
-         alpha, beta, 1, nz - 1, tv%eqn_of_state)
+    !
+    ! a positive curvature means we're too light relative to adjacent columns,
+    ! so dzInterface needs to be positive too (push the interface deeper)
+    call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,:) * GV%H_to_Pa, &
+         alpha, beta, 1, nz + 1, tv%eqn_of_state)
     do K = 2, nz
       ! TODO make lower bound here configurable
       dzInterface(i,j,K) = dzInterface(i,j,K) * (0.5 * (h(i,j,k-1) + h(i,j,k))) / &
-           max(alpha(K-1) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
-               beta(K-1)  * (tv%S(i,j,k) - tv%S(i,j,k-1)), 1e-20)
+           max(alpha(K) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
+               beta(K)  * (tv%S(i,j,k) - tv%S(i,j,k-1)), 1e-20)
 
       ! don't move the interface so far that it would tangle with another
       ! interface in the direction we're moving (or exceed a Nyquist limit
@@ -1510,21 +1525,31 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
       zNext(i,j,K) = zInt(i,j,K) + dzInterface(i,j,K)
     enddo
 
-
     ! solve diffusivity equation to smooth grid
     ! upper diagonal coefficients: -kGrid(2:nz)
     ! lower diagonal coefficients: -kGrid(1:nz-1)
     ! diagonal coefficients:       1 + (kGrid(1:nz-1) + kGrid(2:nz))
+    !
+    ! first, calculate the diffusivities within layers
     do k = 1, nz
       ! local depth for scaling diffusivity
       depth = G%bathyT(i,j) * GV%m_to_H
 
+      ! calculate the dr bit of drdz
+      drdz = 0.5 * (alpha(K) + alpha(K+1)) * (tInt(i,j,K+1) - tInt(i,j,K)) + &
+             0.5 * (beta(K)  + beta(K+1))  * (sInt(i,j,K+1) - sInt(i,j,K))
+      ! divide by dz from the new interface positions
+      drdz = drdz / (zNext(i,j,K) - zNext(i,j,K+1) + GV%H_subroundoff)
+      ! don't do weird stuff in unstably-stratified regions
+      drdz = max(drdz, 0.)
+
       ! set vertical grid diffusivity
       kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
            (CS%adaptZoomCoeff / (CS%adaptZoom * GV%m_to_H + 0.5*(zNext(i,j,K) + zNext(i,j,K+1))) + &
-           (1.0 - CS%adaptZoomCoeff) / depth)
+           (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
+           (1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff) / depth)
     enddo
-    !
+
     ! initial denominator (first diagonal element)
     b1 = 1.0
     ! initial Q_1 = 1 - q_1 = 1 - 0/1
@@ -2138,7 +2163,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol, integrate_downward_for_e, &
-             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptAlpha)
+             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2155,7 +2180,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
-  real, optional, intent(in) :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptAlpha
+  real, optional, intent(in) :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
@@ -2178,6 +2203,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(adaptTimeRatio)) CS%adaptTimeRatio = adaptTimeRatio
   if (present(adaptZoom)) CS%adaptZoom = adaptZoom
   if (present(adaptZoomCoeff)) CS%adaptZoomCoeff = adaptZoomCoeff
+  if (present(adaptBuoyCoeff)) CS%adaptBuoyCoeff = adaptBuoyCoeff
   if (present(adaptAlpha)) CS%adaptAlpha = adaptAlpha
 
   select case (CS%regridding_scheme)
