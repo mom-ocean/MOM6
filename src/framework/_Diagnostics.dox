@@ -1,5 +1,7 @@
 /*! \page Diagnostics Diagnostics
 
+\brief Controlling run-time diagnostics and how to add diagnostics to the code
+
 MOM6 diagnostics are orchestrated via the FMS diag_manager, as for previous versions of MOM.
 However, because MOM6 is a general coordinate model, the model native-coordinae output can be less familiar to users of earlier generations of MOM.
 To alleviate this problem, MOM6 provides both "native" and "remapped" diagnostics;
