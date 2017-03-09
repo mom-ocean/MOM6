@@ -841,27 +841,6 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   hwt(3) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
   hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * mask2dCv(i+1,J)
 
-
-  ! if (present(OBC)) then
-  !    if (associated(OBC)) then
-  !    do n=1,OBC%number_of_segments
-  !       segment=>OBC%segment(n)
-  !       if (segment%on_pe) then
-  !          if (segment%direction == OBC_DIRECTION_E) then
-  !             if (i==segment%HI%IscB .and. j>=segment%HI%jsd .and. j<=segment%HI%jed) then
-  !                hwt(2) = 0.0; hwt(4) = 0.0
-  !             endif
-  !          endif
-  !          if (i==segment%HI%IscB .and. segment%direction == OBC_DIRECTION_W) then
-  !             if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
-  !                hwt(1) = 0.0; hwt(3) = 0.0
-  !             endif
-  !          endif
-  !       endif
-  !    enddo
-  !    endif
-  ! endif
-
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
@@ -886,26 +865,6 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   hwt(2) = (h(i,j,k) + h(i+1,j,k)) * mask2dCu(I,j)
   hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * mask2dCu(I-1,j+1)
   hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * mask2dCu(I,j+1)
-
-  ! if (present(OBC)) then
-  !    if (associated(OBC)) then
-  !    do n=1,OBC%number_of_segments
-  !       segment=>OBC%segment(n)
-  !       if (segment%on_pe) then
-  !          if (segment%direction == OBC_DIRECTION_N) then
-  !             if (j==segment%HI%JscB .and. i>=segment%HI%isd .and. i<=segment%HI%ied) then
-  !                hwt(3) = 0.0; hwt(4) = 0.0
-  !             endif
-  !          endif
-  !          if (segment%direction == OBC_DIRECTION_S) then
-  !             if (j==segment%HI%JscB .and. i>=segment%HI%isd .and. i<=segment%HI%ied) then
-  !                hwt(1) = 0.0; hwt(2) = 0.0
-  !             endif
-  !          endif
-  !       endif
-  !    enddo
-  !    endif
-  ! endif
 
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_u_at_v = 0.0
