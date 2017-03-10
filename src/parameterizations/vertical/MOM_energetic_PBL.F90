@@ -76,7 +76,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use CVmix_kpp, only : cvmix_kpp_efactor_model
 use CVmix_kinds_and_types, only : cvmix_global_params_type
-use MOM_wave_interface, only: wave_parameters_CS
+use MOM_wave_interface, only: wave_parameters_CS, Get_LA_waves, Get_LA_windsea
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -444,6 +444,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   !/BGR added Aug24,2016 for adding iteration to get boundary layer depth
   !    - needed to compute new mixing length.
   real :: MLD_guess, MLD_found ! Mixing Layer depth guessed/found for iteration, in m.
+  real :: entrainment_depth
   real :: max_MLD, min_MLD ! Iteration bounds, in m, which are adjusted at each step
                            !  - These are initialized based on surface/bottom
                            !  1. The iteration guesses a value (possibly from
@@ -467,6 +468,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
   logical :: OBL_CONVERGED ! Flag for convergence of MLD
   integer :: OBL_IT        ! Iteration counter
+  integer :: spinup=0 ! this is super hacky never commit this
 !### These need to be made into run-time parameters.
   integer :: MAX_OBL_IT=20 ! Set maximum number of iterations.  Probably
                            !  best as an input parameter, but then may want
@@ -495,15 +497,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: B_STAR ! Buoyancy flux over ustar
   real :: STAB_SCALE ! Composite of Stabilizing length scales:
                      !  Ekman scale and Monin-Obukhov scale.
-  real :: C_MO = 1. ! Constant in STAB_SCALE for Monin-Obukhov
-  real :: C_EK = 2. ! Constant in STAB_SCALE for Ekman length
+  real,save :: C_MO = 1.8 ! Constant in STAB_SCALE for Monin-Obukhov
+  real,save :: C_EK = 2.5 ! Constant in STAB_SCALE for Ekman length
   real :: MLD_over_STAB ! Mixing layer depth divided by STAB_SCALE
   real :: MSTAR_MIX! The value of mstar (Proportionality of TKE to drive mixing to ustar
                     ! cubed) which is computed as a function of latitude, boundary layer depth,
                     ! and the Monin-Obhukov depth.
   !Langmuir turbulence addition (need proper documentation)
-  real :: H_LA, USy_LA, USx_LA, wavenum, cmnfact, stkmag, wavedir, currentdir,&
-          wave_current_mis, LASQ
+  real :: current_dir
   integer ::b
   !/
   REAL :: EKRATIO, MORATIO, LAmod
@@ -734,35 +735,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ! Initialize ENHANCE_M to 1
       ENHANCE_M=1.e0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
+        entrainment_depth = mld_guess / 1.2
         if (CS%Use_LA_windsea) then !Using Li et al. formula
-          call get_LA_windsea( u_star_mean, MLD_guess, GV, LA)
+          call get_LA_windsea( u_star_mean, entrainment_depth, GV, LA)
         elseif (CS%USE_LA_waves) then ! Using Stokes drift via waves
           if (present(Waves).and.associated(Waves)) then
-            ! Need to compute the Langmuir number at h points.
-            ! Comparison to LES shows EPBL enhancement correlates
-            ! with Stokes drift averaged over 4% of entrainment depth
-            H_LA = min(-0.1, -.04*MLD_guess)
-            USy_LA = 0.0; USx_LA = 0.0
-            if (WAVES%PartitionMode==1) then
-              do b=1,WAVES%NumBands
-                ! Deep-water
-                wavenum = (2.*3.1415*WAVES%Freq_Cen(b))**2/ GV%g_Earth
-                ! Factor includes analytical integration of e(2kz)
-                !  - divided by (-H_LA) to get average from integral.
-                CMNFACT = 1./(2.*wavenum)*EXP(H_LA*2.0*wavenum)/(-H_LA)
-                USy_LA = USy_LA + 0.5 * ( WAVES%STKy0(i,j,b) &
-                     + WAVES%STKy0(i,j-1,b) ) * CMNFACT
-                USx_LA = USx_LA + 0.5 * ( WAVES%STKx0(i,j,b) &
-                     + WAVES%STKy0(i-1,j,b) ) * CMNFACT
-              enddo
-            endif
-            STKMAG = sqrt(USx_LA**2 + USy_LA**2)
-            wavedir = atan2(USy_LA,USx_LA)
-            currentdir = atan2(v(i,1),u(i,1))
-            wave_current_mis = cos(max(1.e-6,wavedir-currentdir))
-            STKMAG = STKMAG * wave_current_mis +1.e-8
-            LASQ =  u_star / STKMAG
-            LA = sqrt(LASQ)
+            current_dir = atan2(u(i,1),v(i,1)) 
+            call get_LA_waves ( Waves, GV, G%ke,i,j,u_star_mean, entrainment_depth, current_dir, LA, H=h(i,:))
           else 
             ! Shoud include option to prevent ever getting here.
             LA = 1.e8
@@ -775,10 +754,16 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           !New Mix_LT/Mix_ST scaling
           ENHANCE_M = (1.+CS%LT_ENHANCE_COEF*LA**CS%LT_ENHANCE_EXP)
         elseif (CS%LT_Enhance_Form==3) then
-          EKratio = abs(MLD_guess*absf(i)/u_star)
-          MOratio = abs(MLD_guess/u_star**3*buoy_Flux(i,j)*0.4)
-          LAmod = 0.75 + LA + 0.55*MOratio + -0.8*EKratio
-          ENHANCE_M = min(7.,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
+          EKratio = abs(entrainment_depth*absf(i)/u_star)
+          MOratio = abs(entrainment_depth/u_star**3*buoy_Flux(i,j)*0.4)
+          if (buoy_flux(i,j).lt.0) then
+            LAmod = 0.5 + LA + 5.*MOratio + -0.5*EKratio
+          else
+            LAmod = 0.5 + LA + 1.*MOratio + -0.5*EKratio
+          endif   
+          ENHANCE_M = (1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP)
+          print*,ENHANCE_M,la,LAMOD,mld_guess
+          enhance_m=min(7.,enhance_m)
         endif
         
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
@@ -789,7 +774,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (.not.CS%Use_Mstar_Fixed) then
           ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
           ! First solve for the TKE to PE length scale
-          MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
+          MLD_over_Stab = entrainment_depth / Stab_Scale - CS%MSTAR_XINT
           if ((MLD_over_Stab) .le. 0.0) then
             !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
             MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
@@ -810,6 +795,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
             endif
           endif
+          if (spinup<3*4) then
+             mstar_mix=0.0
+             if (i==3 .and. j==3 .and. obl_it==1) then
+                spinup=spinup+1
+             endif
+             print*,spinup
+          endif
+          
+          print*,MLD_guess,stab_scale,MSTAR_Mix
 
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_M*GV%Rho0)*((U_Star**3))
@@ -1854,141 +1848,6 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G)
   enddo ; enddo
 end subroutine energetic_PBL_get_MLD
 
-!> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
-subroutine ust_2_u10_coare3p5(USTair,U10,GV)
-  real, intent(in)  :: USTair
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out) :: U10
-  real, parameter :: vonkar = 0.4
-  real, parameter :: nu=1e-6
-  real :: z0sm, z0, z0rough, u10a, alpha, CD
-  integer :: CT
-
-  ! Uses empirical formula for z0 to convert ustar_air to u10 based on the
-  !  COARE 3.5 paper (Edson et al., 2013)
-  !alpha=m*U10+b
-  !Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
-  ! m=0.0017 reproduces the curve in their figure 6.
-
-  z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
-  u10 = USTair/sqrt(0.001);  !Guess for u10
-  u10a = 1000;
-
-  CT=0
-  do while (abs(u10a/u10-1.)>0.001)
-    CT=CT+1
-    u10a = u10
-    alpha = min(0.028,0.0017 * u10 - 0.005)
-    z0rough = alpha * USTair**2/GV%g_Earth ! Compute z0rough from ustar guess
-    z0=z0sm+z0rough
-    CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
-    u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
-                       ! ends and checks for convergence...CT counter
-                       ! makes sure loop doesn't run away if function
-                       ! doesn't converge.  This code was produced offline
-                       ! and converged rapidly (e.g. 2 cycles)
-                       ! for ustar=0.0001:0.0001:10.
-    if (CT>20) then
-      u10 = USTair/sqrt(0.0015) ! I don't expect to get here, but just
-                              !  in case it will output a reasonable value.
-      exit
-    endif
-  enddo
-  return
-end subroutine ust_2_u10_coare3p5
-
-subroutine get_LA_windsea(ustar, hbl, GV, LA)
-! Original description:
-! This function returns the enhancement factor, given the 10-meter
-! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
-! Update (Jan/25):
-! Converted from function to subroutine, now returns Langmuir number.
-! Computs 10m wind internally, so only ustar and hbl need passed to
-! subroutine.
-!
-! Qing Li, 160606
-! BGR port from CVMix to MOM6 Jan/25/2017
-! BGR change output to LA from Efactor
-! BGR remove u10 input
-
-! Input
-  real, intent(in) :: &
-       ! water-side surface friction velocity (m/s)
-       ustar, &
-       ! boundary layer depth (m)
-       hbl
-  type(verticalGrid_type), intent(in) :: GV
-  real, intent(out) :: LA
-! Local variables
-  ! parameters
-  real, parameter :: &
-       ! ratio of U19.5 to U10 (Holthuijsen, 2007)
-       u19p5_to_u10 = 1.075, &
-       ! ratio of mean frequency to peak frequency for
-       ! Pierson-Moskowitz spectrum (Webb, 2011)
-       fm_to_fp = 1.296, &
-       ! ratio of surface Stokes drift to U10
-       us_to_u10 = 0.0162, &
-       ! loss ratio of Stokes transport
-       r_loss = 0.667
-  real :: us, hm0, fm, fp, vstokes, kphil, kstar
-  real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
-  real :: pi, u10
-  pi = 4.0*atan(1.0)
-  ! Computing u10 based on u_star and COARE 3.5 relationships
-  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
-  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
-    ! surface Stokes drift
-    us = us_to_u10*u10
-    !
-    ! significant wave height from Pierson-Moskowitz
-    ! spectrum (Bouws, 1998)
-    hm0 = 0.0246 *u10**2
-    !
-    ! peak frequency (PM, Bouws, 1998)
-    tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%g_Earth / tmp
-    !
-    ! mean frequency
-    fm = fm_to_fp * fp
-    !
-    ! total Stokes transport (a factor r_loss is applied to account
-    !  for the effect of directional spreading, multidirectional waves
-    !  and the use of PM peak frequency and PM significant wave height
-    !  on estimating the Stokes transport)
-    vstokes = 0.125 * PI * r_loss * fm * hm0**2
-    !
-    ! the general peak wavenumber for Phillips' spectrum
-    ! (Breivik et al., 2016) with correction of directional spreading
-    kphil = 0.176 * us / vstokes
-    !
-    ! surface layer averaged Stokes dirft with Stokes drift profile
-    ! estimated from Phillips' spectrum (Breivik et al., 2016)
-    ! the directional spreading effect from Webb and Fox-Kemper, 2015
-    ! is also included
-    kstar = kphil * 2.56
-    ! surface layer
-    z0 = 0.2 * abs(hbl)
-    z0i = 1.0 / z0
-    ! term 1 to 4
-    r1 = ( 0.151 / kphil * z0i -0.84 ) &
-         * ( 1.0 - exp(-2.0 * kphil * z0) )
-    r2 = -( 0.84 + 0.0591 / kphil * z0i ) &
-         *sqrt( 2.0 * PI * kphil * z0 ) &
-         *erfc( sqrt( 2.0 * kphil * z0 ) )
-    r3 = ( 0.0632 / kstar * z0i + 0.125 ) &
-         * (1.0 - exp(-2.0 * kstar * z0) )
-    r4 = ( 0.125 + 0.0946 / kstar * z0i ) &
-         *sqrt( 2.0 * PI *kstar * z0) &
-         *erfc( sqrt( 2.0 * kstar * z0 ) )
-    us_sl = us * (0.715 + r1 + r2 + r3 + r4)
-    !
-    LA = sqrt(ustar / us_sl)
-  else
-    LA=1.e8
-  endif
-endsubroutine Get_LA_windsea
-
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
@@ -2166,8 +2025,8 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
    call get_param(param_file, mod, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
                  "Exponent for Langmuir enhancement if LT_ENHANCE = 2",&
                  units="nondim", default=-1.5)
-   if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then
-      call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, then "//&
+   if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.(CS%USE_LA_Windsea .or. CS%Use_LA_Waves))) then
+      call MOM_error(FATAL, "If flags USE_LA_LI2016 and USE_LA_WAVES are false, then "//&
                  " LT_ENHANCE must be 0.")
   endif
   ! This gives a minimum decay scale that is typically much less than Angstrom.

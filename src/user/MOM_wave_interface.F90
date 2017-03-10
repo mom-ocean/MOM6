@@ -27,6 +27,8 @@ public Import_Stokes_Drift
 public StokesMixing
 public CoriolisStokes
 public Waves_end
+public get_LA_waves
+public get_LA_windsea
 
 !> Container for wave related parameters
 type, public:: wave_parameters_CS ;
@@ -77,6 +79,10 @@ private
   logical, public ::SurfaceStokesInRIb
   !^ True if surface Stokes drift should be used
   !  to enhance the denominator of bulk Richardson number.
+  logical, public :: WaveAgePeakFreq=.false.
+  real, public :: WaveAge = 0.8
+  real, public :: WaveWind = 10.0
+  !
   integer :: WaveMethod
   !^ Options for various wave methods
   !    Valid (tested) choices are:
@@ -134,7 +140,7 @@ character(len=40)  :: mod = "MOM_wave_interface" ! This module's name.
 ! Switches needed in import_stokes_drift
 integer, parameter :: NO_SCHEME = 0, FROMFILE = 1, DATAOVERRIDE =2,&
                       PARAMETRIC = 3, TESTPROF = 99;
-integer, parameter :: ELFOUHAILY = 1
+integer, parameter :: ELFOUHAILY = 1, DHH85 = 2
 
 ! For Test Prof
 Real :: TP_STKX0, TP_STKY0, TP_WVL
@@ -160,7 +166,8 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   character*(13), parameter :: DATAOVERRIDE_STRING = "DATA_OVERRIDE"
   character*(10), parameter :: TESTPROF_STRING = "TEST_PROF"
   character*(10), parameter :: ELF97_STRING = "ELF97"
-
+  character*(10), parameter :: DHH85_STRING = "DHH85"
+ 
   if (associated(CS)) then
      call MOM_error(WARNING, "wave_interface_init called with an associated"//&
                              "control structure.")
@@ -241,6 +248,18 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
         Print*,' so no waves are used.'
      case (ELF97_STRING)
         CS%SpecMethod = ELFOUHAILY
+     case (DHH85_STRING)
+        CS%SpecMethod = DHH85
+        call get_param(param_file,mod,"DHH85_AGE_FP",CS%WaveAgePeakFreq,   &
+             "Choose true to use waveage in peak frequency.", &
+             units='', default=.false.)
+        call get_param(param_file,mod,"DHH85_AGE",CS%WaveAge,   &
+             "Wave Age for DHH85 spectrum.", &
+             units='', default=1.2)
+        call get_param(param_file,mod,"DHH85_WIND",CS%WaveWind,   &
+             "Wind speed for DHH85 spectrum.", &
+             units='', default=10.0)
+
      endselect
   case (TESTPROF_STRING)
      CS%WaveMethod = TESTPROF
@@ -303,7 +322,7 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
   real    :: USy20pct, USx20pct, H20pct
   real    :: Top, MidPoint, Bottom
   real    :: DecayScale
-  real    :: CMN_FAC, WN
+  real    :: CMN_FAC, WN, US
   real, parameter :: PI=3.14159265359
   type(time_type) :: Day_Center
   integer :: ii, jj, kk, b, iim1, jjm1
@@ -439,7 +458,24 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
            enddo
         enddo
      enddo
-
+  elseif (CS%WaveMethod==PARAMETRIC) then   
+     if (CS%SpecMethod==DHH85) then
+        do ii=G%isc,G%iec
+           do jj=G%jsc,G%jec
+              bottom = 0.0
+              do kk=1, G%ke
+                 Top = Bottom
+                 jjm1 = max(jj-1,1)
+                 MidPoint = Bottom - GV%H_to_m * (h(ii,jj,kk)+h(ii,jjm1,kk))/4.
+                 Bottom = Bottom - GV%H_to_m *  (h(ii,jj,kk)+h(ii,jjm1,kk))/2.
+                 call DHH85_mid(CS,GV,FLUXES%ustar(ii,jj),Midpoint,US)
+                 ! Putting into x-direction for now
+                 CS%US_x(:,:,kk) = US
+                 CS%US_y(:,:,kk) = 0.0
+              enddo
+           enddo
+        enddo
+     endif
   else!Keep this else, fallback to 0 Stokes drift
      do ii=G%isdB,G%iedB
            do jj=G%jsd,G%jed
@@ -610,6 +646,218 @@ end subroutine Stokes_Drift_by_Data_Override
 !/
 !/
 !/
+subroutine get_LA_windsea(ustar, hbl, GV, LA)
+! Original description:
+! This function returns the enhancement factor, given the 10-meter
+! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+! Update (Jan/25):
+! Converted from function to subroutine, now returns Langmuir number.
+! Computs 10m wind internally, so only ustar and hbl need passed to
+! subroutine.
+!
+! Qing Li, 160606
+! BGR port from CVMix to MOM6 Jan/25/2017
+! BGR change output to LA from Efactor
+! BGR remove u10 input
+
+! Input
+  real, intent(in) :: &
+       ! water-side surface friction velocity (m/s)
+       ustar, &
+       ! boundary layer depth (m)
+       hbl
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out) :: LA
+! Local variables
+  ! parameters
+  real, parameter :: &
+       ! ratio of U19.5 to U10 (Holthuijsen, 2007)
+       u19p5_to_u10 = 1.075, &
+       ! ratio of mean frequency to peak frequency for
+       ! Pierson-Moskowitz spectrum (Webb, 2011)
+       fm_to_fp = 1.296, &
+       ! ratio of surface Stokes drift to U10
+       us_to_u10 = 0.0162, &
+       ! loss ratio of Stokes transport
+       r_loss = 0.667
+  real :: us, hm0, fm, fp, vstokes, kphil, kstar
+  real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
+  real :: pi, u10
+  pi = 4.0*atan(1.0)
+  ! Computing u10 based on u_star and COARE 3.5 relationships
+  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
+  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
+    ! surface Stokes drift
+    us = us_to_u10*u10
+    !
+    ! significant wave height from Pierson-Moskowitz
+    ! spectrum (Bouws, 1998)
+    hm0 = 0.0246 *u10**2
+    !
+    ! peak frequency (PM, Bouws, 1998)
+    tmp = 2.0 * PI * u19p5_to_u10 * u10
+    fp = 0.877 * GV%g_Earth / tmp
+    !
+    ! mean frequency
+    fm = fm_to_fp * fp
+    !
+    ! total Stokes transport (a factor r_loss is applied to account
+    !  for the effect of directional spreading, multidirectional waves
+    !  and the use of PM peak frequency and PM significant wave height
+    !  on estimating the Stokes transport)
+    vstokes = 0.125 * PI * r_loss * fm * hm0**2
+    !
+    ! the general peak wavenumber for Phillips' spectrum
+    ! (Breivik et al., 2016) with correction of directional spreading
+    kphil = 0.176 * us / vstokes
+    !
+    ! surface layer averaged Stokes dirft with Stokes drift profile
+    ! estimated from Phillips' spectrum (Breivik et al., 2016)
+    ! the directional spreading effect from Webb and Fox-Kemper, 2015
+    ! is also included
+    kstar = kphil * 2.56
+    ! surface layer
+    z0 = 0.2 * abs(hbl)
+    z0i = 1.0 / z0
+    ! term 1 to 4
+    r1 = ( 0.151 / kphil * z0i -0.84 ) &
+         * ( 1.0 - exp(-2.0 * kphil * z0) )
+    r2 = -( 0.84 + 0.0591 / kphil * z0i ) &
+         *sqrt( 2.0 * PI * kphil * z0 ) &
+         *erfc( sqrt( 2.0 * kphil * z0 ) )
+    r3 = ( 0.0632 / kstar * z0i + 0.125 ) &
+         * (1.0 - exp(-2.0 * kstar * z0) )
+    r4 = ( 0.125 + 0.0946 / kstar * z0i ) &
+         *sqrt( 2.0 * PI *kstar * z0) &
+         *erfc( sqrt( 2.0 * kstar * z0 ) )
+    us_sl = us * (0.715 + r1 + r2 + r3 + r4)
+    !
+    LA = sqrt(ustar / us_sl)
+  else
+    LA=1.e8
+  endif
+endsubroutine Get_LA_windsea
+
+!/
+!/
+!/
+subroutine Get_LA_waves(WAVES,GV,NK,I,J,ustar,MLD,currentdir,LA,H)
+  type(Wave_parameters_CS), pointer :: Waves
+  type(verticalGrid_type),  intent(in)    :: GV !< Ocean vertical grid
+  real, intent(in) :: ustar
+  real, intent(in) :: MLD
+  real, intent(in) :: currentdir
+  real, intent(out) :: LA
+  integer, intent(in) :: I,J,NK
+  real, intent(in),dimension(NK),optional :: H
+
+  real :: H_LA, USy_LA, USx_LA, wavenum
+  real :: cmnfact, stkmag, wavedir, wave_current_mis, lasq
+  real :: top, midpoint, bottom
+  integer :: b,kk
+!/
+  ! Compute averaging depth for Stokes drift
+  H_LA = min(-0.1, -0.04*MLD)
+  USy_LA = 0.0; USx_LA = 0.0
+  if (WAVES%WaveMethod==DATAOVERRIDE) then
+    do b=1,WAVES%NumBands
+      ! Deep water waves 
+      wavenum = ( 2.*3.1415*WAVES%Freq_Cen(b))**2/9.81
+      ! Factor includes analytical integration of e(2kz)
+      !  - divided by (-H_LA) to get average from integral.
+      CMNFACT = 1./(2.*wavenum)*EXP(H_LA*2.0*wavenum)/(-H_LA)
+      USy_LA = USy_LA + 0.5 * ( WAVES%STKy0(i,j,b) &
+           + WAVES%STKy0(i,j-1,b) ) * CMNFACT
+      USx_LA = USx_LA + 0.5 * ( WAVES%STKx0(i,j,b) &
+           + WAVES%STKy0(i-1,j,b) ) * CMNFACT
+    enddo
+  elseif (WAVES%WaveMethod==Parametric) then
+    bottom = 0.0
+    do kk=1, NK
+      Top = Bottom
+      MidPoint = Bottom - GV%H_to_m * h(kk)/2.
+      Bottom = Bottom - GV%H_to_m * h(kk)
+      if (H_LA .lt. Bottom) then !Whole cell within H_LA
+        USx_LA = USx_LA+WAVES%US_x(i,j,kk)/(GV%H_to_m * h(kk))
+        USy_LA = USx_LA+WAVES%US_y(i,j,kk)/(GV%H_to_m * h(kk))
+      elseif (H_LA .lt. top) then !partial cell within H_LA
+        USx_LA = USx_LA+WAVES%US_x(i,j,kk)/(top-h_LA)
+        USy_LA = USx_LA+WAVES%US_y(i,j,kk)/(top-h_LA)
+      endif
+    enddo
+    USx_LA=USx_LA/abs(h_LA)
+    USy_LA=USx_LA/abs(h_LA)
+  endif
+  STKMAG = sqrt(USx_LA**2 + USy_LA**2)
+  wavedir = atan2(USy_LA,USx_LA)
+  wave_current_mis = max(1.e-6,cos(wavedir-currentdir))
+  STKMAG = STKMAG * wave_current_mis +1.e-8
+  LASQ =  ustar / STKMAG
+  LA = sqrt(LASQ)
+
+end subroutine Get_LA_waves
+!/
+!/
+!/
+subroutine DHH85_mid(WAVES,GV, ust, zpt,US)
+!Taken from Qing Li (Brown)
+! use for comparing MOM6 simulation to his LES
+! computed at z mid point (I think) and not depth averaged.
+! Should be fine to integrate in frequency from 0.1 to sqrt(-0.2*grav*2pi/dz
+  !/
+  type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
+  type(Wave_parameters_CS), pointer                         :: Waves  !< Surface wave related control structure.
+  real, intent(in) :: UST,ZPT
+  real, intent(out) :: US
+  !/
+  real :: ann, Bnn, Snn, Cnn, Dnn
+  real :: omega_peak, omega, u10, WA, domega
+  real :: omega_min, omega_max, wavespec, Stokes
+  real :: pi
+  integer :: Nomega, OI
+  !/
+  WA = WAVES%WaveAge
+  u10 = WAVES%WaveWind
+  pi = 4.0*atan(1.0)
+  !/
+  omega_min = 0.1 !Hz
+  ! Cut off at 30cm for now...
+  omega_max = 6.5 !~sqrt(0.2*GV%g_earth*2*pi/0.3)
+  domega=0.05
+  NOmega = (omega_max-omega_min)/domega
+  !
+  if (WAVES%WaveAgePeakFreq) then
+    omega_peak = GV%G_EARTH/WA/u10  
+  else   
+    omega_peak = 2. * pi * 0.13 * GV%g_earth / U10
+  endif
+  !/
+  Ann = 0.006 * WAVES%WaveAge**(-0.55)
+  Bnn = 1.0
+  Snn = 0.08 * (1.0 + 4.0 * WAVES%WaveAge**3)
+  Cnn = 1.7
+  if (WA.lt. 1.) then
+    Cnn = Cnn - 6.0*log10(WA)
+  endif
+  !/
+  US = 0.0
+  omega = omega_min+domega/2.
+  do oi = 1,nomega-1
+    Dnn = exp ( -0.5 * (omega-omega_peak)**2 / Snn**2 / omega_peak**2 )
+    ! wavespec units = m2s
+    wavespec = (Ann * GV%g_earth**2 / (omega_peak*omega**4 ) ) &
+         *exp(-bnn*(omega_peak/omega)**4)*Cnn**Dnn
+    ! Stokes units m  (multiply by frequency range for units of m/s)
+    Stokes = 2.0 * wavespec * omega**3 * &
+         exp( 2.0 * omega**2 * zpt/GV%g_earth)/GV%g_earth
+    US=US+Stokes*domega
+    omega = omega + domega
+  enddo
+
+end subroutine DHH85_mid
+!/
+!/
+!/
 subroutine StokesMixing(G, GV, DT, h, u, v, WAVES, FLUXES)
   ! Arguments
   type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
@@ -723,7 +971,48 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
      enddo
   enddo
 end subroutine CoriolisStokes
+!> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
+subroutine ust_2_u10_coare3p5(USTair,U10,GV)
+  real, intent(in)  :: USTair
+  type(verticalGrid_type), intent(in) :: GV
+  real, intent(out) :: U10
+  real, parameter :: vonkar = 0.4
+  real, parameter :: nu=1e-6
+  real :: z0sm, z0, z0rough, u10a, alpha, CD
+  integer :: CT
 
+  ! Uses empirical formula for z0 to convert ustar_air to u10 based on the
+  !  COARE 3.5 paper (Edson et al., 2013)
+  !alpha=m*U10+b
+  !Note in Edson et al. 2013, eq. 13 m is given as 0.017.  However,
+  ! m=0.0017 reproduces the curve in their figure 6.
+
+  z0sm = 0.11 * nu / USTair; !Compute z0smooth from ustar guess
+  u10 = USTair/sqrt(0.001);  !Guess for u10
+  u10a = 1000;
+
+  CT=0
+  do while (abs(u10a/u10-1.)>0.001)
+    CT=CT+1
+    u10a = u10
+    alpha = min(0.028,0.0017 * u10 - 0.005)
+    z0rough = alpha * USTair**2/GV%g_Earth ! Compute z0rough from ustar guess
+    z0=z0sm+z0rough
+    CD = ( vonkar / log(10/z0) )**2 ! Compute CD from derived roughness
+    u10 = USTair/sqrt(CD);!Compute new u10 from derived CD, while loop
+                       ! ends and checks for convergence...CT counter
+                       ! makes sure loop doesn't run away if function
+                       ! doesn't converge.  This code was produced offline
+                       ! and converged rapidly (e.g. 2 cycles)
+                       ! for ustar=0.0001:0.0001:10.
+    if (CT>20) then
+      u10 = USTair/sqrt(0.0015) ! I don't expect to get here, but just
+                              !  in case it will output a reasonable value.
+      exit
+    endif
+  enddo
+  return
+end subroutine ust_2_u10_coare3p5
 !> Clear pointers, deallocate memory
 subroutine Waves_end(CS)
 !/
@@ -744,4 +1033,6 @@ subroutine Waves_end(CS)
 !/
   return
 end subroutine Waves_end
+
+
 end module MOM_wave_interface
