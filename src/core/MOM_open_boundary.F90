@@ -121,6 +121,8 @@ type, public :: ocean_OBC_type
                                                       !! in the global domain use Flather BCs.
   logical :: Flather_v_BCs_exist_globally = .false.   !< True if any meridional velocity points
                                                       !! in the global domain use Flather BCs.
+  logical :: oblique_BCs_exist_globally = .false.     !< True if any velocity points
+                                                      !! in the global domain use oblique BCs.
   logical :: nudged_u_BCs_exist_globally = .false.    !< True if any velocity points in the
                                                       !! global domain use nudged BCs.
   logical :: nudged_v_BCs_exist_globally = .false.    !< True if any velocity points in the
@@ -576,12 +578,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
-      OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%oblique = .true.
-      OBC%Flather_u_BCs_exist_globally = .true.
+      OBC%oblique_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
@@ -679,12 +680,11 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
-      OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%oblique = .true.
-      OBC%Flather_v_BCs_exist_globally = .true.
+      OBC%oblique_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
@@ -1374,16 +1374,16 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       I=segment%HI%iscB
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
-          segment%grad_normal(J,1,k) = uvel(I-1,j+1,k)-uvel(I-1,j,k)
-          segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
+          segment%grad_normal(J,1,k) = (uvel(I-1,j+1,k)-uvel(I-1,j,k)) * G%mask2dBu(I-1,J)
+          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! western segment
       I=segment%HI%iscB
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
-          segment%grad_normal(J,1,k) = uvel(I+1,j+1,k)-uvel(I+1,j,k)
-          segment%grad_normal(J,2,k) = uvel(I,j+1,k)-uvel(I,j,k)
+          segment%grad_normal(J,1,k) = (uvel(I+1,j+1,k)-uvel(I+1,j,k)) * G%mask2dBu(I+1,J)
+          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif
@@ -1397,16 +1397,16 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       J=segment%HI%jscB
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
-          segment%grad_normal(I,1,k) = vvel(i+1,J-1,k)-vvel(i,J-1,k)
-          segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
+          segment%grad_normal(I,1,k) = (vvel(i+1,J-1,k)-vvel(i,J-1,k)) * G%mask2dBu(I,J-1)
+          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! south segment
       J=segment%HI%jscB
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
-          segment%grad_normal(I,1,k) = vvel(i+1,J+1,k)-vvel(i,J+1,k)
-          segment%grad_normal(I,2,k) = vvel(i+1,J,k)-vvel(i,J,k)
+          segment%grad_normal(I,1,k) = (vvel(i+1,J+1,k)-vvel(i,J+1,k)) * G%mask2dBu(I,J+1)
+          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif

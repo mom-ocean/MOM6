@@ -1088,6 +1088,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
 
+        if (thermo_does_span_coupling) then
+          dtdia = dt_therm
+        else
+          dtdia = dt*min(ntstep,n_max-(n-1))
+        endif
+
         if (CS%debug) then
           call uchksum(u,"Pre-diabatic u", G%HI, haloshift=2)
           call vchksum(v,"Pre-diabatic v", G%HI, haloshift=2)
@@ -1273,7 +1279,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
 
-      call post_diags_TS_tendency(G,GV,CS,dtdia)
+      call post_diags_TS_tendency(G,GV,CS,CS%dt_trans)
 
       call disable_averaging(CS%diag)
 
@@ -2849,7 +2855,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! heat tendencies from lateral advection
   CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2')
+      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2',v_extensive=.true.)
   CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
       'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W/m2')
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
