@@ -708,13 +708,14 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
 end subroutine post_data_2d_low
 
-subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
+subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
   type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
+  real, target, optional, intent(in) :: alt_h(:,:,:)
 
 ! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
@@ -728,6 +729,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
   integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
+  real, dimension(:,:,:), pointer :: h_diag
+
+  if(present(alt_h)) then
+    h_diag => alt_h
+  else
+    h_diag => diag_cs%h
+  endif
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
 
@@ -752,7 +760,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call vertically_reintegrate_diag_field( &
               diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then
@@ -776,7 +784,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then
@@ -800,7 +808,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz+1))
       call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then

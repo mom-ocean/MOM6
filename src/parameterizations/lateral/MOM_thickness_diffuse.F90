@@ -56,6 +56,9 @@ type, public :: thickness_diffuse_CS ; private
   real, pointer :: GMwork(:,:)       => NULL()  !< Work by thickness diffusivity (W m-2)
   real, pointer :: diagSlopeX(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
   real, pointer :: diagSlopeY(:,:,:) => NULL()  !< Diagnostic: zonal neutral slope (nondim)
+  real, dimension(:,:,:), allocatable :: h_pre  !< If the mass tranports associated with this
+                                                !! routine are remapped in the diag manager, the
+                                                !< starting layer thicknesses will need to be saved
 
   !>@{
   !! Diagnostic identifier
@@ -121,6 +124,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   real :: hv(SZI_(G), SZJ_(G))       ! v-thickness (H)
   real :: KH_u_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
   real :: KH_v_lay(SZI_(G), SZJ_(G)) ! layer ave thickness diffusivities (m2/sec)
+  real, dimension(:,:,:), allocatable :: h_pre ! h at the beginning of this routine may need to be
+                                               ! stored if transports are being remapped
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_thickness_diffuse:"// &
          "Module must be initialized before it is used.")
@@ -136,6 +141,12 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     if (ASSOCIATED(MEKE%GM_src)) then
       do j=js,je ; do i=is,ie ; MEKE%GM_src(i,j) = 0. ; enddo ; enddo
     endif
+  endif
+
+  if ((CS%id_uhGM > 0) .or. (CS%id_vhGM > 0)) then
+    do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      CS%h_pre(i,j,k) = h(i,j,k)
+    enddo ; enddo ; enddo ;
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
@@ -353,8 +364,8 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   ! offer diagnostic fields for averaging
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, CDp%uhGM, CS%diag)
-    if (CS%id_vhGM > 0)   call post_data(CS%id_vhGM, CDp%vhGM, CS%diag)
+    if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, CDp%uhGM, CS%diag, alt_h = CS%h_pre)
+    if (CS%id_vhGM > 0)   call post_data(CS%id_vhGM, CDp%vhGM, CS%diag, alt_h = CS%h_pre)
     if (CS%id_GMwork > 0) call post_data(CS%id_GMwork, CS%GMwork, CS%diag)
     if (CS%id_KH_u > 0)   call post_data(CS%id_KH_u, KH_u, CS%diag)
     if (CS%id_KH_v > 0)   call post_data(CS%id_KH_v, KH_v, CS%diag)
@@ -1765,6 +1776,10 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
            'Time Mean Diffusive Meridional Thickness Flux', flux_units, &
            x_cell_method='sum', v_extensive=.true.)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
+
+  if ((CS%id_uhGM > 0) .or. (CS%id_vhGM>0)) then
+    allocate(CS%h_pre(G%isd:G%ied,G%jsd:G%jed,G%ke)) ; CS%h_pre(:,:,:) = 0.0
+  endif
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
    'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',               &
