@@ -134,7 +134,7 @@ type, public ::  ocean_public_type
   type(coupler_2d_bc_type) :: fields    ! A structure that may contain an
                                         ! array of named tracer-related fields.
   integer                  :: avg_kount ! Used for accumulating averages of this type.
-  integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
+  integer, dimension(2)    :: axes = 0  ! Axis numbers that are available
                                         ! for I/O using this surface data.
 end type ocean_public_type
 
@@ -337,9 +337,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
 
   if(ASSOCIATED(OS%grid%Domain%maskmap)) then
      call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       maskmap=OS%grid%Domain%maskmap)
+                                       OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap)
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc)
+     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                       OS%MOM_CSp%diag)
   endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
@@ -712,9 +713,10 @@ end subroutine ocean_model_save_restart
 
 !=======================================================================
 
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap)
   type(domain2D), intent(in)             :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
+  type(diag_ctrl), intent(in)            :: diag
   logical, intent(in), optional          :: maskmap(:,:)
   integer :: xsz, ysz, layout(2)
   ! ice-ocean-boundary fields are always allocated using absolute indicies
@@ -746,6 +748,7 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
   Ocean_sfc%sea_lev = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
   Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
   Ocean_sfc%area    = 0.0
+  Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
 
 end subroutine initialize_ocean_public_type
 
