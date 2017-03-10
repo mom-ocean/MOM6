@@ -504,8 +504,11 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call set_target_densities(CS, rho_target)
     deallocate(rho_target)
   endif
-  ! \todo This line looks like it would overwrite the target densities set just above?
-  if (coordinateMode(coord_mode) == REGRIDDING_RHO) call set_target_densities_from_GV(GV, CS)
+  if (coordinateMode(coord_mode) == REGRIDDING_RHO) then
+    call set_target_densities_from_GV(GV, CS)
+    call log_param(param_file, mod, "!TARGET_DENSITIES", CS%target_density, &
+             'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
+  endif
 
   if (main_parameters) then
     call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
