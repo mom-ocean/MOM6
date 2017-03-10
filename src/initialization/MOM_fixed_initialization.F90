@@ -147,6 +147,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
   endif
 
+  call initialize_grid_rotation_angle(G, PF)
+
 ! Compute global integrals of grid values for later use in scalar diagnostics !
   call compute_global_grid_integrals(G)
 
