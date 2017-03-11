@@ -765,26 +765,26 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             if ( CS%MSTAR_CAP.le.0.0) then !No cap.
               MSTAR_MIX = max(& ! 1st term if balance of rotation and stabilizing
                                 ! the balance is f(L_Ekman,L_Obukhov)
-                              CS%MSTAR_COEF*sqrt(-b_star/u_star/absf(i)),&
+                              CS%MSTAR_COEF*sqrt(-b_star/u_star/(absf(i)+1.e-10)),&
                               min(& ! 2nd term for forced stratification limited
                                  1.25,& !.5/von Karman (Obukhov limit)
                                  ! 3rd term for rotation (Ekman length) limited
                                  CS%C_EK*log(max(&!mstar->0 at Ekman limit
                                                  1.,&
-                                                 u_star/absf(i)/mld_guess))))
+                                                 u_star/(absf(i)+1.e-10)/mld_guess))))
             else
               MSTAR_MIX = min( & ! Sets a cap. The cap should be large and just
                                !  meant to be a safety net.
                            CS%MSTAR_CAP, &
                            max(& ! 1st term if balance of rotation and stabilizing
                                  ! the balance is f(L_Ekman,L_Obukhov)
-                              CS%MSTAR_COEF*sqrt(-b_star/u_star/absf(i)),&
+                              CS%MSTAR_COEF*sqrt(-b_star/u_star/(absf(i)+1.e-10)),&
                               min(& ! 2nd term for forced stratification limited
                                  1.25,& !.5/von Karman (Obukhov limit)
                                  ! 3rd term for rotation (Ekman length) limited
                                  CS%C_EK*log(max(&!mstar->0 at Ekman limit
                                                  1.,&
-                                                 u_star/absf(i)/mld_guess)))))
+                                                 u_star/(absf(i)+1.e-10)/mld_guess)))))
             endif!cap for mstar_mode==2
           endif!mstar_mode==1 or ==2
 
