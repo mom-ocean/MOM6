@@ -1663,33 +1663,29 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
 
   allocate(CS%mask2dCu(IsdB:IedB,jsd:jed)) ; CS%mask2dCu = G%mask2dCu
   allocate(CS%mask2dCv(isd:ied,JsdB:JedB)) ; CS%mask2dCv = G%mask2dCv
-  
+
   if (associated(CS%OBC)) then
     do n=1,CS%OBC%number_of_segments
       segment=>CS%OBC%segment(n)
       if  (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_E) then
         I=segment%HI%IscB
-        do j=segment%HI%jsd,segment%HI%jed
-          CS%mask2dCv(i+1,J-1)=0.0
+        do J=segment%HI%JsdB,segment%HI%JedB
           CS%mask2dCv(i+1,J)=0.0
         enddo
       else if (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IscB
-        do j=segment%HI%jsd,segment%HI%jed
-          CS%mask2dCv(i,J-1)=0.0
+        do J=segment%HI%JsdB,segment%HI%JedB
           CS%mask2dCv(i,J)=0.0
         enddo
       else if (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JscB
-        do i=segment%HI%isd,segment%HI%ied
-          CS%mask2dCu(I-1,j+1)=0.0
+        do I=segment%HI%IsdB,segment%HI%IedB
           CS%mask2dCu(I,j+1)=0.0
         enddo
       else if (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JscB
-        do i=segment%HI%isd,segment%HI%ied
-          CS%mask2dCu(I-1,j)=0.0
+        do I=segment%HI%IsdB,segment%HI%IedB
           CS%mask2dCu(I,j)=0.0
         enddo
       endif
