@@ -234,8 +234,9 @@ subroutine open_boundary_config(G, param_file, OBC)
   if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
 
   call get_param(param_file, mod, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
-                   "If true, extend OBC segments.", &
-                   default=.false.)
+                   "If true, extend OBC segments. This option is used to recover\n"//&
+                   "legacy solutions dependent on an incomplete implementaion of OBCs.\n"//&
+                   "This option will be obsoleted in the future.", default=.false.)
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
