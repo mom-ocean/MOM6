@@ -68,7 +68,8 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-
+use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary, only : OBC_segment_type
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -127,7 +128,9 @@ type, public :: set_visc_CS ; private
   integer :: id_bbl_thick_v = -1, id_kv_bbl_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
-
+  type(ocean_OBC_type), pointer :: OBC => NULL()
+  real, allocatable, dimension(:,:) :: mask2dCu, mask2dCv  ! masks used to disable contributions from
+                            ! velocities outside of the domain where open boundaries are active.
 end type set_visc_CS
 
 contains
@@ -384,11 +387,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           hwtot = hwtot + hweight
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
-            u_at_v = set_u_at_v(u, h, G, i, j, k)
+            u_at_v = set_u_at_v(u, h, G, i, j, k, CS%mask2dCu)
             hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
@@ -755,13 +758,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
           if (m==1) then
             if (Rayleigh > 0.0) then
-              v_at_u = set_v_at_u(v, h, G, i, j, k)
+              v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
               visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
-              u_at_v = set_u_at_v(u, h, G, i, j, k)
+              u_at_v = set_u_at_v(u, h, G, i, j, k,CS%mask2dCu)
               visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
@@ -820,20 +823,24 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
 end subroutine set_viscous_BBL
 
-function set_v_at_u(v, h, G, i, j, k)
+function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   type(ocean_grid_type),                     intent(in) :: G
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
   integer,                                   intent(in) :: i, j, k
+  real, dimension(SZI_(G),SZJB_(G)),  intent(in) :: mask2dCv
   real                                                  :: set_v_at_u
+  integer                                            :: n
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  type(OBC_segment_type), pointer :: segment
 
-  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * G%mask2dCv(i,J-1)
-  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * G%mask2dCv(i+1,J-1)
-  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * G%mask2dCv(i,J)
-  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * G%mask2dCv(i+1,J)
+  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * mask2dCv(i,J-1)
+  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
+  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
+  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * mask2dCv(i+1,J)
+
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
@@ -841,20 +848,24 @@ function set_v_at_u(v, h, G, i, j, k)
            (hwt(4) * v(i+1,J,k) + hwt(1) * v(i,J-1,k))) / hwt_tot
 end function set_v_at_u
 
-function set_u_at_v(u, h, G, i, j, k)
+function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   type(ocean_grid_type),                  intent(in) :: G
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
+  integer                                            :: n
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  type(OBC_segment_type), pointer :: segment
 
-  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * G%mask2dCu(I-1,j)
-  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * G%mask2dCu(I,j)
-  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * G%mask2dCu(I-1,j+1)
-  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * G%mask2dCu(I,j+1)
+  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * mask2dCu(I-1,j)
+  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * mask2dCu(I,j)
+  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * mask2dCu(I-1,j+1)
+  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * mask2dCu(I,j+1)
+
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
@@ -1184,7 +1195,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
@@ -1429,7 +1440,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            u_at_v = set_u_at_v(u, h, G, i, J, k)
+            u_at_v = set_u_at_v(u, h, G, i, J, k,CS%mask2dCu)
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + &
                                            u_at_v**2 + U_bg_sq)
           endif
@@ -1608,7 +1619,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 
 end subroutine set_visc_register_restarts
 
-subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
+subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G
   type(verticalGrid_type), intent(in)    :: GV
@@ -1616,6 +1627,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   type(diag_ctrl), target, intent(inout) :: diag
   type(vertvisc_type),     intent(inout) :: visc
   type(set_visc_CS),       pointer       :: CS
+  type(ocean_OBC_type),    pointer       :: OBC
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -1629,8 +1641,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   real    :: Csmag_chan_dflt, smag_const1, TKE_decay_dflt, bulk_Ri_ML_dflt
   real    :: Kv_background
   real    :: omega_frac_dflt
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, i, j, n
   logical :: use_kappa_shear, adiabatic, differential_diffusion, use_omega
+  type(OBC_segment_type), pointer :: segment  ! pointer to OBC segment type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_set_visc"  ! This module's name.
@@ -1642,8 +1655,46 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS)
   endif
   allocate(CS)
 
+  CS%OBC => OBC
+
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+
+  allocate(CS%mask2dCu(IsdB:IedB,jsd:jed)) ; CS%mask2dCu = G%mask2dCu
+  allocate(CS%mask2dCv(isd:ied,JsdB:JedB)) ; CS%mask2dCv = G%mask2dCv
+
+  if (associated(CS%OBC)) then
+    do n=1,CS%OBC%number_of_segments
+      segment=>CS%OBC%segment(n)
+      if  (.not. segment%on_pe) cycle
+      if (segment%direction == OBC_DIRECTION_E) then
+        I=segment%HI%IscB
+        do j=segment%HI%jsd,segment%HI%jed
+          CS%mask2dCv(i+1,J-1)=0.0
+          CS%mask2dCv(i+1,J)=0.0
+        enddo
+      else if (segment%direction == OBC_DIRECTION_W) then
+        I=segment%HI%IscB
+        do j=segment%HI%jsd,segment%HI%jed
+          CS%mask2dCv(i,J-1)=0.0
+          CS%mask2dCv(i,J)=0.0
+        enddo
+      else if (segment%direction == OBC_DIRECTION_N) then
+        J=segment%HI%JscB
+        do i=segment%HI%isd,segment%HI%ied
+          CS%mask2dCu(I-1,j+1)=0.0
+          CS%mask2dCu(I,j+1)=0.0
+        enddo
+      else if (segment%direction == OBC_DIRECTION_S) then
+        J=segment%HI%JscB
+        do i=segment%HI%isd,segment%HI%ied
+          CS%mask2dCu(I-1,j)=0.0
+          CS%mask2dCu(I,j)=0.0
+        enddo
+      endif
+    enddo
+  endif
 
   CS%diag => diag
 
