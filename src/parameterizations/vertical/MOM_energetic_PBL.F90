@@ -160,9 +160,13 @@ type, public :: energetic_PBL_CS ; private
   real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
   real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
                              !  ends of the linear fit within the well constrained region.
+  real :: C_EK = 0.17       ! Hard coded Ekman coefficient for mstar_mode==2
+  real :: MSTAR_COEF = 0.3  ! Hard coded mstar_coefficient for mstar_mode==2
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
-  logical :: Use_Mstar_Fixed = .true. ! A logical to revert to a fixed m*
+  integer :: MSTAR_MODE = 0 ! An integer to determine which formula is used to
+                            !  set mstar
+  integer :: CONST_MSTAR=0,MLD_o_OBUKHOV=1,EKMAN_o_OBUKHOV=2
   logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
   logical :: Use_LA_windsea = .false.
@@ -633,7 +637,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       ! TKE for mixing = TKE production minus TKE dissipation
       Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
 
-      if (CS%Use_Mstar_Fixed) then
+      if (CS%Mstar_Mode.eq.CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
 
@@ -731,30 +735,58 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
         sfc_connected(i) = .true.
 
-        if (.not.CS%Use_Mstar_Fixed) then
-          ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
-          ! First solve for the TKE to PE length scale
-          MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
-          if ((MLD_over_Stab) .le. 0.0) then
-            !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
-            MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
-          else
-            if (CS%MSTAR_CAP>=0.) then
-              if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
-                !If using flat cap (or if using asymptotic cap but within linear regime we
-                ! can make use of same code)
-                MSTAR_mix = min(CS%MSTAR_CAP, &
-                     CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT)
-              else
-                !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
-                MSTAR_mix = CS%MSTAR_CAP - &
-                     (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)+CS%MSTAR_A2)**(CS%MSTAR_N)
-              endif
+        if (CS%Mstar_Mode.gt.0) then
+        ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
+        ! First solve for the TKE to PE length scale
+          if (CS%MSTAR_MODE.eq.CS%MLD_o_OBUKHOV) then
+            MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
+            if ((MLD_over_Stab) .le. 0.0) then
+              !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
+              MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
             else
-              !No cap if negative cap value given.
-              MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
+              if (CS%MSTAR_CAP>=0.) then
+                if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
+                !If using flat cap (or if using asymptotic cap
+                !   but within linear regime we can make use of same code)
+                  MSTAR_mix = min(CS%MSTAR_CAP, &
+                     CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT)
+                else
+                  !Asymptote to MSTAR_CAP as MLD_over_Stab -> infinity
+                  MSTAR_mix = CS%MSTAR_CAP - &
+                       (CS%MSTAR_B2*(MLD_over_Stab-CS%MSTAR_XINT_UP)&
+                       +CS%MSTAR_A2)**(CS%MSTAR_N)
+                endif
+              else
+                !No cap if negative cap value given.
+                MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
+              endif
             endif
-          endif
+          elseif (CS%MSTAR_MODE.eq.CS%EKMAN_o_OBUKHOV) then
+            if ( CS%MSTAR_CAP.le.0.0) then !No cap.
+              MSTAR_MIX = max(& ! 1st term if balance of rotation and stabilizing
+                                ! the balance is f(L_Ekman,L_Obukhov)
+                              CS%MSTAR_COEF*sqrt(-b_star/u_star/(absf(i)+1.e-10)),&
+                              min(& ! 2nd term for forced stratification limited
+                                 1.25,& !.5/von Karman (Obukhov limit)
+                                 ! 3rd term for rotation (Ekman length) limited
+                                 CS%C_EK*log(max(&!mstar->0 at Ekman limit
+                                                 1.,&
+                                                 u_star/(absf(i)+1.e-10)/mld_guess))))
+            else
+              MSTAR_MIX = min( & ! Sets a cap. The cap should be large and just
+                               !  meant to be a safety net.
+                           CS%MSTAR_CAP, &
+                           max(& ! 1st term if balance of rotation and stabilizing
+                                 ! the balance is f(L_Ekman,L_Obukhov)
+                              CS%MSTAR_COEF*sqrt(-b_star/u_star/(absf(i)+1.e-10)),&
+                              min(& ! 2nd term for forced stratification limited
+                                 1.25,& !.5/von Karman (Obukhov limit)
+                                 ! 3rd term for rotation (Ekman length) limited
+                                 CS%C_EK*log(max(&!mstar->0 at Ekman limit
+                                                 1.,&
+                                                 u_star/(absf(i)+1.e-10)/mld_guess)))))
+            endif!cap for mstar_mode==2
+          endif!mstar_mode==1 or ==2
 
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_V*GV%Rho0)*((U_Star**3))
@@ -1944,6 +1976,12 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 ! Set default, read and log parameters
   call log_version(param_file, mod, version, "")
 
+  call get_param(param_file, mod, "MSTAR_MODE", CS%mstar_mode, &
+                 "An integer switch for how to compute MSTAR. \n"//&
+                 "    0 for constant MSTAR\n"//&
+                 "    1 for MSTAR w/ MLD in stabilizing limit\n"//&
+                 "    2 for MSTAR w/ L_E/L_O in stabilizing limit.",&
+                 "units=nondim",default=0)
   call get_param(param_file, mod, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
@@ -1953,26 +1991,23 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "units=nondim", default=2.0)
   call get_param(param_file, mod, "MSTAR_CAP", CS%mstar_cap, &
                  "Maximum value of mstar allowed in model if non-negative\n"//&
-                 "(used if MSTAR_FIXED=false).",&
+                 "(used if MSTAR_MODE>0).",&
                  "units=nondim", default=-1.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
-                 "and the length scale ratio (used if MSTAR_FIXED=false).",&
+                 "and the length scale ratio (used if MSTAR_MODE=1).",&
                  "units=nondim", default=1.0)
   call get_param(param_file, mod, "MSTAR_XINT", CS%mstar_xint, &
                  "The value of the length scale ratio where the mstar \n"//&
-                 "is linear above (used if MSTAR_FIXED=false).",&
+                 "is linear above (used if MSTAR_MODE=1).",&
                  "units=nondim", default=-0.25)
   call get_param(param_file, mod, "MSTAR_AT_XINT", CS%mstar_at_xint, &
                  "The value of mstar at MSTAR_XINT \n"//&
-                 "(used if MSTAR_FIXED=false).",&
+                 "(used if MSTAR_MODE=1).",&
                  "units=nondim", default=0.13)
-  call get_param(param_file, mod, "MSTAR_FIXED", CS%Use_Mstar_Fixed, &
-                 "True to use a fixed value of mstar, if false mstar depends \n"//&
-                 "on the composite Obhukov length and Ekman length.","units=nondim",&
-                 default=.true.)
   call get_param(param_file, mod, "MSTAR_FLATCAP", CS%MSTAR_FLATCAP, &
-                 "Set false to use asmptotic cap or defaults to true to use flat cap."&
+                 "Set false to use asymptotic cap, defaults to true.\n"//&
+                 "(used only if MSTAR_MODE=1)"&
                  ,"units=nondim",default=.true.)
   call get_param(param_file, mod, "NSTAR", CS%nstar, &
                  "The portion of the buoyant potential energy imparted by \n"//&
