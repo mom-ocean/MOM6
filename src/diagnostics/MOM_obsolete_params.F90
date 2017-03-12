@@ -181,6 +181,8 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
+  call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
+
   ! Write the file version number to the model log.
   call log_version(param_file, mod, version)
 
