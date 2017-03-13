@@ -604,8 +604,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) &
-        Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+      if (OBC%extend_segments) then
+        Js_obc = Js_obc + 1
+        Je_obc = Je_obc - 1
+      endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -706,8 +708,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) &
-        Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+      if (OBC%extend_segments) then
+        Is_obc = Is_obc + 1
+        Ie_obc = Ie_obc - 1
+      endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
