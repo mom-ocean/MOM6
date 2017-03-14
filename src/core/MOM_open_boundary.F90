@@ -1077,10 +1077,10 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
         if (segment%direction == OBC_DIRECTION_E) then
           areaCu(I,j) = G%areaT(i,j)
          !G%IareaCu(I,j) = G%IareaT(i,j) ?
-	else   ! West
+        else   ! West
           areaCu(I,j) = G%areaT(i+1,j)
          !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
-	endif
+        endif
       enddo
     else
       ! Sweep along v-segments and for %specified BC points reset the v-point area which was masked out
@@ -1092,7 +1092,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
         else      ! North
           areaCu(i,J) = G%areaT(i,j)
          !G%IareaCu(i,J) = G%IareaT(i,j) ?
-	endif
+        endif
       enddo
     endif
   enddo
