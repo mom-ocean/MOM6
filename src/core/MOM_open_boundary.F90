@@ -999,35 +999,65 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   type(dyn_horgrid_type),           intent(in)    :: G !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
-  integer :: i, j
+  integer :: i, j, n
   logical :: bc_north, bc_south, bc_east, bc_west
+  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(OBC)) return
 
-  do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
-    bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
-    if (associated(OBC%OBC_segment_u)) then
-      if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
-          .and. .not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
-      if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
-          .and. .not. OBC%segment(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
+  if (.not.(OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
+    return
+
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe .or. segment%specified) cycle
+    if (segment%direction == OBC_DIRECTION_E) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        depth(i+1,j) = depth(i,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_W) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        depth(i,j) = depth(i+1,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_N) then
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        depth(i,j+1) = depth(i,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_S) then
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        depth(i,j) = depth(i,j+1)
+      enddo
     endif
-    if (associated(OBC%OBC_segment_v)) then
-      if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
-          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
-      if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
-          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
-    endif
-    if (bc_north) depth(i,j+1) = depth(i,j)
-    if (bc_south) depth(i,j-1) = depth(i,j)
-    if (bc_east) depth(i+1,j) = depth(i,j)
-    if (bc_west) depth(i-1,j) = depth(i,j)
+  enddo
+
+! do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
+!   bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
+!   if (associated(OBC%OBC_segment_u)) then
+!     if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
+!         .and. .not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
+!     if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
+!         .and. .not. OBC%segment(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
+!   endif
+!   if (associated(OBC%OBC_segment_v)) then
+!     if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
+!         .and. .not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
+!     if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
+!         .and. .not. OBC%segment(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
+!   endif
+!   if (bc_north) depth(i,j+1) = depth(i,j)
+!   if (bc_south) depth(i,j-1) = depth(i,j)
+!   if (bc_east) depth(i+1,j) = depth(i,j)
+!   if (bc_west) depth(i-1,j) = depth(i,j)
     ! Convex corner cases
-    if (bc_north.and.bc_east) depth(i+1,j+1) = depth(i,j)
-    if (bc_north.and.bc_west) depth(i-1,j+1) = depth(i,j)
-    if (bc_south.and.bc_east) depth(i+1,j-1) = depth(i,j)
-    if (bc_south.and.bc_west) depth(i-1,j-1) = depth(i,j)
-  enddo ; enddo
+!   if (bc_north.and.bc_east) depth(i+1,j+1) = depth(i,j)
+!   if (bc_north.and.bc_west) depth(i-1,j+1) = depth(i,j)
+!   if (bc_south.and.bc_east) depth(i+1,j-1) = depth(i,j)
+!   if (bc_south.and.bc_west) depth(i-1,j-1) = depth(i,j)
+! enddo ; enddo
 
 end subroutine open_boundary_impose_normal_slope
 
