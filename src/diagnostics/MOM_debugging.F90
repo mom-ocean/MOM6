@@ -43,6 +43,7 @@ implicit none ; private
 public :: check_redundant_C, check_redundant_B, check_redundant_T, check_redundant
 public :: vec_chksum, vec_chksum_C, vec_chksum_B, vec_chksum_A
 public :: MOM_debugging_init, totalStuff, totalTandS
+public :: check_column_integral, check_column_integrals
 
 ! These interfaces come from MOM_checksums.
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
@@ -797,5 +798,78 @@ subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   endif
 
 end subroutine totalTandS
+
+!> Returns false if the column integral of a given quantity is within roundoff
+logical function check_column_integral(nk, field, known_answer)
+  integer,             intent(in) :: nk           !< Number of levels in column
+  real, dimension(nk), intent(in) :: field        !< Field to be summed
+  real, optional,      intent(in) :: known_answer !< If present is the expected sum,
+                                                  !! If missing, assumed zero
+  ! Local variables
+  real    :: u_sum, error, expected
+  integer :: k
+
+  u_sum = field(1)
+  error = 0.
+
+  ! Reintegrate and sum roundoff errors
+  do k=2,nk
+    u_sum = u_sum + field(k)
+    error = error + EPSILON(u_sum)*MAX(ABS(u_sum),ABS(field(k)))
+  enddo
+
+  ! Assign expected answer to either the optional input or 0
+  if (present(known_answer)) then
+    expected = known_answer
+  else
+    expected = 0.
+  endif
+
+  ! Compare the column integrals against calculated roundoff error
+  if (abs(u_sum-expected) > error) then
+    check_column_integral = .true.
+  else
+    check_column_integral = .false.
+  endif
+
+end function check_column_integral
+
+!> Returns false if the column integrals of two given quantities are within roundoff of each other
+logical function check_column_integrals(nk_1, field_1, nk_2, field_2)
+  integer,               intent(in) :: nk_1    !< Number of levels in field 1
+  integer,               intent(in) :: nk_2    !< Number of levels in field 2
+  real, dimension(nk_1), intent(in) :: field_1 !< First field to be summed
+  real, dimension(nk_2), intent(in) :: field_2 !< Second field to be summed
+
+  ! Local variables
+  real    :: u1_sum, error1, u2_sum, error2
+  integer :: k
+
+  u1_sum = field_1(1)
+  error1 = 0.
+
+  ! Reintegrate and sum roundoff errors
+  do k=2,nk_1
+    u1_sum = u1_sum + field_1(k)
+    error1 = error1 + EPSILON(u1_sum)*MAX(ABS(u1_sum),ABS(field_1(k)))
+  enddo
+
+  u2_sum = field_2(1)
+  error2 = 0.
+
+  ! Reintegrate and sum roundoff errors
+  do k=2,nk_2
+    u2_sum = u2_sum + field_2(k)
+    error2 = error2 + EPSILON(u2_sum)*MAX(ABS(u2_sum),ABS(field_2(k)))
+  enddo
+
+  ! Compare the column integrals against calculated roundoff error
+  if (abs(u1_sum-u2_sum) > (error1+error2)) then
+    check_column_integrals = .true.
+  else
+    check_column_integrals = .false.
+  endif
+
+end function check_column_integrals
 
 end module MOM_debugging
