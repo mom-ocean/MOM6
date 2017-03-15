@@ -166,6 +166,7 @@ type, public :: energetic_PBL_CS ; private
   real :: LaC_MLDoOB        !  length scale ratios, MLD is boundary, EK is Ekman,
   real :: LaC_EKoOB         !  and OB is Obukhov, the "o" in the name is for division.
   real :: LaDepthRatio=0.04 ! The ratio of OBL depth to average Stokes drift over
+  real :: Max_Enhance_M = 5.! The maximum allowed LT enhancement to the mixing.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
   integer :: MSTAR_MODE = 0 ! An integer to determine which formula is used to
@@ -648,7 +649,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
       ! Inverse of Ekman and Obukhov
       iL_Ekman   = absf(i)/U_star
-      iL_Obukhov = -buoy_flux(i,j)*vonkar/U_Star**3
+      iL_Obukhov = buoy_flux(i,j)*vonkar/U_Star**3
 
       if (CS%Mstar_Mode.eq.CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
@@ -745,10 +746,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             Ekman_o_Obukhov = abs(iL_Obukhov/(iL_Ekman+1.e-10))
             !Assumes linear factors based on length scale ratios to adjust LA
             ! Note when these coefficients are set to 0 recovers simple LA.
-            LAmod = LA * (1.0 + CS%LaC_MLDoEK * MLD_o_Ekman +   &
-                                CS%LaC_MLDoOB * MLD_o_Obukhov + &
-                                CS%LaC_EKoOB * Ekman_o_Obukhov)
-            ENHANCE_M = (1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP)
+            LAmod = LA * (1.0 + max(-0.9,CS%LaC_MLDoEK * MLD_o_Ekman +   &
+                 CS%LaC_MLDoOB * MLD_o_Obukhov + &
+                 CS%LaC_EKoOB * Ekman_o_Obukhov))
+            ENHANCE_M = min(CS%Max_Enhance_M,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
+            write(*,'(3F7.3)')LA,LAmod, ENHANCE_M
           endif
         endif
         CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
