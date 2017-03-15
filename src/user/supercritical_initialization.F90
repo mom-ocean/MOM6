@@ -87,7 +87,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
 
 end subroutine supercritical_set_OBC_data
 
-!> \class supercritical_initialization
+!> \namespace supercritical_initialization
 !!
 !! The module configures the model for the "supercritical" experiment.
 !! https://marine.rutgers.edu/po/index.php?model=test-problems&title=supercritical
