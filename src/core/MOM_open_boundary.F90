@@ -1097,24 +1097,27 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
     endif
   enddo
 
-  !! Clean this up too?
+  ! G%mask2du will be open wherever bathymetry allows it.
+  ! Bathymetry outside of the open boundary was adjusted to match
+  ! the bathymetry inside so these points will be open unless the
+  ! bathymetry inside the boundary was too shallow and flagged as land.
   any_U = .false.
-  if (associated(OBC%OBC_segment_u)) then
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      ! G%mask2du will be open wherever bathymetry allows it.
-      ! Bathymetry outside of the open boundary was adjusted to match
-      ! the bathymetry inside so these points will be open unless the
-      ! bathymetry inside the boundary was too shallow and flagged as land.
-      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) any_U = .true.
-    enddo ; enddo
-  endif
-
   any_V = .false.
-  if (associated(OBC%OBC_segment_v)) then
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) any_V = .true.
-    enddo ; enddo
-  endif
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+    if (segment%is_E_or_W) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        if (OBC%OBC_segment_u(I,j) /= OBC_NONE) any_U = .true.
+      enddo
+    else
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        if (OBC%OBC_segment_v(i,J) /= OBC_NONE) any_V = .true.
+      enddo
+    endif
+  enddo
 
   OBC%OBC_pe = .true.
   if (.not.(any_U .or. any_V)) OBC%OBC_pe = .false.
