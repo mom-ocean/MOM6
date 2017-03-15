@@ -111,7 +111,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
 
 end subroutine tidal_bay_set_OBC_data
 
-!> \class tidal_bay_Initialization
+!> \namespace tidal_bay_initialization
 !!
 !! The module configures the model for the "tidal_bay" experiment.
 !! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
