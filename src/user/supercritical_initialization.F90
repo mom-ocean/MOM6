@@ -53,7 +53,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
     segment => OBC%segment(l)
     if (.not. segment%on_pe) cycle
     if (segment%gradient) cycle
-    if (segment%radiation .and. .not. segment%nudged .and. .not. segment%Flather) cycle
+    if (segment%oblique .and. .not. segment%nudged .and. .not. segment%Flather) cycle
 
     if (segment%is_E_or_W) then
       jsd = segment%HI%jsd ; jed = segment%HI%jed
