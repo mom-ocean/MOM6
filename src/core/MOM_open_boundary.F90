@@ -999,35 +999,39 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
   type(dyn_horgrid_type),           intent(in)    :: G !< Ocean grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: depth !< Bathymetry at h-points
   ! Local variables
-  integer :: i, j
-  logical :: bc_north, bc_south, bc_east, bc_west
+  integer :: i, j, n
+  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(OBC)) return
 
-  do J=G%jsd+1,G%jed-1 ; do i=G%isd+1,G%ied-1
-    bc_north = .false. ; bc_south = .false. ; bc_east = .false. ; bc_west = .false.
-    if (associated(OBC%OBC_segment_u)) then
-      if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E &
-          .and. .not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) bc_east = .true.
-      if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_W &
-          .and. .not. OBC%segment(OBC%OBC_segment_u(I-1,j))%specified) bc_west = .true.
+  if (.not.(OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
+    return
+
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe .or. segment%specified) cycle
+    if (segment%direction == OBC_DIRECTION_E) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        depth(i+1,j) = depth(i,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_W) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        depth(i,j) = depth(i+1,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_N) then
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        depth(i,j+1) = depth(i,j)
+      enddo
+    elseif (segment%direction == OBC_DIRECTION_S) then
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        depth(i,j) = depth(i,j+1)
+      enddo
     endif
-    if (associated(OBC%OBC_segment_v)) then
-      if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N &
-          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) bc_north = .true.
-      if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_S &
-          .and. .not. OBC%segment(OBC%OBC_segment_v(i,J-1))%specified) bc_south = .true.
-    endif
-    if (bc_north) depth(i,j+1) = depth(i,j)
-    if (bc_south) depth(i,j-1) = depth(i,j)
-    if (bc_east) depth(i+1,j) = depth(i,j)
-    if (bc_west) depth(i-1,j) = depth(i,j)
-    ! Convex corner cases
-    if (bc_north.and.bc_east) depth(i+1,j+1) = depth(i,j)
-    if (bc_north.and.bc_west) depth(i-1,j+1) = depth(i,j)
-    if (bc_south.and.bc_east) depth(i+1,j-1) = depth(i,j)
-    if (bc_south.and.bc_west) depth(i-1,j-1) = depth(i,j)
-  enddo ; enddo
+  enddo
 
 end subroutine open_boundary_impose_normal_slope
 
@@ -1039,84 +1043,81 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell (m2)
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
   ! Local variables
-  integer :: i, j
+  integer :: i, j, n
+  type(OBC_segment_type), pointer :: segment
   logical :: any_U, any_V
 
   if (.not.associated(OBC)) return
 
-  ! Sweep along u-segments and delete the OBC for blocked points.
-  if (associated(OBC%OBC_segment_u)) then
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      if (G%mask2dCu(I,j) == 0 .and. (OBC%OBC_segment_u(I,j) /= OBC_NONE)) then
-        if (.not. OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
-          OBC%OBC_segment_u(I,j) = OBC_NONE
-        endif
-      endif
-    enddo ; enddo
-  endif
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe .or. segment%specified) cycle
+    if (segment%is_E_or_W) then
+      ! Sweep along u-segments and delete the OBC for blocked points.
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        if (G%mask2dCu(I,j) == 0) OBC%OBC_segment_u(I,j) = OBC_NONE
+      enddo
+    else
+      ! Sweep along v-segments and delete the OBC for blocked points.
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        if (G%mask2dCv(i,J) == 0) OBC%OBC_segment_v(i,J) = OBC_NONE
+      enddo
+    endif
+  enddo
 
-  ! Sweep along v-segments and delete the OBC for blocked points.
-  if (associated(OBC%OBC_segment_v)) then
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if (G%mask2dCv(i,J) == 0 .and. (OBC%OBC_segment_v(i,J) /= OBC_NONE)) then
-        if (.not. OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
-          OBC%OBC_segment_v(I,j) = OBC_NONE
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe .or. .not. segment%specified) cycle
+    if (segment%is_E_or_W) then
+      ! Sweep along u-segments and for %specified BC points reset the u-point area which was masked out
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        if (segment%direction == OBC_DIRECTION_E) then
+          areaCu(I,j) = G%areaT(i,j)
+         !G%IareaCu(I,j) = G%IareaT(i,j) ?
+        else   ! West
+          areaCu(I,j) = G%areaT(i+1,j)
+         !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
         endif
-      endif
-    enddo ; enddo
-  endif
-
-  ! Sweep along u-segments and for %specified BC points reset the u-point area which was masked out
-  if (associated(OBC%OBC_segment_u)) then
-    do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-        if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-            areaCu(I,j) = G%areaT(i+1,j)
-           !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
-          elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-            areaCu(I,j) = G%areaT(i,j)
-           !G%IareaCu(I,j) = G%IareaT(i,j) ?
-          endif
+      enddo
+    else
+      ! Sweep along v-segments and for %specified BC points reset the v-point area which was masked out
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        if (segment%direction == OBC_DIRECTION_S) then
+          areaCv(i,J) = G%areaT(i,j+1)
+         !G%IareaCv(i,J) = G%IareaT(i,j+1) ?
+        else      ! North
+          areaCu(i,J) = G%areaT(i,j)
+         !G%IareaCu(i,J) = G%IareaT(i,j) ?
         endif
-      endif
-    enddo ; enddo
-  endif
+      enddo
+    endif
+  enddo
 
-  ! Sweep along v-segments and for %specified BC points reset the v-point area which was masked out
-  if (associated(OBC%OBC_segment_v)) then
-    do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-        if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
-            areaCv(i,J) = G%areaT(i,j+1)
-           !G%IareaCv(i,J) = G%IareaT(i,j+1) ?
-          elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
-            areaCu(i,J) = G%areaT(i,j)
-           !G%IareaCu(i,J) = G%IareaT(i,j) ?
-          endif
-        endif
-      endif
-    enddo ; enddo
-  endif
-
+  ! G%mask2du will be open wherever bathymetry allows it.
+  ! Bathymetry outside of the open boundary was adjusted to match
+  ! the bathymetry inside so these points will be open unless the
+  ! bathymetry inside the boundary was too shallow and flagged as land.
   any_U = .false.
-  if (associated(OBC%OBC_segment_u)) then
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-      ! G%mask2du will be open wherever bathymetry allows it.
-      ! Bathymetry outside of the open boundary was adjusted to match
-      ! the bathymetry inside so these points will be open unless the
-      ! bathymetry inside the boundary was do shallow and flagged as land.
-      if (OBC%OBC_segment_u(I,j) /= OBC_NONE) any_U = .true.
-    enddo ; enddo
-  endif
-
   any_V = .false.
-  if (associated(OBC%OBC_segment_v)) then
-    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
-      if (OBC%OBC_segment_v(i,J) /= OBC_NONE) any_V = .true.
-    enddo ; enddo
-  endif
+  do n=1,OBC%number_of_segments
+    segment=>OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+    if (segment%is_E_or_W) then
+      I=segment%HI%IsdB
+      do j=segment%HI%jsd,segment%HI%jed
+        if (OBC%OBC_segment_u(I,j) /= OBC_NONE) any_U = .true.
+      enddo
+    else
+      J=segment%HI%JsdB
+      do i=segment%HI%isd,segment%HI%ied
+        if (OBC%OBC_segment_v(i,J) /= OBC_NONE) any_V = .true.
+      enddo
+    endif
+  enddo
 
   OBC%OBC_pe = .true.
   if (.not.(any_U .or. any_V)) OBC%OBC_pe = .false.
