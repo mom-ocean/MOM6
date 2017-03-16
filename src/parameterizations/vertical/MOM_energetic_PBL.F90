@@ -1475,13 +1475,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           CS%Velocity_Scale(i,j,k) = Vstar_Used(k)
         enddo
       endif
-      CS%Enhance_M(i,j) = Enhance_M
-      CS%MSTAR_MIX(i,j) = MSTAR_MIX
-      CS%MLD_OBUKHOV(i,j) = (MLD_guess*iL_Obukhov)
-      CS%MLD_EKMAN(i,j) = (MLD_guess*iL_Ekman)
-      CS%EKMAN_OBUKHOV(i,j) = (iL_Obukhov/(iL_Ekman+1.e-10))
-      CS%La(i,j) = LA
-      CS%LA_MOD(i,j) = LAmod
+      if (allocated(CS%Enhance_M)) CS%Enhance_M(i,j) = Enhance_M
+      if (allocated(CS%mstar_mix)) CS%mstar_mix(i,j) = MSTAR_MIX
+      if (allocated(CS%MLD_Obukhov)) CS%MLD_Obukhov(i,j) = (MLD_guess*iL_Obukhov)
+      if (allocated(CS%MLD_Ekman)) CS%MLD_Ekman(i,j) = (MLD_guess*iL_Ekman)
+      if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = (iL_Obukhov/(iL_Ekman+1.e-10))
+      if (allocated(CS%La)) CS%La(i,j) = LA
+      if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
       do K=1,nz+1
