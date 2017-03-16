@@ -107,6 +107,8 @@ module MOM_generic_tracer
      ! linked list of generic diagnostics fields that must be Z registered by MOM.
      type(g_diag_type), pointer :: g_diag_list => NULL()
 
+     integer :: H_to_m !Auxiliary to access GV%H_to_m in routines that do not have access to GV
+
   end type MOM_generic_tracer_CS
 
 ! This include declares and sets the variable "version".
@@ -490,6 +492,8 @@ contains
 
        enddo
     endif
+
+    CS%H_to_m = GV%H_to_m
 
   end subroutine initialize_MOM_generic_tracer
 
@@ -899,11 +903,14 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke) ::  dzt
     type(g_tracer_type), pointer :: g_tracer
 
     !Set coupler values
     !nnz: fake rho0
     rho0=1.0
+
+    dzt(:,:,:) = CS%H_to_m * h(:,:,:)
 
     sosga = global_area_mean(state%SSS, G)
 
@@ -912,6 +919,7 @@ contains
          SS=state%SSS,&
          rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
+         dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars
          tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
