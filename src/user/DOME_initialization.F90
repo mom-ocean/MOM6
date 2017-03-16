@@ -352,7 +352,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
 end subroutine DOME_set_OBC_data
 
-!> \class DOME_initialization
+!> \namespace dome_initialization
 !!
 !! The module configures the model for the "DOME" experiment.
 !! DOME = Dynamics of Overflows and Mixing Experiment
