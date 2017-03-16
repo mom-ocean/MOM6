@@ -279,7 +279,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
 end subroutine benchmark_init_temperature_salinity
 ! -----------------------------------------------------------------------------
 
-!! \class benchmark_initialization
+!! \namespace benchmark_initialization
 !!
 !! The module configures the model for the benchmark experiment.
 end module benchmark_initialization
