@@ -1881,6 +1881,10 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
     deallocate(diag_coords)
   endif
 
+  call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
+                 'Set the default missing value to use for diagnostics.', &
+                 default=-1.e34)
+
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
   diag_cs%h => null()
