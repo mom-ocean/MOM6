@@ -2032,7 +2032,7 @@ subroutine diag_masks_set(G, nz, missing_value, diag_cs)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
 
-  diag_cs%missing_value = missing_value
+!  diag_cs%missing_value = missing_value
 
 end subroutine diag_masks_set
 
