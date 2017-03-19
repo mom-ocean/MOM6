@@ -4,7 +4,7 @@ module MOM
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_variables, only : vertvisc_type
-use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : ocean_OBC_type, set_OBC_external_thickness
 
 ! A Structure with pointers to forcing fields to drive MOM;
 ! all fluxes are positive downward.
@@ -521,6 +521,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV)
     call hchksum(CS%h,"CS%h beginning of step_MOM",G%HI)
   endif
+
+
+  if (associated(CS%OBC)) &
+    call set_OBC_external_thickness(CS%OBC, G, h)
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
