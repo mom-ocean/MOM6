@@ -259,7 +259,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
 end subroutine sloshing_initialize_temperature_salinity
 
-!> \class sloshing_initialization
+!> \namespace sloshing_initialization
 !!
 !! The module configures the model for the non-rotating sloshing
 !! test case.
