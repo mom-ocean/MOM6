@@ -1052,7 +1052,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
+
       ! Post mass transports, including SGS
+      ! Build the remap grids using the layer thicknesses from before the dynamics
+      call diag_update_remap_grids(CS%diag, alt_h = h_pre_dyn)
       if (CS%id_umo_2d > 0) then
         umo2d(:,:) = CS%uhtr(:,:,1)
         do k = 2, nz
@@ -1079,10 +1082,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         vmo(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
         call post_data(CS%id_vmo, vmo, CS%diag, alt_h = h_pre_dyn)
       endif
-      
+
       if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag, alt_h = h_pre_dyn)
       if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag, alt_h = h_pre_dyn)
 
+      ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
+      ! from before the dynamics calls
+      call diag_update_remap_grids(CS%diag)
 
       if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
       if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
