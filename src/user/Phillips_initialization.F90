@@ -320,7 +320,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
 
 end subroutine Phillips_initialize_topography
 
-!> \class Phillips_initialization
+!> \namespace phillips_initialization
 !!
 !!  By Robert Hallberg, April 1994 - June 2002                         *
 !!                                                                     *

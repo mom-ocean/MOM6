@@ -288,7 +288,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
 end subroutine adjustment_initialize_temperature_salinity
 
-!> \class adjustment_initialization
+!> \namespace adjustment_initialization
 !!
 !! The module configures the model for the geostrophic adjustment
 !! test case.

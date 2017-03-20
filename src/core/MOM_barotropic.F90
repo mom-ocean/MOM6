@@ -2396,14 +2396,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (h_in-BT_OBC%eta_outer_u(I,j)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%radiation) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
           grad(I-1,J) = (ubt_old(I-1,j+1) - ubt_old(I-1,j)) * G%mask2dBu(I-1,J)
           grad(I-1,J-1) = (ubt_old(I-1,j) - ubt_old(I-1,j-1)) * G%mask2dBu(I-1,J-1)
           dhdt = ubt_old(I-1,j)-ubt(I-1,j) !old-new
           dhdx = ubt(I-1,j)-ubt(I-2,j) !in new time backward sasha for I-1
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             if (dhdt*(grad(I-1,J) + grad(I-1,J-1)) > 0.0) then
               dhdy = grad(I-1,J-1)
             elseif (dhdt*(grad(I-1,J) + grad(I-1,J-1)) == 0.0) then
@@ -2411,17 +2411,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             else
               dhdy = grad(I-1,J)
             endif
-          endif
+!         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
           if (dhdx == 0.0) dhdx=eps  ! avoid segv
           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
-          Cy = 0
+!         Cy = 0
           cff = max(dhdx*dhdx, eps)
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
             if (dhdy==0.) dhdy=eps ! avoid segv
             Cy = min(cff, max(dhdt/dhdy, -cff))
-          endif
+!         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
           vel_trans = ubt(I,j)
@@ -2442,14 +2442,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (BT_OBC%eta_outer_u(I,j)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%radiation) then
+        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
           grad(I+1,J) = (ubt_old(I+1,j+1) - ubt_old(I+1,j)) * G%mask2dBu(I+1,J)
           grad(I+1,J-1) = (ubt_old(I+1,j) - ubt_old(I+1,j-1)) * G%mask2dBu(I+1,J-1)
           dhdt = ubt_old(I+1,j)-ubt(I+1,j) !old-new
           dhdx = ubt(I+1,j)-ubt(I+2,j) !in new time backward sasha for I+1
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             if (dhdt*(grad(I+1,J) + grad(I+1,J-1)) > 0.0) then
               dhdy = grad(I+1,J-1)
             elseif (dhdt*(grad(I+1,J) + grad(I+1,J-1)) == 0.0) then
@@ -2457,17 +2457,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             else
               dhdy = grad(I+1,J)
             endif
-          endif
+!         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
           if (dhdx == 0.0) dhdx=eps  ! avoid segv
           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
-          Cy = 0
+!         Cy = 0
           cff = max(dhdx*dhdx, eps)
-          if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
             if (dhdy==0.) dhdy=eps ! avoid segv
             Cy = min(cff,max(dhdt/dhdy,-cff))
-          endif
+!         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
@@ -2509,14 +2509,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (h_in-BT_OBC%eta_outer_v(i,J)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%radiation) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
           grad(I,J-1) = (vbt_old(i+1,J-1) - vbt_old(i,J-1)) * G%mask2dBu(I,J-1)
           grad(I-1,J-1) = (vbt_old(i,J-1) - vbt_old(i-1,J-1)) * G%mask2dBu(I-1,J-1)
           dhdt = vbt_old(i,J-1)-vbt(i,J-1) !old-new
           dhdy = vbt(i,J-1)-vbt(i,J-2) !in new time backward sasha for J-1
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             if (dhdt*(grad(I,J-1) + grad(I-1,J-1)) > 0.0) then
               dhdx = grad(I-1,J-1)
             elseif (dhdt*(grad(I,J-1) + grad(I-1,J-1)) == 0.0) then
@@ -2524,17 +2524,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             else
               dhdx = grad(I,J-1)
             endif
-          endif
+!         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
           if (dhdy == 0.0) dhdy=eps  ! avoid segv
           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
-          Cx = 0
+!         Cx = 0
           cff = max(dhdy*dhdy, eps)
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
             if (dhdx==0.) dhdx=eps ! avoid segv
             Cx = min(cff,max(dhdt/dhdx,-cff))
-          endif
+!         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
@@ -2556,14 +2556,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (BT_OBC%eta_outer_v(i,J)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%radiation) then
+        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
           grad(I,J+1) = (vbt_old(i+1,J+1) - vbt_old(i,J+1)) * G%mask2dBu(I,J+1)
           grad(I-1,J+1) = (vbt_old(i,J+1) - vbt_old(i-1,J+1)) * G%mask2dBu(I-1,J+1)
           dhdt = vbt_old(i,J+1)-vbt(i,J+1) !old-new
           dhdy = vbt(i,J+1)-vbt(i,J+2) !in new time backward sasha for J+1
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             if (dhdt*(grad(I,J+1) + grad(I-1,J+1)) > 0.0) then
               dhdx = grad(I-1,J+1)
             elseif (dhdt*(grad(I,J+1) + grad(I-1,J+1)) == 0.0) then
@@ -2571,17 +2571,17 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             else
               dhdx = grad(I,J+1)
             endif
-          endif
+!         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
           if (dhdy == 0.0) dhdy=eps  ! avoid segv
           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
-          Cx = 0
+!         Cx = 0
           cff = max(dhdy*dhdy, eps)
-          if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
+!         if (OBC%segment(OBC%OBC_segment_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
             if (dhdx==0.) dhdx=eps ! avoid segv
             Cx = min(cff,max(dhdt/dhdx,-cff))
-          endif
+!         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
 !         vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
