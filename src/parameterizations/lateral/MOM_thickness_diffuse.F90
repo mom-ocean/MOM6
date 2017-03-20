@@ -322,17 +322,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     endif
   endif
 
-  do k=1,nz
-    do j=js,je ; do I=is-1,ie
-      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
-      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
-    enddo ; enddo
-    do J=js-1,je ; do i=is,ie
-      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
-      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
-    enddo ; enddo
-  enddo
-
   ! offer diagnostic fields for averaging
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, uhD, CS%diag)
@@ -377,6 +366,14 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
 
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
   do k=1,nz
+    do j=js,je ; do I=is-1,ie
+      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
+      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
+    enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
+      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
+    enddo ; enddo
     do j=js,je ; do i=is,ie
       h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
           ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
