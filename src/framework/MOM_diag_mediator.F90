@@ -1983,7 +1983,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, diag_cs%h, diag_cs%T, diag_cs%S, &
+                           diag_cs%G, h_diag, diag_cs%T, diag_cs%S, &
                            diag_cs%eqn_of_state)
   enddo
 
