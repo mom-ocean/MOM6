@@ -1973,6 +1973,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h)
   integer :: i
   real, dimension(:,:,:), pointer :: h_diag
 
+  ! Allow for the source layer thicknesses to be overriden
   if(present(alt_h)) then
     h_diag => alt_h
   else
