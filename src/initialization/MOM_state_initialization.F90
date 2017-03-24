@@ -3,7 +3,7 @@ module MOM_state_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum, qchksum, uvchksum_pair
+use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
@@ -348,7 +348,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 
     call pass_vector(u, v, G%Domain)
     if (debug) then
-        call uvchksum_pair("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+        call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
     endif
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
@@ -477,8 +477,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   ! Still need a way to specify the boundary values
   if (debug.and.associated(OBC)) then
     call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
-    call uvchksum_pair('MOM_initialize_state: mask2dC[uv]', G%mask2dCu,  &
-                       G%mask2dCv, G%HI)
+    call uvchksum('MOM_initialize_state: mask2dC[uv]', G%mask2dCu,  &
+                  G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 

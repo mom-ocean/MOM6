@@ -3,7 +3,7 @@ module MOM_offline_main
 use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_tracer_final
-use MOM_checksums,            only : hchksum, uvchksum_pair
+use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_diabatic_aux,         only : diabatic_aux_CS
 use MOM_diabatic_driver,      only : diabatic_CS
@@ -217,7 +217,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   if(CS%debug) then
     call hchksum(h_pre,"h_pre before transport",G%HI)
-    call uvchksum_pair("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI)
+    call uvchksum("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI)
   endif
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
@@ -292,7 +292,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   if(CS%debug) then
     call hchksum(h_pre,"h after offline_advection_ale",G%HI)
-    call uvchksum_pair("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI)
+    call uvchksum("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI)
   endif
 
 end subroutine offline_advection_ale
@@ -346,7 +346,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   if (CS%debug) then
     call hchksum(h_pre,"h_pre before upwards redistribute",G%HI, haloshift = 1)
     call hchksum(h_vol,"h_vol before upwards redistribute",G%HI)
-    call uvchksum_pair("[uv]htr before upwards redistribute", uhtr, vhtr, G%HI)
+    call uvchksum("[uv]htr before upwards redistribute", uhtr, vhtr, G%HI)
   endif
 
   ! These are used to find out how much will be redistributed in this routine
@@ -370,7 +370,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   if (CS%debug) then
     call hchksum(h_vol,"h_vol after upwards redistribute",G%HI,haloshift = 1)
-    call uvchksum_pair("[uv]h after upwards redistribute", uhtr, vhtr, G%HI)
+    call uvchksum("[uv]h after upwards redistribute", uhtr, vhtr, G%HI)
   endif
   call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
         CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
@@ -388,7 +388,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   if (CS%debug) then
     call hchksum(h_vol,"h_vol before barotropic redistribute",G%HI)
     call hchksum(h_new,"h_new before barotropic redistribute",G%HI)
-    call uvchksum_pair("[uv]hr before barotropic redistribute", uhr, vhr, G%HI)
+    call uvchksum("[uv]hr before barotropic redistribute", uhr, vhr, G%HI)
   endif
 
   ! Then check if there's any transport left and if so, distribute it equally
@@ -407,7 +407,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   call pass_vector(uhr,vhr,G%Domain)
   if (CS%debug) then
     call hchksum(h_vol,"h_vol after barotropic redistribute",G%HI)
-    call uvchksum_pair("[uv]hr after barotropic redistribute", uhr, vhr, G%HI)
+    call uvchksum("[uv]hr after barotropic redistribute", uhr, vhr, G%HI)
   endif
 
   call advect_tracer(h_new, uhr, vhr, CS%OBC, CS%dt_offline, G, GV, &
@@ -416,7 +416,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   if (CS%debug) then
     call hchksum(h_pre,"h_pre after advection barotropic redistribute",G%HI)
-    call uvchksum_pair("[uv]htr after advection barotropic redistribute", &
+    call uvchksum("[uv]htr after advection barotropic redistribute", &
                        uhtr, vhtr, G%HI)
 
     do k=1,nz ; do j=js,je ; do i=is-1,ie
@@ -849,7 +849,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
     call hchksum(h_end,"h_end after transport_by_file",G%HI)
     call hchksum(eatr,"eatr after transport_by_file",G%HI)
     call hchksum(ebtr,"ebtr after transport_by_file",G%HI)
-    call uvchksum_pair("[uv]htr after transport_by_file", uhtr, vhtr, G%HI)
+    call uvchksum("[uv]htr after transport_by_file", uhtr, vhtr, G%HI)
   endif
 
   call callTree_leave("transport_by_file")

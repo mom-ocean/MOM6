@@ -51,7 +51,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : uvchksum_pair
+use MOM_debugging, only : uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -814,14 +814,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
   if (CS%debug) then
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call uvchksum_pair("Ray [uv]", visc%Ray_u, &
-                           visc%Ray_v, G%HI,haloshift=0)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call uvchksum_pair("kv_bbl_[uv]", visc%kv_bbl_u, &
-                           visc%kv_bbl_v, G%HI,haloshift=0)
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI,haloshift=0)
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
-        call uvchksum_pair("bbl_thick_[uv]", visc%bbl_thick_u, &
-                           visc%bbl_thick_v, G%HI,haloshift=0)
+        call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
+                      visc%bbl_thick_v, G%HI,haloshift=0)
   endif
 
 end subroutine set_viscous_BBL
@@ -1543,8 +1541,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   if (CS%debug) then
     if (associated(visc%nkml_visc_u) .and. associated(visc%nkml_visc_v)) &
-      call uvchksum_pair("nkml_visc_[uv]", visc%nkml_visc_u, &
-                         visc%nkml_visc_v, G%HI,haloshift=0)
+      call uvchksum("nkml_visc_[uv]", visc%nkml_visc_u, &
+                    visc%nkml_visc_v, G%HI,haloshift=0)
   endif
   if (CS%id_nkml_visc_u > 0) &
     call post_data(CS%id_nkml_visc_u, visc%nkml_visc_u, CS%diag)
