@@ -29,7 +29,7 @@ use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-public :: hchksum, Bchksum, qchksum, uchksum, vchksum, is_NaN, chksum
+public :: hchksum, Bchksum, qchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum_pair, Bchksum_pair
 public :: MOM_checksums_init
 
@@ -39,14 +39,6 @@ end interface
 
 interface uvchksum_pair
   module procedure chksum_pair_uv_2d, chksum_pair_uv_3d
-end interface
-
-interface uchksum
-  module procedure chksum_u_2d, chksum_u_3d
-end interface
-
-interface vchksum
-  module procedure chksum_v_2d, chksum_u_3d
 end interface
 
 interface Bchksum_pair
