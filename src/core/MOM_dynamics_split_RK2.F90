@@ -20,7 +20,7 @@ use MOM_domains,           only : MOM_domains_init
 use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : start_group_pass, complete_group_pass
-use MOM_debugging,         only : hchksum, uvchksum_pair
+use MOM_debugging,         only : hchksum, uvchksum
 use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
@@ -412,8 +412,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (CS%debug) then
-    call uvchksum_pair("After PressureForce CS%PFu", &
-                       CS%PFu, CS%PFv, G%HI,haloshift=0)
+    call uvchksum("After PressureForce CS%PFu", CS%PFu, CS%PFv, G%HI,haloshift=0)
   endif
 
   if (dyn_p_surf) then
@@ -495,7 +494,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uvchksum_pair("before vertvisc: up", up, vp, G%HI, haloshift=0)
+    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
@@ -579,10 +578,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum_pair("Predictor 1 [uv]", up, vp, G%HI, haloshift=0)
+    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0)
     call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
-    call uvchksum_pair("Predictor 1 [uv]h", &
-                       GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2)
+    call uvchksum("Predictor 1 [uv]h", &
+                  GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -595,7 +594,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uvchksum_pair("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0)
+    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
@@ -705,7 +704,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uvchksum_pair("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1)
     call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
@@ -791,10 +790,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum_pair("Corrector 1 [uv]", u, v, G%HI,haloshift=0)
+    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0)
     call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
-    call uvchksum_pair("Corrector 1 [uv]h", GV%H_to_kg_m2*uh, &
-                       GV%H_to_kg_m2*vh, G%HI,haloshift=2)
+    call uvchksum("Corrector 1 [uv]h", GV%H_to_kg_m2*uh, &
+                  GV%H_to_kg_m2*vh, G%HI,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -900,7 +899,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uvchksum_pair("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1)
+    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1)
     call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif

@@ -91,7 +91,7 @@ module MOM_barotropic
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : hchksum, uvchksum_pair
+use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
@@ -1461,13 +1461,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (CS%debug) then
-    call uvchksum_pair("BT [uv]hbt", uhbt*GV%H_to_m, vhbt*GV%H_to_m, &
-                       CS%debug_BT_HI,haloshift=0)
-    call uvchksum_pair("BT Initial [uv]bt", ubt, vbt, &
-                       CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT [uv]hbt", uhbt*GV%H_to_m, vhbt*GV%H_to_m, &
+                  CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT Initial [uv]bt", ubt, vbt, &
+                  CS%debug_BT_HI,haloshift=0)
     call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta", CS%debug_BT_HI,haloshift=0)
-    call uvchksum_pair("BT BT_force_[uv]", BT_force_u, BT_force_v, &
-                       CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
+                  CS%debug_BT_HI,haloshift=0)
     if (interp_eta_PF) then
       call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0)
       call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0)
@@ -1475,21 +1475,21 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0)
       call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0)
     endif
-    call uvchksum_pair("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, &
-                       CS%debug_BT_HI, haloshift=0)
-    call uvchksum_pair("BT [uv]hbt0", uhbt0*GV%H_to_m, vhbt0*GV%H_to_m, &
-                       CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, &
+                  CS%debug_BT_HI, haloshift=0)
+    call uvchksum("BT [uv]hbt0", uhbt0*GV%H_to_m, vhbt0*GV%H_to_m, &
+                 CS%debug_BT_HI,haloshift=0)
     if (.not. use_BT_cont) then
-      call uvchksum_pair("BT Dat[uv]", GV%H_to_m*Datu, GV%H_to_m*Datv, &
-                         CS%debug_BT_HI, haloshift=1)
+      call uvchksum("BT Dat[uv]", GV%H_to_m*Datu, GV%H_to_m*Datv, &
+                    CS%debug_BT_HI, haloshift=1)
     endif
-    call uvchksum_pair("BT wt_[uv]", wt_u, wt_v, G%HI, haloshift=1)
-    call uvchksum_pair("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
-    call uvchksum_pair("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, &
-                       G%HI, haloshift=0)
-    call uvchksum_pair("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0)
-    call uvchksum_pair("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, &
-                       G%HI,haloshift=1)
+    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, haloshift=1)
+    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, &
+                  G%HI, haloshift=0)
+    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0)
+    call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, &
+                  G%HI,haloshift=1)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
@@ -1967,8 +1967,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%debug_bt) then
-      call uvchksum_pair("BT [uv]hbt just after OBC", uhbt*GV%H_to_m, &
-                         vhbt*GV%H_to_m, CS%debug_BT_HI,haloshift=iev-ie)
+      call uvchksum("BT [uv]hbt just after OBC", uhbt*GV%H_to_m, &
+                    vhbt*GV%H_to_m, CS%debug_BT_HI,haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1994,8 +1994,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
-      call uvchksum_pair(trim(mesg)//" [uv]bt", ubt, vbt, &
-                         CS%debug_BT_HI, haloshift=iev-ie)
+      call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, &
+                    CS%debug_BT_HI, haloshift=iev-ie)
       call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie)
     endif
 
@@ -3074,7 +3074,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   enddo
 
   if (CS%debug) then
-    call uvchksum_pair("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
     call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
   endif
 
