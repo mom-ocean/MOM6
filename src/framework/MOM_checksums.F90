@@ -30,15 +30,15 @@ use MOM_hor_index, only : hor_index_type
 implicit none ; private
 
 public :: hchksum, Bchksum, qchksum, is_NaN, chksum
-public :: hchksum_pair, uvchksum_pair, Bchksum_pair
+public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: MOM_checksums_init
 
 interface hchksum_pair
   module procedure chksum_pair_h_2d, chksum_pair_h_3d
 end interface
 
-interface uvchksum_pair
-  module procedure chksum_pair_uv_2d, chksum_pair_uv_3d
+interface uvchksum
+  module procedure chksum_uv_2d, chksum_uv_3d
 end interface
 
 interface Bchksum_pair
@@ -342,7 +342,7 @@ end subroutine chksum_B_2d
 
 ! =====================================================================
 
-subroutine chksum_pair_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
+subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
@@ -356,9 +356,9 @@ subroutine chksum_pair_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
     call chksum_v_2d(arrayV, 'v '//mesg, HI)
   endif
 
-end subroutine chksum_pair_uv_2d
+end subroutine chksum_uv_2d
 
-subroutine chksum_pair_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
+subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
@@ -372,7 +372,7 @@ subroutine chksum_pair_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
     call chksum_v_3d(arrayV, 'v '//mesg, HI)
   endif
 
-end subroutine chksum_pair_uv_3d
+end subroutine chksum_uv_3d
 
 !> chksum_u_2d performs checksums on a 2d array staggered at C-grid u points.
 subroutine chksum_u_2d(array, mesg, HI, haloshift)
