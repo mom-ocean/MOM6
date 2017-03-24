@@ -174,29 +174,29 @@ subroutine grid_metrics_chksum(parent, G)
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
-  call hchksum_pair(G%dxT, trim(parent)//': dxT', &
-                    G%dyT, trim(parent)//': dyT', G%HI, haloshift=halo)
+  call hchksum_pair(trim(parent)//': d[xy]T', &
+                    G%dxT, G%dyT, G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%dxCu, trim(parent)//': dxCu', &
-                     G%dyCv, trim(parent)//': dyCv',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': dxC[uv]', &
+                     G%dxCu, G%dyCv, G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%dxCv, trim(parent)//': dxCv', &
-                     G%dyCu ,trim(parent)//': dyCu',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': dxC[uv]', &
+                     G%dxCv, G%dyCu, G%HI, haloshift=halo)
 
-  call Bchksum_pair(G%dxBu, trim(parent)//': dxBu', &
-                    G%dyBu, trim(parent)//': dyBu',G%HI, haloshift=halo)
+  call Bchksum_pair(trim(parent)//': dxB[uv]', &
+                    G%dxBu, G%dyBu, G%HI, haloshift=halo)
 
-  call hchksum_pair(G%IdxT, trim(parent)//': IdxT', &
-                    G%IdyT, trim(parent)//': IdyT',G%HI, haloshift=halo)
+  call hchksum_pair(trim(parent)//': Id[xy]T', &
+                    G%IdxT, G%IdyT, G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%IdxCu, trim(parent)//': IdxCu', &
-                     G%IdyCv, trim(parent)//': IdyCv',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': Id[xy]C[uv]', &
+                     G%IdxCu, G%IdyCv, G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%IdxCv, trim(parent)//': IdxCv', &
-                     G%IdyCu, trim(parent)//': IdyCu',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': Id[xy]C[uv]', &
+                     G%IdxCv, G%IdyCu, G%HI, haloshift=halo)
 
-  call Bchksum_pair(G%IdxBu, trim(parent)//': IdxBu', &
-                    G%IdyBu, trim(parent)//': IdyBu',G%HI, haloshift=halo)
+  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', &
+                    G%IdxBu, G%IdyBu, G%HI, haloshift=halo)
 
   call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo)
   call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo)
@@ -210,11 +210,11 @@ subroutine grid_metrics_chksum(parent, G)
   call Bchksum(G%geoLonBu, trim(parent)//': geoLonBu',G%HI, haloshift=halo)
   call Bchksum(G%geoLatBu, trim(parent)//': geoLatBu',G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%geoLonCu, trim(parent)//': geoLonCu', &
-                     G%geoLonCv, trim(parent)//': geoLonCv',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': geoLonC[uv]', &
+                     G%geoLonCu, G%geoLonCv, G%HI, haloshift=halo)
 
-  call uvchksum_pair(G%geoLatCu, trim(parent)//': geoLatCu', &
-                     G%geoLatCv, trim(parent)//': geoLatCv',G%HI, haloshift=halo)
+  call uvchksum_pair(trim(parent)//': geoLatC[uv]', &
+                     G%geoLatCu, G%geoLatCv, G%HI, haloshift=halo)
 
 end subroutine grid_metrics_chksum
 

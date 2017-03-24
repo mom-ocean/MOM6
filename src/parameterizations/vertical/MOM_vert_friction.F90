@@ -520,8 +520,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uvchksum_pair(visc_rem_u,"visc_rem_u", &
-                       visc_rem_v,"visc_rem_v",G%HI,haloshift=0)
+    call uvchksum_pair("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI,haloshift=0)
   endif
 
 end subroutine vertvisc_remnant
@@ -905,13 +904,13 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
 
   if (CS%debug) then
-    call uvchksum_pair(CS%h_u*H_to_m,"vertvisc_coef h_u", &
-                       CS%h_v*H_to_m,"vertvisc_coef h_v",G%HI,haloshift=0)
-    call uvchksum_pair(CS%a_u,"vertvisc_coef a_u", &
-                       CS%a_v,"vertvisc_coef a_v",G%HI,haloshift=0)
+    call uvchksum_pair("vertvisc_coef h_[uv]", CS%h_u*H_to_m, &
+                       CS%h_v*H_to_m, G%HI,haloshift=0)
+    call uvchksum_pair("vertvisc_coef a_[uv]", CS%a_u, &
+                       CS%a_v, G%HI,haloshift=0)
     if (allocated(hML_u) .and. allocated(hML_v)) &
-        call uvchksum_pair(hML_u*H_to_m,"vertvisc_coef hML_u", &
-                           hML_v*H_to_m,"vertvisc_coef hML_v",G%HI,haloshift=0)
+        call uvchksum_pair("vertvisc_coef hML_[uv]", hML_u*H_to_m, &
+                           hML_v*H_to_m, G%HI,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.

@@ -80,34 +80,34 @@ contains
 
 ! =====================================================================
 
-subroutine chksum_pair_h_2d(arrayA, mesgA, arrayB, mesgB, HI, haloshift)
+subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
-  character(len=*),                 intent(in) :: mesgA, mesgB !< Identifying messages
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   if (present(haloshift)) then
-    call chksum_h_2d(arrayA, mesgA, HI, haloshift)
-    call chksum_h_2d(arrayB, mesgB, HI, haloshift)
+    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift)
   else
-    call chksum_h_2d(arrayA, mesgA, HI)
-    call chksum_h_2d(arrayB, mesgB, HI)
+    call chksum_h_2d(arrayA, 'x '//mesg, HI)
+    call chksum_h_2d(arrayB, 'y '//mesg, HI)
   endif
 
 end subroutine chksum_pair_h_2d
 
-subroutine chksum_pair_h_3d(arrayA, mesgA, arrayB, mesgB, HI, haloshift)
-  type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
+subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
-  character(len=*),                    intent(in) :: mesgA, mesgB !< Identifying messages
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   if (present(haloshift)) then
-    call chksum_h_3d(arrayA, mesgA, HI, haloshift)
-    call chksum_h_3d(arrayB, mesgB, HI, haloshift)
+    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift)
   else
-    call chksum_h_3d(arrayA, mesgA, HI)
-    call chksum_h_3d(arrayB, mesgB, HI)
+    call chksum_h_3d(arrayA, 'x '//mesg, HI)
+    call chksum_h_3d(arrayB, 'y '//mesg, HI)
   endif
 
 end subroutine chksum_pair_h_3d
@@ -201,10 +201,10 @@ end subroutine chksum_h_2d
 
 ! =====================================================================
 
-subroutine chksum_pair_B_2d(arrayA, mesgA, arrayB, mesgB, HI, symmetric, haloshift)
+subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, symmetric, haloshift)
+  character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
-  character(len=*),                 intent(in) :: mesgA, mesgB !< Identifying messages
   logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
@@ -213,33 +213,29 @@ subroutine chksum_pair_B_2d(arrayA, mesgA, arrayB, mesgB, HI, symmetric, haloshi
   sym = .false. ; if (present(symmetric)) sym = symmetric
 
   if (present(haloshift)) then
-    call chksum_B_2d(arrayA, mesgA, HI, haloshift, &
-                     symmetric=sym)
-    call chksum_B_2d(arrayB, mesgB, HI, haloshift, &
-                     symmetric=sym)
+    call chksum_B_2d(arrayA, 'x '//mesg, HI, haloshift, symmetric=sym)
+    call chksum_B_2d(arrayB, 'y '//mesg, HI, haloshift, symmetric=sym)
   else
-    call chksum_B_2d(arrayA, mesgA, HI, &
-                     symmetric=sym)
-    call chksum_B_2d(arrayB, mesgB, HI, &
-                     symmetric=sym)
+    call chksum_B_2d(arrayA, 'x '//mesg, HI, symmetric=sym)
+    call chksum_B_2d(arrayB, 'y '//mesg, HI, symmetric=sym)
   endif
 
 end subroutine chksum_pair_B_2d
 
-subroutine chksum_pair_B_3d(arrayA, mesgA, arrayB, mesgB, HI, haloshift)
+subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
-  character(len=*),                    intent(in) :: mesgA, mesgB !< Identifying messages
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   logical :: sym
 
   if (present(haloshift)) then
-    call chksum_B_3d(arrayA, mesgA, HI, haloshift)
-    call chksum_B_3d(arrayB, mesgB, HI, haloshift)
+    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift)
   else
-    call chksum_B_3d(arrayA, mesgA, HI)
-    call chksum_B_3d(arrayB, mesgB, HI)
+    call chksum_B_3d(arrayA, 'x '//mesg, HI)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI)
   endif
 
 end subroutine chksum_pair_B_3d
@@ -346,34 +342,34 @@ end subroutine chksum_B_2d
 
 ! =====================================================================
 
-subroutine chksum_pair_uv_2d(arrayU, mesgU, arrayV, mesgV, HI, haloshift)
+subroutine chksum_pair_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
+  character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
-  character(len=*),                 intent(in) :: mesgU, mesgV !< Identifying messages
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   if (present(haloshift)) then
-    call chksum_u_2d(arrayU, mesgU, HI, haloshift)
-    call chksum_v_2d(arrayV, mesgV, HI, haloshift)
+    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift)
   else
-    call chksum_u_2d(arrayU, mesgU, HI)
-    call chksum_v_2d(arrayV, mesgV, HI)
+    call chksum_u_2d(arrayU, 'u '//mesg, HI)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI)
   endif
 
 end subroutine chksum_pair_uv_2d
 
-subroutine chksum_pair_uv_3d(arrayU, mesgU, arrayV, mesgV, HI, haloshift)
+subroutine chksum_pair_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
-  character(len=*),                    intent(in) :: mesgU, mesgV !< Identifying messages
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
 
   if (present(haloshift)) then
-    call chksum_u_3d(arrayU, mesgU, HI, haloshift)
-    call chksum_v_3d(arrayV, mesgV, HI, haloshift)
+    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift)
   else
-    call chksum_u_3d(arrayU, mesgU, HI)
-    call chksum_v_3d(arrayV, mesgV, HI)
+    call chksum_u_3d(arrayU, 'u '//mesg, HI)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI)
   endif
 
 end subroutine chksum_pair_uv_3d

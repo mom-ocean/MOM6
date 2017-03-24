@@ -28,7 +28,6 @@ module MOM_debugging
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 
 use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum_pair
-use MOM_checksums, only : uvchksum_pair
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
@@ -581,7 +580,7 @@ subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum_pair(u_comp, mesg//"(u)", v_comp, mesg//"(v)", G%HI, halos)
+    call uvchksum_pair(mesg, u_comp, v_comp, G%HI, halos)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -607,7 +606,7 @@ subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum_pair(u_comp, mesg//"(u)", v_comp, mesg//"(v)", G%HI, halos)
+    call uvchksum_pair(mesg, u_comp, v_comp, G%HI, halos)
   endif
   if (debug_redundant) then
     if (are_scalars) then
