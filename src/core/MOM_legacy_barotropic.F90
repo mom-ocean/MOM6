@@ -1440,13 +1440,11 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   endif
 
   if (CS%debug) then
-    call uvchksum_pair(uhbt, "BT uhbt", vhbt, "BT vhbt", &
-                       CS%debug_BT_HI, haloshift=0)
-    call uvchksum_pair(ubt, "BT Initial ubt", vbt, "BT Initial vbt", &
-                       CS%debug_BT_HI,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_HI,haloshift=0)
-    call uvchksum_pair(BT_force_u, "BT BT_force_u", &
-                       BT_force_v, "BT BT_force_v", CS%debug_BT_HI,haloshift=0)
+    call uvchksum_pair("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0)
+    call uvchksum_pair("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0)
+    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_HI, haloshift=0)
+    call uvchksum_pair("BT BT_force_[uv]", &
+                       BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=0)
     if (interp_eta_PF) then
       call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0)
       call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0)
@@ -1454,23 +1452,22 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0)
       call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0)
     endif
-    call uvchksum_pair(Cor_ref_u, "BT Cor_ref_u", Cor_ref_v, "BT Cor_ref_v",&
-                       CS%debug_BT_HI,haloshift=0)
-    call uvchksum_pair(uhbt0, "BT uhbt0", vhbt0, "BT vhbt0",CS%debug_BT_HI,haloshift=0)
+    call uvchksum_pair("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, &
+                       CS%debug_BT_HI, haloshift=0)
+    call uvchksum_pair("BT [uv]hbt0", uhbt0,  vhbt0, CS%debug_BT_HI, haloshift=0)
     if (.not. use_BT_cont) then
-      call uvchksum_pair(GV%H_to_m*Datu, "BT Datu", GV%H_to_m*Datv, "BT Datv", &
+      call uvchksum_pair("BT Dat[uv]", GV%H_to_m*Datu, GV%H_to_m*Datv, &
                          CS%debug_BT_HI,haloshift=1)
     endif
-    call uvchksum_pair(wt_u, "BT wt_u", wt_v, "BT wt_v",G%HI,haloshift=1)
-    call uvchksum_pair(CS%frhatu, "BT frhatu", &
-                       CS%frhatv, "BT frhatv", G%HI, haloshift=1)
-    call uvchksum_pair(bc_accel_u, "BT bc_accel_u", &
-                       bc_accel_v, "BT bc_accel_v",G%HI,haloshift=0)
-    call uvchksum_pair(CS%IDatu, "BT IDatu", &
-                       CS%IDatv, "BT IDatv",G%HI,haloshift=0)
+    call uvchksum_pair("BT wt_[uv]", wt_u, wt_v, G%HI,haloshift=1)
+    call uvchksum_pair("BT frhat[uv]", &
+                       CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call uvchksum_pair("BT bc_accel_[uv]", &
+                       bc_accel_u, bc_accel_v, G%HI,haloshift=0)
+    call uvchksum_pair("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI,haloshift=0)
     if (use_visc_rem) then
-      call uvchksum_pair(visc_rem_u, "BT visc_rem_u", &
-                         visc_rem_v, "BT visc_rem_v",G%HI,haloshift=1)
+      call uvchksum_pair("BT visc_rem_[uv]", &
+                         visc_rem_u, visc_rem_v, G%HI, haloshift=1)
     endif
   endif
 
@@ -1813,8 +1810,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     endif
 
     if (CS%debug_bt) then
-      call uvchksum_pair(uhbt, "BT uhbt just after OBC", &
-                         vhbt, "BT vhbt just after OBC",CS%debug_BT_HI,haloshift=iev-ie)
+      call uvchksum_pair("BT [uv]hbt just after OBC", &
+                         uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1839,8 +1836,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
-      call uvchksum_pair(ubt, trim(mesg)//" ubt", &
-                         vbt, trim(mesg)//" vbt", CS%debug_BT_HI, haloshift=iev-ie)
+      call uvchksum_pair(trim(mesg)//" [uv]bt", &
+                         ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie)
       call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie)
     endif
 
@@ -2816,8 +2813,8 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   endif
 
   if (CS%debug) then
-    call uvchksum_pair(CS%frhatu, "btcalc frhatu", &
-                       CS%frhatv, "btcalc frhatv",G%HI,haloshift=1)
+    call uvchksum_pair("btcalc frhat[uv]", &
+                       CS%frhatu, CS%frhatv, G%HI,haloshift=1)
     call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
   endif
 
