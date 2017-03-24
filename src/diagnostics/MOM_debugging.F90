@@ -27,7 +27,7 @@ module MOM_debugging
 ! separate we retain the ability to set up MOM6 and SIS2 debugging separately. !
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 
-use MOM_checksums, only : hchksum, Bchksum, uchksum, vchksum, qchksum, uvchksum_pair
+use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum_pair
 use MOM_checksums, only : uvchksum_pair
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
@@ -47,7 +47,7 @@ public :: MOM_debugging_init, totalStuff, totalTandS
 public :: check_column_integral, check_column_integrals
 
 ! These interfaces come from MOM_checksums.
-public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uchksum, vchksum
+public :: hchksum, Bchksum, qchksum, is_NaN, chksum
 public :: uvchksum_pair
 
 interface check_redundant
