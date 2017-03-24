@@ -980,12 +980,12 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   if (CS%debug) then
     if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-      call uvchksum_pair(state%taux_shelf, "taux_shelf", &
-                         state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
-      call uvchksum_pair(fluxes%rigidity_ice_u, "rigidity_ice_u", &
-                         fluxes%rigidity_ice_v, "rigidity_ice_v", G%HI, haloshift=0)
-      call uvchksum_pair(fluxes%frac_shelf_u, "frac_shelf_u", &
-                         fluxes%frac_shelf_v, "frac_shelf_v", G%HI, haloshift=0)
+      call uvchksum_pair("tau[xy]_shelf", state%taux_shelf, state%tauy_shelf, &
+                         G%HI, haloshift=0)
+      call uvchksum_pair("rigidity_ice_[uv]", fluxes%rigidity_ice_u, &
+                         fluxes%rigidity_ice_v, G%HI, haloshift=0)
+      call uvchksum_pair("frac_shelf_[uv]", fluxes%frac_shelf_u, &
+                         fluxes%frac_shelf_v, G%HI, haloshift=0)
     endif
   endif
 
@@ -1127,8 +1127,8 @@ end subroutine add_shelf_flux
 
 !   if (CS%debug) then
 !     if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-!       call uvchksum_pair(state%taux_shelf, "taux_shelf", &
-!                          state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
+!       call uvchksum_pair("tau[xy]_shelf", state%taux_shelf, &
+!                          state%tauy_shelf, G%HI, haloshift=0)
 !     endif
 !   endif
 

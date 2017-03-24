@@ -806,15 +806,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call hchksum(Kd,"BBL Kd",G%HI,haloshift=0)
     if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call uvchksum_pair(visc%kv_bbl_u,"BBL Kv_bbl_u", &
-                         visc%kv_bbl_v,"BBL Kv_bbl_v",G%HI,haloshift=1)
+      call uvchksum_pair("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
+                         G%HI,haloshift=1)
     endif
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
-      call uvchksum_pair(visc%bbl_thick_u,"BBL bbl_thick_u", &
-                         visc%bbl_thick_v,"BBL bbl_thick_v",G%HI,haloshift=1)
+      call uvchksum_pair("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
+                         visc%bbl_thick_v, G%HI,haloshift=1)
     endif
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uvchksum_pair(visc%Ray_u,"Ray_u", visc%Ray_v,"Ray_v", G%HI)
+      call uvchksum_pair("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI)
     endif
   endif
 

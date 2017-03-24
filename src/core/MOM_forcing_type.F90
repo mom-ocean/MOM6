@@ -815,8 +815,8 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%taux) .and. associated(fluxes%tauy)) &
-    call uvchksum_pair(fluxes%taux, mesg//" fluxes%taux", &
-                       fluxes%tauy, mesg//" fluxes%tauy",G%HI,haloshift=1)
+    call uvchksum_pair(mesg//" fluxes%tau[xy]", &
+                       fluxes%taux, fluxes%tauy, G%HI, haloshift=1)
   if (associated(fluxes%ustar)) &
     call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
   if (associated(fluxes%buoy)) &

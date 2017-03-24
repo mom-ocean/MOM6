@@ -95,8 +95,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
-    call uvchksum_pair(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', &
-                       G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call uvchksum_pair('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
+                       G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
