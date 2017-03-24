@@ -192,13 +192,14 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+  if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
+       HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
     write(0,*) 'chksum_B_2d: haloshift =',hshift
-    write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
-    write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
+    write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
     call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
   endif
+
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
 
@@ -230,7 +231,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -245,15 +246,15 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     integer :: i, j, n
     real :: aMean, aMin, aMax
     aMean = 0.
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%iscB,HI%jscB)
+    aMax = array(HI%iscB,HI%jscB)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jscB,HI%jecB ; do i=HI%iscB,HI%iecB
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jscB:HI%jecB))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -287,12 +288,12 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  if (hshift<0) hshift=HI%iedB-HI%iecB
 
-  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+  if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_2d: haloshift =',hshift
-    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
     write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
   endif
@@ -319,7 +320,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%iscB+di,HI%iecB+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -334,15 +335,15 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     integer :: i, j, n
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%isc,HI%jscB)
+    aMax = array(HI%isc,HI%jscB)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jscB,HI%jecB ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jscB:HI%jecB))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -379,10 +380,10 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
   if (hshift<0) hshift=HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+       HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
     write(0,*) 'chksum_v_2d: haloshift =',hshift
     write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
-    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
     call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
   endif
 
@@ -408,7 +409,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%iscB+di,HI%iecB+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -423,15 +424,15 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     integer :: i, j, n
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%iscB,HI%jsc)
+    aMax = array(HI%iscB,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jsc,HI%jec ; do i=HI%iscB,HI%iecB
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
