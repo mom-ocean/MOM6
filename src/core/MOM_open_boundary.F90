@@ -225,8 +225,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
-  ! Should this be set in MOM_input instead?
-  if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
+  ! It's in state initialization...
+!  if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
 
   call get_param(param_file, mod, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
                    "If true, extend OBC segments. This option is used to recover\n"//&

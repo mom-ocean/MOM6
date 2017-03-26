@@ -17,6 +17,7 @@ use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_tracer_registry,       only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
 use tidal_bay_initialization,  only : tidal_bay_set_OBC_data
+use Kelvin_initialization,     only : Kelvin_set_OBC_data
 
 implicit none ; private
 
@@ -56,6 +57,8 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, Time)
 
   if (OBC%OBC_user_config == "tidal_bay") then
     call tidal_bay_set_OBC_data(OBC, G, h, Time)
+  elseif (OBC%OBC_user_config == "Kelvin") then
+    call Kelvin_set_OBC_data(OBC, G, h, Time)
   elseif (OBC%needs_IO_for_data) then
     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   endif
