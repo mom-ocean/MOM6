@@ -106,7 +106,7 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
   real :: uh_src_rem, uh_dest_rem, duh ! Incremental amounts of stuff
   real :: c_uh_dest ! Compensating term for uh_dest
   integer :: k_src, k_dest ! Index of cell in src and dest columns
-  integer :: iter
+  integer :: k
   logical :: src_ran_out, src_exists
 
   uh_dest(:) = missing_value
@@ -169,7 +169,10 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
     if ((k_dest==ndest .and. h_dest_rem==0.) .or. (k_src==nsrc .and. h_src_rem==0.)) then
       ! Add the remaining mass transport (ostensibly due to roundoff) to the last cell in the
       ! destination column. Alternatively, the residual could be added to the first non-zero cell
-      uh_dest(k_dest) = uh_dest(k_dest) + uh_src_rem
+      do k = ndest,1,-1
+        if (uh_dest(k)==missing_value) cycle
+        uh_dest(k) = uh_dest(k) + uh_src_rem
+      enddo
       exit
     endif
   enddo
