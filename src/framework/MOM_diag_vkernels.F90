@@ -172,6 +172,7 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       do k = ndest,1,-1
         if (uh_dest(k)==missing_value) cycle
         uh_dest(k) = uh_dest(k) + uh_src_rem
+        exit
       enddo
       exit
     endif
