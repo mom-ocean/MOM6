@@ -1,7 +1,7 @@
-.. _Annotated:
+.. _Todo:
 
-Data types
-==========
+Todo list
+=========
 
 .. raw:: html
 
@@ -9,4 +9,4 @@ Data types
       <script> function resizeIframe(obj) { obj.style.height = obj.contentWindow.document.body.scrollHeight + 'px'; } </script>
 
       <!-- inline, after the iframe -->
-      <iframe src="_static/annotated.html" class="auto-height" width="100%" height="600px" scrolling="yes" marginheight="0" frameborder="0" onload="resizeIframe(this)"></iframe>
+      <iframe src="../_static/todo.html" class="auto-height" width="100%" height="600px" scrolling="yes" marginheight="0" frameborder="0" onload="resizeIframe(this)"></iframe>

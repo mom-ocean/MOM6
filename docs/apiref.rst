@@ -6,13 +6,13 @@ API Reference
 .. toctree::
   :maxdepth: 1
 
-  api_modules
-  api_annotated
-  api_pages
-  api_files
-  api_classes
-  api_globals
-  api_globals_defs
-  api_globals_func
-  api_globals_vars
-  api_todo
+  api/modules
+  api/annotated
+  api/pages
+  api/files
+  api/classes
+  api/globals
+  api/globals_defs
+  api/globals_func
+  api/globals_vars
+  api/todo
