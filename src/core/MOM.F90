@@ -501,6 +501,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real, dimension(SZIB_(CS%G), SZJ_(CS%G), SZK_(CS%G)) :: umo ! Diagnostics
   real, dimension(SZI_(CS%G), SZJB_(CS%G), SZK_(CS%G)) :: vmo ! Diagnostics
 
+  ! Store the layer thicknesses before any changes by the dynamics. This is necessary for remapped
+  ! mass transport diagnostics
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_pre_dyn
+
   real :: tot_wt_ssh, Itot_wt_ssh, I_time_int
   real :: zos_area_mean, volo, ssh_ga
   type(time_type) :: Time_local
@@ -896,6 +900,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       enddo ; enddo ; enddo
     endif
 
+    ! Store pre-dynamics layer thicknesses so that mass fluxes are remapped correctly
+    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+      h_pre_dyn(i,j,k) = h(i,j,k)
+    enddo ; enddo ; enddo
+
     if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
       ! This section uses a split time stepping scheme for the dynamic equations,
       ! basically the stacked shallow water equations with viscosity.
@@ -1040,7 +1049,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
+
       ! Post mass transports, including SGS
+      ! Build the remap grids using the layer thicknesses from before the dynamics
+      call diag_update_remap_grids(CS%diag, alt_h = h_pre_dyn)
       if (CS%id_umo_2d > 0) then
         umo2d(:,:) = CS%uhtr(:,:,1)
         do k = 2, nz
@@ -1052,7 +1064,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_umo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
         umo(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_umo, umo, CS%diag)
+        call post_data(CS%id_umo, umo, CS%diag, alt_h = h_pre_dyn)
       endif
       if (CS%id_vmo_2d > 0) then
         vmo2d(:,:) = CS%vhtr(:,:,1)
@@ -1065,8 +1077,15 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_vmo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
         vmo(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
-        call post_data(CS%id_vmo, vmo, CS%diag)
+        call post_data(CS%id_vmo, vmo, CS%diag, alt_h = h_pre_dyn)
       endif
+
+      if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag, alt_h = h_pre_dyn)
+      if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag, alt_h = h_pre_dyn)
+
+      ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
+      ! from before the dynamics calls
+      call diag_update_remap_grids(CS%diag)
 
       if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
       if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
@@ -1270,9 +1289,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
       if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
       if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
-
-      if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag)
-      if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag)
 
       call post_diags_TS_tendency(G,GV,CS,CS%dt_trans)
 
