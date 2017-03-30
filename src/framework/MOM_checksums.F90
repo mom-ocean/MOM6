@@ -30,14 +30,15 @@ use MOM_hor_index, only : hor_index_type
 implicit none ; private
 
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
+public :: hchksum_pair, uvchksum, Bchksum_pair
 public :: MOM_checksums_init
 
-interface hchksum
-  module procedure chksum_h_2d, chksum_h_3d
+interface hchksum_pair
+  module procedure chksum_pair_h_2d, chksum_pair_h_3d
 end interface
 
-interface Bchksum
-  module procedure chksum_B_2d, chksum_B_3d
+interface uvchksum
+  module procedure chksum_uv_2d, chksum_uv_3d
 end interface
 
 interface uchksum
@@ -46,6 +47,18 @@ end interface
 
 interface vchksum
   module procedure chksum_v_2d, chksum_v_3d
+end interface
+
+interface Bchksum_pair
+  module procedure chksum_pair_B_2d, chksum_pair_B_3d
+end interface
+
+interface hchksum
+  module procedure chksum_h_2d, chksum_h_3d
+end interface
+
+interface Bchksum
+  module procedure chksum_B_2d, chksum_B_3d
 end interface
 
 ! This is an older interface that has been renamed Bchksum
@@ -74,6 +87,38 @@ logical :: checkForNaNs=.true. ! If true, checks array for NaNs and cause
 contains
 
 ! =====================================================================
+
+subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                 intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  if (present(haloshift)) then
+    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift)
+  else
+    call chksum_h_2d(arrayA, 'x '//mesg, HI)
+    call chksum_h_2d(arrayB, 'y '//mesg, HI)
+  endif
+
+end subroutine chksum_pair_h_2d
+
+subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  if (present(haloshift)) then
+    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift)
+  else
+    call chksum_h_3d(arrayA, 'x '//mesg, HI)
+    call chksum_h_3d(arrayB, 'y '//mesg, HI)
+  endif
+
+end subroutine chksum_pair_h_3d
 
 !> chksum_h_2d performs checksums on a 2d array staggered at tracer points.
 subroutine chksum_h_2d(array, mesg, HI, haloshift)
@@ -164,6 +209,45 @@ end subroutine chksum_h_2d
 
 ! =====================================================================
 
+subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, symmetric, haloshift)
+  character(len=*),                 intent(in) :: mesg   !< Identifying messages
+  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  logical :: sym
+
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if (present(haloshift)) then
+    call chksum_B_2d(arrayA, 'x '//mesg, HI, haloshift, symmetric=sym)
+    call chksum_B_2d(arrayB, 'y '//mesg, HI, haloshift, symmetric=sym)
+  else
+    call chksum_B_2d(arrayA, 'x '//mesg, HI, symmetric=sym)
+    call chksum_B_2d(arrayB, 'y '//mesg, HI, symmetric=sym)
+  endif
+
+end subroutine chksum_pair_B_2d
+
+subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  logical :: sym
+
+  if (present(haloshift)) then
+    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift)
+  else
+    call chksum_B_3d(arrayA, 'x '//mesg, HI)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI)
+  endif
+
+end subroutine chksum_pair_B_3d
+
 !> chksum_B_2d performs checksums on a 2d array staggered at corner points.
 subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
   type(hor_index_type), intent(in) :: HI     !< A horizontal index type
@@ -192,13 +276,14 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+  if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
+       HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
     write(0,*) 'chksum_B_2d: haloshift =',hshift
-    write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
-    write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    write(0,*) 'chksum_B_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
+    write(0,*) 'chksum_B_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
     call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
   endif
+
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
 
@@ -230,7 +315,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%iscB+di,HI%iecB+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -245,15 +330,15 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     integer :: i, j, n
     real :: aMean, aMin, aMax
     aMean = 0.
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%iscB,HI%jscB)
+    aMax = array(HI%iscB,HI%jscB)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jscB,HI%jecB ; do i=HI%iscB,HI%iecB
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jscB:HI%jecB))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -264,6 +349,38 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
 end subroutine chksum_B_2d
 
 ! =====================================================================
+
+subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
+  character(len=*),                 intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
+  integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  if (present(haloshift)) then
+    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift)
+  else
+    call chksum_u_2d(arrayU, 'u '//mesg, HI)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI)
+  endif
+
+end subroutine chksum_uv_2d
+
+subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
+  character(len=*),                    intent(in) :: mesg !< Identifying messages
+  type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
+  integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+
+  if (present(haloshift)) then
+    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift)
+  else
+    call chksum_u_3d(arrayU, 'u '//mesg, HI)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI)
+  endif
+
+end subroutine chksum_uv_3d
 
 !> chksum_u_2d performs checksums on a 2d array staggered at C-grid u points.
 subroutine chksum_u_2d(array, mesg, HI, haloshift)
@@ -287,12 +404,12 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
 
   hshift=default_shift
   if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  if (hshift<0) hshift=HI%iedB-HI%iecB
 
-  if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
+  if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
     write(0,*) 'chksum_u_2d: haloshift =',hshift
-    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
+    write(0,*) 'chksum_u_2d: isd,isc,iec,ied=',HI%isdB,HI%iscB,HI%iecB,HI%iedB
     write(0,*) 'chksum_u_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
     call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
   endif
@@ -319,7 +436,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jsc+dj,HI%jec+dj; do i=HI%iscB+di,HI%iecB+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -334,15 +451,15 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     integer :: i, j, n
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%iscB,HI%jsc)
+    aMax = array(HI%iscB,HI%jsc)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jsc,HI%jec ; do i=HI%iscB,HI%iecB
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jsc:HI%jec))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -379,10 +496,10 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
   if (hshift<0) hshift=HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
-       HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
+       HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
     write(0,*) 'chksum_v_2d: haloshift =',hshift
     write(0,*) 'chksum_v_2d: isd,isc,iec,ied=',HI%isd,HI%isc,HI%iec,HI%ied
-    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsd,HI%jsc,HI%jec,HI%jed
+    write(0,*) 'chksum_v_2d: jsd,jsc,jec,jed=',HI%jsdB,HI%jscB,HI%jecB,HI%jedB
     call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
   endif
 
@@ -408,7 +525,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%isc+di,HI%iec+di
         bc = bitcount(abs(array(i,j)))
         subchk = subchk + bc
     enddo; enddo
@@ -423,15 +540,15 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     integer :: i, j, n
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc)
-    aMax = array(HI%isc,HI%jsc)
+    aMin = array(HI%isc,HI%jscB)
+    aMax = array(HI%isc,HI%jscB)
     n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
+    do j=HI%jscB,HI%jecB ; do i=HI%isc,HI%iec
       aMin = min(aMin, array(i,j))
       aMax = max(aMax, array(i,j))
       n = n + 1
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jscB:HI%jecB))
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)

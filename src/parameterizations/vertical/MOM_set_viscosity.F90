@@ -51,7 +51,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : uchksum, vchksum
+use MOM_debugging, only : uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -813,12 +813,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     call post_data(CS%id_Ray_v, visc%Ray_v, CS%diag)
 
   if (CS%debug) then
-    if (associated(visc%Ray_u)) call uchksum(visc%Ray_u,"Ray u",G%HI,haloshift=0)
-    if (associated(visc%Ray_v)) call vchksum(visc%Ray_v,"Ray v",G%HI,haloshift=0)
-    if (associated(visc%kv_bbl_u)) call uchksum(visc%kv_bbl_u,"kv_bbl_u",G%HI,haloshift=0)
-    if (associated(visc%kv_bbl_v)) call vchksum(visc%kv_bbl_v,"kv_bbl_v",G%HI,haloshift=0)
-    if (associated(visc%bbl_thick_u)) call uchksum(visc%bbl_thick_u,"bbl_thick_u",G%HI,haloshift=0)
-    if (associated(visc%bbl_thick_v)) call vchksum(visc%bbl_thick_v,"bbl_thick_v",G%HI,haloshift=0)
+    if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI,haloshift=0)
+    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
+        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI,haloshift=0)
+    if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
+        call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, &
+                      visc%bbl_thick_v, G%HI,haloshift=0)
   endif
 
 end subroutine set_viscous_BBL
@@ -1539,10 +1540,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   enddo ! J-loop at v-points
 
   if (CS%debug) then
-    if (associated(visc%nkml_visc_u)) &
-      call uchksum(visc%nkml_visc_u,"nkml_visc_u",G%HI,haloshift=0)
-    if (associated(visc%nkml_visc_v)) &
-      call vchksum(visc%nkml_visc_v,"nkml_visc_v",G%HI,haloshift=0)
+    if (associated(visc%nkml_visc_u) .and. associated(visc%nkml_visc_v)) &
+      call uvchksum("nkml_visc_[uv]", visc%nkml_visc_u, &
+                    visc%nkml_visc_v, G%HI,haloshift=0)
   endif
   if (CS%id_nkml_visc_u > 0) &
     call post_data(CS%id_nkml_visc_u, visc%nkml_visc_u, CS%diag)

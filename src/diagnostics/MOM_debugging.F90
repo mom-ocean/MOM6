@@ -27,7 +27,7 @@ module MOM_debugging
 ! separate we retain the ability to set up MOM6 and SIS2 debugging separately. !
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 
-use MOM_checksums, only : hchksum, Bchksum, uchksum, vchksum, qchksum
+use MOM_checksums, only : hchksum, Bchksum, qchksum, uvchksum
 use MOM_checksums, only : is_NaN, chksum, MOM_checksums_init
 use MOM_coms, only : PE_here, root_PE, num_PEs, sum_across_PEs
 use MOM_coms, only : min_across_PEs, max_across_PEs, reproducing_sum
@@ -46,7 +46,8 @@ public :: MOM_debugging_init, totalStuff, totalTandS
 public :: check_column_integral, check_column_integrals
 
 ! These interfaces come from MOM_checksums.
-public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
+public :: hchksum, Bchksum, qchksum, is_NaN, chksum
+public :: uvchksum
 
 interface check_redundant
   module procedure check_redundant_vC3d, check_redundant_vC2d
@@ -579,8 +580,7 @@ subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uchksum(u_comp, mesg//"(u)", G%HI, halos)
-    call vchksum(v_comp, mesg//"(v)", G%HI, halos)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -606,8 +606,7 @@ subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uchksum(u_comp, mesg//"(u)", G%HI, halos)
-    call vchksum(v_comp, mesg//"(v)", G%HI, halos)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos)
   endif
   if (debug_redundant) then
     if (are_scalars) then
