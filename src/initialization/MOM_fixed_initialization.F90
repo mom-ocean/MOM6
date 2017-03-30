@@ -4,7 +4,7 @@ module MOM_fixed_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -95,8 +95,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
-    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G%HI)
-    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
+                  G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 

@@ -23,7 +23,7 @@ module MOM_checksum_packages
 !   This module provdes a several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.
 
-use MOM_debugging, only : hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, uvchksum
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
@@ -77,11 +77,10 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs=1; if (present(haloshift)) hs=haloshift
-  call uchksum(u, mesg//" u",G%HI,haloshift=hs)
-  call vchksum(v, mesg//" v",G%HI,haloshift=hs)
-  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI,haloshift=hs)
-  call uchksum(GV%H_to_kg_m2*uh, mesg//" uh",G%HI,haloshift=hs)
-  call vchksum(GV%H_to_kg_m2*vh, mesg//" vh",G%HI,haloshift=hs)
+  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs)
+  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI, haloshift=hs)
+  call uvchksum(mesg//" [uv]h", GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, &
+                G%HI, haloshift=hs)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
@@ -110,8 +109,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs=1; if (present(haloshift)) hs=haloshift
-  call uchksum(u, mesg//" u",G%HI,haloshift=hs)
-  call vchksum(v, mesg//" v",G%HI,haloshift=hs)
+  call uvchksum(mesg//" u", u, v, G%HI,haloshift=hs)
   call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI,haloshift=hs)
 end subroutine MOM_state_chksum_3arg
 
@@ -184,18 +182,13 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  call uchksum(CAu, mesg//" CAu",G%HI,haloshift=0)
-  call vchksum(CAv, mesg//" CAv",G%HI,haloshift=0)
-  call uchksum(PFu, mesg//" PFu",G%HI,haloshift=0)
-  call vchksum(PFv, mesg//" PFv",G%HI,haloshift=0)
-  call uchksum(diffu, mesg//" diffu",G%HI,haloshift=0)
-  call vchksum(diffv, mesg//" diffv",G%HI,haloshift=0)
+  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0)
+  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI,haloshift=0)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0)
   if (present(pbce)) &
     call hchksum(GV%kg_m2_to_H*pbce, mesg//" pbce",G%HI,haloshift=0)
-  if (present(u_accel_bt)) &
-    call uchksum(u_accel_bt, mesg//" u_accel_bt",G%HI,haloshift=0)
-  if (present(v_accel_bt)) &
-    call vchksum(v_accel_bt, mesg//" v_accel_bt",G%HI,haloshift=0)
+  if (present(u_accel_bt) .and. present(v_accel_bt)) &
+    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0)
 end subroutine MOM_accel_chksum
 
 ! =============================================================================

@@ -5,7 +5,7 @@ module MOM_vert_friction
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_debugging, only : uchksum, vchksum, hchksum
+use MOM_debugging, only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -520,8 +520,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   enddo ! end of v-component J loop
 
   if (CS%debug) then
-    call uchksum(visc_rem_u,"visc_rem_u",G%HI,haloshift=0)
-    call vchksum(visc_rem_v,"visc_rem_v",G%HI,haloshift=0)
+    call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI,haloshift=0)
   endif
 
 end subroutine vertvisc_remnant
@@ -905,12 +904,13 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS)
 
 
   if (CS%debug) then
-    call uchksum(CS%h_u*H_to_m,"vertvisc_coef h_u",G%HI,haloshift=0)
-    call vchksum(CS%h_v*H_to_m,"vertvisc_coef h_v",G%HI,haloshift=0)
-    call uchksum(CS%a_u,"vertvisc_coef a_u",G%HI,haloshift=0)
-    call vchksum(CS%a_v,"vertvisc_coef a_v",G%HI,haloshift=0)
-    if (allocated(hML_u)) call uchksum(hML_u*H_to_m,"vertvisc_coef hML_u",G%HI,haloshift=0)
-    if (allocated(hML_v)) call vchksum(hML_v*H_to_m,"vertvisc_coef hML_v",G%HI,haloshift=0)
+    call uvchksum("vertvisc_coef h_[uv]", CS%h_u*H_to_m, &
+                  CS%h_v*H_to_m, G%HI,haloshift=0)
+    call uvchksum("vertvisc_coef a_[uv]", CS%a_u, &
+                  CS%a_v, G%HI,haloshift=0)
+    if (allocated(hML_u) .and. allocated(hML_v)) &
+        call uvchksum("vertvisc_coef hML_[uv]", hML_u*H_to_m, &
+                      hML_v*H_to_m, G%HI,haloshift=0)
   endif
 
 ! Offer diagnostic fields for averaging.
