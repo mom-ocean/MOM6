@@ -107,6 +107,7 @@ use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
+use MOM_energetic_PBL,         only : energetic_PBL_get_MLD
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
 use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
@@ -204,6 +205,14 @@ type, public :: MOM_control_struct
                                      !! isopycnal/stacked shallow water mode. This logical is
                                      !! set by calling the function useRegridding() from the
                                      !! MOM_regridding module.
+  logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
+                                     !! boundary layer scheme to determine the diffusivity
+                                     !! in the surface boundary layer.
+  logical :: use_fixed_hmix          !< If true, surface properties are averaged over
+                                     !! a fixed depth set via HMIX_SFC_PROP (tracers)
+                                     !! and HMIX_UV_SFC_PROP (velocity). If false,
+                                     !! use_energetic_PBL must be true and surface
+                                     !! properties are averaged over the mixed layer depth.
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
                                      !! undocumented run-time flag that is fragile.
   logical :: offline_tracer_mode = .false.
@@ -1049,7 +1058,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
                                  CS%diag_to_Z_CSp)
       call cpu_clock_end(id_clock_Z_diag)
-
       ! Post mass transports, including SGS
       ! Build the remap grids using the layer thicknesses from before the dynamics
       call diag_update_remap_grids(CS%diag, alt_h = h_pre_dyn)
@@ -1284,6 +1292,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%id_Tady_2d   > 0) call post_data(CS%id_Tady_2d,   CS%T_ady_2d,   CS%diag)
       if (CS%id_Tdiffx_2d > 0) call post_data(CS%id_Tdiffx_2d, CS%T_diffx_2d, CS%diag)
       if (CS%id_Tdiffy_2d > 0) call post_data(CS%id_Tdiffy_2d, CS%T_diffy_2d, CS%diag)
+
+      if (CS%id_Sadx_2d   > 0) call post_data(CS%id_Sadx_2d,   CS%S_adx_2d,   CS%diag)
+      if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
+      if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
+      if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
 
       if (CS%id_Sadx_2d   > 0) call post_data(CS%id_Sadx_2d,   CS%S_adx_2d,   CS%diag)
       if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
@@ -1908,18 +1921,30 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "The actual thermodynamic timestep that is used in this \n"//&
                  "case is the largest integer multiple of the coupling \n"//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
-
+  call get_param(param_file, "MOM", "ENERGETICS_SFC_PBL", CS%use_energetic_PBL, &
+                 "If true, use an implied energetics planetary boundary \n"//&
+                 "layer scheme to determine the diffusivity and viscosity \n"//&
+                 "in the surface boundary layer.", default=.false.,do_not_log=.true.)
   if (.not.CS%bulkmixedlayer) then
-    call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
-                 "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
-                 "over which to average to find surface properties like \n"//&
+    call get_param(param_file, "MOM", "USE_FIXED_HMIX", CS%use_fixed_hmix, &
+                 "If BULKMIXEDLAYER is false, this flag sets whether the \n"//&
+                 "depth over which to average to find surface properties is \n"//&
+                 "constant (USE_FIXED_HMIX = True) or variable. If constant, \n"// &
+                 "HMIX_SFC_PROP and HMIX_UV_SFC_PROP are used. If variable, \n"//&
+                 "ENERGETICS_SFC_PBL must be used and surface properties will \n"//&
+                 "be averaged over the mixed layer depth.",default=.true.)
+    if (CS%use_fixed_hmix) then
+       call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
+                 "If BULKMIXEDLAYER is false and FIXED_HMIX is true, HMIX_SFC_PROP \n"//&
+                 "is the depth over which to average to find surface properties like \n"//&
                  "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0)
-    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
-                 "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
-                 "over which to average to find surface flow properties,\n"//&
+       call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
+                 "If BULKMIXEDLAYER is false and FIXED_HMIX is true,HMIX_UV_SFC_PROP \n"//&
+                 "is the depth over which to average to find surface flow properties,\n"//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
                  units="m", default=0.)
+    endif
   endif
   call get_param(param_file, "MOM", "MIN_Z_DIAG_INTERVAL", Z_diag_int, &
                  "The minimum amount of time in seconds between \n"//&
@@ -2050,6 +2075,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if (CS%bulkmixedlayer .and. .not.use_EOS) call MOM_error(FATAL, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add USE_EOS = True to MOM_input.")
+  if (.not. CS%use_fixed_hmix .and. .not. CS%use_energetic_PBL) call MOM_error(FATAL, &
+    "MOM: FIXED_HMIX = False can only be used if ENERGETICS_SFC_PBL = True.")
 
   call get_param(param_file, 'MOM', "ICE_SHELF", use_ice_shelf, default=.false., do_not_log=.true.)
   if (use_ice_shelf) then
@@ -3403,7 +3430,11 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
 
     if (.not.associated(state%Hml)) allocate(state%Hml(isd:ied,jsd:jed))
 
-    depth_ml = CS%Hmix
+    if (.not. CS%use_fixed_hmix) then
+        call energetic_PBL_get_MLD(CS%diabatic_CSp%energetic_PBL_CSp, state%Hml, G)
+        call pass_var(state%Hml, G%domain)
+    endif
+
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
     do j=js,je
@@ -3417,6 +3448,11 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       enddo
 
       do k=1,nz ; do i=is,ie
+        if (CS%use_fixed_hmix) then
+          depth_ml = CS%Hmix
+        else
+          depth_ml = state%Hml(i,j)
+        endif
         if (depth(i) + h(i,j,k)*GV%H_to_m < depth_ml) then
           dh = h(i,j,k)*GV%H_to_m
         elseif (depth(i) < depth_ml) then
@@ -3442,13 +3478,12 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         else
           state%sfc_density(i,j) = state%sfc_density(i,j) / depth(i)
         endif
-        state%Hml(i,j) = depth(i)
+        if (CS%use_fixed_hmix) state%Hml(i,j) = depth(i)
       enddo
     enddo ! end of j loop
 
 !   Determine the mean velocities in the uppermost depth_ml fluid.
-    if (CS%Hmix_UV>0.) then
-      depth_ml = CS%Hmix_UV
+    if (CS%Hmix_UV>0. .or. (.not. CS%use_fixed_hmix)) then
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,iscB,iecB,jscB,jecB,CS,state,h,v,depth_ml,GV) private(depth,dh,hv)
       do J=jscB,jecB
         do i=is,ie
@@ -3456,6 +3491,12 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
           state%v(i,J) = 0.0
         enddo
         do k=1,nz ; do i=is,ie
+          if (CS%use_fixed_hmix) then
+            depth_ml = CS%Hmix
+          else
+            depth_ml = 0.5 * (state%Hml(i,j) + state%Hml(i,j+1))
+          endif
+
           hv = 0.5 * (h(i,j,k) + h(i,j+1,k)) * GV%H_to_m
           if (depth(i) + hv < depth_ml) then
             dh = hv
@@ -3482,6 +3523,11 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
           state%u(I,j) = 0.0
         enddo
         do k=1,nz ; do I=iscB,iecB
+          if (CS%use_fixed_hmix) then
+            depth_ml = CS%Hmix
+          else
+            depth_ml = 0.5 * (state%Hml(i,j) + state%Hml(i+1,j))
+          endif
           hu = 0.5 * (h(i,j,k) + h(i+1,j,k)) * GV%H_to_m
           if (depth(i) + hu < depth_ml) then
             dh = hu
