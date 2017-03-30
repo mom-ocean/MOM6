@@ -99,12 +99,14 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
   real, dimension(ndest), intent(in)    :: h_dest !< Thickness of destination cells
   real,                   intent(in)    :: missing_value !< Value to assign in vanished cells
   real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces
+
   ! Local variables
   real :: x_dest ! Relative position of target interface
   real :: h_src_rem, h_dest_rem, dh ! Incremental thicknesses
   real :: uh_src_rem, uh_dest_rem, duh ! Incremental amounts of stuff
+  real :: c_uh_dest ! Compensating term for uh_dest
   integer :: k_src, k_dest ! Index of cell in src and dest columns
-  integer :: iter
+  integer :: k
   logical :: src_ran_out, src_exists
 
   uh_dest(:) = missing_value
@@ -129,6 +131,7 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       ! Sink has no capacity so move to the next destination cell
       k_dest = k_dest + 1
       h_dest_rem = h_dest(k_dest)
+      c_uh_dest = 0.
       uh_dest(k_dest) = 0.
       if (h_dest_rem==0.) cycle
     endif
@@ -159,13 +162,40 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
       uh_src_rem = 0.
       h_dest_rem = 0.
     endif
-    uh_dest(k_dest) = uh_dest(k_dest) + duh
-    if (k_dest==ndest .and. (k_src==nsrc .or. h_dest_rem==0.)) exit
+    ! Use compensated summation to ensure accuracy in case multiple (small) sums are added
+    ! to a destination cell
+    call comp_sum(uh_dest(k_dest), c_uh_dest + duh, c_uh_dest)
+    ! Exit out of the loop if either the source or destination column has been depleted/filled
+    if ((k_dest==ndest .and. h_dest_rem==0.) .or. (k_src==nsrc .and. h_src_rem==0.)) then
+      ! Add the remaining mass transport (ostensibly due to roundoff) to the last cell in the
+      ! destination column. Alternatively, the residual could be added to the first non-zero cell
+      do k = ndest,1,-1
+        if (uh_dest(k)==missing_value) cycle
+        uh_dest(k) = uh_dest(k) + uh_src_rem
+        exit
+      enddo
+      exit
+    endif
   enddo
 
   if (.not. src_exists) uh_dest(1:ndest) = missing_value
 
 end subroutine reintegrate_column
+
+!> Given a running sum and a summand, return both the naive sum and the residual due to roundoff
+subroutine comp_sum(sum,b,comp)
+  real, intent(inout) :: sum  !< Running sum
+  real, intent(in   ) :: b    !< Number to be added to the sum
+  real, intent(  out) :: comp !< Roundoff
+  ! Local variable
+  real :: temp
+
+  ! Store the original sum
+  temp = sum
+  sum = sum + b
+  comp = b - (sum - temp)
+
+end subroutine comp_sum
 
 !> Returns true if any unit tests for module MOM_diag_vkernels fail
 logical function diag_vkernels_unit_tests()
