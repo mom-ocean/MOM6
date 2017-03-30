@@ -708,13 +708,14 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
 end subroutine post_data_2d_low
 
-subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
+subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
 
   integer,           intent(in) :: diag_field_id
   real,              intent(in) :: field(:,:,:)
   type(diag_ctrl), target, intent(in) :: diag_cs
   logical, optional, intent(in) :: is_static
   real,    optional, intent(in) :: mask(:,:,:)
+  real, target, optional, intent(in) :: alt_h(:,:,:)
 
 ! Arguments:
 !  (in) diag_field_id - id for an output variable returned by a
@@ -728,6 +729,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
   integer :: nz, i, j, k
   real, dimension(:,:,:), allocatable :: remapped_field
   logical :: staggered_in_x, staggered_in_y
+  real, dimension(:,:,:), pointer :: h_diag
+
+  if(present(alt_h)) then
+    h_diag => alt_h
+  else
+    h_diag => diag_cs%h
+  endif
 
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
 
@@ -752,7 +760,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call vertically_reintegrate_diag_field( &
               diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then
@@ -776,7 +784,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then
@@ -800,7 +808,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz+1))
       call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%h, staggered_in_x, staggered_in_y, &
+              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
               diag%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%mask3d)) then
@@ -1873,6 +1881,10 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
     deallocate(diag_coords)
   endif
 
+  call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
+                 'Set the default missing value to use for diagnostics.', &
+                 default=-1.e34)
+
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
   diag_cs%h => null()
@@ -1952,16 +1964,26 @@ end subroutine
 !> Build/update vertical grids for diagnostic remapping.
 !! \note The target grids need to be updated whenever sea surface
 !! height changes.
-subroutine diag_update_remap_grids(diag_cs)
-  type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
+subroutine diag_update_remap_grids(diag_cs, alt_h)
+  type(diag_ctrl),        intent(inout) :: diag_cs      !< Diagnostics control structure
+  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be
+                                                        !! something other than the current
+                                                        !! thicknesses
   ! Local variables
   integer :: i
+  real, dimension(:,:,:), pointer :: h_diag
+
+  if(present(alt_h)) then
+    h_diag => alt_h
+  else
+    h_diag => diag_cs%h
+  endif
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, diag_cs%h, diag_cs%T, diag_cs%S, &
+                           diag_cs%G, h_diag, diag_cs%T, diag_cs%S, &
                            diag_cs%eqn_of_state)
   enddo
 
@@ -2010,7 +2032,7 @@ subroutine diag_masks_set(G, nz, missing_value, diag_cs)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
 
-  diag_cs%missing_value = missing_value
+!  diag_cs%missing_value = missing_value
 
 end subroutine diag_masks_set
 
