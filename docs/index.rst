@@ -11,8 +11,11 @@ Contents:
 .. toctree::
   :maxdepth: 2
 
-  equations
-  topics
+  about
+  equations/overview
+  parameterizations
+  working_with_MOM6
+  tutorials
   apiref
 
 
