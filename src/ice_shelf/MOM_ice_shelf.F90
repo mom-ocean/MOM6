@@ -129,7 +129,7 @@ use user_shelf_init, only : user_ice_shelf_CS
 use constants_mod,      only: GRAV
 use mpp_mod, only : mpp_sum, mpp_max, mpp_min, mpp_pe, mpp_npes, mpp_sync
 use MOM_coms, only : reproducing_sum
-use MOM_debugging, only : hchksum, qchksum, chksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, qchksum, chksum, uvchksum
 
 implicit none ; private
 
@@ -980,12 +980,12 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
 
   if (CS%debug) then
     if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
-      call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
-      call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
-      call uchksum(fluxes%rigidity_ice_u, "rigidity_ice_u", G%HI, haloshift=0)
-      call vchksum(fluxes%rigidity_ice_v, "rigidity_ice_v", G%HI, haloshift=0)
-      call uchksum(fluxes%frac_shelf_u, "frac_shelf_u", G%HI, haloshift=0)
-      call vchksum(fluxes%frac_shelf_v, "frac_shelf_v", G%HI, haloshift=0)
+      call uvchksum("tau[xy]_shelf", state%taux_shelf, state%tauy_shelf, &
+                    G%HI, haloshift=0)
+      call uvchksum("rigidity_ice_[uv]", fluxes%rigidity_ice_u, &
+                    fluxes%rigidity_ice_v, G%HI, haloshift=0)
+      call uvchksum("frac_shelf_[uv]", fluxes%frac_shelf_u, &
+                    fluxes%frac_shelf_v, G%HI, haloshift=0)
     endif
   endif
 
@@ -1126,11 +1126,9 @@ end subroutine add_shelf_flux
 !   endif
 
 !   if (CS%debug) then
-!     if (associated(state%taux_shelf)) then
-!       call uchksum(state%taux_shelf, "taux_shelf", G%HI, haloshift=0)
-!     endif
-!     if (associated(state%tauy_shelf)) then
-!       call vchksum(state%tauy_shelf, "tauy_shelf", G%HI, haloshift=0)
+!     if (associated(state%taux_shelf) .and. associated(state%tauy_shelf)) then
+!       call uvchksum("tau[xy]_shelf", state%taux_shelf, &
+!                     state%tauy_shelf, G%HI, haloshift=0)
 !     endif
 !   endif
 
