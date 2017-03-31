@@ -55,7 +55,6 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! timing of diagnostic output.
 
   real, dimension(:,:), pointer :: &
-         MLD          => NULL(), & !< Mixed layer depth used in the MLE re-stratification parameterization (H units)
          MLD_filtered => NULL()    !< Time-filtered MLD (H units)
 
   integer :: id_urestrat_time
@@ -125,6 +124,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    MLD, &                ! Mixed layer depth actually used in MLE restratification parameterization (H units)
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
@@ -179,7 +179,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
       dK(:) = 0.5 * h(:,j,1) * GV%H_to_m ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
       deltaRhoAtK(:) = 0.
-      CS%MLD(:,j) = 0.
+      MLD(:,j) = 0.
       do k = 2, nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
@@ -189,16 +189,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
         deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
         do i = is-1, ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-          if ((CS%MLD(i,j)==0.) .and. (ddRho>0.) .and. &
+          if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
               (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
             aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
-            CS%MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+            MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
           endif
         enddo ! i-loop
       enddo ! k-loop
       do i = is-1, ie+1
-        CS%MLD(i,j) = CS%MLE_MLD_stretch * CS%MLD(i,j)
-        if ((CS%MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) CS%MLD(i,j) = dK(i) ! Assume mixing to the bottom
+        MLD(i,j) = CS%MLE_MLD_stretch * MLD(i,j)
+        if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
   elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
@@ -211,12 +211,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
-      CS%MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
+      MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
       ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
-      CS%MLD_filtered(i,j) = max( CS%MLD(i,j), bFac*CS%MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
-      CS%MLD(i,j) = CS%MLD_filtered(i,j)
+      CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
+      MLD(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -245,7 +245,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     do k=1,nz
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
-        if (htot(i,j) < CS%MLD(i,j)) then
+        if (htot(i,j) < MLD(i,j)) then
           Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
@@ -261,7 +261,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   if (CS%debug) then
     call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
     call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
-    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
     call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
@@ -371,7 +371,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
     if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
     if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, CS%MLD, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD, CS%diag)
     if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
@@ -750,6 +750,7 @@ end function mixedlayer_restrat_init
 
 !> Allocate and regsiter fields in the mixedlayer restratification structure for restarts
 subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
+  ! Arguments
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
@@ -768,18 +769,14 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
        "mixedlayer_restrat_register_restarts called with an associated control structure.")
   allocate(CS)
 
-  ! CS%MLD is used either for the internally diagnosed MLD or
-  ! for keep a running mean of the PBL's actively mixed MLD.
-  allocate(CS%MLD(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD(:,:) = 0.
-
   call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              default=.false., do_not_log=.true.)
   if (CS%MLE_use_PBL_MLD) then
+    ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
     call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)
-
   endif
 
 end subroutine mixedlayer_restrat_register_restarts
