@@ -42,7 +42,7 @@ use mpp_domains_mod, only : mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : compute_block_extent => mpp_compute_block_extent
 use mpp_parameter_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
-use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE
+use mpp_parameter_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_parameter_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use fms_io_mod,        only : file_exist, parse_mask_table
 
@@ -57,7 +57,7 @@ public :: pass_var_start, pass_var_complete, fill_symmetric_edges
 public :: pass_vector_start, pass_vector_complete
 public :: global_field_sum, sum_across_PEs, min_across_PEs, max_across_PEs
 public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
-public :: To_East, To_West, To_North, To_South, To_All
+public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
 public :: compute_block_extent
@@ -126,12 +126,13 @@ integer, parameter :: To_All = To_East + To_West + To_North + To_South
 
 contains
 
-subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position)
+subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo)
   real, dimension(:,:,:), intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   logical,      optional, intent(in)    :: complete
   integer,      optional, intent(in)    :: position
+  integer,      optional, intent(in)    :: halo
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
@@ -141,11 +142,12 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position)
 !                       TO_EAST sends the data to the processor to the east, so
 !                       the halos on the western side are filled.  TO_ALL is
 !                       the default if sideflag is omitted.
-!  (in)      complete - An optional argument indicating whether the halo updates
+!  (in,opt)  complete - An optional argument indicating whether the halo updates
 !                       should be completed before progress resumes.  Omitting
 !                       complete is the same as setting complete to .true.
-!  (in)      position - An optional argument indicating the position.  This is
+!  (in,opt)   position - An optional argument indicating the position.  This is
 !                       usally CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: dirflag
   logical :: block_til_complete
 
@@ -154,18 +156,25 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position)
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
+  if (PRESENT(halo)) then
+    call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
+                        complete=block_til_complete, position=position, &
+                        whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                           complete=block_til_complete, position=position)
+  endif
 
 end subroutine pass_var_3d
 
 
-subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position)
+subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo)
   real, dimension(:,:),  intent(inout) :: array
   type(MOM_domain_type), intent(inout) :: MOM_dom
   integer,     optional, intent(in)    :: sideflag
   logical,     optional, intent(in)    :: complete
   integer,     optional, intent(in)    :: position
+  integer,     optional, intent(in)    :: halo
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
@@ -175,11 +184,12 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position)
 !                       TO_EAST sends the data to the processor to the east, so
 !                       the halos on the western side are filled.  TO_ALL is
 !                       the default if sideflag is omitted.
-!  (in)      complete - An optional argument indicating whether the halo updates
+!  (in,opt)  complete - An optional argument indicating whether the halo updates
 !                       should be completed before progress resumes.  Omitting
 !                       complete is the same as setting complete to .true.
-!  (in)      position - An optional argument indicating the position.  This is
+!  (in,opt)  position - An optional argument indicating the position.  This is
 !                       usally CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
   integer :: dirflag
   logical :: block_til_complete
@@ -187,19 +197,26 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position)
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
   block_til_complete = .true.
-  if (present(complete)) block_til_complete = complete
+  if (PRESENT(complete)) block_til_complete = complete
 
-  call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
+  if (PRESENT(halo)) then
+    call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
+                        complete=block_til_complete, position=position, &
+                        whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position)
+  endif
 
 end subroutine pass_var_2d
 
-function pass_var_start_2d(array, MOM_dom, sideflag, position, complete)
+function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo)
   real, dimension(:,:),   intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
   logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: halo
   integer :: pass_var_start_2d
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
@@ -216,22 +233,30 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete)
 !                       should be initiated immediately or wait for second
 !                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: dirflag
 
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
-                          flags=dirflag, position=position)
+  if (PRESENT(halo)) then
+    pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position, &
+                            whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position)
+  endif
 end function pass_var_start_2d
 
-function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
+function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo)
   real, dimension(:,:,:), intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
   logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: halo
   integer                               :: pass_var_start_3d
 ! Arguments: array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
@@ -248,22 +273,30 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete)
 !                       should be initiated immediately or wait for second
 !                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: dirflag
 
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
-                          flags=dirflag, position=position)
+  if (PRESENT(halo)) then
+    pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position, &
+                            whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position)
+  endif
 end function pass_var_start_3d
 
-subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
+subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, halo)
   integer,                intent(in)    :: id_update
   real, dimension(:,:),   intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
+  integer,      optional, intent(in)    :: halo
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   array - The array which is having its halos points exchanged.
@@ -277,21 +310,30 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position)
 !                       the default if sideflag is omitted.
 !  (in)      position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: dirflag
 
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
-                                   flags=dirflag, position=position)
+  if (PRESENT(halo)) then
+    call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position, &
+                            whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
+                                     flags=dirflag, position=position)
+  endif
+
 end subroutine pass_var_complete_2d
 
-subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position)
+subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, halo)
   integer,                intent(in)    :: id_update
   real, dimension(:,:,:), intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
+  integer,      optional, intent(in)    :: halo
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   array - The array which is having its halos points exchanged.
@@ -305,13 +347,21 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position)
 !                       the default if sideflag is omitted.
 !  (in)      position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: dirflag
 
   dirflag = To_All ! 60
   if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
-                                   flags=dirflag, position=position)
+  if (PRESENT(halo)) then
+    call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
+                            flags=dirflag, position=position, &
+                            whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
+                                     flags=dirflag, position=position)
+  endif
+
 end subroutine pass_var_complete_3d
 
 
@@ -648,26 +698,29 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 
 end subroutine pass_vector_complete_3d
 
-subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
+subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
+                                    halo)
   type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:),   intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
+  integer,      optional, intent(in)    :: halo
 ! Arguments:
 !  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
+!  (in,opt)  sideflag - An optional integer indicating which directions the
 !                       data should be sent.  It is TO_ALL or the sum of any of
 !                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
 !                       TO_EAST sends the data to the processor to the east, so
 !                       the halos on the western side are filled.  TO_ALL is
 !                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
+!  (in,opt)  position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: dirflag
 
   dirflag = To_All ! 60
@@ -675,6 +728,10 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
+  elseif (present(halo)) then
+    call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
+                                 position=position, whalo=halo, ehalo=halo, &
+                                 shalo=halo, nhalo=halo)
   else
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position)
@@ -682,26 +739,28 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position)
 
 end subroutine create_var_group_pass_2d
 
-subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position)
+subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, halo)
   type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:,:), intent(inout) :: array
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: sideflag
   integer,      optional, intent(in)    :: position
+  integer,      optional, intent(in)    :: halo
 ! Arguments:
 !  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
 !  (inout)   array - The array which is having its halos points exchanged.
 !  (in)      MOM_dom - The MOM_domain_type containing the mpp_domain needed to
 !                      determine where data should be sent.
-!  (in)      sideflag - An optional integer indicating which directions the
+!  (in,opt)  sideflag - An optional integer indicating which directions the
 !                       data should be sent.  It is TO_ALL or the sum of any of
 !                       TO_EAST, TO_WEST, TO_NORTH, and TO_SOUTH.  For example,
 !                       TO_EAST sends the data to the processor to the east, so
 !                       the halos on the western side are filled.  TO_ALL is
 !                       the default if sideflag is omitted.
-!  (in)      position - An optional argument indicating the position.  This is
+!  (in,opt)  position - An optional argument indicating the position.  This is
 !                       may be CORNER, but is CENTER by default.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: dirflag
 
   dirflag = To_All ! 60
@@ -709,6 +768,10 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position)
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
+  elseif (present(halo)) then
+    call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
+                                 position=position, whalo=halo, ehalo=halo, &
+                                 shalo=halo, nhalo=halo)
   else
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position)

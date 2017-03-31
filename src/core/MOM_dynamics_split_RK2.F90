@@ -20,7 +20,7 @@ use MOM_domains,           only : MOM_domains_init
 use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : start_group_pass, complete_group_pass
-use MOM_debugging,         only : hchksum, uchksum, vchksum
+use MOM_debugging,         only : hchksum, uvchksum
 use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
@@ -226,8 +226,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocitiy in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocitiy in m s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocity in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: hp   ! Predicted thickness in m or kg m-2 (H).
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
@@ -412,8 +412,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (CS%debug) then
-    call uchksum(CS%PFu,"After PressureForce CS%PFu",G%HI,haloshift=0)
-    call vchksum(CS%PFv,"After PressureForce CS%PFv",G%HI,haloshift=0)
+    call uvchksum("After PressureForce CS%PFu", CS%PFu, CS%PFv, G%HI,haloshift=0)
   endif
 
   if (dyn_p_surf) then
@@ -495,8 +494,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uchksum(up,"before vertvisc: up",G%HI,haloshift=0)
-    call vchksum(vp,"before vertvisc: vp",G%HI,haloshift=0)
+    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
@@ -580,11 +578,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(up,"Predictor 1 u",G%HI,haloshift=0)
-    call vchksum(vp,"Predictor 1 v",G%HI,haloshift=0)
+    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0)
     call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
-    call uchksum(GV%H_to_kg_m2*uh,"Predictor 1 uh",G%HI,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Predictor 1 vh",G%HI,haloshift=2)
+    call uvchksum("Predictor 1 [uv]h", &
+                  GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -597,8 +594,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uchksum(up,"0 before vertvisc: up",G%HI,haloshift=0)
-    call vchksum(vp,"0 before vertvisc: vp",G%HI,haloshift=0)
+    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp)
   call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
@@ -630,23 +626,23 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+
+  if (associated(CS%OBC)) then
+    call cpu_clock_begin(id_clock_pass)
+    ! These should be done with a pass that excludes uh & vh.
+    call do_group_pass(CS%pass_hp_uv, G%Domain)
+    call cpu_clock_end(id_clock_pass)
+
+    call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
+             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+  endif
+
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_hp_uv, G%Domain)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_av_uvh, G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
-
-  if (associated(CS%OBC)) then
-    call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-         v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_hp_uv, G%Domain)
-    if (G%nonblocking_updates) then
-      call start_group_pass(CS%pass_av_uvh, G%Domain)
-    endif
-    call cpu_clock_end(id_clock_pass)
-  endif
 
   ! h_av = (h + hp)/2
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h,hp)
@@ -708,8 +704,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uchksum(u_av,"Predictor avg u",G%HI,haloshift=1)
-    call vchksum(v_av,"Predictor avg v",G%HI,haloshift=1)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1)
     call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
@@ -795,11 +790,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uchksum(u,"Corrector 1 u",G%HI,haloshift=0)
-    call vchksum(v,"Corrector 1 v",G%HI,haloshift=0)
+    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0)
     call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
-    call uchksum(GV%H_to_kg_m2*uh,"Corrector 1 uh",G%HI,haloshift=2)
-    call vchksum(GV%H_to_kg_m2*vh,"Corrector 1 vh",G%HI,haloshift=2)
+    call uvchksum("Corrector 1 [uv]h", GV%H_to_kg_m2*uh, &
+                  GV%H_to_kg_m2*vh, G%HI,haloshift=2)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
@@ -905,8 +899,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uchksum(u_av,"Corrector avg u",G%HI,haloshift=1)
-    call vchksum(v_av,"Corrector avg v",G%HI,haloshift=1)
+    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1)
     call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
