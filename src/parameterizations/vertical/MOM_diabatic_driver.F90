@@ -1476,6 +1476,26 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
 end subroutine diabatic
 
+!> Returns pointers or values of members within the diabatic_CS type. For extensibility,
+!! each returned argument is an optional argument
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
+                                   evap_CFL_limit, minimum_forcing_depth)
+  type(diabatic_CS),  intent(in   ) :: CS
+  ! All output arguments are optional
+  type(opacity_CS),   pointer, optional, intent(  out) :: opacity_CSp
+  type(optics_type),  pointer, optional, intent(  out) :: optics_CSp
+  real,                        optional, intent(  out) :: evap_CFL_limit
+  real,                        optional, intent(  out) :: minimum_forcing_depth
+
+  ! Pointers to control structures
+  if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
+  if (present(optics_CSp))  optics_CSp  => CS%optics
+
+  ! Constants within diabatic_CS
+  if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
+  if (present(minimum_forcing_depth)) minimum_forcing_depth = CS%minimum_forcing_depth
+
+end subroutine
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
