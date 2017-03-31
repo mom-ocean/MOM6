@@ -226,8 +226,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping.
 
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocitiy in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocitiy in m s-1.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: up   ! Predicted zonal velocity in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: vp   ! Predicted meridional velocity in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: hp   ! Predicted thickness in m or kg m-2 (H).
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bc_accel
@@ -626,23 +626,23 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+
+  if (associated(CS%OBC)) then
+    call cpu_clock_begin(id_clock_pass)
+    ! These should be done with a pass that excludes uh & vh.
+    call do_group_pass(CS%pass_hp_uv, G%Domain)
+    call cpu_clock_end(id_clock_pass)
+
+    call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
+             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+  endif
+
   call cpu_clock_begin(id_clock_pass)
   call do_group_pass(CS%pass_hp_uv, G%Domain)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_av_uvh, G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
-
-  if (associated(CS%OBC)) then
-    call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-         v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_hp_uv, G%Domain)
-    if (G%nonblocking_updates) then
-      call start_group_pass(CS%pass_av_uvh, G%Domain)
-    endif
-    call cpu_clock_end(id_clock_pass)
-  endif
 
   ! h_av = (h + hp)/2
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h,hp)
