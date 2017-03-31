@@ -105,7 +105,8 @@ end subroutine mixedlayer_restrat
 !> This subroutine does interface depth diffusion.  The fluxes are
 !! limited to give positive definiteness, and the diffusivities are
 !! limited to guarantee stability.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, GV, CS)
+  ! Arguments
   type(ocean_grid_type),                     intent(inout) :: G       !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV      !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
@@ -114,9 +115,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   type(thermo_var_ptrs),                     intent(in)    :: tv      !< thermodynamic variables structure
   type(forcing),                             intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                      intent(in)    :: dt      !< time increment (sec)
-  real, dimension(:,:),                      pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
+  real, dimension(:,:),                      pointer       :: MLD_in  !< Mixed layer depth provided by PBL (H units)
   type(mixedlayer_restrat_CS),               pointer       :: CS      !< module control structure
-
+  ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -201,16 +202,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
       enddo
     enddo ! j-loop
   elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
-    if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+    if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD was not associated!")
     if (CS%debug) then
       call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
-      call hchksum(MLD,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
+      call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
-      CS%MLD(i,j) = CS%MLE_MLD_stretch * MLD(i,j)
+      CS%MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
       ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
