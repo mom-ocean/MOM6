@@ -2068,7 +2068,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         else
            allocate(tmp_buffer(ni_seg*2+1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
         endif
-        print *,'Calling time_interp_external for field ',segment%field(m)%name
 
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
         if (siz(1)==1) then
