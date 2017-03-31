@@ -156,17 +156,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   real :: aFac, bFac, ddRho
   real :: hAtVel, zIHaboveVel, zIHbelowVel
 
-  real :: PSI, PSI1, z ! For statement function
-
+  real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
-  !PSI(z) = max(0., (1. - (2.*z+1.)**2 ) )
+  !PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) )
   PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
-  real :: BOTTOP, XP, PSIC, DD
   BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
   XP(z) = max(0., min(1., (-z-0.5)*2./(1.+2.*CS%MLE_tail_dh) ) )
   DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
-  PSIC(z) = max( PSI1(z), DD(z)*BOTTOP(z) )
-  PSI(z) = PSIC(z)
+  PSI(z) = max( PSI1(z), DD(z)*BOTTOP(z) ) ! Combines original PSI1 with tail
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
