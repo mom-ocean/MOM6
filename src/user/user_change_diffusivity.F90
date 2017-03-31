@@ -274,7 +274,7 @@ subroutine user_change_diff_end(CS)
 
 end subroutine user_change_diff_end
 
-!> \class user_change_diffusivity
+!> \namespace user_change_diffusivity
 !!
 !!  By Robert Hallberg, May 2012
 !!
