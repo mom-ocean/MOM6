@@ -46,7 +46,7 @@ use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROU
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_debugging,           only : hchksum, uchksum, vchksum
+use MOM_debugging,           only : hchksum, uvchksum
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_error_handler,       only : callTree_showQuery
@@ -806,16 +806,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call hchksum(Kd,"BBL Kd",G%HI,haloshift=0)
     if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call uchksum(visc%kv_bbl_u,"BBL Kv_bbl_u",G%HI,haloshift=1)
-      call vchksum(visc%kv_bbl_v,"BBL Kv_bbl_v",G%HI,haloshift=1)
+      call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
+                    G%HI,haloshift=1)
     endif
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
-      call uchksum(visc%bbl_thick_u,"BBL bbl_thick_u",G%HI,haloshift=1)
-      call vchksum(visc%bbl_thick_v,"BBL bbl_thick_v",G%HI,haloshift=1)
+      call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
+                    visc%bbl_thick_v, G%HI,haloshift=1)
     endif
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uchksum(visc%Ray_u,"Ray_u",G%HI)
-      call vchksum(visc%Ray_v,"Ray_v",G%HI)
+      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI)
     endif
   endif
 

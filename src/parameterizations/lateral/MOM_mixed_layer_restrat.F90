@@ -367,18 +367,6 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     vDml_diag(i,J) = vDml(i)
   enddo ; enddo
 
-!$OMP do
-  do j=js,je ; do k=1,nz ; do i=is,ie
-    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
-        ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
-  enddo ; enddo ; enddo
-!$OMP end parallel
-
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  ! This needs to happen after the H update and before the next post_data.
-  call diag_update_remap_grids(CS%diag)
-
   ! Offer diagnostic fields for averaging.
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_urestrat_time > 0) call post_data(CS%id_urestrat_time, utimescale_diag, CS%diag)
@@ -405,6 +393,18 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
       call post_data(CS%id_vml, vDml_diag, CS%diag)
     endif
   endif
+
+!$OMP do
+  do j=js,je ; do k=1,nz ; do i=is,ie
+    h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
+        ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
+  enddo ; enddo ; enddo
+!$OMP end parallel
+
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! This needs to happen after the H update and before the next post_data.
+  call diag_update_remap_grids(CS%diag)
 
 end subroutine mixedlayer_restrat_general
 

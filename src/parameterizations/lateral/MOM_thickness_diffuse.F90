@@ -3,7 +3,7 @@ module MOM_thickness_diffuse
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging,             only : hchksum, uchksum, vchksum
+use MOM_debugging,             only : hchksum, uvchksum
 use MOM_diag_mediator,         only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_diag_mediator,         only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator,         only : diag_update_remap_grids
@@ -288,15 +288,14 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uchksum(Kh_u(:,:,:),"Kh_u",G%HI,haloshift=0)
-    call vchksum(Kh_v(:,:,:),"Kh_v",G%HI,haloshift=0)
-    call uchksum(int_slope_u(:,:,:),"int_slope_u",G%HI,haloshift=0)
-    call vchksum(int_slope_v(:,:,:),"int_slope_v",G%HI,haloshift=0)
+    call uvchksum("Kh_[uv]", Kh_u(:,:,:), Kh_v(:,:,:), G%HI,haloshift=0)
+    call uvchksum("int_slope_[uv]", int_slope_u(:,:,:), &
+                  int_slope_v(:,:,:), G%HI,haloshift=0)
     call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G%HI,haloshift=1)
     call hchksum(e(:,:,:),"thickness_diffuse_1 e",G%HI,haloshift=1)
     if (use_stored_slopes) then
-      call uchksum(VarMix%slope_x(:,:,:),"VarMix%slope_x",G%HI,haloshift=0)
-      call vchksum(VarMix%slope_y(:,:,:),"VarMix%slope_y",G%HI,haloshift=0)
+      call uvchksum("VarMix%slope_[xy]", VarMix%slope_x(:,:,:), &
+                    VarMix%slope_y(:,:,:), G%HI,haloshift=0)
     endif
     if (associated(tv%eqn_of_state)) then
       call hchksum(tv%T(:,:,:),"thickness_diffuse T",G%HI,haloshift=1)
@@ -312,27 +311,6 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, MEKE, CS, &
                                 int_slope_u, int_slope_v)
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
-  do k=1,nz
-    do j=js,je ; do I=is-1,ie
-      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
-      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
-    enddo ; enddo
-    do J=js-1,je ; do i=is,ie
-      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
-      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
-    enddo ; enddo
-    do j=js,je ; do i=is,ie
-      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
-          ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
-      if (h(i,j,k) < GV%Angstrom) h(i,j,k) = GV%Angstrom
-    enddo ; enddo
-  enddo
-
-  ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
-  ! This needs to happen after the H update and before the next post_data.
-  call diag_update_remap_grids(CS%diag)
 
   if (associated(MEKE) .AND. ASSOCIATED(VarMix)) then
     if (ASSOCIATED(MEKE%Rd_dx_h) .and. ASSOCIATED(VarMix%Rd_dx_h)) then
@@ -343,18 +321,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
     endif
   endif
 
-  if (CS%debug) then
-    call uchksum(uhD(:,:,:)*H_to_m,"thickness_diffuse uhD",G%HI,haloshift=0)
-    call vchksum(vhD(:,:,:)*H_to_m,"thickness_diffuse vhD",G%HI,haloshift=0)
-    call uchksum(uhtr(:,:,:)*H_to_m,"thickness_diffuse uhtr",G%HI,haloshift=0)
-    call vchksum(vhtr(:,:,:)*H_to_m,"thickness_diffuse vhtr",G%HI,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G%HI,haloshift=0)
-  endif
-
   ! offer diagnostic fields for averaging
   if (query_averaging_enabled(CS%diag)) then
-    if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, CDp%uhGM, CS%diag)
-    if (CS%id_vhGM > 0)   call post_data(CS%id_vhGM, CDp%vhGM, CS%diag)
+    if (CS%id_uhGM > 0)   call post_data(CS%id_uhGM, uhD, CS%diag)
+    if (CS%id_vhGM > 0)   call post_data(CS%id_vhGM, vhD, CS%diag)
     if (CS%id_GMwork > 0) call post_data(CS%id_GMwork, CS%GMwork, CS%diag)
     if (CS%id_KH_u > 0)   call post_data(CS%id_KH_u, KH_u, CS%diag)
     if (CS%id_KH_v > 0)   call post_data(CS%id_KH_v, KH_v, CS%diag)
@@ -391,6 +361,36 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
       if(CS%id_KH_t1 > 0) call post_data(CS%id_KH_t1, KH_t(:,:,1), CS%diag)
     endif
 
+  endif
+
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,uhtr,uhD,dt,vhtr,CDp,vhD,h,G,GV)
+  do k=1,nz
+    do j=js,je ; do I=is-1,ie
+      uhtr(I,j,k) = uhtr(I,j,k) + uhD(I,j,k)*dt
+      if (ASSOCIATED(CDp%uhGM)) CDp%uhGM(I,j,k) = uhD(I,j,k)
+    enddo ; enddo
+    do J=js-1,je ; do i=is,ie
+      vhtr(i,J,k) = vhtr(i,J,k) + vhD(i,J,k)*dt
+      if (ASSOCIATED(CDp%vhGM)) CDp%vhGM(i,J,k) = vhD(i,J,k)
+    enddo ; enddo
+    do j=js,je ; do i=is,ie
+      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * &
+          ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
+      if (h(i,j,k) < GV%Angstrom) h(i,j,k) = GV%Angstrom
+    enddo ; enddo
+  enddo
+
+  ! Whenever thickness changes let the diag manager know, target grids
+  ! for vertical remapping may need to be regenerated.
+  ! This needs to happen after the H update and before the next post_data.
+  call diag_update_remap_grids(CS%diag)
+
+  if (CS%debug) then
+    call uvchksum("thickness_diffuse [uv]hD", uhD(:,:,:)*H_to_m, &
+                  vhD(:,:,:)*H_to_m, G%HI,haloshift=0)
+    call uvchksum("thickness_diffuse [uv]htr", uhtr(:,:,:)*H_to_m, &
+                  vhtr(:,:,:)*H_to_m, G%HI,haloshift=0)
+    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G%HI,haloshift=0)
   endif
 
 end subroutine thickness_diffuse
