@@ -201,9 +201,19 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
         if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
-  elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
+  elseif (CS%MLE_use_PBL_MLD) then
     if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
-         "Argument MLD was not associated!")
+         "Argument MLD_in was not associated!")
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
+    enddo ; enddo
+  else
+    call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "No MLD to use for MLE parameterization.")
+  endif
+
+  ! Apply time filter (to remove diurnal cycle)
+  if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
       call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
       call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
@@ -211,16 +221,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
-      MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
       ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
       CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
       MLD(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
-  else
-    call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
-         "No MLD to use for MLE parameterization.")
   endif
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
@@ -693,13 +699,12 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
              "depth provided by the active PBL parameterization. If false,\n"//&
              "MLE will estimate a MLD based on a density difference with the\n"//&
              "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
-    if (CS%MLE_use_PBL_MLD) then
-      call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
-             "When MLE_USE_PBL_MLD is true, the PBL provided active miing layer\n"//&
-             "depth is running mean average with this time-scale when the MLD\n"//&
-             "is retreating. When the MLD deepens below the current running-mean\n"//&
-             "the runn-mean is instantaneously set to the current MLD.", units="s", default=0.)
-    else
+    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+             "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
+             "depth used in the MLE restratification parameterization. When\n"//&
+             "the MLD deepens below the current running-mean the running-mean\n"//&
+             "is instantaneously set to the current MLD.", units="s", default=0.)
+    if (.not. CS%MLE_use_PBL_MLD) then
       call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
              "Density difference used to detect the mixed-layer\n"//&
              "depth used for the mixed-layer eddy parameterization\n"//&
@@ -769,9 +774,9 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
        "mixedlayer_restrat_register_restarts called with an associated control structure.")
   allocate(CS)
 
-  call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
-             default=.false., do_not_log=.true.)
-  if (CS%MLE_use_PBL_MLD) then
+  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+                 default=0., do_not_log=.true.)
+  if (CS%MLE_MLD_decay_time>0.) then
     ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
