@@ -128,7 +128,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
     Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
-  real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
+  real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
   real :: h_vel           ! htot interpolated onto velocity points in metre (not H).
@@ -236,11 +236,11 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   dz_neglect = GV%H_subroundoff*GV%H_to_m
 
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
 !$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
-!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
+!$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
 !$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
 !$OMP                       firstprivate(uDml,vDml)
 !$OMP do
@@ -249,10 +249,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
     enddo
     do k=1,nz
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
+      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
         if (htot(i,j) < MLD(i,j)) then
-          Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
+          Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*rho_ml(i)
           htot(i,j) = htot(i,j) + h(i,j,k)
         endif
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom),0.0)
