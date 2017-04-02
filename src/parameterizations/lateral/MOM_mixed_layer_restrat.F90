@@ -157,7 +157,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
   real :: hAtVel, zIHaboveVel, zIHbelowVel, dh
-  logical :: proper_averaging
+  logical :: proper_averaging, line_is_empty, keep_going
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
@@ -244,6 +244,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
 !$OMP                               nz,MLD,uDml_diag,vDml_diag,proper_averaging)       &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
+!$OMP                               line_is_empty, keep_going,                         &
 !$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel,dh)         &
 !$OMP                       firstprivate(uDml,vDml)
 !$OMP do
@@ -251,17 +252,25 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     do i=is-1,ie+1
       htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
     enddo
+    keep_going = .true.
     do k=1,nz
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
-        if (htot(i,j) < MLD(i,j)) then
-          dh = h(i,j,k)
-          if (proper_averaging) dh = min( h(i,j,k), MLD(i,j)-htot(i,j) )
-          Rml_av(i,j) = Rml_av(i,j) + dh*rho_ml(i)
-          htot(i,j) = htot(i,j) + dh
-        endif
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom),0.0)
       enddo
+      if (keep_going) then
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
+        line_is_empty = .true.
+        do i=is-1,ie+1
+          if (htot(i,j) < MLD(i,j)) then
+            dh = h(i,j,k)
+            if (proper_averaging) dh = min( h(i,j,k), MLD(i,j)-htot(i,j) )
+            Rml_av(i,j) = Rml_av(i,j) + dh*rho_ml(i)
+            htot(i,j) = htot(i,j) + dh
+            line_is_empty = .false.
+          endif
+        enddo
+        if (line_is_empty) keep_going=.false.
+      endif
     enddo
 
     do i=is-1,ie+1
