@@ -50,6 +50,7 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! the mixed-layer.
   real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD
                                    !! used in the MLE scheme. This simply multiplies MLD wherever used.
+  logical :: MLE_use_MLD_ave_bug   !< If true, do not account for MLD mismatch to interface positions.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
@@ -155,7 +156,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
-  real :: hAtVel, zIHaboveVel, zIHbelowVel
+  real :: hAtVel, zIHaboveVel, zIHbelowVel, dh
+  logical :: proper_averaging
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
@@ -234,14 +236,15 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
+  proper_averaging = .not. CS%MLE_use_MLD_ave_bug
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
+!$OMP                               nz,MLD,uDml_diag,vDml_diag,proper_averaging)       &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
-!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
+!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel,dh)         &
 !$OMP                       firstprivate(uDml,vDml)
 !$OMP do
   do j=js-1,je+1
@@ -252,8 +255,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
       call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
         if (htot(i,j) < MLD(i,j)) then
-          Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*rho_ml(i)
-          htot(i,j) = htot(i,j) + h(i,j,k)
+          dh = h(i,j,k)
+          if (proper_averaging) dh = min( h(i,j,k), MLD(i,j)-htot(i,j) )
+          Rml_av(i,j) = Rml_av(i,j) + dh*rho_ml(i)
+          htot(i,j) = htot(i,j) + dh
         endif
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom),0.0)
       enddo
@@ -718,6 +723,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
              "A scaling coefficient for stretching/shrinking the MLD\n"//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
+    call get_param(param_file, mod, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
+             "If true, do not account for MLD mismatch to interface positions.",&
+             default=.false.)
   endif
 
   CS%diag => diag
