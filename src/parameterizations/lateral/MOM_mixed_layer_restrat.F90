@@ -125,9 +125,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    MLD, &                ! Mixed layer depth actually used in MLE restratification parameterization (H units)
-    htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
-    Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
+    MLD_fast, &           ! Mixed layer depth actually used in MLE restratification parameterization (H units)
+    htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av_fast, &        ! g_Rho0 times the average mixed layer density (m s-2)
+    MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization (H units)
+    htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av_slow           ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
   real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
@@ -140,13 +143,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected (H units)
   real :: dz_neglect      ! A tiny thickness (in m) that is usually lost in roundoff so can be neglected
   real :: I4dt            ! 1/(4 dt) (sec-1)
-  real :: Ihtot           ! total mixed layer thickness
+  real :: Ihtot,Ihtot_slow! total mixed layer thickness
   real :: a(SZK_(G))      ! A nondimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
                           ! layer.  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
+  real :: b(SZK_(G))      ! As for a(k) but for the slow-filtered MLD
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
+  real :: uDml_slow(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
+  real :: vDml_slow(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
@@ -156,7 +162,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
-  real :: hAtVel, zIHaboveVel, zIHbelowVel, dh
+  real :: hAtVel, zpa, zpb, dh
   logical :: proper_averaging, line_is_empty, keep_going
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
@@ -181,7 +187,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
       dK(:) = 0.5 * h(:,j,1) * GV%H_to_m ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
       deltaRhoAtK(:) = 0.
-      MLD(:,j) = 0.
+      MLD_fast(:,j) = 0.
       do k = 2, nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
@@ -191,23 +197,23 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
         deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
         do i = is-1, ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-          if ((MLD(i,j)==0.) .and. (ddRho>0.) .and. &
+          if ((MLD_fast(i,j)==0.) .and. (ddRho>0.) .and. &
               (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
             aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
-            MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+            MLD_fast(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
           endif
         enddo ! i-loop
       enddo ! k-loop
       do i = is-1, ie+1
-        MLD(i,j) = CS%MLE_MLD_stretch * MLD(i,j)
-        if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+        MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_fast(i,j)
+        if ((MLD_fast(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD_fast(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
   elseif (CS%MLE_use_PBL_MLD) then
     if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD_in was not associated!")
     do j = js-1, je+1 ; do i = is-1, ie+1
-      MLD(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
+      MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -223,34 +229,41 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
     do j = js-1, je+1 ; do i = is-1, ie+1
-      ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
-      CS%MLD_filtered(i,j) = max( MLD(i,j), bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
-      MLD(i,j) = CS%MLD_filtered(i,j)
+      CS%MLD_filtered(i,j) = max( MLD_fast(i,j), bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) )
+      MLD_fast(i,j) = CS%MLD_filtered(i,j)
     enddo ; enddo
   endif
 
   uDml(:) = 0.0 ; vDml(:) = 0.0
+  uDml_slow(:) = 0.0 ; vDml_slow(:) = 0.0
   I4dt = 0.25 / dt
   g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
   proper_averaging = .not. CS%MLE_use_MLD_ave_bug
 
+  MLD_slow(:,:) = 0. ! For testing
+ !MLD_slow(:,:) = MLD_fast(:,:) ! For testing
+ !MLD_fast(:,:) = 0. ! For testing
+
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
+!$OMP                               htot_slow,MLD_slow,Rml_av_slow,                    &
 !$OMP                               nz,MLD,uDml_diag,vDml_diag,proper_averaging)       &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
 !$OMP                               line_is_empty, keep_going,                         &
-!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel,dh)         &
-!$OMP                       firstprivate(uDml,vDml)
+!$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
+!$OMP                       firstprivate(uDml,vDml,uDml_slow,vDml_slow)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
-      htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
+      htot_fast(i,j) = 0.0 ; Rml_av_fast(i,j) = 0.0
+      htot_slow(i,j) = 0.0 ; Rml_av_slow(i,j) = 0.0
     enddo
     keep_going = .true.
     do k=1,nz
@@ -261,11 +274,17 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
         line_is_empty = .true.
         do i=is-1,ie+1
-          if (htot(i,j) < MLD(i,j)) then
+          if (htot_fast(i,j) < MLD_fast(i,j)) then
             dh = h(i,j,k)
-            if (proper_averaging) dh = min( h(i,j,k), MLD(i,j)-htot(i,j) )
-            Rml_av(i,j) = Rml_av(i,j) + dh*rho_ml(i)
-            htot(i,j) = htot(i,j) + dh
+            if (proper_averaging) dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
+            Rml_av_fast(i,j) = Rml_av_fast(i,j) + dh*rho_ml(i)
+            htot_fast(i,j) = htot_fast(i,j) + dh
+            line_is_empty = .false.
+          endif
+          if (htot_slow(i,j) < MLD_slow(i,j)) then
+            dh = min( h(i,j,k), MLD_slow(i,j)-htot_slow(i,j) )
+            Rml_av_slow(i,j) = Rml_av_slow(i,j) + dh*rho_ml(i)
+            htot_slow(i,j) = htot_slow(i,j) + dh
             line_is_empty = .false.
           endif
         enddo
@@ -274,15 +293,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     enddo
 
     do i=is-1,ie+1
-      Rml_av(i,j) = -(g_Rho0*Rml_av(i,j)) / (htot(i,j) + h_neglect)
+      Rml_av_fast(i,j) = -(g_Rho0*Rml_av_fast(i,j)) / (htot_fast(i,j) + h_neglect)
+      Rml_av_slow(i,j) = -(g_Rho0*Rml_av_slow(i,j)) / (htot_slow(i,j) + h_neglect)
     enddo
   enddo
 
   if (CS%debug) then
     call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
     call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
-    call hchksum(MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
-    call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
+    call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(Rml_av_fast,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
 ! TO DO:
@@ -292,44 +312,62 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
 !   U - Component
 !$OMP do
   do j=js,je ; do I=is-1,ie
-    h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect) * GV%H_to_m
-
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+    h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect) * GV%H_to_m
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-
     timescale = timescale * CS%ml_restrat_coef
-!     timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
-
-
     uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-        G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * GV%m_to_H)
+        G%IdxCu(I,j)*(Rml_av_fast(i+1,j)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
+    ! As above but using the slow filtered MLD
+    h_vel = 0.5*((htot_slow(i,j) + htot_slow(i+1,j)) + h_neglect) * GV%H_to_m
+    mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+    timescale = timescale * CS%ml_restrat_coef
+    uDml_slow(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
+        G%IdxCu(I,j)*(Rml_av_slow(i+1,j)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
-    if (uDml(i) == 0) then
+    if (uDml(I) + uDml_slow(I) == 0.) then
       do k=1,nz ; uhml(I,j,k) = 0.0 ; enddo
     else
-      IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect)
-      zIHbelowVel = 0.0
+      IhTot = 2.0 / ((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
+      IhTot_slow = 2.0 / ((htot_slow(i,j) + htot_slow(i+1,j)) + h_neglect)
+      zpa = 0.0 ; zpb = 0.0
       ! a(k) relates the sublayer transport to uDml with a linear profile.
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))
-        zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
-        zIHbelowVel = zIHbelowVel - (hAtVel * IhTot) ! z/H for lower interface
-        a(k) = PSI( zIHaboveVel ) - PSI( zIHbelowVel )
+        a(k) = PSI(zpa)                     ! Psi(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
+        a(k) = a(k) - PSI(zpa)              ! Transport profile
+        ! Limit magnitude (uDml) if it would violate CFL
         if (a(k)*uDml(I) > 0.0) then
           if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
         elseif (a(k)*uDml(I) < 0.0) then
           if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k) / a(k)
         endif
+        ! Transport for slow-filtered MLD
+        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
+        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        ! Limit magnitude (uDml_slow) if it would violate CFL when added to uDml
+        if (b(k)*uDml_slow(I) > 0.0) then
+          if (b(k)*uDml_slow(I) > h_avail(i,j,k) - a(k)*uDml(I)) &
+             uDml_slow(I) = max( 0., h_avail(i,j,k) - a(k)*uDml(I) ) / b(k)
+        elseif (b(k)*uDml_slow(I) < 0.0) then
+          if (-b(k)*uDml_slow(I) > h_avail(i+1,j,k) + a(k)*uDml(I)) &
+             uDml_slow(I) = -max( 0., h_avail(i+1,j,k) + a(k)*uDml(I) ) / b(k)
+        endif
       enddo
       do k=1,nz
-        uhml(I,j,k) = a(k)*uDml(I)
+        uhml(I,j,k) = a(k)*uDml(I) + b(k)*uDml_slow(I)
         uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
@@ -341,42 +379,62 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) * GV%H_to_m
-
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+    h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect) * GV%H_to_m
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-
     timescale = timescale * CS%ml_restrat_coef
-!     timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
-
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
-        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * GV%m_to_H)
-    if (vDml(i) == 0) then
+        G%IdyCv(i,J)*(Rml_av_fast(i,j+1)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
+    ! As above but using the slow filtered MLD
+    h_vel = 0.5*((htot_slow(i,j) + htot_slow(i,j+1)) + h_neglect) * GV%H_to_m
+    mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+    timescale = timescale * CS%ml_restrat_coef
+    vDml_slow(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
+        G%IdyCv(i,J)*(Rml_av_slow(i,j+1)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
+
+    if (vDml(i) + vDml_slow(i) == 0.) then
       do k=1,nz ; vhml(i,J,k) = 0.0 ; enddo
     else
-      IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect)
-      zIHbelowVel = 0.0
+      IhTot = 2.0 / ((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
+      IhTot_slow = 2.0 / ((htot_slow(i,j) + htot_slow(i,j+1)) + h_neglect)
+      zpa = 0.0 ; zpb = 0.0
       ! a(k) relates the sublayer transport to uDml with a linear profile.
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))
-        zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
-        zIHbelowVel = zIHbelowVel - (hAtVel * IhTot) ! z/H for lower interface
-        a(k) = PSI( zIHaboveVel ) - PSI( zIHbelowVel )
+        a(k) = PSI( zpa )                   ! Psi(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
+        a(k) = a(k) - PSI( zpa )            ! Transport profile
+        ! Limit magnitude (vDml) if it would violate CFL
         if (a(k)*vDml(i) > 0.0) then
           if (a(k)*vDml(i) > h_avail(i,j,k)) vDml(i) = h_avail(i,j,k) / a(k)
         elseif (a(k)*vDml(i) < 0.0) then
           if (-a(k)*vDml(i) > h_avail(i,j+1,k)) vDml(i) = -h_avail(i,j+1,k) / a(k)
         endif
+        ! Transport for slow-filtered MLD
+        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
+        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        ! Limit magnitude (vDml_slow) if it would violate CFL when added to vDml
+        if (b(k)*vDml_slow(I) > 0.0) then
+          if (b(k)*vDml_slow(I) > h_avail(i,j,k) - a(k)*vDml(I)) &
+             vDml_slow(I) = max( 0., h_avail(i,j,k) - a(k)*vDml(I) ) / b(k)
+        elseif (b(k)*vDml_slow(I) < 0.0) then
+          if (-b(k)*vDml_slow(I) > h_avail(i,j+1,k) + a(k)*vDml(I)) &
+             vDml_slow(I) = -max( 0., h_avail(i,j+1,k) + a(k)*vDml(I) ) / b(k)
+        endif
       enddo
       do k=1,nz
-        vhml(i,J,k) = a(k)*vDml(i)
+        vhml(i,J,k) = a(k)*vDml(i) + b(k)*vDml_slow(I)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
@@ -391,21 +449,21 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
     if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
     if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD, CS%diag)
-    if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD_fast, CS%diag)
+    if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av_fast, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
 
     if (CS%id_uml > 0) then
       do J=js,je ; do i=is,ie
-        h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
+        h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
         uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js,je ; do i=is,ie
-        h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect)
+        h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
         vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
