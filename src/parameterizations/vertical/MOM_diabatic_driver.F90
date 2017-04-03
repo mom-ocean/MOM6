@@ -70,11 +70,12 @@ implicit none ; private
 public diabatic
 public diabatic_driver_init
 public diabatic_driver_end
+public extract_diabatic_member
 public adiabatic
 public adiabatic_driver_init
 
 !> Control structure for this module
-type, public :: diabatic_CS ;
+type, public:: diabatic_CS ; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
@@ -135,6 +136,10 @@ type, public :: diabatic_CS ;
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
                                      !! near the bottom, in m2 s-1.
+  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
+                                           !! fluxes is applied, in m.
+  real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
+                                     !! evaporated in one time-step (non-dim).
 
   logical :: useKPP                  !< use CVmix/KPP diffusivities and non-local transport
   logical :: salt_reject_below_ML    !< If true, add salt below mixed layer (layer mode only)
@@ -742,7 +747,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
     if (CS%use_energetic_PBL) then
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
+                          CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS)
+
       call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
            CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
 
@@ -795,7 +802,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     else
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    h, tv, CS%aggregate_FW_forcing)
+                                    h, tv, CS%aggregate_FW_forcing, &
+                                    CS%evap_CFL_limit, CS%minimum_forcing_depth)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -1148,8 +1156,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! so hold should be h_orig
       call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                evap_CFL_limit = CS%evap_CFL_limit, &
+                                minimum_forcing_depth = CS%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
@@ -1179,8 +1187,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug,&
-                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                  evap_CFL_limit = CS%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
@@ -1191,8 +1199,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
       call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                  evap_CFL_limit = CS%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%minimum_forcing_depth)
     else
       call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
@@ -1470,6 +1478,26 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
 end subroutine diabatic
 
+!> Returns pointers or values of members within the diabatic_CS type. For extensibility,
+!! each returned argument is an optional argument
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
+                                   evap_CFL_limit, minimum_forcing_depth)
+  type(diabatic_CS),  intent(in   ) :: CS
+  ! All output arguments are optional
+  type(opacity_CS),   pointer, optional, intent(  out) :: opacity_CSp
+  type(optics_type),  pointer, optional, intent(  out) :: optics_CSp
+  real,                        optional, intent(  out) :: evap_CFL_limit
+  real,                        optional, intent(  out) :: minimum_forcing_depth
+
+  ! Pointers to control structures
+  if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
+  if (present(optics_CSp))  optics_CSp  => CS%optics
+
+  ! Constants within diabatic_CS
+  if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
+  if (present(minimum_forcing_depth)) minimum_forcing_depth = CS%minimum_forcing_depth
+
+end subroutine
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
@@ -1924,6 +1952,18 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
                  "If true, use the passive tracer tridiagonal solver for T and S\n", &
                  default=.false.)
+
+  call get_param(param_file, mod, "MINIMUM_FORCING_DEPTH", CS%minimum_forcing_depth, &
+                 "The smallest depth over which forcing can be applied. This\n"//&
+                 "only takes effect when near-surface layers become thin\n"//&
+                 "relative to this scale, in which case the forcing tendencies\n"//&
+                 "scaled down by distributing the forcing over this depth scale.", &
+                 units="m", default=0.001)
+  call get_param(param_file, mod, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
+                 "The largest fraction of a layer than can be lost to forcing\n"//&
+                 "(e.g. evaporation, sea-ice formation) in one time-step. The unused\n"//&
+                 "mass loss is passed down through the column.", &
+                 units="nondim", default=0.8)
 
 
   ! Register all available diagnostics for this module.
