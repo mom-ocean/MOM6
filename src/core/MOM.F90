@@ -2485,7 +2485,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if(present(offline_tracer_mode)) offline_tracer_mode=CS%offline_tracer_mode
 
   if(CS%offline_tracer_mode) then
-    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
+    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
     CS%offline_CSp%debug = CS%debug
     if (mod(first_direction,2)==0) then
       CS%offline_CSp%x_before_y = .true.
