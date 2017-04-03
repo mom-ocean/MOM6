@@ -382,8 +382,9 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   ! Local variables
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
+  logical :: is_zstar
   integer :: nz_src, nz_dest
-  integer :: i, j, k
+  integer :: i, j, k, smaller
 
   call assert(remap_cs%initialized, 'vertically_reintegrate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -393,6 +394,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
   reintegrated_field(:,:,:) = missing_value
 
+  is_zstar = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
@@ -400,8 +403,20 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
+        ! In the case of z-star coordinate, the u/v points should be associated with the
+        ! smaller T-point column
+        if (is_zstar) then
+          if (larger_column(h(i,j,:), h(i+1,j,:))) then
+            smaller = i+1
+          else
+            smaller = i
+          endif
+          h_src =  h(smaller, j, :)
+          h_dest = remap_cs%h(smaller, j ,:)
+        else
+          h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+          h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
+        endif
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(I,j,:))
       enddo
@@ -413,8 +428,20 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
+        ! In the case of z-star coordinate, the u/v points should be associated with the
+        ! smaller T-point column
+        if (is_zstar) then
+          if (larger_column(h(i,j,:), h(i,j+1,:))) then
+            smaller = j+1
+          else
+            smaller = j
+          endif
+          h_src =  h(i, smaller, :)
+          h_dest = remap_cs%h(i, smaller ,:)
+        else
+          h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+          h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
+        endif
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(i,J,:))
       enddo
@@ -652,5 +679,16 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
   enddo
 
 end subroutine horizontally_average_diag_field
+
+!> Returns true if sum of column 1 is larger than column 2
+logical function larger_column(h1, h2)
+  real,     dimension(:), intent(in) :: h1  !< Column of quantities
+  real,     dimension(:), intent(in) :: h2  !< Column of quantities
+  ! Local variables
+  integer :: k
+
+  larger_column = ( SUM(h1) > SUM(h2) )
+
+end function larger_column
 
 end module MOM_diag_remap
