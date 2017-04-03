@@ -39,10 +39,12 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! predicted based on the resolved  gradients.  This
                                    !! increases with grid spacing^2, up to something
                                    !! of order 500.
+  real    :: ml_restrat_coef2      !< As for ml_restrat_coef but using the slow filtered MLD.
   logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
                                    !! if false, MLE will calculate a MLD based on a density difference
                                    !! based on the parameter MLE_DENSITY_DIFF.
-  real    :: MLE_MLD_decay_time    !< Time-scale to use un running-mean when MLD is retreating (s).
+  real    :: MLE_MLD_decay_time    !< Time-scale to use in a running-mean when MLD is retreating (s).
+  real    :: MLE_MLD_decay_time2   !< Time-scale to use in a running-mean when filtered MLD is retreating (s).
   real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
                                    !! depth (kg/m3).
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
@@ -56,7 +58,8 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! timing of diagnostic output.
 
   real, dimension(:,:), pointer :: &
-         MLD_filtered => NULL()    !< Time-filtered MLD (H units)
+         MLD_filtered => NULL(), &   !< Time-filtered MLD (H units)
+         MLD_filtered_slow => NULL() !< Slower time-filtered MLD (H units)
 
   integer :: id_urestrat_time
   integer :: id_vrestrat_time
@@ -237,6 +240,27 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     enddo ; enddo
   endif
 
+  ! Apply slower time filter (to remove seasonal cycle) on already filtered MLD_fast
+  if (CS%MLE_MLD_decay_time2>0.) then
+    if (CS%debug) then
+      call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1)
+      call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1)
+    endif
+    aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! (running mean) of MLD. The max() allows the "running mean" to be reset
+      ! instantly to a deeper MLD.
+      CS%MLD_filtered_slow(i,j) = max( MLD_fast(i,j), bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered_slow(i,j) )
+      MLD_slow(i,j) = CS%MLD_filtered_slow(i,j)
+    enddo ; enddo
+  else
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      MLD_slow(i,j) = MLD_fast(i,j)
+    enddo ; enddo
+  endif
+
   uDml(:) = 0.0 ; vDml(:) = 0.0
   uDml_slow(:) = 0.0 ; vDml_slow(:) = 0.0
   I4dt = 0.25 / dt
@@ -245,16 +269,12 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   dz_neglect = GV%H_subroundoff*GV%H_to_m
   proper_averaging = .not. CS%MLE_use_MLD_ave_bug
 
-  MLD_slow(:,:) = 0. ! For testing
- !MLD_slow(:,:) = MLD_fast(:,:) ! For testing
- !MLD_fast(:,:) = 0. ! For testing
-
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,                    &
-!$OMP                               nz,MLD,uDml_diag,vDml_diag,proper_averaging)       &
+!$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
 !$OMP                               line_is_empty, keep_going,                         &
 !$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
@@ -330,7 +350,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-    timescale = timescale * CS%ml_restrat_coef
+    timescale = timescale * CS%ml_restrat_coef2
     uDml_slow(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
         G%IdxCu(I,j)*(Rml_av_slow(i+1,j)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
@@ -397,7 +417,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-    timescale = timescale * CS%ml_restrat_coef
+    timescale = timescale * CS%ml_restrat_coef2
     vDml_slow(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av_slow(i,j+1)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
@@ -766,6 +786,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
   if (GV%nkml==0) then
+    call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
+             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
+             "of the MLE restratification parameterization.", units="nondim", default=0.0)
+  ! We use GV%nkml to distinguish between the old and new implementation of MLE.
     call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer\n"//&
              "depth provided by the active PBL parameterization. If false,\n"//&
@@ -775,6 +799,11 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
              "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
              "depth used in the MLE restratification parameterization. When\n"//&
              "the MLD deepens below the current running-mean the running-mean\n"//&
+             "is instantaneously set to the current MLD.", units="s", default=0.)
+    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+             "The time-scale for a running-mean filter applied to the filtered\n"//&
+             "mixed-layer depth used in a second MLE restratification parameterization.\n"//&
+             "When the MLD deepens below the current running-mean the running-mean\n"//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     if (.not. CS%MLE_use_PBL_MLD) then
       call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
@@ -851,12 +880,21 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
 
   call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
                  default=0., do_not_log=.true.)
-  if (CS%MLE_MLD_decay_time>0.) then
+  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+                 default=0., do_not_log=.true.)
+  if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
     ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
     call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)
+  endif
+  if (CS%MLE_MLD_decay_time2>0.) then
+    ! CS%MLD_filtered_slow is used to keep a running mean of the PBL's seasonal or winter MLD.
+    allocate(CS%MLD_filtered_slow(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered_slow(:,:) = 0.
+    vd = var_desc("MLD_MLE_filtered_slow","m","c Slower time-filtered MLD for use in MLE", &
+                  hor_grid='h', z_grid='1')
+    call register_restart_field(CS%MLD_filtered_slow, vd, .false., restart_CS)
   endif
 
 end subroutine mixedlayer_restrat_register_restarts
