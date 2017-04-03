@@ -83,7 +83,7 @@ subroutine external_gwave_initialize_thickness(h, G, param_file)
 end subroutine external_gwave_initialize_thickness
 ! -----------------------------------------------------------------------------
 
-!> \class external_gwave_initialization
+!> \namespace external_gwave_initialization
 !!
 !! The module configures the model for the "external_gwave" experiment.
 !! external_gwave = External Gravity Wave

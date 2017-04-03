@@ -247,7 +247,7 @@ subroutine write_user_log(param_file)
 
 end subroutine write_user_log
 
-!> \class user_initialization
+!> \namespace user_initialization
 !!
 !!  By Robert Hallberg, April 1994 - June 2002                         *
 !!                                                                     *
