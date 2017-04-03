@@ -193,7 +193,7 @@ integer :: num_msg = 0, max_msg = 2
 contains
 
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
-                          optics, aggregate_FW_forcing, dt_diag, last_call)
+                          optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
@@ -204,6 +204,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: ea, eb
   type(bulkmixedlayer_CS),                   pointer       :: CS
   type(optics_type),                         pointer       :: optics
+  real, dimension(:,:),                      pointer       :: Hml !< active mixed layer depth
   logical,                                   intent(in)    :: aggregate_FW_forcing
   real,                            optional, intent(in)    :: dt_diag
   logical,                         optional, intent(in)    :: last_call
@@ -639,8 +640,8 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
     if (write_diags .and. ALLOCATED(CS%ML_depth)) then ; do i=is,ie
       CS%ML_depth(i,j) = h(i,0) * GV%H_to_m
     enddo ; endif
-    if (ASSOCIATED(tv%Hml)) then ; do i=is,ie
-      tv%Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m)
+    if (ASSOCIATED(Hml)) then ; do i=is,ie
+      Hml(i,j) = G%mask2dT(i,j) * (h(i,0) * GV%H_to_m)
     enddo ; endif
 
 ! At this point, return water to the original layers, but constrained to
