@@ -153,7 +153,7 @@ type, public :: MOM_control_struct
     vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
-  real, pointer, dimension(:,:)   :: Hml !< active mixed layer depth, in m
+  real, pointer, dimension(:,:)   :: Hml => NULL() !< active mixed layer depth, in m
   real, pointer, dimension(:,:,:) :: &
     u_prev => NULL(), &  !< previous value of u stored for diagnostics
     v_prev => NULL()     !< previous value of v stored for diagnostics
