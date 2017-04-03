@@ -881,6 +881,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 !$OMP                                  H_limit_fluxes,IforcingDepthScale,                &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
+!$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
