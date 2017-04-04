@@ -528,6 +528,10 @@ subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
     enddo ; enddo
   enddo ; endif
 
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    eta_tidal(i,j) = (G%GeoLatT(i,j) - G%south_lat) / G%len_lat * 0.01
+  enddo ; enddo
+
   call cpu_clock_end(id_clock_tides)
 
 end subroutine calc_tidal_forcing
