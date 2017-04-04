@@ -384,7 +384,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(size(h,3)) :: h_src
   logical :: is_zstar
   integer :: nz_src, nz_dest
-  integer :: i, j, k, smaller
+  integer :: i, j, k
 
   call assert(remap_cs%initialized, 'vertically_reintegrate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
@@ -403,20 +403,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        ! In the case of z-star coordinate, the u/v points should be associated with the
-        ! smaller T-point column
-        if (is_zstar) then
-          if (larger_column(h(i,j,:), h(i+1,j,:))) then
-            smaller = i+1
-          else
-            smaller = i
-          endif
-          h_src =  h(smaller, j, :)
-          h_dest = remap_cs%h(smaller, j ,:)
-        else
-          h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-          h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
-        endif
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i+1,j,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j,:), h_src, h_dest)
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(I,j,:))
       enddo
@@ -428,20 +416,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        ! In the case of z-star coordinate, the u/v points should be associated with the
-        ! smaller T-point column
-        if (is_zstar) then
-          if (larger_column(h(i,j,:), h(i,j+1,:))) then
-            smaller = j+1
-          else
-            smaller = j
-          endif
-          h_src =  h(i, smaller, :)
-          h_dest = remap_cs%h(i, smaller ,:)
-        else
-          h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-          h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        endif
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j+1,:), h_src, h_dest)
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(i,J,:))
       enddo
@@ -680,15 +656,33 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
 
 end subroutine horizontally_average_diag_field
 
-!> Returns true if sum of column 1 is larger than column 2
-logical function larger_column(h1, h2)
-  real,     dimension(:), intent(in) :: h1  !< Column of quantities
-  real,     dimension(:), intent(in) :: h2  !< Column of quantities
-  ! Local variables
-  integer :: k
+! Sets the source and target column thicknesses for reintegrate and remapping
+subroutine set_hsrc_hdest(is_zstar, hl_src, hr_src, hl_dest, hr_dest, h_src, h_dest)
+  logical,            intent(in   ) :: is_zstar !< Zstar is a special case
+  real, dimension(:), intent(in   ) :: hl_src   !< Left source column thicknesses
+  real, dimension(:), intent(in   ) :: hr_src   !< Right source column thicknesses
+  real, dimension(:), intent(in   ) :: hl_dest  !< Left source column thicknesses
+  real, dimension(:), intent(in   ) :: hr_dest  !< Right source column thicknesses
+  real, dimension(:), intent(  out) :: h_src    !< Source column for remapping/interpolation
+  real, dimension(:), intent(  out) :: h_dest   !< Targe column for remapping/interpolation
 
-  larger_column = ( SUM(h1) > SUM(h2) )
+  ! In the case of z-star coordinate, the u/v points should be associated with the
+  ! thinner T-point column
+  if (is_zstar) then
+    if ( SUM(hl_src)<SUM(hr_src) ) then
+      h_src(:) = hl_src(:)
+      h_dest(:) = hl_dest(:)
+    else
+      h_src(:) = hr_src(:)
+      h_dest(:) = hr_dest(:)
+    endif
+  ! In all other coordinates the thickness of the water column at the u/v points should
+  ! be estimated
+  else
+    h_src(:) = 0.5 * (hl_src(:) + hr_src(:))
+    h_dest(:) = 0.5 * ( hl_dest(:) + hr_dest(:) )
+  endif
 
-end function larger_column
+end subroutine
 
 end module MOM_diag_remap
