@@ -220,32 +220,27 @@ subroutine regridding_set_ppolys(densities, n0, h0, ppoly0_E, ppoly0_S, &
   end select
 end subroutine regridding_set_ppolys
 
-
-!------------------------------------------------------------------------------
-! Given target values (e.g., density), build new grid based on polynomial
-!------------------------------------------------------------------------------
+!> Given target values (e.g., density), build new grid based on polynomial
+!!
+!! Given the grid 'grid0' and the piecewise polynomial interpolant
+!! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1'
+!! are determined by finding the corresponding target interface densities.
 subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_values, degree, n1, h1, x1 )
-! ------------------------------------------------------------------------------
-! Given the grid 'grid0' and the piecewise polynomial interpolant
-! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1'
-! are determined by finding the corresponding target interface densities.
-! ------------------------------------------------------------------------------
-
   ! Arguments
-  integer,            intent(in)    :: n0
-  real, dimension(:), intent(in)    :: h0
-  real, dimension(:), intent(in)    :: x0
-  real, dimension(:,:), intent(in)  :: ppoly0_E            !Edge value of polynomial
-  real, dimension(:,:), intent(in)  :: ppoly0_coefficients !Coefficients of polynomial
-  real, dimension(:), intent(in)    :: target_values
-  integer,            intent(in)    :: degree
-  integer,            intent(in)    :: n1
-  real, dimension(:), intent(inout) :: h1
-  real, dimension(:), intent(inout) :: x1
+  integer,            intent(in)    :: n0                  !< Number of points on source grid
+  real, dimension(:), intent(in)    :: h0                  !< Thicknesses of source grid cells
+  real, dimension(:), intent(in)    :: x0                  !< Source interface positions
+  real, dimension(:,:), intent(in)  :: ppoly0_E            !< Edge values of interpolating polynomials
+  real, dimension(:,:), intent(in)  :: ppoly0_coefficients !< Coefficients of interpolating polynomials
+  real, dimension(:), intent(in)    :: target_values       !< Target values of interfaces
+  integer,            intent(in)    :: degree              !< Degree of interpolating polynomials
+  integer,            intent(in)    :: n1                  !< Number of points on target grid
+  real, dimension(:), intent(inout) :: h1                  !< Thicknesses of target grid cells
+  real, dimension(:), intent(inout) :: x1                  !< Target interface positions
 
   ! Local variables
-  integer        :: k   ! loop index
-  real           :: t   ! current interface target density
+  integer        :: k ! loop index
+  real           :: t ! current interface target density
 
   ! Make sure boundary coordinates of new grid coincide with boundary
   ! coordinates of previous grid
@@ -262,56 +257,50 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_v
 
 end subroutine interpolate_grid
 
-
-!------------------------------------------------------------------------------
-! Given target value, find corresponding coordinate for given polynomial
-!------------------------------------------------------------------------------
+!> Given a target value, find corresponding coordinate for given polynomial
+!!
+!! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
+!! 'degree' throughout the domain defined by 'grid'. A target value is given
+!! and we need to determine the corresponding grid coordinate to define the
+!! new grid.
+!!
+!! If the target value is out of range, the grid coordinate is simply set to
+!! be equal to one of the boundary coordinates, which results in vanished layers
+!! near the boundaries.
+!!
+!! IT IS ASSUMED THAT THE PIECEWISE POLYNOMIAL IS MONOTONICALLY INCREASING.
+!! IF THIS IS NOT THE CASE, THE NEW GRID MAY BE ILL-DEFINED.
+!!
+!! It is assumed that the number of cells defining 'grid' and 'ppoly' are the
+!! same.
 function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
                                      target_value, degree ) result ( x_tgt )
-! ------------------------------------------------------------------------------
-! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
-! 'degree' throughout the domain defined by 'grid'. A target value is given
-! and we need to determine the corresponding grid coordinate to define the
-! new grid.
-!
-! If the target value is out of range, the grid coordinate is simply set to
-! be equal to one of the boundary coordinates, which results in vanished layers
-! near the boundaries.
-!
-! IT IS ASSUMED THAT THE PIECEWISE POLYNOMIAL IS MONOTONICALLY INCREASING.
-! IF THIS IS NOT THE CASE, THE NEW GRID MAY BE ILL-DEFINED.
-!
-! It is assumed that the number of cells defining 'grid' and 'ppoly' are the
-! same.
-! ------------------------------------------------------------------------------
-
   ! Arguments
-  integer,              intent(in) :: N     ! The number of grid cells
-  real, dimension(:),   intent(in) :: h     ! Grid cell thicknesses    (size N)
-  real, dimension(:),   intent(in) :: x_g   ! Grid interface locations (size N+1)
-  real, dimension(:,:), intent(in) :: ppoly_E  !Edge value of polynomial
-  real, dimension(:,:), intent(in) :: ppoly_coefficients !Coefficients of polynomial
-  real,                 intent(in) :: target_value
-  integer,              intent(in) :: degree ! The degree of the polynomials
+  integer,              intent(in) :: N                  !< Number of grid cells
+  real, dimension(:),   intent(in) :: h                  !< Grid cell thicknesses
+  real, dimension(:),   intent(in) :: x_g                !< Grid interface locations
+  real, dimension(:,:), intent(in) :: ppoly_E            !< Edge values of interpolating polynomials
+  real, dimension(:,:), intent(in) :: ppoly_coefficients !< Coefficients of interpolating polynomials
+  real,                 intent(in) :: target_value       !< Target value to find position for
+  integer,              intent(in) :: degree             !< Degree of the interpolating polynomials
 
-  real :: x_tgt      !< The position of x_g at which target_value is found.
+  real :: x_tgt !< The position of x_g at which target_value is found.
 
   ! Local variables
-  integer            :: i, k            ! loop indices
-  integer            :: k_found         ! index of target cell
-  integer            :: iter
-  real               :: xi0             ! normalized target coordinate
-  real               :: numerator
-  real               :: denominator
-  real               :: delta           ! Newton-Raphson increment
-  real               :: x               ! global target coordinate
-  real               :: eps                 ! offset used to get away from
-                                        ! boundaries
-  real               :: grad            ! gradient during N-R iterations
-  real, dimension(DEGREE_MAX) :: a               ! polynomial coefficients
+  integer                     :: i, k        ! loop indices
+  integer                     :: k_found     ! index of target cell
+  integer                     :: iter
+  real                        :: xi0         ! normalized target coordinate
+  real, dimension(DEGREE_MAX) :: a           ! polynomial coefficients
+  real                        :: numerator
+  real                        :: denominator
+  real                        :: delta       ! Newton-Raphson increment
+  real                        :: x           ! global target coordinate
+  real                        :: eps         ! offset used to get away from
+                                             ! boundaries
+  real                        :: grad        ! gradient during N-R iterations
 
   eps = NR_OFFSET
-
   k_found = -1
 
   ! If the target value is outside the range of all values, we
@@ -382,6 +371,7 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
 
   ! Newton-Raphson iterations
   do
+    ! break if converged or too many iterations taken
     if ( ( iter > NR_ITERATIONS ) .OR. &
          ( abs(delta) < NR_TOLERANCE ) ) then
       exit
@@ -392,8 +382,7 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
 
     denominator = a(2) + 2*a(3)*xi0 + 3*a(4)*xi0*xi0 + 4*a(5)*xi0*xi0*xi0
 
-    delta = - ( numerator ) / &
-              ( denominator )
+    delta = -numerator / denominator
 
     xi0 = xi0 + delta
 
@@ -415,11 +404,9 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
     end if
 
     iter = iter + 1
-
   end do ! end Newton-Raphson iterations
 
   x_tgt = x_g(k_found) + xi0 * h(k_found)
-
 end function get_polynomial_coordinate
 
 !> Numeric value of interpolation_scheme corresponding to scheme name
@@ -440,7 +427,6 @@ integer function interpolation_scheme(interp_scheme)
     case default ; call MOM_error(FATAL, "MOM_regridding: "//&
      "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interp_scheme)//").")
   end select
-
 end function interpolation_scheme
 
 end module regrid_interp
