@@ -26,6 +26,7 @@ use regrid_interp, only : regridding_set_ppolys, interpolate_grid, interpolation
 use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE
 
 use coord_zlike, only : init_coord_zlike, zlike_CS, build_zstar_column
+use coord_sigma, only : init_coord_sigma, sigma_CS, build_sigma_column
 
 use netcdf ! Used by check_grid_def()
 
@@ -135,6 +136,7 @@ type, public :: regridding_CS
   logical :: integrate_downward_for_e = .true.
 
   type(zlike_CS), pointer :: zlike_CS => null()
+  type(sigma_CS), pointer :: sigma_CS => null()
 
 end type
 
@@ -144,13 +146,13 @@ public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public set_regrid_params, get_regrid_size
 public uniformResolution, setCoordinateResolution
-public build_rho_column, build_sigma_column
+public build_rho_column
 public set_target_densities_from_GV, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
-public get_zlike_CS
+public get_zlike_CS, get_sigma_CS
 
 !> Documentation for coordinate options
 character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
@@ -682,10 +684,12 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     deallocate(h_max)
   endif
 
-  if (coordinateMode(coord_mode) == REGRIDDING_ZSTAR) then
-    ! associate zlike_CS
+  select case (coordinateMode(coord_mode))
+  case (REGRIDDING_ZSTAR)
     call init_coord_zlike(CS%zlike_CS, CS%min_thickness, CS%coordinateResolution)
-  endif
+  case (REGRIDDING_SIGMA)
+    call init_coord_sigma(CS%sigma_CS, CS%min_thickness, CS%coordinateResolution)
+  end select
 
   if (allocated(dz)) deallocate(dz)
 end subroutine initialize_regridding
@@ -742,6 +746,9 @@ end subroutine check_grid_def
 !> Deallocation of regridding memory
 subroutine end_regridding(CS)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+
+  if (associated(CS%zlike_CS)) deallocate(CS%zlike_CS)
+  if (associated(CS%sigma_CS)) deallocate(CS%sigma_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
@@ -1200,7 +1207,7 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
         totalThickness = totalThickness + h(i,j,k)
       end do
 
-      call build_sigma_column(CS, nz, nominalDepth, totalThickness, zNew)
+      call build_sigma_column(CS%sigma_CS, nz, nominalDepth, totalThickness, zNew)
 
       ! Calculate the final change in grid position after blending new and old grids
       zOld(nz+1) =  -nominalDepth
@@ -1233,28 +1240,6 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
   end do
 
 end subroutine build_sigma_grid
-
-subroutine build_sigma_column(CS, nz, depth, totalThickness, zInterface)
-  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
-  integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real,                  intent(in)    :: totalThickness !< Column thickness (positive in m)
-  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-
-  ! Local variables
-  integer :: k
-
-  zInterface(nz+1) = -depth
-  do k = nz,1,-1
-    zInterface(k) = zInterface(k+1) + (totalThickness * CS%coordinateResolution(k))
-    ! Adjust interface position to accomodate inflating layers
-    ! without disturbing the interface above
-    if (zInterface(k) < (zInterface(k+1) + CS%min_thickness)) then
-      zInterface(k) = zInterface(k+1) + CS%min_thickness
-    endif
-  enddo
-
-end subroutine build_sigma_column
 
 !------------------------------------------------------------------------------
 ! Build grid based on target interface densities
@@ -2864,6 +2849,13 @@ function get_zlike_CS(CS)
 
   get_zlike_CS = CS%zlike_CS
 end function get_zlike_CS
+
+function get_sigma_CS(CS)
+  type(regridding_CS), intent(in) :: CS
+  type(sigma_CS) :: get_sigma_CS
+
+  get_sigma_CS = CS%sigma_CS
+end function get_sigma_CS
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
