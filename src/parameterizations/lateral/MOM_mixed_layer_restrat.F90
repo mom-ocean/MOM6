@@ -39,10 +39,12 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! predicted based on the resolved  gradients.  This
                                    !! increases with grid spacing^2, up to something
                                    !! of order 500.
+  real    :: ml_restrat_coef2      !< As for ml_restrat_coef but using the slow filtered MLD.
   logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
                                    !! if false, MLE will calculate a MLD based on a density difference
                                    !! based on the parameter MLE_DENSITY_DIFF.
-  real    :: MLE_MLD_decay_time    !< Time-scale to use un running-mean when MLD is retreating (s).
+  real    :: MLE_MLD_decay_time    !< Time-scale to use in a running-mean when MLD is retreating (s).
+  real    :: MLE_MLD_decay_time2   !< Time-scale to use in a running-mean when filtered MLD is retreating (s).
   real    :: MLE_density_diff      !< Density difference used in detecting mixed-layer
                                    !! depth (kg/m3).
   real    :: MLE_tail_dh           !< Fraction by which to extend the mixed-layer re-stratification
@@ -50,13 +52,14 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! the mixed-layer.
   real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD
                                    !! used in the MLE scheme. This simply multiplies MLD wherever used.
+  logical :: MLE_use_MLD_ave_bug   !< If true, do not account for MLD mismatch to interface positions.
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
 
   real, dimension(:,:), pointer :: &
-         MLD          => NULL(), & !< Mixed layer depth used in the MLE re-stratification parameterization (H units)
-         MLD_filtered => NULL()    !< Time-filtered MLD (H units)
+         MLD_filtered => NULL(), &   !< Time-filtered MLD (H units)
+         MLD_filtered_slow => NULL() !< Slower time-filtered MLD (H units)
 
   integer :: id_urestrat_time
   integer :: id_vrestrat_time
@@ -105,7 +108,8 @@ end subroutine mixedlayer_restrat
 !> This subroutine does interface depth diffusion.  The fluxes are
 !! limited to give positive definiteness, and the diffusivities are
 !! limited to guarantee stability.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, GV, CS)
+  ! Arguments
   type(ocean_grid_type),                     intent(inout) :: G       !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV      !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h       !< layer thickness (H units = m or kg/m2)
@@ -114,9 +118,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   type(thermo_var_ptrs),                     intent(in)    :: tv      !< thermodynamic variables structure
   type(forcing),                             intent(in)    :: fluxes  !< pointers to forcing fields
   real,                                      intent(in)    :: dt      !< time increment (sec)
-  real, dimension(:,:),                      pointer       :: MLD     !< Mixed layer depth provided by PBL (H units)
+  real, dimension(:,:),                      pointer       :: MLD_in  !< Mixed layer depth provided by PBL (H units)
   type(mixedlayer_restrat_CS),               pointer       :: CS      !< module control structure
-
+  ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -124,10 +128,14 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
                           ! sublayer of the mixed layer, divided by dt, in units
                           ! of H * m2 s-1 (i.e., m3 s-1 or kg s-1).
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    htot, &               ! The sum of the thicknesses of layers in the mixed layer (H units)
-    Rml_av                ! g_Rho0 times the average mixed layer density (m s-2)
+    MLD_fast, &           ! Mixed layer depth actually used in MLE restratification parameterization (H units)
+    htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av_fast, &        ! g_Rho0 times the average mixed layer density (m s-2)
+    MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization (H units)
+    htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer (H units)
+    Rml_av_slow           ! g_Rho0 times the average mixed layer density (m s-2)
   real :: g_Rho0          ! G_Earth/Rho0 (m4 s-2 kg-1)
-  real :: Rho0(SZI_(G))   ! Potential density relative to the surface (kg m-3)
+  real :: rho_ml(SZI_(G)) ! Potential density relative to the surface (kg m-3)
   real :: p0(SZI_(G))     ! A pressure of 0 (Pa)
 
   real :: h_vel           ! htot interpolated onto velocity points in metre (not H).
@@ -138,13 +146,16 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected (H units)
   real :: dz_neglect      ! A tiny thickness (in m) that is usually lost in roundoff so can be neglected
   real :: I4dt            ! 1/(4 dt) (sec-1)
-  real :: Ihtot           ! total mixed layer thickness
+  real :: Ihtot,Ihtot_slow! total mixed layer thickness
   real :: a(SZK_(G))      ! A nondimensional value relating the overall flux
                           ! magnitudes (uDml & vDml) to the realized flux in a
                           ! layer.  The vertical sum of a() through the pieces of
                           ! the mixed layer must be 0.
+  real :: b(SZK_(G))      ! As for a(k) but for the slow-filtered MLD
   real :: uDml(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
   real :: vDml(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
+  real :: uDml_slow(SZIB_(G))  ! The zonal and meridional volume fluxes in the upper
+  real :: vDml_slow(SZI_(G))   ! half of the mixed layer in H m2 s-1 (m3 s-1 or kg s-1).
   real :: utimescale_diag(SZIB_(G),SZJ_(G)) ! restratification timescales
   real :: vtimescale_diag(SZI_(G),SZJB_(G)) ! in the zonal and meridional
                                             ! directions, in s, stored in 2-D
@@ -154,19 +165,17 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
-  real :: hAtVel, zIHaboveVel, zIHbelowVel
+  real :: hAtVel, zpa, zpb, dh
+  logical :: proper_averaging, line_is_empty, keep_going
 
-  real :: PSI, PSI1, z ! For statement function
-
+  real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
-  !PSI(z) = max(0., (1. - (2.*z+1.)**2 ) )
+  !PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) )
   PSI1(z) = max(0., (1. - (2.*z+1.)**2 ) * (1. + (5./21.)*(2.*z+1.)**2) )
-  real :: BOTTOP, XP, PSIC, DD
   BOTTOP(z) = 0.5*(1.-SIGN(1.,z+0.5)) ! =0 for z>-0.5, =1 for z<-0.5
   XP(z) = max(0., min(1., (-z-0.5)*2./(1.+2.*CS%MLE_tail_dh) ) )
   DD(z) = (1.-3.*(XP(z)**2)+2.*(XP(z)**3))**(1.+2.*CS%MLE_tail_dh)
-  PSIC(z) = max( PSI1(z), DD(z)*BOTTOP(z) )
-  PSI(z) = PSIC(z)
+  PSI(z) = max( PSI1(z), DD(z)*BOTTOP(z) ) ! Combines original PSI1 with tail
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -181,7 +190,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
       dK(:) = 0.5 * h(:,j,1) * GV%H_to_m ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
       deltaRhoAtK(:) = 0.
-      CS%MLD(:,j) = 0.
+      MLD_fast(:,j) = 0.
       do k = 2, nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
@@ -191,80 +200,129 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
         deltaRhoAtK(:) = deltaRhoAtK(:) - rhoSurf(:) ! Density difference between layer K and surface
         do i = is-1, ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
-          if ((CS%MLD(i,j)==0.) .and. (ddRho>0.) .and. &
+          if ((MLD_fast(i,j)==0.) .and. (ddRho>0.) .and. &
               (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
             aFac = ( CS%MLE_density_diff - deltaRhoAtKm1(i) ) / ddRho
-            CS%MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+            MLD_fast(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
           endif
         enddo ! i-loop
       enddo ! k-loop
       do i = is-1, ie+1
-        CS%MLD(i,j) = CS%MLE_MLD_stretch * CS%MLD(i,j)
-        if ((CS%MLD(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) CS%MLD(i,j) = dK(i) ! Assume mixing to the bottom
+        MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_fast(i,j)
+        if ((MLD_fast(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) MLD_fast(i,j) = dK(i) ! Assume mixing to the bottom
       enddo
     enddo ! j-loop
-  elseif (CS%MLE_use_PBL_MLD .and. CS%MLE_MLD_decay_time>=0.) then
-    if (.not. associated(MLD)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
-         "Argument MLD was not associated!")
-    if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
-      call hchksum(MLD,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
-    endif
-    aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
-    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
+  elseif (CS%MLE_use_PBL_MLD) then
+    if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "Argument MLD_in was not associated!")
     do j = js-1, je+1 ; do i = is-1, ie+1
-      CS%MLD(i,j) = CS%MLE_MLD_stretch * MLD(i,j)
-      ! Expression bFac*MLD(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
-      ! (running mean) of MLD. The max() allows the "running mean" to be reset
-      ! instantly to a deeper MLD.
-      CS%MLD_filtered(i,j) = max( CS%MLD(i,j), bFac*CS%MLD(i,j) + aFac*CS%MLD_filtered(i,j) )
-      CS%MLD(i,j) = CS%MLD_filtered(i,j)
+      MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "No MLD to use for MLE parameterization.")
   endif
 
+  ! Apply time filter (to remove diurnal cycle)
+  if (CS%MLE_MLD_decay_time>0.) then
+    if (CS%debug) then
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
+      call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
+    endif
+    aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time )
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! (running mean) of MLD. The max() allows the "running mean" to be reset
+      ! instantly to a deeper MLD.
+      CS%MLD_filtered(i,j) = max( MLD_fast(i,j), bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) )
+      MLD_fast(i,j) = CS%MLD_filtered(i,j)
+    enddo ; enddo
+  endif
+
+  ! Apply slower time filter (to remove seasonal cycle) on already filtered MLD_fast
+  if (CS%MLE_MLD_decay_time2>0.) then
+    if (CS%debug) then
+      call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1)
+      call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1)
+    endif
+    aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
+    bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
+      ! (running mean) of MLD. The max() allows the "running mean" to be reset
+      ! instantly to a deeper MLD.
+      CS%MLD_filtered_slow(i,j) = max( MLD_fast(i,j), bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered_slow(i,j) )
+      MLD_slow(i,j) = CS%MLD_filtered_slow(i,j)
+    enddo ; enddo
+  else
+    do j = js-1, je+1 ; do i = is-1, ie+1
+      MLD_slow(i,j) = MLD_fast(i,j)
+    enddo ; enddo
+  endif
+
   uDml(:) = 0.0 ; vDml(:) = 0.0
+  uDml_slow(:) = 0.0 ; vDml_slow(:) = 0.0
   I4dt = 0.25 / dt
   g_Rho0 = GV%g_Earth/GV%Rho0
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
+  proper_averaging = .not. CS%MLE_use_MLD_ave_bug
 
   p0(:) = 0.0
-!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,         &
+!$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OMP                               nz,MLD,uDml_diag,vDml_diag)                        &
-!$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
-!$OMP                               a,IhTot,zIHbelowVel,hAtVel,zIHaboveVel)            &
-!$OMP                       firstprivate(uDml,vDml)
+!$OMP                               htot_slow,MLD_slow,Rml_av_slow,                    &
+!$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
+!$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
+!$OMP                               line_is_empty, keep_going,                         &
+!$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
+!$OMP                       firstprivate(uDml,vDml,uDml_slow,vDml_slow)
 !$OMP do
   do j=js-1,je+1
     do i=is-1,ie+1
-      htot(i,j) = 0.0 ; Rml_av(i,j) = 0.0
+      htot_fast(i,j) = 0.0 ; Rml_av_fast(i,j) = 0.0
+      htot_slow(i,j) = 0.0 ; Rml_av_slow(i,j) = 0.0
     enddo
+    keep_going = .true.
     do k=1,nz
-      call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,Rho0(:),is-1,ie-is+3,tv%eqn_of_state)
       do i=is-1,ie+1
-        if (htot(i,j) < CS%MLD(i,j)) then
-          Rml_av(i,j) = Rml_av(i,j) + h(i,j,k)*Rho0(i)
-          htot(i,j) = htot(i,j) + h(i,j,k)
-        endif
         h_avail(i,j,k) = max(I4dt*G%areaT(i,j)*(h(i,j,k)-GV%Angstrom),0.0)
       enddo
+      if (keep_going) then
+        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p0,rho_ml(:),is-1,ie-is+3,tv%eqn_of_state)
+        line_is_empty = .true.
+        do i=is-1,ie+1
+          if (htot_fast(i,j) < MLD_fast(i,j)) then
+            dh = h(i,j,k)
+            if (proper_averaging) dh = min( h(i,j,k), MLD_fast(i,j)-htot_fast(i,j) )
+            Rml_av_fast(i,j) = Rml_av_fast(i,j) + dh*rho_ml(i)
+            htot_fast(i,j) = htot_fast(i,j) + dh
+            line_is_empty = .false.
+          endif
+          if (htot_slow(i,j) < MLD_slow(i,j)) then
+            dh = min( h(i,j,k), MLD_slow(i,j)-htot_slow(i,j) )
+            Rml_av_slow(i,j) = Rml_av_slow(i,j) + dh*rho_ml(i)
+            htot_slow(i,j) = htot_slow(i,j) + dh
+            line_is_empty = .false.
+          endif
+        enddo
+        if (line_is_empty) keep_going=.false.
+      endif
     enddo
 
     do i=is-1,ie+1
-      Rml_av(i,j) = -(g_Rho0*Rml_av(i,j)) / (htot(i,j) + h_neglect)
+      Rml_av_fast(i,j) = -(g_Rho0*Rml_av_fast(i,j)) / (htot_fast(i,j) + h_neglect)
+      Rml_av_slow(i,j) = -(g_Rho0*Rml_av_slow(i,j)) / (htot_slow(i,j) + h_neglect)
     enddo
   enddo
 
   if (CS%debug) then
     call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
     call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
-    call hchksum(CS%MLD,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
-    call hchksum(Rml_av,'mixed_layer_restrat: rml',G%HI,haloshift=1)
+    call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(Rml_av_fast,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
 ! TO DO:
@@ -274,44 +332,62 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 !   U - Component
 !$OMP do
   do j=js,je ; do I=is-1,ie
-    h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect) * GV%H_to_m
-
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+    h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect) * GV%H_to_m
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-
     timescale = timescale * CS%ml_restrat_coef
-!     timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
-
-
     uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
-        G%IdxCu(I,j)*(Rml_av(i+1,j)-Rml_av(i,j)) * (h_vel**2 * GV%m_to_H)
+        G%IdxCu(I,j)*(Rml_av_fast(i+1,j)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
+    ! As above but using the slow filtered MLD
+    h_vel = 0.5*((htot_slow(i,j) + htot_slow(i+1,j)) + h_neglect) * GV%H_to_m
+    mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+    timescale = timescale * CS%ml_restrat_coef2
+    uDml_slow(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
+        G%IdxCu(I,j)*(Rml_av_slow(i+1,j)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
-    if (uDml(i) == 0) then
+    if (uDml(I) + uDml_slow(I) == 0.) then
       do k=1,nz ; uhml(I,j,k) = 0.0 ; enddo
     else
-      IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect)
-      zIHbelowVel = 0.0
+      IhTot = 2.0 / ((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
+      IhTot_slow = 2.0 / ((htot_slow(i,j) + htot_slow(i+1,j)) + h_neglect)
+      zpa = 0.0 ; zpb = 0.0
       ! a(k) relates the sublayer transport to uDml with a linear profile.
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))
-        zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
-        zIHbelowVel = zIHbelowVel - (hAtVel * IhTot) ! z/H for lower interface
-        a(k) = PSI( zIHaboveVel ) - PSI( zIHbelowVel )
+        a(k) = PSI(zpa)                     ! Psi(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
+        a(k) = a(k) - PSI(zpa)              ! Transport profile
+        ! Limit magnitude (uDml) if it would violate CFL
         if (a(k)*uDml(I) > 0.0) then
           if (a(k)*uDml(I) > h_avail(i,j,k)) uDml(I) = h_avail(i,j,k) / a(k)
         elseif (a(k)*uDml(I) < 0.0) then
           if (-a(k)*uDml(I) > h_avail(i+1,j,k)) uDml(I) = -h_avail(i+1,j,k) / a(k)
         endif
+        ! Transport for slow-filtered MLD
+        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
+        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        ! Limit magnitude (uDml_slow) if it would violate CFL when added to uDml
+        if (b(k)*uDml_slow(I) > 0.0) then
+          if (b(k)*uDml_slow(I) > h_avail(i,j,k) - a(k)*uDml(I)) &
+             uDml_slow(I) = max( 0., h_avail(i,j,k) - a(k)*uDml(I) ) / b(k)
+        elseif (b(k)*uDml_slow(I) < 0.0) then
+          if (-b(k)*uDml_slow(I) > h_avail(i+1,j,k) + a(k)*uDml(I)) &
+             uDml_slow(I) = -max( 0., h_avail(i+1,j,k) + a(k)*uDml(I) ) / b(k)
+        endif
       enddo
       do k=1,nz
-        uhml(I,j,k) = a(k)*uDml(I)
+        uhml(I,j,k) = a(k)*uDml(I) + b(k)*uDml_slow(I)
         uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k)*dt
       enddo
     endif
@@ -323,42 +399,62 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect) * GV%H_to_m
-
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
     ! 0.41 is the von Karmen constant, 9.8696 = pi^2.
+    h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect) * GV%H_to_m
     mom_mixrate = (0.41*9.8696)*u_star**2 / &
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
-
     timescale = timescale * CS%ml_restrat_coef
-!     timescale = timescale*(2?)*(L_def/L_MLI)*min(EKE/MKE,1.0 + G%dyCv(i,j)**2/L_def**2))
-
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
-        G%IdyCv(i,J)*(Rml_av(i,j+1)-Rml_av(i,j)) * (h_vel**2 * GV%m_to_H)
-    if (vDml(i) == 0) then
+        G%IdyCv(i,J)*(Rml_av_fast(i,j+1)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
+    ! As above but using the slow filtered MLD
+    h_vel = 0.5*((htot_slow(i,j) + htot_slow(i,j+1)) + h_neglect) * GV%H_to_m
+    mom_mixrate = (0.41*9.8696)*u_star**2 / &
+                  (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
+    timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
+    timescale = timescale * CS%ml_restrat_coef2
+    vDml_slow(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
+        G%IdyCv(i,J)*(Rml_av_slow(i,j+1)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
+
+    if (vDml(i) + vDml_slow(i) == 0.) then
       do k=1,nz ; vhml(i,J,k) = 0.0 ; enddo
     else
-      IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect)
-      zIHbelowVel = 0.0
+      IhTot = 2.0 / ((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
+      IhTot_slow = 2.0 / ((htot_slow(i,j) + htot_slow(i,j+1)) + h_neglect)
+      zpa = 0.0 ; zpb = 0.0
       ! a(k) relates the sublayer transport to uDml with a linear profile.
       ! The sum of a(k) through the mixed layers must be 0.
       do k=1,nz
         hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))
-        zIHaboveVel = zIHbelowVel                    ! z/H for upper interface
-        zIHbelowVel = zIHbelowVel - (hAtVel * IhTot) ! z/H for lower interface
-        a(k) = PSI( zIHaboveVel ) - PSI( zIHbelowVel )
+        a(k) = PSI( zpa )                   ! Psi(z/MLD) for upper interface
+        zpa = zpa - (hAtVel * IhTot)        ! z/H for lower interface
+        a(k) = a(k) - PSI( zpa )            ! Transport profile
+        ! Limit magnitude (vDml) if it would violate CFL
         if (a(k)*vDml(i) > 0.0) then
           if (a(k)*vDml(i) > h_avail(i,j,k)) vDml(i) = h_avail(i,j,k) / a(k)
         elseif (a(k)*vDml(i) < 0.0) then
           if (-a(k)*vDml(i) > h_avail(i,j+1,k)) vDml(i) = -h_avail(i,j+1,k) / a(k)
         endif
+        ! Transport for slow-filtered MLD
+        b(k) = PSI(zpb)                     ! Psi(z/MLD) for upper interface
+        zpb = zpb - (hAtVel * IhTot_slow)   ! z/H for lower interface
+        b(k) = b(k) - PSI(zpb)              ! Transport profile
+        ! Limit magnitude (vDml_slow) if it would violate CFL when added to vDml
+        if (b(k)*vDml_slow(I) > 0.0) then
+          if (b(k)*vDml_slow(I) > h_avail(i,j,k) - a(k)*vDml(I)) &
+             vDml_slow(I) = max( 0., h_avail(i,j,k) - a(k)*vDml(I) ) / b(k)
+        elseif (b(k)*vDml_slow(I) < 0.0) then
+          if (-b(k)*vDml_slow(I) > h_avail(i,j+1,k) + a(k)*vDml(I)) &
+             vDml_slow(I) = -max( 0., h_avail(i,j+1,k) + a(k)*vDml(I) ) / b(k)
+        endif
       enddo
       do k=1,nz
-        vhml(i,J,k) = a(k)*vDml(i)
+        vhml(i,J,k) = a(k)*vDml(i) + b(k)*vDml_slow(I)
         vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k)*dt
       enddo
     endif
@@ -373,21 +469,21 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV,
     if (CS%id_vrestrat_time > 0) call post_data(CS%id_vrestrat_time, vtimescale_diag, CS%diag)
     if (CS%id_uhml          > 0) call post_data(CS%id_uhml, uhml, CS%diag)
     if (CS%id_vhml          > 0) call post_data(CS%id_vhml, vhml, CS%diag)
-    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, CS%MLD, CS%diag)
-    if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av, CS%diag)
+    if (CS%id_MLD           > 0) call post_data(CS%id_MLD, MLD_fast, CS%diag)
+    if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av_fast, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
 
     if (CS%id_uml > 0) then
       do J=js,je ; do i=is,ie
-        h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
+        h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
         uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_uml, uDml_diag, CS%diag)
     endif
     if (CS%id_vml > 0) then
       do J=js,je ; do i=is,ie
-        h_vel = 0.5*((htot(i,j) + htot(i,j+1)) + h_neglect)
+        h_vel = 0.5*((htot_fast(i,j) + htot_fast(i,j+1)) + h_neglect)
         vDml_diag(i,J) = vDml_diag(i,J) / (0.01*h_vel) * G%IdxCv(i,J) * (PSI(0.)-PSI(-.01))
       enddo ; enddo
       call post_data(CS%id_vml, vDml_diag, CS%diag)
@@ -690,18 +786,26 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
   if (GV%nkml==0) then
+    call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
+             "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
+             "of the MLE restratification parameterization.", units="nondim", default=0.0)
+  ! We use GV%nkml to distinguish between the old and new implementation of MLE.
     call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer\n"//&
              "depth provided by the active PBL parameterization. If false,\n"//&
              "MLE will estimate a MLD based on a density difference with the\n"//&
              "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
-    if (CS%MLE_use_PBL_MLD) then
-      call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
-             "When MLE_USE_PBL_MLD is true, the PBL provided active miing layer\n"//&
-             "depth is running mean average with this time-scale when the MLD\n"//&
-             "is retreating. When the MLD deepens below the current running-mean\n"//&
-             "the runn-mean is instantaneously set to the current MLD.", units="s", default=0.)
-    else
+    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+             "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
+             "depth used in the MLE restratification parameterization. When\n"//&
+             "the MLD deepens below the current running-mean the running-mean\n"//&
+             "is instantaneously set to the current MLD.", units="s", default=0.)
+    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+             "The time-scale for a running-mean filter applied to the filtered\n"//&
+             "mixed-layer depth used in a second MLE restratification parameterization.\n"//&
+             "When the MLD deepens below the current running-mean the running-mean\n"//&
+             "is instantaneously set to the current MLD.", units="s", default=0.)
+    if (.not. CS%MLE_use_PBL_MLD) then
       call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
              "Density difference used to detect the mixed-layer\n"//&
              "depth used for the mixed-layer eddy parameterization\n"//&
@@ -715,6 +819,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
              "A scaling coefficient for stretching/shrinking the MLD\n"//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
+    call get_param(param_file, mod, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
+             "If true, do not account for MLD mismatch to interface positions.",&
+             default=.false.)
   endif
 
   CS%diag => diag
@@ -752,6 +859,7 @@ end function mixedlayer_restrat_init
 
 !> Allocate and regsiter fields in the mixedlayer restratification structure for restarts
 subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
+  ! Arguments
   type(hor_index_type),        intent(in)    :: HI         !< Horizontal index structure
   type(param_file_type),       intent(in)    :: param_file !< Parameter file to parse
   type(mixedlayer_restrat_CS), pointer       :: CS         !< Module control structure
@@ -770,18 +878,23 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
        "mixedlayer_restrat_register_restarts called with an associated control structure.")
   allocate(CS)
 
-  ! CS%MLD is used either for the internally diagnosed MLD or
-  ! for keep a running mean of the PBL's actively mixed MLD.
-  allocate(CS%MLD(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD(:,:) = 0.
-
-  call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
-             default=.false., do_not_log=.true.)
-  if (CS%MLE_use_PBL_MLD) then
+  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+                 default=0., do_not_log=.true.)
+  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+                 default=0., do_not_log=.true.)
+  if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
+    ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered(:,:) = 0.
     vd = var_desc("MLD_MLE_filtered","m","Time-filtered MLD for use in MLE", &
                   hor_grid='h', z_grid='1')
     call register_restart_field(CS%MLD_filtered, vd, .false., restart_CS)
-
+  endif
+  if (CS%MLE_MLD_decay_time2>0.) then
+    ! CS%MLD_filtered_slow is used to keep a running mean of the PBL's seasonal or winter MLD.
+    allocate(CS%MLD_filtered_slow(HI%isd:HI%ied,HI%jsd:HI%jed)) ; CS%MLD_filtered_slow(:,:) = 0.
+    vd = var_desc("MLD_MLE_filtered_slow","m","c Slower time-filtered MLD for use in MLE", &
+                  hor_grid='h', z_grid='1')
+    call register_restart_field(CS%MLD_filtered_slow, vd, .false., restart_CS)
   endif
 
 end subroutine mixedlayer_restrat_register_restarts
