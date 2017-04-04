@@ -153,7 +153,7 @@ type, public :: MOM_control_struct
     vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
-
+  real, pointer, dimension(:,:)   :: Hml => NULL() !< active mixed layer depth, in m
   real, pointer, dimension(:,:,:) :: &
     u_prev => NULL(), &  !< previous value of u stored for diagnostics
     v_prev => NULL()     !< previous value of v stored for diagnostics
@@ -729,7 +729,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
+        call diabatic(u, v, h, CS%tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
                       dtdia, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
@@ -1125,7 +1125,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
         endif
         call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u, v, h, CS%tv, fluxes, CS%visc, CS%ADp, CS%CDp, &
+        call diabatic(u, v, h, CS%tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
                       CS%dt_trans, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
@@ -2139,9 +2139,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     allocate(CS%tv%salt_deficit(isd:ied,jsd:jed)) ; CS%tv%salt_deficit(:,:)=0.0
   endif
 
+  if (CS%bulkmixedlayer .or. CS%use_temperature) then
+     allocate(CS%Hml(isd:ied,jsd:jed)) ; CS%Hml(:,:) = 0.0
+  endif
+
   if (CS%bulkmixedlayer) then
     GV%nkml = nkml ; GV%nk_rho_varies = nkml + nkbl
-    allocate(CS%tv%Hml(isd:ied,jsd:jed)) ; CS%tv%Hml(:,:) = 0.0
   else
     GV%nkml = 0 ; GV%nk_rho_varies = 0
   endif
@@ -2482,7 +2485,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if(present(offline_tracer_mode)) offline_tracer_mode=CS%offline_tracer_mode
 
   if(CS%offline_tracer_mode) then
-    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp%diabatic_aux_CSp, G, GV)
+    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
     CS%offline_CSp%debug = CS%debug
     if (mod(first_direction,2)==0) then
       CS%offline_CSp%x_before_y = .true.
@@ -3274,7 +3277,7 @@ subroutine set_restart_fields(GV, param_file, CS)
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
   ! Local variables
-  logical :: use_ice_shelf ! Needed to determine whether to add tv%Hml to restarts
+  logical :: use_ice_shelf ! Needed to determine whether to add CS%Hml to restarts
   type(vardesc) :: vd
   character(len=48) :: thickness_units, flux_units
 
@@ -3314,9 +3317,9 @@ subroutine set_restart_fields(GV, param_file, CS)
   call register_restart_field(CS%ave_ssh, vd, .false., CS%restart_CSp)
 
   ! hML is needed when using the ice shelf module
-  if (use_ice_shelf .and. associated(CS%tv%Hml)) then
+  if (use_ice_shelf .and. associated(CS%Hml)) then
      vd = var_desc("hML","meter","Mixed layer thickness",'h','1')
-     call register_restart_field(CS%tv%Hml, vd, .false., CS%restart_CSp)
+     call register_restart_field(CS%Hml, vd, .false., CS%restart_CSp)
   endif
 
 end subroutine set_restart_fields
@@ -3378,7 +3381,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     state%u => u(:,:,1)
     state%v => v(:,:,1)
     nullify(state%sfc_density)
-    if (associated(CS%tv%Hml)) state%Hml => CS%tv%Hml
+    if (associated(CS%Hml)) state%Hml => CS%Hml
   else
     if (CS%use_temperature) then
       if (.not.associated(state%SST)) then
@@ -3661,7 +3664,7 @@ subroutine MOM_end(CS)
   endif
   if (associated(CS%tv%frazil)) deallocate(CS%tv%frazil)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
-  if (associated(CS%tv%Hml)) deallocate(CS%tv%Hml)
+  if (associated(CS%Hml)) deallocate(CS%Hml)
 
   call tracer_advect_end(CS%tracer_adv_CSp)
   call tracer_hor_diff_end(CS%tracer_diff_CSp)

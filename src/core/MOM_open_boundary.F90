@@ -38,6 +38,7 @@ public set_Flather_data
 public update_obc_segment_data
 public fill_OBC_halos
 public open_boundary_test_extern_uv
+public open_boundary_test_extern_h
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -1899,6 +1900,49 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
   enddo
 
 end subroutine open_boundary_test_extern_uv
+
+!> Set thicknesses outside of open boundaries to silly values
+!! (used for checking the interior state is independent of values outside
+!! of the domain).
+subroutine open_boundary_test_extern_h(G, OBC, h)
+  type(ocean_grid_type),                    intent(in)    :: G   !< Ocean grid structure
+  type(ocean_OBC_type),                     pointer       :: OBC !< Open boundary structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness (m or kg/m2)
+  ! Local variables
+  integer :: i, j, k, n
+  real, parameter :: silly_value = 1.E40
+
+  if (.not. associated(OBC)) return
+
+  do n = 1, OBC%number_of_segments
+    do k = 1, G%ke
+      if (OBC%segment(n)%is_N_or_S) then
+        J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+          do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+            h(i,j+1,k) = silly_value
+          enddo
+        else
+          do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+            h(i,j,k) = silly_value
+          enddo
+        endif
+      elseif (OBC%segment(n)%is_E_or_W) then
+        I = OBC%segment(n)%HI%IsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            h(i+1,j,k) = silly_value
+          enddo
+        else
+          do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            h(i,j,k) = silly_value
+          enddo
+        endif
+      endif
+    enddo
+  enddo
+
+end subroutine open_boundary_test_extern_h
 
 subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
