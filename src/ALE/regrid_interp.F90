@@ -32,7 +32,7 @@ integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 !< O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
 
 !> List of interpolant degrees
-integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
+integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4, DEGREE_MAX = 5
 
 !> When the N-R algorithm produces an estimate that lies outside [0,1], the
 !! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
@@ -301,7 +301,6 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
   integer            :: k_found         ! index of target cell
   integer            :: iter
   real               :: xi0             ! normalized target coordinate
-  real, dimension(5) :: a               ! polynomial coefficients
   real               :: numerator
   real               :: denominator
   real               :: delta           ! Newton-Raphson increment
@@ -309,6 +308,7 @@ function get_polynomial_coordinate ( N, h, x_g, ppoly_E, ppoly_coefficients, &
   real               :: eps                 ! offset used to get away from
                                         ! boundaries
   real               :: grad            ! gradient during N-R iterations
+  real, dimension(DEGREE_MAX) :: a               ! polynomial coefficients
 
   eps = NR_OFFSET
 
