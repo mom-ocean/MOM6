@@ -29,10 +29,12 @@ use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding
-use MOM_regridding,       only : build_zstar_column, build_rho_column, build_sigma_column
+use MOM_regridding,       only : build_rho_column, build_sigma_column
 use MOM_regridding,       only : set_regrid_params, get_regrid_size, uniformResolution
 use MOM_regridding,       only : getCoordinateInterfaces
+use MOM_regridding,       only : get_zlike_CS
 use regrid_consts,        only : coordinateMode
+use coord_zlike,          only : build_zstar_column
 
 use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
@@ -253,7 +255,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
       endif
 
       if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
-        call build_zstar_column(remap_cs%regrid_cs, nz, &
+        call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
                               G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
         call build_sigma_column(remap_cs%regrid_cs, nz, &

@@ -25,6 +25,8 @@ use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_interp, only : regridding_set_ppolys, interpolate_grid, interpolation_scheme
 use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE
 
+use coord_zlike, only : init_coord_zlike, zlike_CS, build_zstar_column
+
 use netcdf ! Used by check_grid_def()
 
 implicit none ; private
@@ -132,6 +134,8 @@ type, public :: regridding_CS
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
+  type(zlike_CS), pointer :: zlike_CS => null()
+
 end type
 
 ! The following routines are visible to the outside world
@@ -140,12 +144,13 @@ public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
 public adjust_interface_motion
 public set_regrid_params, get_regrid_size
 public uniformResolution, setCoordinateResolution
-public build_zstar_column, build_rho_column, build_sigma_column
+public build_rho_column, build_sigma_column
 public set_target_densities_from_GV, set_target_densities
 public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
+public get_zlike_CS
 
 !> Documentation for coordinate options
 character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
@@ -677,8 +682,12 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     deallocate(h_max)
   endif
 
-  if (allocated(dz)) deallocate(dz)
+  if (coordinateMode(coord_mode) == REGRIDDING_ZSTAR) then
+    ! associate zlike_CS
+    call init_coord_zlike(CS%zlike_CS, CS%min_thickness, CS%coordinateResolution)
+  endif
 
+  if (allocated(dz)) deallocate(dz)
 end subroutine initialize_regridding
 
 !> Do some basic checks on the vertical grid definition file, variable
@@ -1116,14 +1125,14 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
       if (ice_shelf) then
         if (frac_shelf_h(i,j) > 0.) then ! under ice shelf
-           call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew, &
+           call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew, &
                                 z_rigid_top = totalThickness-nominalDepth, &
                                 eta_orig = zOld(1))
         else
-           call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
+           call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew)
         endif
       else
-        call build_zstar_column(CS, nz, nominalDepth, totalThickness, zNew)
+        call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew)
       endif
 
       ! Calculate the final change in grid position after blending new and old grids
@@ -1152,79 +1161,6 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
   end do
 
 end subroutine build_zstar_grid
-
-!> Builds a z* coordinate with a minimum thickness
-subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigid_top, eta_orig)
-  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
-  integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real,                  intent(in)    :: total_thickness !< Column thickness (positive in m)
-  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in m)
-  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top (m)
-  ! Local variables
-  real :: eta, stretching, dh, min_thickness, z0_top, z_star
-  integer :: k
-  logical :: new_zstar_def
-
-  new_zstar_def = .false.
-  min_thickness = min( CS%min_thickness, total_thickness/real(nz) )
-  z0_top = 0.
-  if (present(z_rigid_top)) then
-    z0_top = z_rigid_top
-    new_zstar_def = .true.
-  endif
-
-  ! Position of free-surface (or the rigid top, for which eta ~ z0_top)
-  eta = total_thickness - depth
-  if (present(eta_orig)) eta = eta_orig
-
-  ! Conventional z* coordinate:
-  !   z* = (z-eta) / stretching   where stretching = (H+eta)/H
-  !   z = eta + stretching * z*
-  ! The above gives z*(z=eta) = 0, z*(z=-H) = -H.
-  ! With a rigid top boundary at eta = z0_top then
-  !   z* = z0 + (z-eta) / stretching   where stretching = (H+eta)/(H+z0)
-  !   z = eta + stretching * (z*-z0) * stretching
-  stretching = total_thickness / ( depth + z0_top )
-
-  if (new_zstar_def) then
-    ! z_star is the notional z* coordinate in absence of upper/lower topography
-    z_star = 0. ! z*=0 at the free-surface
-    zInterface(1) = eta ! The actual position of the top of the column
-    do k = 2,nz
-      z_star = z_star - CS%coordinateResolution(k-1)
-      ! This ensures that z is below a rigid upper surface (ice shelf bottom)
-      zInterface(k) = min( eta + stretching * ( z_star - z0_top ), z0_top )
-      ! This ensures that the layer in inflated
-      zInterface(k) = min( zInterface(k), zInterface(k-1) - min_thickness )
-      ! This ensures that z is above or at the topography
-      zInterface(k) = max( zInterface(k), -depth + real(nz+1-k) * min_thickness )
-    enddo
-    zInterface(nz+1) = -depth
-
-  else
-    ! Integrate down from the top for a notional new grid, ignoring topography
-    ! The starting position is offset by z0_top which, if z0_top<0, will place
-    ! interfaces above the rigid boundary.
-    zInterface(1) = eta
-    do k = 1,nz
-      dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
-      zInterface(k+1) = zInterface(k) - dh
-    enddo
-
-    ! Integrating up from the bottom adjusting interface position to accommodate
-    ! inflating layers without disturbing the interface above
-    zInterface(nz+1) = -depth
-    do k = nz,1,-1
-      if ( zInterface(k) < (zInterface(k+1) + min_thickness) ) then
-        zInterface(k) = zInterface(k+1) + min_thickness
-      endif
-    enddo
-  endif
-
-end subroutine build_zstar_column
-
 
 !------------------------------------------------------------------------------
 ! Build sigma grid
@@ -2921,6 +2857,13 @@ integer function get_regrid_size(CS)
   get_regrid_size = CS%nk
 
 end function get_regrid_size
+
+function get_zlike_CS(CS)
+  type(regridding_CS), intent(in) :: CS
+  type(zlike_CS) :: get_zlike_CS
+
+  get_zlike_CS = CS%zlike_CS
+end function get_zlike_CS
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
