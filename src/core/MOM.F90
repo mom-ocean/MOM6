@@ -218,6 +218,9 @@ type, public :: MOM_control_struct
   real    :: dt_trans                !< The elapsed time since updating the tracers and
                                      !! applying diabatic processes (sec); may
                                      !! span multiple timesteps.
+  real    :: dt_ALE                  !< The amount of time that has been accumulated since
+                                     !! the last ALE step
+  real    :: ALE_period              !< How frequently ALE remapping/regridding is done
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
   type(time_type), pointer :: Time   !< pointer to ocean clock
@@ -747,32 +750,36 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! Regridding/remapping is done here, at end of thermodynamics time step
         ! (that may comprise several dynamical time steps)
         ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then
-!         call pass_vector(u, v, G%Domain)
-          call do_group_pass(CS%pass_T_S_h, G%Domain)
+        if ( CS%use_ALE_algorithm) then
+          CS%dt_ALE = CS%dt_ALE + dtdia
+          if (MOD(CS%dt_ALE,CS%ALE_period)==0) then
+  !         call pass_vector(u, v, G%Domain)
+            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
-          ! update squared quantities
-          if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-          if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+            ! update squared quantities
+            if (associated(CS%S_squared)) &
+              CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+            if (associated(CS%T_squared)) &
+              CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
-          if (CS%debug) then
-            call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
-            call check_redundant("Pre-ALE 1 ", u, v, G)
+            if (CS%debug) then
+              call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
+              call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+              call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+              call check_redundant("Pre-ALE 1 ", u, v, G)
+            endif
+            call cpu_clock_begin(id_clock_ALE)
+            if (use_ice_shelf) then
+
+               call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_ALE, &
+                            fluxes%frac_shelf_h)
+            else
+               call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_ALE)
+            endif
+
+            call cpu_clock_end(id_clock_ALE)
+            CS%dt_ALE = 0.
           endif
-          call cpu_clock_begin(id_clock_ALE)
-          if (use_ice_shelf) then
-
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
-                          fluxes%frac_shelf_h)
-          else
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
-          endif
-
-          call cpu_clock_end(id_clock_ALE)
         endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
         call cpu_clock_begin(id_clock_pass)
@@ -1143,31 +1150,41 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
             call post_data(CS%id_e_preale, eta_preale, CS%diag)
         endif
 
-        if ( CS%use_ALE_algorithm ) then
-!         call pass_vector(u, v, G%Domain)
-          call do_group_pass(CS%pass_T_S_h, G%Domain)
-          ! update squared quantities
-          if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-          if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+        ! Regridding/remapping is done here, at end of thermodynamics time step
+        ! (that may comprise several dynamical time steps)
+        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+        if ( CS%use_ALE_algorithm) then
+          CS%dt_ALE = CS%dt_ALE + CS%dt_trans
+          if (MOD(CS%dt_ALE,CS%ALE_period)==0) then
+  !         call pass_vector(u, v, G%Domain)
+            call do_group_pass(CS%pass_T_S_h, G%Domain)
 
-          if (CS%debug) then
-            call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE S", G%HI, haloshift=1)
-            call check_redundant("Pre-ALE ", u, v, G)
-          endif
-          call cpu_clock_begin(id_clock_ALE)
-          if (use_ice_shelf) then
+            ! update squared quantities
+            if (associated(CS%S_squared)) &
+              CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
+            if (associated(CS%T_squared)) &
+              CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
 
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans, &
-                           fluxes%frac_shelf_h)
-          else
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+            if (CS%debug) then
+              call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
+              call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
+              call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
+              call check_redundant("Pre-ALE 1 ", u, v, G)
+            endif
+            call cpu_clock_begin(id_clock_ALE)
+            if (use_ice_shelf) then
+
+               call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_ALE, &
+                            fluxes%frac_shelf_h)
+            else
+               call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_ALE)
+            endif
+
+            call cpu_clock_end(id_clock_ALE)
+            ! Reset the counter for ALE frequency
+            CS%dt_ALE = 0.
           endif
-          call cpu_clock_end(id_clock_ALE)
-        endif
+        endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
         call cpu_clock_begin(id_clock_pass)
         call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
@@ -1902,6 +1919,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
                  "can be an integer multiple of the coupling timestep.  By \n"//&
                  "default DT_THERM is set to DT.", units="s", default=CS%dt)
+  call get_param(param_file, "MOM", "ALE_PERIOD", CS%ALE_period, &
+                 "Sets how often the ALE regridding/remapping step is done.\n"//&
+                 "This should be an integer multiple of DT_THERM", units = "s", default=CS%dt_therm )
   call get_param(param_file, "MOM", "THERMO_SPANS_COUPLING", CS%thermo_spans_coupling, &
                  "If true, the MOM will take thermodynamic and tracer \n"//&
                  "timesteps that can be longer than the coupling timestep. \n"//&
@@ -2041,6 +2061,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
   if (CS%use_ALE_algorithm .and. .not.CS%use_temperature) call MOM_error(FATAL, &
      "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
+  if (CS%use_ALE_algorithm .and. (MOD(CS%ALE_period,CS%dt_therm) /= 0.)) &
+    call MOM_error(FATAL, "ALE_PERIOD must be an integer multiple of DT_THERM")
   if (CS%adiabatic .and. CS%use_temperature) call MOM_error(WARNING, &
     "MOM: ADIABATIC and ENABLE_THERMODYNAMICS both defined is usually unwise.")
   if (use_EOS .and. .not.CS%use_temperature) call MOM_error(FATAL, &
@@ -2232,6 +2254,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")
 
   if (CS%use_ALE_algorithm) then
+    CS%dt_ALE = 0.
     call ALE_init(param_file, GV, dG%max_depth, CS%ALE_CSp)
     call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
   endif
