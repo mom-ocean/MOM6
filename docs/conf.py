@@ -41,7 +41,7 @@ extensions = [
     'sphinxfortran.fortran_domain',
 ]
 
-autosummary_generate = ['api_modules.rst', 'api_pages.rst']
+autosummary_generate = ['api/modules.rst', 'api/pages.rst']
 doxygen_xml = 'xml'
 
 # Add any paths that contain templates here, relative to this directory.
