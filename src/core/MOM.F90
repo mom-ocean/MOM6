@@ -755,7 +755,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           CS%dt_ALE = CS%dt_ALE + dtdia
           if (MOD(CS%dt_ALE,CS%ALE_period)==0.) then
   !         call pass_vector(u, v, G%Domain)
-
             ! update squared quantities
             if (associated(CS%S_squared)) &
               CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
