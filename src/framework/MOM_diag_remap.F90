@@ -458,6 +458,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
   integer :: i, j, k
+  logical :: is_zstar
 
   call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3)+1, &
@@ -468,6 +469,9 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
+  is_zstar = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
@@ -475,8 +479,8 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i+1,j,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j,:), h_src, h_dest)
         call interpolate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, missing_value, interpolated_field(I,j,:))
       enddo
@@ -488,8 +492,8 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j+1,:), h_src, h_dest)
         call interpolate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, interpolated_field(i,J,:))
       enddo
