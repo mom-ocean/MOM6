@@ -62,20 +62,20 @@ subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
   if (.not.associated(OBC)) return
 
   do n=1,OBC%number_of_segments
-    segment => OBC%segment(1)
+    segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
 
     time_sec = time_type_to_real(Time)
     PI = 4.0*atan(1.0)
     fac = 1.0
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = fac * sin(omega * time_sec)
+    val1 = sin(omega * time_sec)
 
     isdB = segment%HI%isdB ; iedB = segment%HI%iedB
     Jsd = segment%HI%Jsd ; Jed = segment%HI%Jed
     do J=Jsd,Jed ; do i=isdB,iedB
-      x = 0.5 * (G%geoLonT(i+1,j) + G%geoLonT(i,j))
-      y = 0.5 * (G%geoLatT(i+1,j) + G%geoLatT(i,j))
+      x = 0.5 * 1000. * (G%geoLonT(i+1,j) + G%geoLonT(i,j))
+      y = 0.5 * 1000. * (G%geoLatT(i+1,j) + G%geoLatT(i,j))
       cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
       val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
       OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
