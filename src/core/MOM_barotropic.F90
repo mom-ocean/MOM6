@@ -372,6 +372,8 @@ type, private :: BT_OBC_type
     eta_outer_u => NULL(), & ! The surface height outside of the domain at a
     eta_outer_v => NULL()    ! u- or v- point with an open boundary condition,
                              ! in units of m or kg m-2.
+  logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
+  logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
   integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
   integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
 end type BT_OBC_type
@@ -379,7 +381,6 @@ end type BT_OBC_type
 integer :: id_clock_sync=-1, id_clock_calc=-1
 integer :: id_clock_calc_pre=-1, id_clock_calc_post=-1
 integer :: id_clock_pass_step=-1, id_clock_pass_pre=-1, id_clock_pass_post=-1
-logical :: apply_u_OBCs, apply_v_OBCs
 
 ! Enumeration values for various schemes
 integer, parameter :: HARMONIC        = 1
@@ -718,12 +719,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-  apply_OBCs = .false. ; apply_u_OBCs = .false. ; apply_v_OBCs = .false.
+  apply_OBCs = .false. ; BT_OBC%apply_u_OBCs = .false. ; BT_OBC%apply_v_OBCs = .false.
   apply_OBC_open = .false.
   apply_OBC_flather = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
-    apply_u_OBCs = OBC%Flather_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
-    apply_v_OBCs = OBC%Flather_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
+    BT_OBC%apply_u_OBCs = OBC%open_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
+    BT_OBC%apply_v_OBCs = OBC%open_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
     apply_OBC_flather = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
     apply_OBC_open = OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally
     apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
@@ -1643,7 +1644,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ioff = 0; joff = 1
       endif
 
-      if (apply_u_OBCs) then  ! save the old value of ubt and uhbt
+      if (BT_OBC%apply_u_OBCs) then  ! save the old value of ubt and uhbt
 !GOMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
 !GOMP                                  uhbt,ubt_sum_prev,ubt_sum,uhbt_sum_prev, &
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -1653,7 +1654,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         enddo ; enddo
       endif
 
-      if (apply_v_OBCs) then  ! save the old value of vbt and vhbt
+      if (BT_OBC%apply_v_OBCs) then  ! save the old value of vbt and vhbt
 !GOMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,vbt_prev,vbt,vhbt_prev,  &
 !GOMP                                  vhbt,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
 !GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
@@ -1710,7 +1711,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-      if (apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1 ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
           vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
@@ -1753,7 +1754,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
-     if (apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+     if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP do
         do j=jsv,jev ; do I=isv-1,iev ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
           ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
@@ -1797,7 +1798,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
-      if (apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+      if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
           ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
@@ -1839,7 +1840,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-      if (apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP do
         do J=jsv-1,jev ; do i=isv,iev ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
           vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
@@ -1890,7 +1891,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !GOMP end parallel
 
     if (apply_OBCs) then
-      if (apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+      if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
         do j=js,je ; do I=is-1,ie
@@ -1900,7 +1901,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         enddo ; enddo
       endif
 
-      if (apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
 !GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd,BT_OBC)
         do J=js-1,je ; do I=is,ie
@@ -1914,14 +1915,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
            ubt_trans, vbt_trans, eta, ubt_old, vbt_old, BT_OBC, &
            G, MS, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
            uhbt0, vhbt0)
-      if (apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
+      if (BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
         if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
           ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
           uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
           ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
         endif
       enddo ; enddo ; endif
-      if (apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
+      if (BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
         if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
           vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
           vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
@@ -2338,7 +2339,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   rx_max = OBC%rx_max ; ry_max = OBC%rx_max
 
-  if (apply_u_OBCs) then
+  if (BT_OBC%apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
         uhbt(I,j) = BT_OBC%uhbt(I,j)
@@ -2451,7 +2452,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
     endif ; enddo ; enddo
   endif
 
-  if (apply_v_OBCs) then
+  if (BT_OBC%apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
         vhbt(i,J) = BT_OBC%vhbt(i,J)
@@ -2599,7 +2600,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if (OBC%open_u_BCs_exist_globally .and. apply_u_OBCS) then
+  if (OBC%open_u_BCs_exist_globally .and. BT_OBC%apply_u_OBCS) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
       if (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
         if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
@@ -2640,7 +2641,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     endif ; enddo ; enddo
   endif
 
-  if (OBC%open_v_BCs_exist_globally .and. apply_v_OBCs) then
+  if (OBC%open_v_BCs_exist_globally .and. BT_OBC%apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
       if (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
         if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
@@ -2742,7 +2743,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
   allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
 
-  if (apply_u_OBCs) then
+  if (BT_OBC%apply_u_OBCs) then
     if (OBC%specified_u_BCs_exist_globally) then
       do n = 1, OBC%number_of_segments
         segment = OBC%segment(n)
@@ -2780,7 +2781,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
     enddo ; enddo ; endif
   endif
 
-  if (apply_v_OBCs) then
+  if (BT_OBC%apply_v_OBCs) then
     if (OBC%specified_v_BCs_exist_globally) then
       do n = 1, OBC%number_of_segments
         segment = OBC%segment(n)
