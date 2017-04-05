@@ -22,11 +22,14 @@ use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
-use regrid_interp, only : regridding_set_ppolys, interpolate_grid, interpolation_scheme
-use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE
+use regrid_interp, only : regridding_set_ppolys, interpolate_grid
+use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
+use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE, DEGREE_MAX
 
 use coord_zlike, only : init_coord_zlike, zlike_CS, build_zstar_column
 use coord_sigma, only : init_coord_sigma, sigma_CS, build_sigma_column
+use coord_rho,   only : init_coord_rho, rho_CS, build_rho_column
+use coord_rho,   only : old_inflate_layers_1d
 
 use netcdf ! Used by check_grid_def()
 
@@ -62,20 +65,12 @@ type, public :: regridding_CS
 
   integer :: nk !< Number of layers/levels
 
-  integer :: degree_i=4 !< Degree of interpolation polynomial
-
   !> Indicates which grid to use in the vertical (z*, sigma, target interface
   !! densities)
   integer :: regridding_scheme
 
-  !> The following parameter is only relevant when used with the target
-  !! interface densities regridding scheme. It indicates which interpolation
-  !! to use to determine the grid.
-  integer :: interpolation_scheme
-
-  ! Indicate whether high-order boundary extrapolation should be used within
-  !! boundary cells
-  logical :: boundary_extrapolation
+  !> Interpolation control structure
+  type(interp_CS_type) :: interp_CS
 
   !> Minimum thickness allowed when building the new grid through regridding
   real :: min_thickness
@@ -137,6 +132,7 @@ type, public :: regridding_CS
 
   type(zlike_CS), pointer :: zlike_CS => null()
   type(sigma_CS), pointer :: sigma_CS => null()
+  type(rho_CS),   pointer :: rho_CS   => null()
 
 end type
 
@@ -152,7 +148,7 @@ public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
-public get_zlike_CS, get_sigma_CS
+public get_zlike_CS, get_sigma_CS, get_rho_CS
 
 !> Documentation for coordinate options
 character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
@@ -179,12 +175,6 @@ character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
 character(len=6), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
 logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
 real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
-
-!> Maximum number of regridding iterations
-integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
-!> Deviation tolerance between succesive grids in regridding iterations
-real, parameter    :: DEVIATION_TOLERANCE = 1e-10
-! This CPP macro embeds some safety checks
 
 #undef __DO_SAFETY_CHECKS__
 
@@ -262,8 +252,6 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                  "used. It can be one of the following schemes:\n"//&
                  trim(regriddingInterpSchemeDoc), default=trim(string2))
     call set_regrid_params(CS, interp_scheme=string)
-  else
-    CS%interpolation_scheme = -1 ! Cause error if ever used
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -689,6 +677,9 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call init_coord_zlike(CS%zlike_CS, CS%min_thickness, CS%coordinateResolution)
   case (REGRIDDING_SIGMA)
     call init_coord_sigma(CS%sigma_CS, CS%min_thickness, CS%coordinateResolution)
+  case (REGRIDDING_RHO)
+    call init_coord_rho(CS%rho_CS, CS%min_thickness, CS%ref_pressure, CS%integrate_downward_for_e, &
+         CS%target_density, CS%interp_CS)
   end select
 
   if (allocated(dz)) deallocate(dz)
@@ -749,6 +740,7 @@ subroutine end_regridding(CS)
 
   if (associated(CS%zlike_CS)) deallocate(CS%zlike_CS)
   if (associated(CS%sigma_CS)) deallocate(CS%sigma_CS)
+  if (associated(CS%rho_CS)) deallocate(CS%rho_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
@@ -1287,7 +1279,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      call build_rho_column(CS, remapCS, nz, nominalDepth, h(i, j, :)*GV%H_to_m, &
+      call build_rho_column(CS%rho_CS, remapCS, nz, nominalDepth, h(i, j, :)*GV%H_to_m, &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
 
       if (CS%integrate_downward_for_e) then
@@ -1349,170 +1341,6 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 end subroutine build_rho_grid
 
 
-subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)
-! The algorithn operates as follows within each
-! column:
-! 1. Given T & S within each layer, the layer densities are computed.
-! 2. Based on these layer densities, a global density profile is reconstructed
-!    (this profile is monotonically increasing and may be discontinuous)
-! 3. The new grid interfaces are determined based on the target interface
-!    densities.
-! 4. T & S are remapped onto the new grid.
-! 5. Return to step 1 until convergence or until the maximum number of
-!    iterations is reached, whichever comes first.
-!------------------------------------------------------------------------------
-
-  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
-  type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
-  integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
-  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-
-  ! Local variables
-  integer   :: k, m
-  integer   :: map_index
-  integer   :: k_found
-  integer   :: count_nonzero_layers
-  real      :: deviation            ! When iterating to determine the final
-                                    ! grid, this is the deviation between two
-                                    ! successive grids.
-  real      :: threshold
-  real      :: max_thickness
-  real      :: correction
-  real, dimension(CS%nk,2) :: ppoly_i_E            !Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_i_S            !Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients !Coefficients of polynomial
-  integer   :: ppoly_degree         ! The actual degree of the polynomials.
-  real, dimension(nz) :: p, densities, T_tmp, S_tmp, Tmp
-  integer, dimension(nz) :: mapping
-  real :: dh
-  real, dimension(nz) :: h0, h1, hTmp
-  real, dimension(nz+1) :: x0, x1, xTmp
-
-  threshold = CS%min_thickness
-  p(:) = CS%ref_pressure
-  T_tmp(:) = T(:)
-  S_tmp(:) = S(:)
-  h0(:) = h(:)
-
-  ! Start iterations to build grid
-  m = 1
-  deviation = 1e10
-  do while ( ( m <= NB_REGRIDDING_ITERATIONS ) .and. &
-             ( deviation > DEVIATION_TOLERANCE ) )
-
-    ! Count number of nonzero layers within current water column
-    count_nonzero_layers = 0
-    do k = 1,nz
-      if ( h0(k) > threshold ) then
-        count_nonzero_layers = count_nonzero_layers + 1
-      end if
-    end do
-
-    ! If there is at most one nonzero layer, stop here (no regridding)
-    if ( count_nonzero_layers <= 1 ) then
-      h1(:) = h0(:)
-      exit  ! stop iterations here
-    end if
-
-    ! Build new grid containing only nonzero layers
-    map_index = 1
-    correction = 0.0
-    do k = 1,nz
-      if ( h0(k) > threshold ) then
-        mapping(map_index) = k
-        hTmp(map_index) = h0(k)
-        map_index = map_index + 1
-      else
-        correction = correction + h0(k)
-      end if
-    end do
-
-    max_thickness = hTmp(1)
-    k_found = 1
-    do k = 1,count_nonzero_layers
-      if ( hTmp(k) > max_thickness ) then
-        max_thickness = hTmp(k)
-        k_found = k
-      end if
-    end do
-
-    hTmp(k_found) = hTmp(k_found) + correction
-
-    xTmp(1) = 0.0
-    do k = 1,count_nonzero_layers
-      xTmp(k+1) = xTmp(k) + hTmp(k)
-    end do
-
-    ! Compute densities within current water column
-    call calculate_density( T_tmp, S_tmp, p, densities,&
-                             1, nz, eqn_of_state )
-
-    do k = 1,count_nonzero_layers
-      densities(k) = densities(mapping(k))
-    end do
-
-    ! One regridding iteration
-    call regridding_set_ppolys(densities, count_nonzero_layers, hTmp, &
-         ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
-         ppoly_degree, CS%interpolation_scheme, CS%boundary_extrapolation)
-    ! Based on global density profile, interpolate to generate a new grid
-    call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
-                          CS%target_density, ppoly_degree, nz, h1, x1 )
-
-    call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
-    x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
-
-    ! Remap T and S from previous grid to new grid
-    do k = 1,nz
-      h1(k) = x1(k+1) - x1(k)
-    end do
-
-    call remapping_core_h(nz, h0, S, nz, h1, Tmp, remapCS)
-    S_tmp(:) = Tmp(:)
-
-    call remapping_core_h(nz, h0, T, nz, h1, Tmp, remapCS)
-    T_tmp(:) = Tmp(:)
-
-    ! Compute the deviation between two successive grids
-    deviation = 0.0
-    x0(1) = 0.0
-    x1(1) = 0.0
-    do k = 2,nz
-      x0(k) = x0(k-1) + h0(k-1)
-      x1(k) = x1(k-1) + h1(k-1)
-      deviation = deviation + (x0(k)-x1(k))**2
-    end do
-    deviation = sqrt( deviation / (nz-1) )
-
-    m = m + 1
-
-    ! Copy final grid onto start grid for next iteration
-    h0(:) = h1(:)
-
-  end do ! end regridding iterations
-
-  if (CS%integrate_downward_for_e) then
-    zInterface(1) = 0.
-    do k = 1,nz
-      zInterface(k+1) = zInterface(k) - h1(k)
-      ! Adjust interface position to accomodate inflating layers
-      ! without disturbing the interface above
-    enddo
-  else
-    ! The rest of the model defines grids integrating up from the bottom
-    zInterface(nz+1) = -depth
-    do k = nz,1,-1
-      zInterface(k) = zInterface(k+1) + h1(k)
-      ! Adjust interface position to accomodate inflating layers
-      ! without disturbing the interface above
-    enddo
-  endif
-
-end subroutine build_rho_column
 
 
 !> Builds a simple HyCOM-like grid with the deepest location of potential
@@ -1590,7 +1418,7 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_
   real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
   real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(CS%nk,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real, dimension(CS%nk,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   real :: stretching ! z* stretching, converts z* to z.
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: hNew
@@ -1610,8 +1438,8 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_
   enddo
 
   ! Interpolates for the target interface position with the rho_col profile
-  call regridding_set_ppolys(rho_col, nz, h(:), ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
-       ppoly_degree, CS%interpolation_scheme, CS%boundary_extrapolation)
+  call regridding_set_ppolys(CS%interp_CS, rho_col, nz, h(:), ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
+       ppoly_degree)
   ! Based on global density profile, interpolate to generate a new grid
   call interpolate_grid(nz, h(:), z_col, ppoly_i_E, ppoly_i_coefficients, &
                         CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
@@ -2016,7 +1844,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
   real, dimension(nz)   :: ru_min_lay ! an unstable region containing a layer.
   real, dimension(nz,2) :: ppoly_i_E ! Edge value of polynomial
   real, dimension(nz,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(nz,CS%degree_i+1) :: ppoly_i_coefficients ! Coefficients of polynomial
+  real, dimension(nz,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   logical, dimension(nz)   :: unstable_lay ! If true, this layer is in an unstable region.
   logical, dimension(nz+1) :: unstable_int ! If true, this interface is in an unstable region.
   real :: rt  ! The current target density, in kg m-3.
@@ -2054,9 +1882,8 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
   endif
 
   ! This sets up the piecewise polynomials based on the rho_col profile.
-  call regridding_set_ppolys(rho_col, nz, h_col, ppoly_i_E, ppoly_i_S, &
-       ppoly_i_coefficients, ppoly_degree, &
-       CS%interpolation_scheme, CS%boundary_extrapolation)
+  call regridding_set_ppolys(CS%interp_CS, rho_col, nz, h_col, ppoly_i_E, ppoly_i_S, &
+       ppoly_i_coefficients, ppoly_degree)
 
   ! Determine the density ranges of unstably stratified segments.
   ! Interfaces that start out in an unstably stratified segment can
@@ -2431,68 +2258,6 @@ subroutine inflate_vanished_layers_old( CS, G, GV, h )
 end subroutine inflate_vanished_layers_old
 
 !------------------------------------------------------------------------------
-! Inflate vanished layers to finite (nonzero) width
-!------------------------------------------------------------------------------
-subroutine old_inflate_layers_1d( minThickness, N, h )
-
-  ! Argument
-  real,                intent(in) :: minThickness
-  integer,             intent(in) :: N
-  real,                intent(inout) :: h(:)
-
-  ! Local variable
-  integer   :: k
-  integer   :: k_found
-  integer   :: count_nonzero_layers
-  real      :: delta
-  real      :: correction
-  real      :: maxThickness
-
-  ! Count number of nonzero layers
-  count_nonzero_layers = 0
-  do k = 1,N
-    if ( h(k) > minThickness ) then
-      count_nonzero_layers = count_nonzero_layers + 1
-    end if
-  end do
-
-  ! If all layer thicknesses are greater than the threshold, exit routine
-  if ( count_nonzero_layers == N ) return
-
-  ! If all thicknesses are zero, inflate them all and exit
-  if ( count_nonzero_layers == 0 ) then
-    do k = 1,N
-      h(k) = minThickness
-    end do
-    return
-  end if
-
-  ! Inflate zero layers
-  correction = 0.0
-  do k = 1,N
-    if ( h(k) <= minThickness ) then
-      delta = minThickness - h(k)
-      correction = correction + delta
-      h(k) = h(k) + delta
-    end if
-  end do
-
-  ! Modify thicknesses of nonzero layers to ensure volume conservation
-  maxThickness = h(1)
-  k_found = 1
-  do k = 1,N
-    if ( h(k) > maxThickness ) then
-      maxThickness = h(k)
-      k_found = k
-    end if
-  end do
-
-  h(k_found) = h(k_found) - correction
-
-end subroutine old_inflate_layers_1d
-
-
-!------------------------------------------------------------------------------
 ! Convective adjustment by swapping layers
 !------------------------------------------------------------------------------
 subroutine convective_adjustment(G, GV, h, tv)
@@ -2805,14 +2570,14 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
 
-  if (present(boundary_extrapolation)) CS%boundary_extrapolation = boundary_extrapolation
-  if (present(min_thickness)) CS%min_thickness = min_Thickness
+  if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
+  if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
       call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
   endif
-  if (present(interp_scheme)) CS%interpolation_scheme = interpolation_scheme(interp_scheme)
+  if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
   if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
   if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
@@ -2856,6 +2621,13 @@ function get_sigma_CS(CS)
 
   get_sigma_CS = CS%sigma_CS
 end function get_sigma_CS
+
+function get_rho_CS(CS)
+  type(regridding_CS), intent(in) :: CS
+  type(rho_CS) :: get_rho_CS
+
+  get_rho_CS = CS%rho_CS
+end function get_rho_CS
 
 !------------------------------------------------------------------------------
 ! Return coordinate-derived thicknesses for fixed coordinate systems
