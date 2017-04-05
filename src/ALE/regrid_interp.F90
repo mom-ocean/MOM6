@@ -16,8 +16,21 @@ use P3M_functions, only : P3M_interpolation, P3M_boundary_extrapolation
 
 implicit none ; private
 
+type, public :: interp_CS_type
+  private
+
+  !> The following parameter is only relevant when used with the target
+  !! interface densities regridding scheme. It indicates which interpolation
+  !! to use to determine the grid.
+  integer :: interpolation_scheme = -1
+
+  !> Indicate whether high-order boundary extrapolation should be used within
+  !! boundary cells
+  logical :: boundary_extrapolation
+end type interp_CS_type
+
 public regridding_set_ppolys, interpolate_grid
-public interpolation_scheme
+public set_interp_scheme, set_interp_extrap
 
 ! List of interpolation schemes
 integer, parameter :: INTERPOLATION_P1M_H2     = 0 !< O(h^2)
@@ -32,7 +45,8 @@ integer, parameter :: INTERPOLATION_PQM_IH4IH3 = 8 !< O(h^4)
 integer, parameter :: INTERPOLATION_PQM_IH6IH5 = 9 !< O(h^5)
 
 !> List of interpolant degrees
-integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4, DEGREE_MAX = 5
+integer, parameter :: DEGREE_1 = 1, DEGREE_2 = 2, DEGREE_3 = 3, DEGREE_4 = 4
+integer, public, parameter :: DEGREE_MAX = 5
 
 !> When the N-R algorithm produces an estimate that lies outside [0,1], the
 !! estimate is set to be equal to the boundary location, 0 or 1, plus or minus
@@ -53,8 +67,9 @@ contains
 !! available layers is insufficient (e.g., there are two available layers for
 !! a third-order PPM ih4 scheme). In these cases, we resort to the simplest
 !! continuous linear scheme (P1M h2).
-subroutine regridding_set_ppolys(densities, n0, h0, ppoly0_E, ppoly0_S, &
-     ppoly0_coefficients, degree, scheme, extrapolate)
+subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
+     ppoly0_coefficients, degree)
+  type(interp_CS_type),intent(in)    :: CS !< Interpolation control structure
   real, dimension(:),  intent(in)    :: densities !< Actual cell densities
   integer,             intent(in)    :: n0 !< Number of cells on source grid
   real, dimension(:),  intent(in)    :: h0 !< cell widths on source grid
@@ -62,16 +77,18 @@ subroutine regridding_set_ppolys(densities, n0, h0, ppoly0_E, ppoly0_S, &
   real, dimension(:,:),intent(inout) :: ppoly0_S            !< Edge slope of polynomial
   real, dimension(:,:),intent(inout) :: ppoly0_coefficients !< Coefficients of polynomial
   integer,             intent(inout) :: degree  !< The degree of the polynomials
-  integer,             intent(in)    :: scheme !< Interpolation scheme to use
-  logical,             intent(in)    :: extrapolate !< If true, perform boundary extrapolation
+
+  logical :: extrapolate
 
   ! Reset piecewise polynomials
   ppoly0_E(:,:) = 0.0
   ppoly0_S(:,:) = 0.0
   ppoly0_coefficients(:,:) = 0.0
 
+  extrapolate = CS%boundary_extrapolation
+
   ! Compute the interpolated profile of the density field and build grid
-  select case (scheme)
+  select case (CS%interpolation_scheme)
 
     case ( INTERPOLATION_P1M_H2 )
       degree = DEGREE_1
@@ -424,9 +441,23 @@ integer function interpolation_scheme(interp_scheme)
     case ("P3M_IH6IH5"); interpolation_scheme = INTERPOLATION_P3M_IH6IH5
     case ("PQM_IH4IH3"); interpolation_scheme = INTERPOLATION_PQM_IH4IH3
     case ("PQM_IH6IH5"); interpolation_scheme = INTERPOLATION_PQM_IH6IH5
-    case default ; call MOM_error(FATAL, "MOM_regridding: "//&
+    case default ; call MOM_error(FATAL, "regrid_interp: "//&
      "Unrecognized choice for INTERPOLATION_SCHEME ("//trim(interp_scheme)//").")
   end select
 end function interpolation_scheme
+
+subroutine set_interp_scheme(CS, interp_scheme)
+  type(interp_CS_type),  intent(inout) :: CS
+  character(len=*), intent(in)    :: interp_scheme
+
+  CS%interpolation_scheme = interpolation_scheme(interp_scheme)
+end subroutine set_interp_scheme
+
+subroutine set_interp_extrap(CS, extrapolation)
+  type(interp_CS_type), intent(inout) :: CS
+  logical,         intent(in)    :: extrapolation
+
+  CS%boundary_extrapolation = extrapolation
+end subroutine set_interp_extrap
 
 end module regrid_interp
