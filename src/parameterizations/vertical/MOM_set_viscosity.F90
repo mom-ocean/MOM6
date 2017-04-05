@@ -583,7 +583,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
           tmp = G%mask2dCv(i+1,J) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%mask2dCv(i,J-1) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
+          tmp = G%mask2dCv(i-1,J) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif

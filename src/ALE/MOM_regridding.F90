@@ -401,11 +401,16 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                   "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)-1
-      allocate(dz(ke))
-      allocate(z_max(ke+1))
-      call MOM_read_data(trim(fileName), trim(varName), z_max)
-      dz(:) = abs(z_max(1:ke) - z_max(2:ke+1))
-      deallocate(z_max)
+      if (CS%regridding_scheme == REGRIDDING_RHO) then
+        allocate(rho_target(ke+1))
+        call MOM_read_data(trim(fileName), trim(varName), rho_target)
+      else
+        allocate(dz(ke))
+        allocate(z_max(ke+1))
+        call MOM_read_data(trim(fileName), trim(varName), z_max)
+        dz(:) = abs(z_max(1:ke) - z_max(2:ke+1))
+        deallocate(z_max)
+      endif
     else
       ! Assume reading resolution
       call field_size(trim(fileName), trim(varName), nzf)
@@ -499,12 +504,18 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     allocate( CS%target_density(CS%nk+1) ); CS%target_density(:) = -1.E30
   endif
 
-  call setCoordinateResolution(dz, CS)
-  if (allocated(rho_target)) then
+  if (allocated(dz)) call setCoordinateResolution(dz, CS)
+
+  if ((coordinateMode(coord_mode) == REGRIDDING_RHO) .and. (allocated(rho_target))) then
     call set_target_densities(CS, rho_target)
     deallocate(rho_target)
-  endif
-  if (coordinateMode(coord_mode) == REGRIDDING_RHO) then
+
+  elseif (allocated(rho_target)) then
+    call set_target_densities(CS, rho_target)
+    deallocate(rho_target)
+
+  ! \todo This line looks like it would overwrite the target densities set just above?
+  elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
     call set_target_densities_from_GV(GV, CS)
     call log_param(param_file, mod, "!TARGET_DENSITIES", CS%target_density, &
              'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
@@ -701,7 +712,8 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     deallocate(h_max)
   endif
 
-  deallocate(dz)
+  if (allocated(dz)) deallocate(dz)
+
 end subroutine initialize_regridding
 
 !> Do some basic checks on the vertical grid definition file, variable
