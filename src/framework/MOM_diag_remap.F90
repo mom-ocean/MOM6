@@ -417,7 +417,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
           if (mask(i,j,1) == 0.) cycle
         endif
         call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
-                            remap_cs%h(i,j,:), remap_cs%h(i+1,j+1,:), h_src, h_dest)
+                            remap_cs%h(i,j,:), remap_cs%h(i,j+1,:), h_src, h_dest)
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(i,J,:))
       enddo
@@ -493,7 +493,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
           if (mask(i,j,1) == 0.) cycle
         endif
         call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
-                            remap_cs%h(i,j,:), remap_cs%h(i+1,j+1,:), h_src, h_dest)
+                            remap_cs%h(i,j,:), remap_cs%h(i,j+1,:), h_src, h_dest)
         call interpolate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, interpolated_field(i,J,:))
       enddo
