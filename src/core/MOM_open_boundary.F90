@@ -12,7 +12,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_io, only : EAST_FACE, NORTH_FACE
-use MOM_io, only : slasher, read_data, field_size
+use MOM_io, only : slasher, read_data, field_size, SINGLE_FILE
 use MOM_obsolete_params, only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions, only : extract_word, remove_spaces
 use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
@@ -314,6 +314,8 @@ subroutine open_boundary_config(G, param_file, OBC)
 end subroutine open_boundary_config
 
 subroutine initialize_segment_data(G, OBC, PF)
+  use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
+
   type(dyn_horgrid_type),  intent(in) :: G   !< Ocean grid structure
   type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
   type(param_file_type), intent(in)   :: PF  !< Parameter file handle
@@ -333,6 +335,10 @@ subroutine initialize_segment_data(G, OBC, PF)
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
+  integer, dimension(:), allocatable :: saved_pelist
+  integer :: current_pe
+  integer, dimension(1) :: single_pelist
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   ! There is a problem with the order of the OBC initialization
@@ -368,6 +374,15 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   if (OBC%user_BCs_set_globally) return
 
+
+  !< temporarily disable communication in order to read segment data independently
+
+  allocate(saved_pelist(0:mpp_npes()-1))
+  call mpp_get_current_pelist(saved_pelist)
+  current_pe = mpp_pe()
+  single_pelist(1) = current_pe
+  call mpp_set_current_pelist(single_pelist)
+  
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
 
@@ -408,6 +423,7 @@ subroutine initialize_segment_data(G, OBC, PF)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
+
     do m=1,num_fields
       call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
       if (trim(filename) /= 'none') then
@@ -440,7 +456,8 @@ subroutine initialize_segment_data(G, OBC, PF)
             allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
           endif
           segment%field(m)%buffer_src(:,:,:)=0.0
-          segment%field(m)%fid = init_external_field(trim(filename),trim(fieldname),ignore_axis_atts=.true.)
+          segment%field(m)%fid = init_external_field(trim(filename),&
+               trim(fieldname),ignore_axis_atts=.true.,threading=SINGLE_FILE)
           if (siz(3) > 1) then
             fieldname = 'dz_'//trim(fieldname)
             call field_size(filename,fieldname,siz,no_domain=.true.)
@@ -451,7 +468,8 @@ subroutine initialize_segment_data(G, OBC, PF)
             endif
             segment%field(m)%dz_src(:,:,:)=0.0
             segment%field(m)%nk_src=siz(3)
-            segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname),ignore_axis_atts=.true.)
+            segment%field(m)%fid_dz = init_external_field(trim(filename),trim(fieldname),&
+                       ignore_axis_atts=.true.,threading=SINGLE_FILE)
           else
             segment%field(m)%nk_src=1
           endif
@@ -462,6 +480,8 @@ subroutine initialize_segment_data(G, OBC, PF)
       endif
     enddo
   enddo
+
+  call mpp_set_current_pelist(saved_pelist)
 
 end subroutine initialize_segment_data
 
