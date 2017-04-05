@@ -1,0 +1,11 @@
+# don't build extra formats (like HTML zip)
+formats:
+  - none
+
+# path to pip requirements file to bring in
+# doxygen extensions
+requirements_file: docs/requirements.txt
+
+python:
+  # make sure we're using Python 3
+  version: 3.5
