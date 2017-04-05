@@ -23,6 +23,7 @@ use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_interp, only : regridding_set_ppolys, interpolate_grid
+use regrid_interp, only : build_and_interpolate_grid
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
 use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE, DEGREE_MAX
 
@@ -1416,15 +1417,11 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_
   ! Local variables
   integer   :: k
   real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
-  real, dimension(CS%nk,2) :: ppoly_i_E ! Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_i_S ! Edge slope of polynomial
-  real, dimension(CS%nk,DEGREE_MAX+1) :: ppoly_i_coefficients ! Coefficients of polynomial
   real :: stretching ! z* stretching, converts z* to z.
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: hNew
   logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
   logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
-  integer :: ppoly_degree
 
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
@@ -1438,11 +1435,9 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_
   enddo
 
   ! Interpolates for the target interface position with the rho_col profile
-  call regridding_set_ppolys(CS%interp_CS, rho_col, nz, h(:), ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, &
-       ppoly_degree)
   ! Based on global density profile, interpolate to generate a new grid
-  call interpolate_grid(nz, h(:), z_col, ppoly_i_E, ppoly_i_coefficients, &
-                        CS%target_density, ppoly_degree, nz, h_col_new, z_col_new)
+  call build_and_interpolate_grid(CS%interp_CS, rho_col, nz, h(:), z_col, &
+       CS%target_density, nz, h_col_new, z_col_new)
 
   ! Sweep down the interfaces and make sure that the interface is at least
   ! as deep as a nominal target z* grid

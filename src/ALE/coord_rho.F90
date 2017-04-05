@@ -3,7 +3,7 @@ module coord_rho
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_remapping,     only : remapping_CS, remapping_core_h
 use MOM_EOS,           only : EOS_type, calculate_density
-use regrid_interp,     only : interp_CS_type, regridding_set_ppolys, interpolate_grid, DEGREE_MAX
+use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE_MAX
 
 implicit none ; private
 
@@ -79,10 +79,6 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
   real      :: threshold
   real      :: max_thickness
   real      :: correction
-  real, dimension(nz,2) :: ppoly_i_E            !Edge value of polynomial
-  real, dimension(nz,2) :: ppoly_i_S            !Edge slope of polynomial
-  real, dimension(nz,DEGREE_MAX+1) :: ppoly_i_coefficients !Coefficients of polynomial
-  integer   :: ppoly_degree         ! The actual degree of the polynomials.
   real, dimension(nz) :: p, densities, T_tmp, S_tmp, Tmp
   integer, dimension(nz) :: mapping
   real :: dh
@@ -153,11 +149,9 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
     end do
 
     ! One regridding iteration
-    call regridding_set_ppolys(CS%interp_CS, densities, count_nonzero_layers, hTmp, &
-         ppoly_i_E, ppoly_i_S, ppoly_i_coefficients, ppoly_degree)
     ! Based on global density profile, interpolate to generate a new grid
-    call interpolate_grid(count_nonzero_layers, hTmp, xTmp, ppoly_i_E, ppoly_i_coefficients, &
-                          CS%target_density, ppoly_degree, nz, h1, x1 )
+    call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
+         hTmp, xTmp, CS%target_density, nz, h1, x1)
 
     call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
     x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
