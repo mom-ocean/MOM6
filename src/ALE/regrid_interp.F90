@@ -30,6 +30,7 @@ type, public :: interp_CS_type
 end type interp_CS_type
 
 public regridding_set_ppolys, interpolate_grid
+public build_and_interpolate_grid
 public set_interp_scheme, set_interp_extrap
 
 ! List of interpolation schemes
@@ -273,6 +274,23 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefficients, target_v
   h1(n1) = x1(n1+1) - x1(n1)
 
 end subroutine interpolate_grid
+
+subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, n1, h1, x1)
+  type(interp_CS_type), intent(in) :: CS
+  real, dimension(:), intent(in) :: densities, target_values
+  integer, intent(in) :: n0, n1
+  real, dimension(:), intent(in) :: h0, x0
+  real, dimension(:), intent(inout) :: h1, x1
+
+  real, dimension(n0,2) :: ppoly0_E, ppoly0_S
+  real, dimension(n0,DEGREE_MAX+1) :: ppoly0_C
+  integer :: degree
+
+  call regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, ppoly0_C, &
+       degree)
+  call interpolate_grid(n0, h0, x0, ppoly0_E, ppoly0_C, target_values, degree, &
+       n1, h1, x1)
+end subroutine build_and_interpolate_grid
 
 !> Given a target value, find corresponding coordinate for given polynomial
 !!
