@@ -23,7 +23,6 @@ use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_interp, only : regridding_set_ppolys, interpolate_grid
-use regrid_interp, only : build_and_interpolate_grid
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
 use regrid_interp, only : NR_ITERATIONS, NR_TOLERANCE, DEGREE_MAX
 
@@ -31,6 +30,7 @@ use coord_zlike, only : init_coord_zlike, zlike_CS, build_zstar_column
 use coord_sigma, only : init_coord_sigma, sigma_CS, build_sigma_column
 use coord_rho,   only : init_coord_rho, rho_CS, build_rho_column
 use coord_rho,   only : old_inflate_layers_1d
+use coord_hycom, only : init_coord_hycom, hycom_CS, build_hycom1_column
 
 use netcdf ! Used by check_grid_def()
 
@@ -134,6 +134,7 @@ type, public :: regridding_CS
   type(zlike_CS), pointer :: zlike_CS => null()
   type(sigma_CS), pointer :: sigma_CS => null()
   type(rho_CS),   pointer :: rho_CS   => null()
+  type(hycom_CS), pointer :: hycom_CS => null()
 
 end type
 
@@ -681,6 +682,9 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   case (REGRIDDING_RHO)
     call init_coord_rho(CS%rho_CS, CS%min_thickness, CS%ref_pressure, CS%integrate_downward_for_e, &
          CS%target_density, CS%interp_CS)
+  case (REGRIDDING_HYCOM1)
+    call init_coord_hycom(CS%hycom_CS, CS%interp_CS, CS%target_density, CS%coordinateResolution, &
+         CS%max_interface_depths, CS%max_layer_thickness)
   end select
 
   if (allocated(dz)) deallocate(dz)
@@ -742,6 +746,7 @@ subroutine end_regridding(CS)
   if (associated(CS%zlike_CS)) deallocate(CS%zlike_CS)
   if (associated(CS%sigma_CS)) deallocate(CS%sigma_CS)
   if (associated(CS%rho_CS)) deallocate(CS%rho_CS)
+  if (associated(CS%hycom_CS)) deallocate(CS%hycom_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
@@ -818,7 +823,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
+      call build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SLIGHT )
@@ -1351,13 +1356,12 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
+subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
   type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H units
   type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
-  type(remapping_CS),                          intent(in)    :: remapCS !< Remapping control structure
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
   ! Local variables
@@ -1385,7 +1389,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
-      call build_hycom1_column(CS, remapCS, tv%eqn_of_state, nz, depth, &
+      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, nz, depth, &
                                h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
 
       ! Calculate the final change in grid position after blending new and old grids
@@ -1401,66 +1405,6 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, remapCS, CS )
   enddo; enddo ! i,j
 
 end subroutine build_grid_HyCOM1
-
-subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)
-  type(regridding_CS),   intent(in)    :: CS !< Regridding control structure
-  type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options
-  type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
-  integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
-  real, dimension(nz),   intent(in)    :: T, S !< T and S for column
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
-  real, dimension(nz+1), intent(in)    :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
-  real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
-
-  ! Local variables
-  integer   :: k
-  real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
-  real :: stretching ! z* stretching, converts z* to z.
-  real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
-  real :: hNew
-  logical :: maximum_depths_set ! If true, the maximum depths of interface have been set.
-  logical :: maximum_h_set      ! If true, the maximum layer thicknesses have been set.
-
-  maximum_depths_set = allocated(CS%max_interface_depths)
-  maximum_h_set = allocated(CS%max_layer_thickness)
-
-  ! Work bottom recording potential density
-  call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
-  ! This ensures the potential density profile is monotonic
-  ! although not necessarily single valued.
-  do k = nz-1, 1, -1
-    rho_col(k) = min( rho_col(k), rho_col(k+1) )
-  enddo
-
-  ! Interpolates for the target interface position with the rho_col profile
-  ! Based on global density profile, interpolate to generate a new grid
-  call build_and_interpolate_grid(CS%interp_CS, rho_col, nz, h(:), z_col, &
-       CS%target_density, nz, h_col_new, z_col_new)
-
-  ! Sweep down the interfaces and make sure that the interface is at least
-  ! as deep as a nominal target z* grid
-  nominal_z = 0.
-  stretching = z_col(nz+1) / depth ! Stretches z* to z
-  do k = 2, nz+1
-    nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
-    z_col_new(k) = max( z_col_new(k), nominal_z )
-    z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
-  enddo
-
-  if (maximum_depths_set .and. maximum_h_set) then ; do k=2,nz
-    ! The loop bounds are 2 & nz so the top and bottom interfaces do not move.
-    ! Recall that z_col_new is positive downward.
-    z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K), &
-                       z_col_new(K-1) + CS%max_layer_thickness(k-1))
-  enddo ; elseif (maximum_depths_set) then ; do K=2,nz
-    z_col_new(K) = min(z_col_new(K), CS%max_interface_depths(K))
-  enddo ; elseif (maximum_h_set) then ; do k=2,nz
-    z_col_new(K) = min(z_col_new(K), z_col_new(K-1) + CS%max_layer_thickness(k-1))
-  enddo ; endif
-
-end subroutine build_hycom1_column
 
 
 !> Builds a grid that tracks density interfaces for water that is denser than
