@@ -104,8 +104,6 @@ type, public :: thermo_var_ptrs
                          ! When conservative temperature is used, this is
                          ! constant and exactly 3991.86795711963 J K kg-1.
   real, pointer, dimension(:,:) :: &
-    Hml => NULL(), &     !   The surface mixed layer depth in m.
-
 !  These arrays are accumulated fluxes for communication with other components.
     frazil => NULL(), &  !   The energy needed to heat the ocean column to the
                          ! freezing point since calculate_surface_state was
