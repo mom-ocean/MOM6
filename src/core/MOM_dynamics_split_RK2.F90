@@ -634,7 +634,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call cpu_clock_end(id_clock_pass)
 
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, &
-             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt)
+             v_old_rad_OBC, hp, h_old_rad_OBC, G, dt_pred)
   endif
 
   call cpu_clock_begin(id_clock_pass)
