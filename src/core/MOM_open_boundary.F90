@@ -237,28 +237,28 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
-                   "If true, sets relative vorticity to zero on open boundaries.", &
-                   default=.false.)
+         "If true, sets relative vorticity to zero on open boundaries.", &
+         default=.false.)
     call get_param(param_file, mod, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
-                   "If true, sets the normal gradient of tangential velocity to\n"// &
-                   "zero in the relative vorticity on open boundaries. This cannot\n"// &
-                   "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
+         "If true, sets the normal gradient of tangential velocity to\n"// &
+         "zero in the relative vorticity on open boundaries. This cannot\n"// &
+         "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
     if (OBC%zero_vorticity .and. OBC%freeslip_vorticity) call MOM_error(FATAL, &
-                   "MOM_open_boundary.F90, open_boundary_config: "//&
-                   "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
+         "MOM_open_boundary.F90, open_boundary_config: "//&
+         "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
     call get_param(param_file, mod, "OBC_ZERO_STRAIN", OBC%zero_strain, &
-                   "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
-                   default=.false.)
+         "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
+         default=.false.)
     call get_param(param_file, mod, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
-                   "If true, sets the normal gradient of tangential velocity to\n"// &
-                   "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
-                   "be true if OBC_ZERO_STRAIN is True.", default=.false.)
+         "If true, sets the normal gradient of tangential velocity to\n"// &
+         "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
+         "be true if OBC_ZERO_STRAIN is True.", default=.false.)
     if (OBC%zero_strain .and. OBC%freeslip_strain) call MOM_error(FATAL, &
-                   "MOM_open_boundary.F90, open_boundary_config: "//&
-                   "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
+         "MOM_open_boundary.F90, open_boundary_config: "//&
+         "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
     call get_param(param_file, mod, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
-                   "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
-                   "viscosity term.", default=.false.)
+         "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
+         "viscosity term.", default=.false.)
     ! Allocate everything
     ! Note the 0-segment is needed when %OBC_segment_u/v(:,:) = 0
     allocate(OBC%segment(0:OBC%number_of_segments))
@@ -283,8 +283,8 @@ subroutine open_boundary_config(G, param_file, OBC)
     do l = 1, OBC%number_of_segments
       write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
       call get_param(param_file, mod, segment_param_str, segment_str, &
-                   "Documentation needs to be dynamic?????", &
-                   fail_if_missing=.true.)
+           "Documentation needs to be dynamic?????", &
+           fail_if_missing=.true.)
       segment_str = remove_spaces(segment_str)
       if (segment_str(1:2) == 'I=') then
         call setup_u_point_obc(OBC, G, segment_str, l)
@@ -292,21 +292,21 @@ subroutine open_boundary_config(G, param_file, OBC)
         call setup_v_point_obc(OBC, G, segment_str, l)
       else
         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config: "//&
-                       "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
+             "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
       endif
     enddo
 
-!    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
-      call initialize_segment_data(G, OBC, param_file)
-    endif
+    !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
+    call initialize_segment_data(G, OBC, param_file)
+  endif
 
     ! Safety check
-    if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
-      .not.G%symmetric ) call MOM_error(FATAL, &
-                 "MOM_open_boundary, open_boundary_config: "//&
-                 "Symmetric memory must be used when using Flather OBCs.")
+  if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
+       .not.G%symmetric ) call MOM_error(FATAL, &
+       "MOM_open_boundary, open_boundary_config: "//&
+       "Symmetric memory must be used when using Flather OBCs.")
 
-    if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
+  if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
               OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
@@ -1027,22 +1027,22 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
     if (segment%direction == OBC_DIRECTION_E) then
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        depth(i+1,j)=depth(i,j)
+        depth(i+1,j) = depth(i,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_W) then
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        depth(i,j)=depth(i+1,j)
+        depth(i,j) = depth(i+1,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_N) then
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        depth(i,j+1)=depth(i,j)
+        depth(i,j+1) = depth(i,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_S) then
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        depth(i,j)=depth(i,j+1)
+        depth(i,j) = depth(i,j+1)
       enddo
     endif
   enddo
