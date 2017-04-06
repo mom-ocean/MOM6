@@ -1184,6 +1184,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 !          endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
               (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
+         elseif (segment%gradient) then
+           u_new(I,j,k) = u_new(I-1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
@@ -1231,6 +1233,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 !          endif
            u_new(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
              (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
+         elseif (segment%gradient) then
+           u_new(I,j,k) = u_new(I+1,j,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            if (dhdt*dhdx < 0.0) then
@@ -1278,6 +1282,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 !          endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
+         elseif (segment%gradient) then
+           v_new(i,J,k) = v_new(i,J-1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
@@ -1326,6 +1332,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 !          endif
            v_new(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
+         elseif (segment%gradient) then
+           v_new(i,J,k) = v_new(i,J+1,k)
          endif
          if ((segment%radiation .or. segment%oblique) .and. segment%nudged) then
            if (dhdt*dhdy < 0.0) then
