@@ -6,7 +6,7 @@ use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_trace
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_diabatic_aux,         only : diabatic_aux_CS
-use MOM_diabatic_driver,      only : diabatic_CS
+use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
@@ -20,8 +20,9 @@ use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical
 use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_offline_aux,          only : offline_add_diurnal_sw
-use MOM_opacity,              only : set_opacity
+use MOM_opacity,              only : set_opacity, opacity_CS
 use MOM_open_boundary,        only : ocean_OBC_type
+use MOM_shortwave_abs,        only : optics_type
 use MOM_time_manager,         only : time_type
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
@@ -48,6 +49,8 @@ type, public :: offline_transport_CS
   type(thermo_var_ptrs),         pointer :: tv                     => NULL()
   type(ocean_grid_type),         pointer :: G                      => NULL()
   type(verticalGrid_type),       pointer :: GV                     => NULL()
+  type(optics_type),             pointer :: optics                 => NULL()
+  type(opacity_CS),              pointer :: opacity_CSp            => NULL()
 
   !> Variables related to reading in fields from online run
   integer :: start_index  ! Timelevel to start
@@ -481,23 +484,18 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   endif
 
-  if (associated(CS%diabatic_CSp%optics)) &
-    call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes, CS%G, CS%GV, CS%opacity_CSp)
 
-  ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
-  ! because of eatr and ebtr
-
+  ! Do the tracer sources and sinks and also the vertical mixing
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
       fluxes, dt, CS%G, CS%GV, CS%tv, &
-      CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+      CS%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
   ! This next line is called to calculate new layer thicknesses based on the freshwater fluxes
   call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
-
-  ! The mixing of T/S is probably not appropriate because time averages are being used
-  ! call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)
 
   if(CS%diurnal_SW .and. CS%read_sw) then
     fluxes%sw(:,:) = sw
@@ -586,7 +584,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First do vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -626,7 +624,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -912,11 +910,11 @@ end subroutine register_diags_offline_transport
 
 !> Initializes the control structure for offline transport and reads in some of the
 ! run time parameters from MOM_input
-subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
+subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
   type(param_file_type),               intent(in)     :: param_file
   type(offline_transport_CS), pointer, intent(inout)  :: CS
-  type(diabatic_aux_CS),      pointer, intent(in)     :: diabatic_aux_CSp
+  type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
   type(ocean_grid_type),      pointer, intent(in)     :: G
   type(verticalGrid_type),    pointer, intent(in)     :: GV
 
@@ -992,11 +990,10 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
   if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
 
-  ! Copy over parameters from other control structures
-  if(associated(diabatic_aux_CSp)) then
-    CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
-    CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
-  endif
+  ! Copy members from other modules
+  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics,&
+                               evap_CFL_limit=CS%evap_CFL_limit, &
+                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
   ! Grid pointer assignments
   CS%G  => G
@@ -1014,7 +1011,6 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
 
   call callTree_leave("offline_transport_init")
-
 
 end subroutine offline_transport_init
 
