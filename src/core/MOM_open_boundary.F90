@@ -383,7 +383,7 @@ subroutine initialize_segment_data(G, OBC, PF)
   current_pe = mpp_pe()
   single_pelist(1) = current_pe
   call mpp_set_current_pelist(single_pelist)
-  
+
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
 
@@ -396,24 +396,22 @@ subroutine initialize_segment_data(G, OBC, PF)
         print *,'num_fields = 0';cycle ! cycle to next segment
     endif
 
-!    if (segment%on_pe) then
-      allocate(segment%field(num_fields))
+    allocate(segment%field(num_fields))
 
-      if (segment%Flather) then
-        if (num_fields /= 3) call MOM_error(FATAL, &
-                   "MOM_open_boundary, initialize_segment_data: "//&
-                   "Need three inputs for Flather")
+    if (segment%Flather) then
+      if (num_fields /= 3) call MOM_error(FATAL, &
+           "MOM_open_boundary, initialize_segment_data: "//&
+           "Need three inputs for Flather")
 
-        segment%num_fields = 3 ! these are the input fields required for the Flather option
+      segment%num_fields = 3 ! these are the input fields required for the Flather option
                                        ! note that this is assuming that the inputs are coming in this order
                                        ! and independent of the input param string . Needs cleanup - mjh
-        allocate(segment%field_names(segment%num_fields))
-        segment%field_names(:)='None'
-        segment%field_names(1)='UO'
-        segment%field_names(2)='VO'
-        segment%field_names(3)='ZOS'
-      endif
-!    endif
+      allocate(segment%field_names(segment%num_fields))
+      segment%field_names(:)='None'
+      segment%field_names(1)='UO'
+      segment%field_names(2)='VO'
+      segment%field_names(3)='ZOS'
+    endif
 
 !!
 ! CODE HERE FOR OTHER OPTIONS (CLAMPED, NUDGED,..)
@@ -1028,26 +1026,26 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
     if (.not. segment%on_pe .or. segment%specified) cycle
     if (segment%direction == OBC_DIRECTION_E) then
       I=segment%HI%IsdB
-      do j=segment%HI%jsd,segment%HI%jed  
+      do j=segment%HI%jsd,segment%HI%jed
         depth(i+1,j)=depth(i,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_W) then
       I=segment%HI%IsdB
-      do j=segment%HI%jsd,segment%HI%jed  
+      do j=segment%HI%jsd,segment%HI%jed
         depth(i,j)=depth(i+1,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_N) then
       J=segment%HI%JsdB
-      do i=segment%HI%isd,segment%HI%ied  
+      do i=segment%HI%isd,segment%HI%ied
         depth(i,j+1)=depth(i,j)
       enddo
     elseif (segment%direction == OBC_DIRECTION_S) then
       J=segment%HI%JsdB
-      do i=segment%HI%isd,segment%HI%ied  
+      do i=segment%HI%isd,segment%HI%ied
         depth(i,j)=depth(i,j+1)
       enddo
     endif
-  enddo 
+  enddo
 
 
 end subroutine open_boundary_impose_normal_slope
