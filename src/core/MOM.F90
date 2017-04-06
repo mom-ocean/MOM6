@@ -526,7 +526,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call hchksum(CS%h,"CS%h beginning of step_MOM",G%HI)
   endif
 
-
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM(), MOM.F90")
 
