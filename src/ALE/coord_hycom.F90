@@ -1,3 +1,4 @@
+!> Regrid columns for the HyCOM coordinate
 module coord_hycom
 
 use MOM_error_handler, only : MOM_error, FATAL
@@ -6,13 +7,23 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid
 
 implicit none ; private
 
+!> Control structure containing required parameters for the HyCOM coordinate
 type, public :: hycom_CS
   private
 
+  !> Interpolation control structure
   type(interp_CS_type), pointer :: interp_CS
+
+  !> Nominal density of interfaces
   real, dimension(:),   pointer :: target_density
+
+  !> Nominal near-surface resolution
   real, dimension(:),   pointer :: coordinateResolution
+
+  !> Maximum depths of interfaces
   real, dimension(:),   pointer :: max_interface_depths
+
+  !> Maximum thicknessoes of layers
   real, dimension(:),   pointer :: max_layer_thickness
 end type hycom_CS
 
@@ -20,9 +31,10 @@ public init_coord_hycom, build_hycom1_column
 
 contains
 
+!> Initialise a hycom_CS with pointers to parameters
 subroutine init_coord_hycom(CS, interp_CS, target_density, coordinateResolution, &
      max_interface_depths, max_layer_thickness)
-  type(hycom_CS),       pointer :: CS
+  type(hycom_CS),       pointer :: CS !< Unassociated pointer to hold the control structure
   type(interp_CS_type), target  :: interp_CS
   real, dimension(:),   target  :: target_density, coordinateResolution, &
        max_interface_depths, max_layer_thickness
@@ -37,8 +49,9 @@ subroutine init_coord_hycom(CS, interp_CS, target_density, coordinateResolution,
   CS%max_layer_thickness  => max_layer_thickness
 end subroutine init_coord_hycom
 
+!> Build a HyCOM coordinate column
 subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)
-  type(hycom_CS),        intent(in)    :: CS !< Regridding control structure
+  type(hycom_CS),        intent(in)    :: CS !< Coordinate control structure
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
