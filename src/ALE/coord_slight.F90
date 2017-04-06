@@ -1,3 +1,4 @@
+!> Regrid columns for the SLight coordinate
 module coord_slight
 
 use MOM_error_handler, only : MOM_error, FATAL
@@ -8,6 +9,7 @@ use regrid_interp,     only : NR_ITERATIONS, NR_TOLERANCE, DEGREE_MAX
 
 implicit none ; private
 
+!> Control structure containing required parameters for the SLight coordinate
 type, public :: slight_CS
   private
 
@@ -33,12 +35,13 @@ public init_coord_slight, build_slight_column
 
 contains
 
+!> Initialise a slight_CS with pointers to parameters
 subroutine init_coord_slight(CS, min_thickness, Rho_ml_avg_depth, nz_fixed_surface, &
      nlay_ml_offset, fix_haloclines, halocline_filter_length, ref_pressure, &
      compressibility_fraction, halocline_strat_tol, dz_ml_min, max_interface_depths, &
      max_layer_thickness, target_density, interp_CS)
 
-  type(slight_CS), pointer :: CS
+  type(slight_CS), pointer :: CS !< Unassociated pointer to hold the control structure
   real, target :: min_thickness, Rho_ml_avg_depth, nlay_ml_offset, halocline_filter_length, &
        ref_pressure, compressibility_fraction, halocline_strat_tol, dz_ml_min
   integer, target :: nz_fixed_surface
@@ -67,9 +70,10 @@ subroutine init_coord_slight(CS, min_thickness, Rho_ml_avg_depth, nz_fixed_surfa
   CS%interp_CS => interp_CS
 end subroutine init_coord_slight
 
+!> Build a SLight coordinate column
 subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff, &
                                 nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new)
-  type(slight_CS),       intent(in)    :: CS !< Regridding control structure
+  type(slight_CS),       intent(in)    :: CS !< Coordinate control structure
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real,                  intent(in)    :: H_to_Pa !< GV%H_to_Pa
   real,                  intent(in)    :: m_to_H  !< GV%m_to_H
@@ -368,7 +372,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
   real, dimension(nz+1), intent(in)    :: z_col   !< Initial interface heights.
   real, dimension(nz+1), intent(in)    :: rho_tgt !< Interface target densities.
   real, dimension(nz+1), intent(inout) :: z_col_new !< New interface heights.
-  type(slight_CS),       intent(in)    :: CS      !< Regridding control structure
+  type(slight_CS),       intent(in)    :: CS      !< Coordinate control structure
   logical, dimension(nz+1), intent(inout) :: reliable !< If true, the interface positions
                                                   !! are well defined from a stable region.
   logical, optional,     intent(in) :: debug      !< If present and true, do debugging checks.

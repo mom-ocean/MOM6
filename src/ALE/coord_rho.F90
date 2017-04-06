@@ -1,3 +1,4 @@
+!> Regrid columns for the continuous isopycnal (rho) coordinate
 module coord_rho
 
 use MOM_error_handler, only : MOM_error, FATAL
@@ -7,13 +8,24 @@ use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE
 
 implicit none ; private
 
+!> Control structure containing required parameters for the rho coordinate
 type, public :: rho_CS
   private
 
+  !> Minimum thickness allowed for layers
   real,                 pointer :: min_thickness
+
+  !> Reference pressure for density calculations
   real,                 pointer :: ref_pressure
+
+  !> If true, integrate for interface positions from the top downward.
+  !! If false, integrate from the bottom upward, as does the rest of the model.
   logical,              pointer :: integrate_downward_for_e
+
+  !> Nominal density of interfaces
   real, dimension(:),   pointer :: target_density
+
+  !> Interpolation control structure
   type(interp_CS_type), pointer :: interp_CS
 end type rho_CS
 
@@ -27,9 +39,10 @@ public init_coord_rho, build_rho_column, old_inflate_layers_1d
 
 contains
 
+!> Initialise a rho_CS with pointers to parameters
 subroutine init_coord_rho(CS, min_thickness, ref_pressure, integrate_downward_for_e, &
      target_density, interp_CS)
-  type(rho_CS),         pointer :: CS
+  type(rho_CS),         pointer :: CS !< Unassociated pointer to hold the control structure
   real,                 target  :: min_thickness, ref_pressure
   logical,              target  :: integrate_downward_for_e
   real, dimension(:),   target  :: target_density
@@ -47,17 +60,18 @@ subroutine init_coord_rho(CS, min_thickness, ref_pressure, integrate_downward_fo
 end subroutine init_coord_rho
 
 subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)
-! The algorithn operates as follows within each
-! column:
-! 1. Given T & S within each layer, the layer densities are computed.
-! 2. Based on these layer densities, a global density profile is reconstructed
-!    (this profile is monotonically increasing and may be discontinuous)
-! 3. The new grid interfaces are determined based on the target interface
-!    densities.
-! 4. T & S are remapped onto the new grid.
-! 5. Return to step 1 until convergence or until the maximum number of
-!    iterations is reached, whichever comes first.
-!------------------------------------------------------------------------------
+  !< Build a rho coordinate column
+  !!
+  !! The algorithn operates as follows within each column:
+  !!
+  !! 1. Given T & S within each layer, the layer densities are computed.
+  !! 2. Based on these layer densities, a global density profile is reconstructed
+  !!    (this profile is monotonically increasing and may be discontinuous)
+  !! 3. The new grid interfaces are determined based on the target interface
+  !!    densities.
+  !! 4. T & S are remapped onto the new grid.
+  !! 5. Return to step 1 until convergence or until the maximum number of
+  !!    iterations is reached, whichever comes first.
 
   type(rho_CS),          intent(in)    :: CS !< Regridding control structure
   type(remapping_CS),    intent(in)    :: remapCS !< Remapping parameters and options

@@ -1,13 +1,18 @@
+!> Regrid columns for the sigma coordinate
 module coord_sigma
 
 use MOM_error_handler, only : MOM_error, FATAL
 
 implicit none ; private
 
+!> Control structure containing required parameters for the sigma coordinate
 type, public :: sigma_CS
   private
 
+  !> Minimum thickness allowed for layers
   real,               pointer :: min_thickness
+
+  !> Target coordinate resolution
   real, dimension(:), pointer :: coordinateResolution
 end type sigma_CS
 
@@ -15,8 +20,9 @@ public init_coord_sigma, build_sigma_column
 
 contains
 
+!> Initialise a sigma_CS with pointers to parameters
 subroutine init_coord_sigma(CS, min_thickness, coordinateResolution)
-  type(sigma_CS),     pointer :: CS
+  type(sigma_CS),     pointer :: CS !< Unassociated pointer to hold the control structure
   real,               target  :: min_thickness
   real, dimension(:), target  :: coordinateResolution
 
@@ -27,6 +33,7 @@ subroutine init_coord_sigma(CS, min_thickness, coordinateResolution)
   CS%coordinateResolution => coordinateResolution
 end subroutine init_coord_sigma
 
+!> Build a sigma coordinate column
 subroutine build_sigma_column(CS, nz, depth, totalThickness, zInterface)
   type(sigma_CS),        intent(in)    :: CS !< Coordinate control structure
   integer,               intent(in)    :: nz !< Number of levels

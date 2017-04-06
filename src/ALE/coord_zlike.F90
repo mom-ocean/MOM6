@@ -1,13 +1,18 @@
+!> Regrid columns for a z-like coordinate (z-star, z-level)
 module coord_zlike
 
 use MOM_error_handler, only : MOM_error, FATAL
 
 implicit none ; private
 
+!> Control structure containing required parameters for a z-like coordinate
 type, public :: zlike_CS
   private
 
+  !> Minimum thickness allowed for layers
   real,               pointer :: min_thickness
+
+  !> Target coordinate resolution
   real, dimension(:), pointer :: coordinateResolution
 end type zlike_CS
 
@@ -15,8 +20,9 @@ public init_coord_zlike, build_zstar_column
 
 contains
 
+!> Initialise a zlike_CS with pointers to parameters
 subroutine init_coord_zlike(CS, min_thickness, coordinateResolution)
-  type(zlike_CS),     pointer :: CS
+  type(zlike_CS),     pointer :: CS !< Unassociated pointer to hold the control structure
   real,               target  :: min_thickness
   real, dimension(:), target  :: coordinateResolution
 
