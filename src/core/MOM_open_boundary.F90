@@ -2174,32 +2174,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
 end subroutine update_OBC_segment_data
 
-subroutine set_OBC_external_thickness(OBC,G,h)
-  type(ocean_OBC_type) , intent(in) :: OBC
-  type(ocean_grid_type), intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< thickness at h-points
-  integer :: i, j, n
-  type(OBC_segment_type), pointer :: segment
-
-      do n=1,OBC%number_of_segments
-        segment=>OBC%segment(n)
-        if (.not. segment%on_pe) cycle
-        if (segment%direction == OBC_DIRECTION_E) then
-          i=segment%HI%IscB+1
-          h(i,segment%HI%jsd:segment%HI%jed,:)=h(i-1,segment%HI%jsd:segment%HI%jed,:)
-        else if (segment%direction == OBC_DIRECTION_W) then
-          i=segment%HI%IscB
-          h(i,segment%HI%jsd:segment%HI%jed,:)=h(i+1,segment%HI%jsd:segment%HI%jed,:)
-        else if (segment%direction == OBC_DIRECTION_N) then
-          j=segment%HI%JscB+1
-          h(segment%HI%isd:segment%HI%ied,j,:)=h(segment%HI%isd:segment%HI%ied,j-1,:)
-        else if (segment%direction == OBC_DIRECTION_S) then
-          j=segment%HI%JscB
-          h(segment%HI%isd:segment%HI%ied,j,:)=h(segment%HI%isd:segment%HI%ied,j+1,:)
-        endif
-      enddo
-
-end subroutine set_OBC_external_thickness
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
 !! conditions in MOM.
