@@ -2341,12 +2341,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
   if (BT_OBC%apply_u_OBCs) then
     do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-      if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
-        if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
-          uhbt(I,j) = BT_OBC%uhbt(I,j)
-          ubt(I,j) = BT_OBC%ubt_outer(I,j)
-          vel_trans = ubt(I,j)
-        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
+        uhbt(I,j) = BT_OBC%uhbt(I,j)
+        ubt(I,j) = BT_OBC%ubt_outer(I,j)
+        vel_trans = ubt(I,j)
+      elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_E) then
+        if (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2390,11 +2390,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           vel_trans = ubt(I,j)
         endif
       elseif (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) then
-        if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
-          uhbt(I,j) = BT_OBC%uhbt(I,j)
-          ubt(I,j) = BT_OBC%ubt_outer(I,j)
-          vel_trans = ubt(I,j)
-        elseif (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)           ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
 !         h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)     ! external
@@ -2456,12 +2452,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 
   if (BT_OBC%apply_v_OBCs) then
     do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-      if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
-        if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
-          vhbt(i,J) = BT_OBC%vhbt(i,J)
-          vbt(i,J) = BT_OBC%vbt_outer(i,J)
-          vel_trans = vbt(i,J)
-        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
+        vhbt(i,J) = BT_OBC%vhbt(i,J)
+        vbt(i,J) = BT_OBC%vbt_outer(i,J)
+        vel_trans = vbt(i,J)
+      elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_N) then
+        if (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2508,11 +2504,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
           vel_trans = vbt(i,J)
         endif
       elseif (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) then
-        if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
-          vhbt(i,J) = BT_OBC%vhbt(i,J)
-          vbt(i,J) = BT_OBC%vbt_outer(i,J)
-          vel_trans = vbt(i,J)
-        elseif (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
+        if (OBC%segment(OBC%OBC_segment_v(i,J))%Flather) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
         !  h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2753,113 +2745,77 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
     if (OBC%specified_u_BCs_exist_globally) then
       do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe) cycle
-        if (segment%is_E_or_W) then
-          if (segment%specified) then
-            I=segment%HI%IscB
-            do j=segment%HI%jsd,segment%HI%jed 
-              BT_OBC%uhbt(I,j) = segment%normal_trans_bt(I,j)
-            enddo
-            I=segment%HI%IscB
-            do j=segment%HI%jsd,segment%HI%jed 
-              BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
-              BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
-!              if (use_BT_cont) then
-!                BT_OBC%ubt_outer(I,j) = uhbt_to_ubt(BT_OBC%uhbt(I,j),BTCL_u(I,j))
-!              else
-!                if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
-!              endif
-            enddo
-          else            ! Flather
-            if (segment%direction == OBC_DIRECTION_E) then
-              I=segment%HI%IscB
-              do j=segment%HI%jsd,segment%HI%jed 
-                BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
-                BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
-                BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*G%bathyT(i,j))*G%mask2dT(i,j)
-                BT_OBC%H_u(I,j) = segment%Htot(I,j)
-!                if (GV%Boussinesq) then
-!                  BT_OBC%H_u(I,j) = (G%bathyT(i,j)*GV%m_to_H + eta(i,j))*G%mask2dT(i,j)
-!                else
-!                  BT_OBC%H_u(I,j) = eta(i,j) 
-!                endif
-              enddo
-            else
-              I=segment%HI%IscB
-              do j=segment%HI%jsd,segment%HI%jed 
-                BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
-                BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*G%bathyT(i+1,j))*G%mask2dT(i+1,j)
-                BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
-                BT_OBC%H_u(I,j) = segment%Htot(I,j)
-!                if (GV%Boussinesq) then
-!                  BT_OBC%H_u(I,j) = (G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j))*G%mask2dT(i+1,j)
-!                else
-!                  BT_OBC%H_u(I,j) = eta(i+1,j) 
-!                endif
-              enddo
-            endif
-          endif
+        if (segment%is_E_or_W .and. segment%specified) then
+          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
+            BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + segment%normal_trans(I,j,k)
+          enddo ; enddo ; enddo
         endif
-      enddo ! end segment loop for EW sections
+      enddo
     endif
+    do j=js,je ; do I=is-1,ie ; if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+      ! Can this go in segment loop above? Is loop above wrong for wide halos??
+      if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) then
+        if (use_BT_cont) then
+          BT_OBC%ubt_outer(I,j) = uhbt_to_ubt(BT_OBC%uhbt(I,j),BTCL_u(I,j))
+        else
+          if (Datu(I,j) > 0.0) BT_OBC%ubt_outer(I,j) = BT_OBC%uhbt(I,j) / Datu(I,j)
+        endif
+      else            ! This is assuming Flather as only other option
+        BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
+                                (G%bathyT(i,j) + G%bathyT(i+1,j))))
+        if (GV%Boussinesq) then
+          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)))
+        else
+          BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
+        endif
+      endif
+    endif ; enddo ; enddo
+    if (associated(OBC%ubt_outer)) then ; do j=js,je ; do I=is-1,ie
+      BT_OBC%ubt_outer(I,j) = OBC%ubt_outer(I,j)
+    enddo ; enddo ; endif
+    if (associated(OBC%eta_outer_u)) then ; do j=js,je ; do I=is-1,ie
+      BT_OBC%eta_outer_u(I,j) = OBC%eta_outer_u(I,j)
+    enddo ; enddo ; endif
   endif
 
   if (BT_OBC%apply_v_OBCs) then
     if (OBC%specified_v_BCs_exist_globally) then
       do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe) cycle
-        if (segment%is_N_or_S) then
-          if (segment%specified) then
-            J=segment%HI%JscB
-            do i=segment%HI%isd,segment%HI%ied 
-              BT_OBC%vhbt(i,J) = segment%normal_trans_bt(i,J)
-            enddo 
-            J=segment%HI%JscB
-            do i=segment%HI%isd,segment%HI%ied 
-              BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
-              BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
-!              if (use_BT_cont) then
-!                BT_OBC%vbt_outer(i,J) = vhbt_to_vbt(BT_OBC%vhbt(i,J),BTCL_v(i,J))
-!              else
-!                if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
-!              endif
-            enddo
-          else            ! This is assuming Flather as only other option
-            if (segment%direction == OBC_DIRECTION_N) then
-              J=segment%HI%JscB
-              do i=segment%HI%isd,segment%HI%ied
-                BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
-                BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*G%bathyT(i,j))*G%mask2dT(i,j)
-                BT_OBC%H_v(i,J) = segment%Htot(i,J) 
-                BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
-!                if (GV%Boussinesq) then
-!                  BT_OBC%H_v(i,J) = (G%bathyT(i,j)*GV%m_to_H + eta(i,j))*G%mask2dT(i,j)
-!                else
-!                  BT_OBC%H_v(i,J) = eta(i,j) 
-!                endif
-              enddo
-            else
-              J=segment%HI%JscB
-              do i=segment%HI%isd,segment%HI%ied 
-                BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
-                BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*G%bathyT(i,j+1))*G%mask2dT(i,j+1)
-                BT_OBC%H_v(i,J) = segment%Htot(i,J) 
-                BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
-!                if (GV%Boussinesq) then
-!                  BT_OBC%H_v(i,J) = (G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1))*G%mask2dT(i,j+1)
-!                else
-!                  BT_OBC%H_v(i,J) = eta(i,J+1) 
-!                endif
-              enddo
-            endif
-          endif
+        if (segment%is_N_or_S .and. segment%specified) then
+          do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
+            BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + segment%normal_trans(i,J,k)
+          enddo ; enddo ; enddo
         endif
-      enddo ! end segment loop for EW sections
+      enddo
     endif
+    do J=js-1,je ; do i=is,ie ; if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+      ! Can this go in segment loop above? Is loop above wrong for wide halos??
+      if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) then
+        if (use_BT_cont) then
+          BT_OBC%vbt_outer(i,J) = vhbt_to_vbt(BT_OBC%vhbt(i,J),BTCL_v(i,J))
+        else
+          if (Datv(i,J) > 0.0) BT_OBC%vbt_outer(i,J) = BT_OBC%vhbt(i,J) / Datv(i,J)
+        endif
+      else              ! This is assuming Flather as only other option
+        BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
+                                (G%bathyT(i,j) + G%bathyT(i,j+1))))
+        if (GV%Boussinesq) then
+          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
+                                 (G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)))
+        else
+          BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
+        endif
+      endif
+    endif ; enddo ; enddo
+    if (associated(OBC%vbt_outer)) then ; do J=js-1,je ; do i=is,ie
+      BT_OBC%vbt_outer(i,J) = OBC%vbt_outer(i,J)
+    enddo ; enddo ; endif
+    if (associated(OBC%eta_outer_v)) then ; do J=js-1,je ; do i=is,ie
+      BT_OBC%eta_outer_v(i,J) = OBC%eta_outer_v(i,J)
+    enddo ; enddo ; endif
   endif
-
-
 
 end subroutine set_up_BT_OBC
 
