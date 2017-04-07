@@ -3052,42 +3052,54 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     if (.not. OBC%segment(n)%on_pe) cycle
     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
       J = OBC%segment(n)%HI%JsdB
-      iss = OBC%segment(n)%HI%isd ; ies = OBC%segment(n)%HI%ied
-      do i=iss,ies ; hatvtot(i) = h(i,j,1) ; enddo
-      do k=2,nz ; do i=iss,ies
-        hatvtot(i) = hatvtot(i) + h(i,j,k)
-      enddo ; enddo
-      do i=iss,ies ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
-      do k=1,nz ; do i=iss,ies
-        CS%frhatv(i,J,k) = h(i,j,k) * Ihatvtot(i)
-      enddo ; enddo
+      if ((J >= js-1) .and. (J <= je)) then
+        iss = max(is,OBC%segment(n)%HI%isd) ; ies = min(ie,OBC%segment(n)%HI%ied)
+        do i=iss,ies ; hatvtot(i) = h(i,j,1) ; enddo
+        do k=2,nz ; do i=iss,ies
+          hatvtot(i) = hatvtot(i) + h(i,j,k)
+        enddo ; enddo
+        do i=iss,ies
+          Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
+        enddo
+        do k=1,nz ; do i=iss,ies
+          CS%frhatv(i,J,k) = h(i,j,k) * Ihatvtot(i)
+        enddo ; enddo
+      endif
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
       J = OBC%segment(n)%HI%JsdB
-      iss = OBC%segment(n)%HI%isd ; ies = OBC%segment(n)%HI%ied
-      do i=iss,ies ; hatvtot(i) = h(i,j+1,1) ; enddo
-      do k=2,nz ; do i=iss,ies
-        hatvtot(i) = hatvtot(i) + h(i,j+1,k)
-      enddo ; enddo
-      do i=iss,ies ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
-      do k=1,nz ; do i=iss,ies
-        CS%frhatv(i,J,k) = h(i,j+1,k) * Ihatvtot(i)
-      enddo ; enddo
+      if ((J >= js-1) .and. (J <= je)) then
+        iss = max(is,OBC%segment(n)%HI%isd) ; ies = min(ie,OBC%segment(n)%HI%ied)
+        do i=iss,ies ; hatvtot(i) = h(i,j+1,1) ; enddo
+        do k=2,nz ; do i=iss,ies
+          hatvtot(i) = hatvtot(i) + h(i,j+1,k)
+        enddo ; enddo
+        do i=iss,ies
+          Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
+        enddo
+        do k=1,nz ; do i=iss,ies
+          CS%frhatv(i,J,k) = h(i,j+1,k) * Ihatvtot(i)
+        enddo ; enddo
+      endif
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
       I = OBC%segment(n)%HI%IsdB
-      do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
-        htot = h(i,j,1)
-        do k=2,nz ; htot = htot + h(i,j,k) ; enddo
-        Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
-        do k=1,nz ; CS%frhatu(I,j,k) = h(i,j,k) * Ihtot ; enddo
-      enddo
+      if ((I >= is-1) .and. (I <= ie)) then
+        do j = max(js,OBC%segment(n)%HI%jsd), min(je,OBC%segment(n)%HI%jed)
+          htot = h(i,j,1)
+          do k=2,nz ; htot = htot + h(i,j,k) ; enddo
+          Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+          do k=1,nz ; CS%frhatu(I,j,k) = h(i,j,k) * Ihtot ; enddo
+        enddo
+      endif
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
       I = OBC%segment(n)%HI%IsdB
-      do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
-        htot = h(i+1,j,1)
-        do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
-        Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
-        do k=1,nz ; CS%frhatu(I,j,k) = h(i+1,j,k) * Ihtot ; enddo
-      enddo
+      if ((I >= is-1) .and. (I <= ie)) then
+        do j = max(js,OBC%segment(n)%HI%jsd), min(je,OBC%segment(n)%HI%jed)
+          htot = h(i+1,j,1)
+          do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
+          Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+          do k=1,nz ; CS%frhatu(I,j,k) = h(i+1,j,k) * Ihtot ; enddo
+        enddo
+      endif
     else
       call MOM_error(fatal, "btcalc encountered and OBC segment of indeterminate direction.")
     endif
