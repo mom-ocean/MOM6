@@ -2838,7 +2838,7 @@ subroutine destroy_BT_OBC(BT_OBC)
 end subroutine destroy_BT_OBC
 
 
-subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
+subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_grid_type),                  intent(inout) :: G
   type(verticalGrid_type),                intent(in)    :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
@@ -2846,6 +2846,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: h_v
   logical,                                   intent(in), optional :: may_use_default
+  type(ocean_OBC_type),                      pointer,    optional :: OBC
 !   btcalc calculates the barotropic velocities from the full velocity and
 ! thickness fields, determines the fraction of the total water column in each
 ! layer at velocity points, and determines a corrective fictitious mass source
@@ -2876,14 +2877,16 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
                                ! mean thickness.  The harmonic mean uses
                                ! a weight of (1 - wt_arith).
   real :: Rh                   ! A ratio of summed thicknesses, nondim.
-  real :: htot(SZI_(G),SZJ_(G)) !   The sum of the layer thicknesses, in H.
   real :: e_u(SZIB_(G),SZK_(G)+1) !   The interface heights at u-velocity and
   real :: e_v(SZI_(G),SZK_(G)+1)  ! v-velocity points in H.
   real :: D_shallow_u(SZI_(G)) ! The shallower of the adjacent depths in H.
   real :: D_shallow_v(SZIB_(G))! The shallower of the adjacent depths in H.
+  real :: htot                 ! The sum of the layer thicknesses, in H.
+  real :: Ihtot                ! The inverse of htot, in H-1.
 
-  logical :: use_default, test_dflt
+  logical :: use_default, test_dflt, apply_OBCs
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, i, j, k
+  integer :: iss, ies, n
 
 !    This section interpolates thicknesses onto u & v grid points with the
 ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
@@ -2904,6 +2907,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
               (CS%hvel_scheme == ARITHMETIC))) call MOM_error(FATAL, &
         "btcalc: Inconsistent settings of optional arguments and hvel_scheme.")
   endif
+
+  apply_OBCs = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    ! Some open boundary condition points might be in this processor's symmetric
+    ! computational domain.
+    apply_OBCs = (OBC%number_of_segments > 0)
+  endif ; endif ; endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -3037,6 +3047,50 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
       enddo ; enddo
     endif
   enddo
+
+  if (apply_OBCs) then ; do n=1,OBC%number_of_segments ! Test for segment type?
+    if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+      J = OBC%segment(n)%HI%JsdB
+      iss = OBC%segment(n)%HI%IsdB ; ies = OBC%segment(n)%HI%IedB
+      do i=iss,ies ; hatvtot(i) = h(i,j,1) ; enddo
+      do k=2,nz ; do i=iss,ies
+        hatvtot(i) = hatvtot(i) + h(i,j,k)
+      enddo ; enddo
+      do i=iss,ies ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
+      do k=1,nz ; do i=iss,ies
+        CS%frhatv(i,J,k) = h(i,j,k) * Ihatvtot(i)
+      enddo ; enddo
+    elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+      J = OBC%segment(n)%HI%JsdB
+      iss = OBC%segment(n)%HI%IsdB ; ies = OBC%segment(n)%HI%IedB
+      do i=iss,ies ; hatvtot(i) = h(i,j+1,1) ; enddo
+      do k=2,nz ; do i=iss,ies
+        hatvtot(i) = hatvtot(i) + h(i,j+1,k)
+      enddo ; enddo
+      do i=iss,ies ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
+      do k=1,nz ; do i=iss,ies
+        CS%frhatv(i,J,k) = h(i,j+1,k) * Ihatvtot(i)
+      enddo ; enddo
+    elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+      I = OBC%segment(n)%HI%IsdB
+      do j=OBC%segment(n)%HI%Jsd,OBC%segment(n)%HI%JedB
+        htot = h(i,j,1)
+        do k=2,nz ; htot = htot + h(i,j,k) ; enddo
+        Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+        do k=1,nz ; CS%frhatu(I,j,k) = h(i,j,k) * Ihtot ; enddo
+      enddo
+    elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+      I = OBC%segment(n)%HI%IsdB
+      do j=OBC%segment(n)%HI%Jsd,OBC%segment(n)%HI%JedB
+        htot = h(i+1,j,1)
+        do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
+        Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+        do k=1,nz ; CS%frhatu(I,j,k) = h(i+1,j,k) * Ihtot ; enddo
+      enddo
+    else
+      call MOM_error(fatal, "btcalc encountered and OBC segment of indeterminate direction.")
+    endif
+  enddo ; endif
 
   if (CS%debug) then
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
