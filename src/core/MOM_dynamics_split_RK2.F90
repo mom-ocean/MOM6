@@ -513,7 +513,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_btcalc)
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
-    call btcalc(h, G, GV, CS%barotropic_CSp)
+    call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
   call bt_mass_source(h, eta, fluxes, .true., dt_therm, dt_since_flux, &
                       G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
@@ -535,7 +535,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       call cpu_clock_begin(id_clock_pass)
       call do_group_pass(CS%pass_huv, G%Domain)
       call cpu_clock_end(id_clock_pass)
-      call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+      call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
+                  OBC=CS%OBC)
     endif
     if (showCallTree) call callTree_wayPoint("done with continuity[BT_cont] (step_MOM_dyn_split_RK2)")
   endif
@@ -698,7 +699,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call cpu_clock_begin(id_clock_pass)
     call do_group_pass(CS%pass_huv, G%Domain)
     call cpu_clock_end(id_clock_pass)
-    call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v)
+    call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
+                OBC=CS%OBC)
     if (showCallTree) call callTree_wayPoint("done with btcalc[BT_cont_BT_thick] (step_MOM_dyn_split_RK2)")
   endif
 

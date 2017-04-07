@@ -62,7 +62,7 @@ implicit none ; private
 
 public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
-type, public :: Kappa_shear_CS ! ; private
+type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
                              ! shear-entrainment. The theoretical value is 0.25.
                              ! The values found by Jackson et al. are 0.25-0.35.
