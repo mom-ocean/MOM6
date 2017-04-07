@@ -37,7 +37,12 @@ if return_code != 0: sys.exit(return_code)
 # ones.
 extensions = [
     'sphinx.ext.mathjax',
+    'sphinxcontrib.autodoc_doxygen',
+    'sphinxfortran.fortran_domain',
 ]
+
+autosummary_generate = ['api/modules.rst', 'api/pages.rst']
+doxygen_xml = 'xml'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -76,7 +81,7 @@ release = '0.1'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['_build']
+exclude_patterns = ['_build','src']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -137,7 +142,6 @@ html_theme = 'default'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 #html_static_path = ['_static']
-html_static_path = ['APIs']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
