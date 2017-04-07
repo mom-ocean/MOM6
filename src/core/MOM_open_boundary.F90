@@ -1129,17 +1129,14 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
 
 end subroutine open_boundary_impose_land_mask
 
-!> Apply radiation conditions to 3D  u,v (,h) at open boundaries
-subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
-                                     h_new, h_old, G, dt)
+!> Apply radiation conditions to 3D  u,v at open boundaries
+subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< New v values on open boundaries
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_new !< New h values on open boundaries
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_old !< Original h values
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
   real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
@@ -1363,7 +1360,6 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, &
 
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u_new, v_new, G%Domain)
-!  call pass_var(h_new, G%Domain)
   call cpu_clock_end(id_clock_pass)
 
 end subroutine radiation_open_bdry_conds
