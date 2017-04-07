@@ -354,19 +354,19 @@ subroutine initialize_segment_data(G, OBC, PF)
           "This sets the reconstruction scheme used\n"//&
           "for vertical remapping for all variables.\n"//&
           "It can be one of the following schemes:\n"//&
-          trim(remappingSchemesDoc), default=remappingDefaultScheme)
+          trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
   call get_param(PF, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
           "If true, cell-by-cell reconstructions are checked for\n"//&
           "consistency and if non-monotonicity or an inconsistency is\n"//&
-          "detected then a FATAL error is issued.", default=.false.)
+          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
   call get_param(PF, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
           "If true, the results of remapping are checked for\n"//&
           "conservation and new extrema and if an inconsistency is\n"//&
-          "detected then a FATAL error is issued.", default=.false.)
+          "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
   call get_param(PF, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
           "If true, the values on the intermediate grid used for remapping\n"//&
           "are forced to be bounded, which might not be the case due to\n"//&
-          "round off.", default=.false.)
+          "round off.", default=.false.,do_not_log=.true.)
 
   allocate(OBC%remap_CS)
   call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
