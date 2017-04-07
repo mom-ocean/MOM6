@@ -3049,9 +3049,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   enddo
 
   if (apply_OBCs) then ; do n=1,OBC%number_of_segments ! Test for segment type?
+    if (.not. OBC%segment(n)%on_pe) cycle
     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
       J = OBC%segment(n)%HI%JsdB
-      iss = OBC%segment(n)%HI%IsdB ; ies = OBC%segment(n)%HI%IedB
+      iss = OBC%segment(n)%HI%isd ; ies = OBC%segment(n)%HI%ied
       do i=iss,ies ; hatvtot(i) = h(i,j,1) ; enddo
       do k=2,nz ; do i=iss,ies
         hatvtot(i) = hatvtot(i) + h(i,j,k)
@@ -3062,7 +3063,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       enddo ; enddo
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
       J = OBC%segment(n)%HI%JsdB
-      iss = OBC%segment(n)%HI%IsdB ; ies = OBC%segment(n)%HI%IedB
+      iss = OBC%segment(n)%HI%isd ; ies = OBC%segment(n)%HI%ied
       do i=iss,ies ; hatvtot(i) = h(i,j+1,1) ; enddo
       do k=2,nz ; do i=iss,ies
         hatvtot(i) = hatvtot(i) + h(i,j+1,k)
@@ -3073,7 +3074,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       enddo ; enddo
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
       I = OBC%segment(n)%HI%IsdB
-      do j=OBC%segment(n)%HI%Jsd,OBC%segment(n)%HI%JedB
+      do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
         htot = h(i,j,1)
         do k=2,nz ; htot = htot + h(i,j,k) ; enddo
         Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
@@ -3081,7 +3082,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       enddo
     elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
       I = OBC%segment(n)%HI%IsdB
-      do j=OBC%segment(n)%HI%Jsd,OBC%segment(n)%HI%JedB
+      do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
         htot = h(i+1,j,1)
         do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
         Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
