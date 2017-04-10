@@ -1999,10 +1999,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     ni_seg = segment%ie_obc-segment%is_obc+1
     nj_seg = segment%je_obc-segment%js_obc+1
-    is_obc = max(segment%is_obc,is-1)
-    ie_obc = min(segment%ie_obc,ie)
-    js_obc = max(segment%js_obc,js-1)
-    je_obc = min(segment%je_obc,je)
+    is_obc = max(segment%is_obc,isd-1)
+    ie_obc = min(segment%ie_obc,ied)
+    js_obc = max(segment%js_obc,jsd-1)
+    je_obc = min(segment%je_obc,jed)
 
 
     if (segment%is_E_or_W) then
