@@ -22,6 +22,7 @@ use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme, remapping
 use MOM_remapping, only : remapping_core_h, end_remapping
 use MOM_regridding, only : regridding_CS
 use MOM_verticalGrid, only : verticalGrid_type
+use MOM_coms, only : PE_here, Set_PElist, Get_PElist, num_PEs
 
 implicit none ; private
 
@@ -296,7 +297,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       endif
     enddo
 
-    !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
+    ! if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
     call initialize_segment_data(G, OBC, param_file)
   endif
 
@@ -314,8 +315,11 @@ subroutine open_boundary_config(G, param_file, OBC)
 
 end subroutine open_boundary_config
 
+!> Parse OBC_SEGMENT_###_DATA entries and either initialize segment values
+!> with constants or initialize for reading and later linear interpolation
+!> in time.  A pointer to an ALE remapping control structure is set here if
+!> segment data are being read from a brushcutter file.
 subroutine initialize_segment_data(G, OBC, PF)
-  use MOM_coms, only : PE_here, Set_currentPElist, Get_currentPElist, num_PEs
 
   type(dyn_horgrid_type),  intent(in) :: G   !< Ocean grid structure
   type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
@@ -379,10 +383,10 @@ subroutine initialize_segment_data(G, OBC, PF)
   !< temporarily disable communication in order to read segment data independently
 
   allocate(saved_pelist(0:num_PEs()-1))
-  call Get_currentPElist(saved_pelist)
+  call Get_PElist(saved_pelist)
   current_pe = PE_here()
   single_pelist(1) = current_pe
-  call Set_currentPElist(single_pelist)
+  call Set_PElist(single_pelist)
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -398,6 +402,7 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     allocate(segment%field(num_fields))
 
+
     if (segment%Flather) then
       if (num_fields /= 3) call MOM_error(FATAL, &
            "MOM_open_boundary, initialize_segment_data: "//&
@@ -405,12 +410,14 @@ subroutine initialize_segment_data(G, OBC, PF)
 
       segment%num_fields = 3 ! these are the input fields required for the Flather option
                                        ! note that this is assuming that the inputs are coming in this order
-                                       ! and independent of the input param string . Needs cleanup - mjh
-      allocate(segment%field_names(segment%num_fields))
-      segment%field_names(:)='None'
-      segment%field_names(1)='UO'
-      segment%field_names(2)='VO'
-      segment%field_names(3)='ZOS'
+      ! and independent of the input param string . Needs cleanup - mjh
+      !This is going away. Recommend switching to CMIP standard names, i.e. input fields
+      !from brushcutter will use standard names and no remapping of field names is needed
+!      allocate(segment%field_names(segment%num_fields))
+!      segment%field_names(:)='None'
+!      segment%field_names(1)='UO'
+!      segment%field_names(2)='VO'
+!      segment%field_names(3)='ZOS'
     endif
 
 !!
@@ -480,7 +487,7 @@ subroutine initialize_segment_data(G, OBC, PF)
     enddo
   enddo
 
-  call Set_currentPElist(saved_pelist)
+  call Set_PElist(saved_pelist)
 
 end subroutine initialize_segment_data
 
@@ -1676,24 +1683,24 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
 
 end subroutine set_Flather_data
 
-function lookup_seg_field(OBC_seg,field)
-  type(OBC_segment_type), pointer :: OBC_seg
-  character(len=32), intent(in) :: field ! The field name
-  integer :: lookup_seg_field
+! function lookup_seg_field(OBC_seg,field)
+!   type(OBC_segment_type), pointer :: OBC_seg
+!   character(len=32), intent(in) :: field ! The field name
+!   integer :: lookup_seg_field
 
-  integer :: n,m
+!   integer :: n,m
 
-  lookup_seg_field=-1
-  do n=1,OBC_seg%num_fields
-   if (trim(field) == OBC_seg%field_names(n)) then
-     lookup_seg_field=n
-     return
-   endif
-  enddo
+!   lookup_seg_field=-1
+!   do n=1,OBC_seg%num_fields
+!    if (trim(field) == OBC_seg%field_names(n)) then
+!      lookup_seg_field=n
+!      return
+!    endif
+!   enddo
 
-  return
+!   return
 
-end function lookup_seg_field
+! end function lookup_seg_field
 
 
 subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
