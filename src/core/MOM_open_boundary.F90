@@ -315,7 +315,7 @@ subroutine open_boundary_config(G, param_file, OBC)
 end subroutine open_boundary_config
 
 subroutine initialize_segment_data(G, OBC, PF)
-  use mpp_mod, only : mpp_pe, mpp_set_current_pelist, mpp_get_current_pelist,mpp_npes
+  use MOM_coms, only : PE_here, Set_currentPElist, Get_currentPElist, num_PEs
 
   type(dyn_horgrid_type),  intent(in) :: G   !< Ocean grid structure
   type(ocean_OBC_type), intent(inout) :: OBC !< Open boundary control structure
@@ -378,11 +378,11 @@ subroutine initialize_segment_data(G, OBC, PF)
 
   !< temporarily disable communication in order to read segment data independently
 
-  allocate(saved_pelist(0:mpp_npes()-1))
-  call mpp_get_current_pelist(saved_pelist)
-  current_pe = mpp_pe()
+  allocate(saved_pelist(0:num_PEs()-1))
+  call Get_currentPElist(saved_pelist)
+  current_pe = PE_here()
   single_pelist(1) = current_pe
-  call mpp_set_current_pelist(single_pelist)
+  call Set_currentPElist(single_pelist)
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
@@ -480,7 +480,7 @@ subroutine initialize_segment_data(G, OBC, PF)
     enddo
   enddo
 
-  call mpp_set_current_pelist(saved_pelist)
+  call Set_currentPElist(saved_pelist)
 
 end subroutine initialize_segment_data
 
