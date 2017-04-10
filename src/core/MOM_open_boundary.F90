@@ -160,14 +160,6 @@ type, public :: ocean_OBC_type
     eta_outer_u => NULL(), &  !< The SSH anomaly in the outer domain, in m or kg m-2.
     eta_outer_v => NULL()     !< The SSH anomaly in the outer domain, in m or kg m-2.
 
-  ! The following apply at points with OBC_kind_[uv] = OBC_SIMPLE and/or
-  ! if nudging is turned on.
-  real, pointer, dimension(:,:,:) :: &
-    u => NULL(), &  !< The prescribed values of the zonal velocity (u) at OBC points.
-    v => NULL(), &  !< The prescribed values of the meridional velocity (v) at OBC points.
-    uh => NULL(), & !< The prescribed values of the zonal volume transport (uh) at OBC points.
-    vh => NULL()    !< The prescribed values of the meridional volume transport (vh) at OBC points.
-
   ! The following parameters are used in the baroclinic radiation code:
   real :: gamma_uv !< The relative weighting for the baroclinic radiation
                    !! velocities (or speed of characteristics) at the
@@ -994,10 +986,6 @@ subroutine open_boundary_dealloc(OBC)
   if (associated(OBC%vbt_outer)) deallocate(OBC%vbt_outer)
   if (associated(OBC%eta_outer_u)) deallocate(OBC%eta_outer_u)
   if (associated(OBC%eta_outer_v)) deallocate(OBC%eta_outer_v)
-  if (associated(OBC%u)) deallocate(OBC%u)
-  if (associated(OBC%v)) deallocate(OBC%v)
-  if (associated(OBC%uh)) deallocate(OBC%uh)
-  if (associated(OBC%vh)) deallocate(OBC%vh)
   deallocate(OBC)
 end subroutine open_boundary_dealloc
 
@@ -1529,18 +1517,9 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
   endif
 
-  ! Define radiation coefficients r[xy]_old_[uvh] as needed.  For now, there are
-  ! no radiation conditions applied to the thicknesses, since the thicknesses
-  ! might not be physically motivated.  Instead, sponges should be used to
-  ! enforce the near-boundary layer structure.
-  if (OBC%nudged_u_BCs_exist_globally) then
-    allocate(OBC%u(IsdB:IedB,jsd:jed,nz)) ; OBC%u(:,:,:) = 0.0
-    allocate(OBC%uh(IsdB:IedB,jsd:jed,nz)) ; OBC%uh(:,:,:) = 0.0
-  endif
-  if (OBC%nudged_v_BCs_exist_globally) then
-    allocate(OBC%v(isd:ied,JsdB:JedB,nz)) ; OBC%v(:,:,:) = 0.0
-    allocate(OBC%vh(isd:ied,JsdB:JedB,nz)) ; OBC%vh(:,:,:) = 0.0
-  endif
+  ! For now, there are no radiation conditions applied to the thicknesses, since
+  ! the thicknesses might not be physically motivated.  Instead, sponges should be
+  ! used to enforce the near-boundary layer structure.
 
   if (associated(tv%T)) then
     allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
