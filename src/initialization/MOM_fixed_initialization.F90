@@ -32,6 +32,7 @@ use benchmark_initialization, only : benchmark_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
+use shelfwave_initialization, only : shelfwave_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
 
 use netcdf
@@ -193,6 +194,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t shelfwave - exponential slope for shelfwave test case.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
@@ -209,6 +211,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
+    case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
