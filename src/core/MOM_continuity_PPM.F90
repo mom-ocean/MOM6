@@ -168,14 +168,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (local_Flather_EW) then
       do k=1,nz
         do j=LB%jsh,LB%jeh ; do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_E) &
+          if (OBC%segnum_u(I-1,j) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_u(I-1,j))%direction == OBC_DIRECTION_E) &
               h(i,j,k) = h_input(i-1,j,k)
           endif
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) &
+          if (OBC%segnum_u(I,j) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
               h(i,j,k) = h_input(i+1,j,k)
           endif
         enddo ; enddo
@@ -200,14 +200,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (local_Flather_NS) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_N) &
+          if (OBC%segnum_v(i,J-1) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_v(i,J-1))%direction == OBC_DIRECTION_N) &
               h(i,j,k) = h_input(i,j-1,k)
           endif
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) &
+          if (OBC%segnum_v(i,J) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
               h(i,j,k) = h_input(i,j+1,k)
           endif
         enddo ; enddo
@@ -231,14 +231,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (local_Flather_NS) then
       do k=1,nz
         do J=LB%jsh,LB%jeh+1 ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_segment_v(i,J-1) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_v(i,J-1))%direction == OBC_DIRECTION_N) &
+          if (OBC%segnum_v(i,J-1) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_v(i,J-1))%direction == OBC_DIRECTION_N) &
               h(i,j,k) = h_input(i,j-1,k)
           endif
         enddo ; enddo
         do J=LB%jsh-1,LB%jeh ; do i=LB%ish-1,LB%ieh+1
-          if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_v(i,J))%direction == OBC_DIRECTION_S) &
+          if (OBC%segnum_v(i,J) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
               h(i,j,k) = h_input(i,j+1,k)
           endif
         enddo ; enddo
@@ -263,14 +263,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
     if (local_Flather_EW) then
       do k=1,nz
         do j=LB%jsh,LB%jeh ; do I=LB%ish,LB%ieh+1
-          if (OBC%OBC_segment_u(I-1,j) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_u(I-1,j))%direction == OBC_DIRECTION_E) &
+          if (OBC%segnum_u(I-1,j) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_u(I-1,j))%direction == OBC_DIRECTION_E) &
               h(i,j,k) = h_input(i-1,j,k)
           endif
         enddo
         do i=LB%ish-1,LB%ieh
-          if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
-            if (OBC%segment(OBC%OBC_segment_u(I,j))%direction == OBC_DIRECTION_W) &
+          if (OBC%segnum_u(I,j) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
               h(i,j,k) = h_input(i+1,j,k)
           endif
         enddo ; enddo
@@ -386,8 +386,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, j, ish, ieh, do_I, CS%vol_CFL)
       if (local_specified_BC) then ; do I=ish-1,ieh
-        if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-          uh(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_trans(I,j,k)
+        if (OBC%segment(OBC%segnum_u(I,j))%specified) &
+          uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
       enddo ; endif
     enddo
 
@@ -478,8 +478,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       if (present(uhbt) .or. do_aux .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = OBC%segment(OBC%OBC_segment_u(I,j))%specified
-          do_I(I) = .not.(OBC%OBC_segment_u(I,j) /= OBC_NONE .and. is_simple)
+          is_simple = OBC%segment(OBC%segnum_u(I,j))%specified
+          do_I(I) = .not.(OBC%segnum_u(I,j) /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do I=ish-1,ieh
           do_I(I) = .true.
@@ -494,8 +494,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
-            if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-              u_cor(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
+            if (OBC%segment(OBC%segnum_u(I,j))%specified) &
+              u_cor(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           enddo ; endif
         enddo ; endif ! u-corrected
 
@@ -509,8 +509,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         do k=1,nz
           do I=ish-1,ieh ; u_cor_aux(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (local_specified_BC) then ; do I=ish-1,ieh
-            if (OBC%segment(OBC%OBC_segment_u(I,j))%specified) &
-              u_cor_aux(I,j,k) = OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
+            if (OBC%segment(OBC%segnum_u(I,j))%specified) &
+              u_cor_aux(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           enddo ; endif
         enddo
       endif ! do_aux
@@ -521,14 +521,14 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                                visc_rem_max, j, ish, ieh, do_I)
         if (any_simple_OBC) then
           do I=ish-1,ieh
-            do_I(I) = OBC%segment(OBC%OBC_segment_u(I,j))%specified
+            do_I(I) = OBC%segment(OBC%segnum_u(I,j))%specified
             if (do_I(I)) BT_cont%Fa_u_W0(I,j) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
-            if (abs(OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)) > 0.0) &
+            if (abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) &
               BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + &
-                   OBC%segment(OBC%OBC_segment_u(I,j))%normal_trans(I,j,k) / &
-                   OBC%segment(OBC%OBC_segment_u(I,j))%normal_vel(I,j,k)
+                   OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
+                   OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
             BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
@@ -1135,8 +1135,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, J, ish, ieh, do_I, CS%vol_CFL)
       if (local_specified_BC) then ; do i=ish,ieh
-        if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-          vh(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_trans(i,J,k)
+        if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+          vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
       enddo ; endif
     enddo ! k-loop
     if ((.not.use_visc_rem) .or. (.not.CS%use_visc_rem_max)) then ; do i=ish,ieh
@@ -1223,8 +1223,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       if (present(vhbt) .or. do_aux .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = OBC%segment(OBC%OBC_segment_v(i,J))%specified
-          do_I(i) = .not.(OBC%OBC_segment_v(i,J) /= OBC_NONE .and. is_simple)
+          is_simple = OBC%segment(OBC%segnum_v(i,J))%specified
+          do_I(i) = .not.(OBC%segnum_v(i,J) /= OBC_NONE .and. is_simple)
           any_simple_OBC = any_simple_OBC .or. is_simple
         enddo ; else ; do i=ish,ieh
           do_I(i) = .true.
@@ -1239,8 +1239,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
-            if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-              v_cor(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
+            if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+              v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           enddo ; endif
         enddo ; endif ! v-corrected
       endif
@@ -1253,8 +1253,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         do k=1,nz
           do i=ish,ieh ; v_cor_aux(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (local_specified_BC) then ; do i=ish,ieh
-            if (OBC%segment(OBC%OBC_segment_v(i,J))%specified) &
-              v_cor_aux(i,J,k) = OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
+            if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+              v_cor_aux(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           enddo ; endif
         enddo
       endif ! do_aux
@@ -1265,14 +1265,14 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                                visc_rem_max, J, ish, ieh, do_I)
         if (any_simple_OBC) then
           do i=ish,ieh
-            do_I(i) = (OBC%segment(OBC%OBC_segment_v(i,J))%specified)
+            do_I(i) = (OBC%segment(OBC%segnum_v(i,J))%specified)
             if (do_I(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(I,j)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
-            if (abs(OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)) > 0.0) &
+            if (abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) &
               BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + &
-                   OBC%segment(OBC%OBC_segment_v(i,J))%normal_trans(i,J,k) / &
-                   OBC%segment(OBC%OBC_segment_v(i,J))%normal_vel(i,J,k)
+                   OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
+                   OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (do_I(i)) then
             BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
