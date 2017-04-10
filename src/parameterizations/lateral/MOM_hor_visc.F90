@@ -278,7 +278,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: huq, hvq   ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
+  real :: h2uq, h2vq   ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! thicknesses at velocity points in units of H (i.e. m or kg m-2).
   real :: hq         ! harmonic mean of the harmonic means of the u- & v-
                      ! point thicknesses, in H; guarantees that hq/hu < 4.
@@ -340,7 +340,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,         &
-!$OMP                                  Shear_mag, huq, hvq, hq, Kh_scale, hrat_min)
+!$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
 !    This code uses boundary conditions that are consistent with
@@ -374,8 +374,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           J = OBC%segment(n)%HI%JsdB
           do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_strain) then
-              dvdx(I,J) = 0.
-              dudy(I,J) = 0.
+              dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
               dudy(I,J) = 0.
             endif
@@ -384,8 +383,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           I = OBC%segment(n)%HI%IsdB
           do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
             if (OBC%zero_strain) then
-              dvdx(I,J) = 0.
-              dudy(I,J) = 0.
+              dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
               dvdx(I,J) = 0.
             endif
@@ -415,13 +413,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
       if (apply_OBC .and. OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
-          if (OBC%segment(n)%is_N_or_S) then
-            J = OBC%segment(n)%HI%JsdB
+          I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+          if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
             do I=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
               v0(i,J) = 0.
             enddo
-          elseif (OBC%segment(n)%is_E_or_W) then
-            I = OBC%segment(n)%HI%IsdB
+          elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
             do j=OBC%segment(n)%HI%jsd,OBC%segment(n)%HI%jed
               u0(I,j) = 0.
             enddo
@@ -521,22 +518,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
         do n=1,OBC%number_of_segments
-          if (OBC%segment(n)%is_N_or_S) then
-            J = OBC%segment(n)%HI%JsdB
+          J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
+          if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= Jeq)) then
             do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
               if (OBC%zero_strain) then
-                dvdx(I,J) = 0.
-                dudy(I,J) = 0.
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
               elseif (OBC%freeslip_strain) then
                 dudy(I,J) = 0.
               endif
             enddo
-          elseif (OBC%segment(n)%is_E_or_W) then
-            I = OBC%segment(n)%HI%IsdB
+          elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= Ieq)) then
             do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
               if (OBC%zero_strain) then
-                dvdx(I,J) = 0.
-                dudy(I,J) = 0.
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
               elseif (OBC%freeslip_strain) then
                 dvdx(I,J) = 0.
               endif
@@ -551,9 +545,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
 
-      huq = (h(i,j,k) + h(i+1,j,k)) * (h(i,j+1,k) + h(i+1,j+1,k))
-      hvq = (h(i,j,k) + h(i,j+1,k)) * (h(i+1,j,k) + h(i+1,j+1,k))
-      hq = 2.0 * huq * hvq / (h_neglect3 + (huq + hvq) * &
+      h2uq = (h(i,j,k) + h(i+1,j,k)) * (h(i,j+1,k) + h(i+1,j+1,k))
+      h2vq = (h(i,j,k) + h(i,j+1,k)) * (h(i+1,j,k) + h(i+1,j+1,k))
+      hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
           ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
 
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
