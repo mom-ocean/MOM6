@@ -71,9 +71,9 @@ subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
     omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
     val1 = sin(omega * time_sec)
 
-    isdB = segment%HI%isdB ; iedB = segment%HI%iedB
-    Jsd = segment%HI%Jsd ; Jed = segment%HI%Jed
-    do J=Jsd,Jed ; do i=isdB,iedB
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    do j=jsd,jed ; do I=IsdB,IedB
       x = 0.5 * 1000. * (G%geoLonT(i+1,j) + G%geoLonT(i,j))
       y = 0.5 * 1000. * (G%geoLatT(i+1,j) + G%geoLatT(i,j))
       cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
