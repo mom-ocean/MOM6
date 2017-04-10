@@ -411,10 +411,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, CS%PressureForce_CSp, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
-  if (CS%debug) then
-    call uvchksum("After PressureForce CS%PFu", CS%PFu, CS%PFv, G%HI,haloshift=0)
-  endif
-
   if (dyn_p_surf) then
     Pa_to_eta = 1.0 / GV%H_to_Pa
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
@@ -458,6 +454,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
+    call MOM_accel_chksum("pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
+                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel)
     call check_redundant("pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
     call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
@@ -744,6 +742,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
+    call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
+                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel)
     call check_redundant("corr pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
     call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
