@@ -259,22 +259,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       if (OBC%zero_vorticity .or. OBC%freeslip_vorticity) then
         if (OBC%segment(n)%is_N_or_S) then
           J = OBC%segment(n)%HI%JsdB
-          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-            if (OBC%zero_vorticity) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_vorticity) then
-              dudy(I,J) = 0.
-            endif
-          enddo
+          if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+              if (OBC%zero_vorticity) then
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              elseif (OBC%freeslip_vorticity) then
+                dudy(I,J) = 0.
+              endif
+            enddo
+          endif
         elseif (OBC%segment(n)%is_E_or_W) then
           I = OBC%segment(n)%HI%IsdB
-          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-            if (OBC%zero_vorticity) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_vorticity) then
-              dvdx(I,J) = 0.
-            endif
-          enddo
+          if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+              if (OBC%zero_vorticity) then
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              elseif (OBC%freeslip_vorticity) then
+                dvdx(I,J) = 0.
+              endif
+            enddo
+          endif
         endif
       endif
 !     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
