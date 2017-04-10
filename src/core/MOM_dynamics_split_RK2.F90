@@ -685,10 +685,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
 
-  if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
-  endif; endif
-
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
     call complete_group_pass(CS%pass_av_uvh, G%Domain)
