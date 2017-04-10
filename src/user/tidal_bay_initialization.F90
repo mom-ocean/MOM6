@@ -74,7 +74,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   segment => OBC%segment(1)
 
   do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
-    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+    if (OBC%segnum_u(I,j) /= OBC_NONE) then
       do k=1,nz
         my_area(1,j) = my_area(1,j) + h(I,j,k)*G%dyCu(I,j)
       enddo
@@ -85,7 +85,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
 
   ! Old way
   do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+    if (OBC%segnum_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
       OBC%ubt_outer(I,j) = my_flux/total_area
 !     if (segment%nudged) then
@@ -97,7 +97,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
     endif
   enddo ; enddo
   do J=JsdB,JedB ; do i=isd,ied
-    if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+    if (OBC%segnum_v(i,J) /= OBC_NONE) then
       OBC%eta_outer_v(i,J) = cff
       OBC%vbt_outer(i,J) = 0.0
     endif
