@@ -65,10 +65,11 @@ subroutine end_coord_hycom(CS)
   deallocate(CS)
 end subroutine end_coord_hycom
 
-subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness)
-  type(hycom_CS),               pointer    :: CS
-  real, optional, dimension(:), intent(in) :: max_interface_depths
-  real, optional, dimension(:), intent(in) :: max_layer_thickness
+subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, interp_CS)
+  type(hycom_CS),                 pointer    :: CS
+  real, optional, dimension(:),   intent(in) :: max_interface_depths
+  real, optional, dimension(:),   intent(in) :: max_layer_thickness
+  type(interp_CS_type), optional, intent(in) :: interp_CS
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
 
@@ -85,6 +86,8 @@ subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness)
     allocate(CS%max_layer_thickness(CS%nk))
     CS%max_layer_thickness(:) = max_layer_thickness(:)
   endif
+
+  if (present(interp_CS)) CS%interp_CS = interp_CS
 end subroutine set_hycom_params
 
 !> Build a HyCOM coordinate column

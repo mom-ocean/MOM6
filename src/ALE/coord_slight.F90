@@ -97,19 +97,20 @@ end subroutine end_coord_slight
 subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
      min_thickness, compressibility_fraction, &
      dz_ml_min, nz_fixed_surface, Rho_ML_avg_depth, nlay_ML_offset, fix_haloclines, &
-     halocline_filter_length, halocline_strat_tol)
-  type(slight_CS),                 pointer     :: CS
-  real,    optional, dimension(:), intent(in)  :: max_interface_depths
-  real,    optional, dimension(:), intent(in)  :: max_layer_thickness
-  real,    optional,               intent(in)  :: min_thickness
-  real,    optional,               intent(in)  :: compressibility_fraction
-  real,    optional,               intent(in)  :: dz_ml_min
-  integer, optional,               intent(in)  :: nz_fixed_surface
-  real,    optional,               intent(in)  :: Rho_ML_avg_depth
-  real,    optional,               intent(in)  :: nlay_ML_offset
-  logical, optional,               intent(in)  :: fix_haloclines
-  real,    optional,               intent(in)  :: halocline_filter_length
-  real,    optional,               intent(in)  :: halocline_strat_tol
+     halocline_filter_length, halocline_strat_tol, interp_CS)
+  type(slight_CS),                 pointer    :: CS
+  real,    optional, dimension(:), intent(in) :: max_interface_depths
+  real,    optional, dimension(:), intent(in) :: max_layer_thickness
+  real,    optional,               intent(in) :: min_thickness
+  real,    optional,               intent(in) :: compressibility_fraction
+  real,    optional,               intent(in) :: dz_ml_min
+  integer, optional,               intent(in) :: nz_fixed_surface
+  real,    optional,               intent(in) :: Rho_ML_avg_depth
+  real,    optional,               intent(in) :: nlay_ML_offset
+  logical, optional,               intent(in) :: fix_haloclines
+  real,    optional,               intent(in) :: halocline_filter_length
+  real,    optional,               intent(in) :: halocline_strat_tol
+  type(interp_CS_type), optional,  intent(in) :: interp_CS
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_slight_params: CS not associated")
 
@@ -141,6 +142,8 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
         "HALOCLINE_STRAT_TOL must not exceed 1.0.")
     CS%halocline_strat_tol = halocline_strat_tol
   endif
+
+  if (present(interp_CS)) CS%interp_CS = interp_CS
 end subroutine set_slight_params
 
 !> Build a SLight coordinate column
