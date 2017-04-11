@@ -77,12 +77,12 @@ subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS)
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_slight: CS already associated!")
   allocate(CS)
-  allocate(CS%target_density(nk))
+  allocate(CS%target_density(nk+1))
 
-  CS%nk             = nk
-  CS%ref_pressure   = ref_pressure
-  CS%target_density = target_density
-  CS%interp_CS      = interp_CS
+  CS%nk                = nk
+  CS%ref_pressure      = ref_pressure
+  CS%target_density(:) = target_density(:)
+  CS%interp_CS         = interp_CS
 end subroutine init_coord_slight
 
 subroutine end_coord_slight(CS)
@@ -114,17 +114,17 @@ subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
   if (.not. associated(CS)) call MOM_error(FATAL, "set_slight_params: CS not associated")
 
   if (present(max_interface_depths)) then
-    if (size(max_interface_depths) /= CS%nk) &
+    if (size(max_interface_depths) /= CS%nk+1) &
       call MOM_error(FATAL, "set_slight_params: max_interface_depths inconsistent size")
-    allocate(CS%max_interface_depths(CS%nk))
-    CS%max_interface_depths = max_interface_depths
+    allocate(CS%max_interface_depths(CS%nk+1))
+    CS%max_interface_depths(:) = max_interface_depths(:)
   endif
 
   if (present(max_layer_thickness)) then
     if (size(max_layer_thickness) /= CS%nk) &
       call MOM_error(FATAL, "set_slight_params: max_layer_thickness inconsistent size")
     allocate(CS%max_layer_thickness(CS%nk))
-    CS%max_layer_thickness = max_layer_thickness
+    CS%max_layer_thickness(:) = max_layer_thickness(:)
   endif
 
   if (present(min_thickness)) CS%min_thickness = min_thickness

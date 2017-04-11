@@ -1980,40 +1980,28 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
                      'set_regrid_params: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   endif
 
-  if (present(min_thickness)) then
-    CS%min_thickness = min_thickness
+  if (present(min_thickness)) CS%min_thickness = min_thickness
+  if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
 
-    select case (CS%regridding_scheme)
-    case (REGRIDDING_ZSTAR)
-      call set_zlike_params(CS%zlike_CS, min_thickness=min_thickness)
-    case (REGRIDDING_SIGMA)
-      call set_sigma_params(CS%sigma_CS, min_thickness=min_thickness)
-    case (REGRIDDING_RHO)
-      call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
-    case (REGRIDDING_SLIGHT)
-      call set_slight_params(CS%slight_CS, min_thickness=min_thickness)
-    end select
-  endif
-
-  if (present(compress_fraction)) then
-    CS%compressibility_fraction = compress_fraction
-
-    ! SLight additionally needs compressibility fraction within its build_column method
-    if (CS%regridding_scheme == REGRIDDING_SLIGHT) &
-      call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
-  endif
-
-  ! SLight-specific parameters
-  if (present(dz_min_surface))      call set_slight_params(CS%slight_CS, dz_ml_min=dz_min_surface)
-  if (present(nz_fixed_surface))    call set_slight_params(CS%slight_CS, nz_fixed_surface=nz_fixed_surface)
-  if (present(Rho_ML_avg_depth))    call set_slight_params(CS%slight_CS, Rho_ML_avg_depth=Rho_ML_avg_depth)
-  if (present(nlay_ML_to_interior)) call set_slight_params(CS%slight_CS, nlay_ML_offset=nlay_ML_to_interior)
-  if (present(fix_haloclines))      call set_slight_params(CS%slight_CS, fix_haloclines=fix_haloclines)
-  if (present(halocline_filt_len))  call set_slight_params(CS%slight_CS, halocline_filter_length=halocline_filt_len)
-  if (present(halocline_strat_tol)) call set_slight_params(CS%slight_CS, halocline_strat_tol=halocline_strat_tol)
-
-  ! rho-specific parameters
-  if (present(integrate_downward_for_e)) call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
+  select case (CS%regridding_scheme)
+  case (REGRIDDING_ZSTAR)
+    if (present(min_thickness)) call set_zlike_params(CS%zlike_CS, min_thickness=min_thickness)
+  case (REGRIDDING_SIGMA)
+    if (present(min_thickness)) call set_sigma_params(CS%sigma_CS, min_thickness=min_thickness)
+  case (REGRIDDING_RHO)
+    if (present(min_thickness)) call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
+    if (present(integrate_downward_for_e)) call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
+  case (REGRIDDING_SLIGHT)
+    if (present(min_thickness))       call set_slight_params(CS%slight_CS, min_thickness=min_thickness)
+    if (present(dz_min_surface))      call set_slight_params(CS%slight_CS, dz_ml_min=dz_min_surface)
+    if (present(nz_fixed_surface))    call set_slight_params(CS%slight_CS, nz_fixed_surface=nz_fixed_surface)
+    if (present(Rho_ML_avg_depth))    call set_slight_params(CS%slight_CS, Rho_ML_avg_depth=Rho_ML_avg_depth)
+    if (present(nlay_ML_to_interior)) call set_slight_params(CS%slight_CS, nlay_ML_offset=nlay_ML_to_interior)
+    if (present(fix_haloclines))      call set_slight_params(CS%slight_CS, fix_haloclines=fix_haloclines)
+    if (present(halocline_filt_len))  call set_slight_params(CS%slight_CS, halocline_filter_length=halocline_filt_len)
+    if (present(halocline_strat_tol)) call set_slight_params(CS%slight_CS, halocline_strat_tol=halocline_strat_tol)
+    if (present(compress_fraction))   call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
+  end select
 
 end subroutine set_regrid_params
 
