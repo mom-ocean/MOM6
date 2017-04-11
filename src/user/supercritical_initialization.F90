@@ -45,7 +45,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
   allocate(OBC%ubt_outer(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%ubt_outer(:,:) = 0.0
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    if (OBC%OBC_segment_u(I,j)>0) then
+    if (OBC%segnum_u(I,j)>0) then
       OBC%ubt_outer(I,j) = zonal_flow
     endif
   enddo ; enddo
