@@ -22,12 +22,12 @@ use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
 
-use coord_zlike,  only : init_coord_zlike, zlike_CS, build_zstar_column
-use coord_sigma,  only : init_coord_sigma, sigma_CS, build_sigma_column
-use coord_rho,    only : init_coord_rho, rho_CS, build_rho_column
+use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column
+use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column
+use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_column
 use coord_rho,    only : old_inflate_layers_1d
-use coord_hycom,  only : init_coord_hycom, hycom_CS, build_hycom1_column
-use coord_slight, only : init_coord_slight, slight_CS, build_slight_column
+use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column
+use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column
 
 use netcdf ! Used by check_grid_def()
 
@@ -76,19 +76,6 @@ type, public :: regridding_CS
   !> Reference pressure for potential density calculations (Pa)
   real :: ref_pressure = 2.e7
 
-  ! The following 4 parameters were introduced for use with the SLight coordinate:
-  !> Depth over which to average to determine the mixed layer potential density (m)
-  real :: Rho_ML_avg_depth = 1.0
-
-  !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
-  real :: nlay_ml_offset = 2.0
-
-  !> The number of fixed-thickess layers at the top of the model
-  integer :: nz_fixed_surface = 2
-
-  !> The fixed resolution in the topmost SLight_nkml_min layers (m)
-  real :: dz_ml_min = 1.0
-
   !> Weight given to old coordinate when blending between new and old grids (nondim)
   !! Used only below depth_of_time_filter_shallow, with a cubic variation
   !! from zero to full effect between depth_of_time_filter_shallow and
@@ -104,17 +91,6 @@ type, public :: regridding_CS
   !> Fraction (between 0 and 1) of compressibility to add to potential density
   !! profiles when interpolating for target grid positions. (nondim)
   real :: compressibility_fraction = 0.
-
-  !> If true, detect regions with much weaker stratification in the coordinate
-  !! than based on in-situ density, and use a stretched coordinate there.
-  logical :: fix_haloclines = .false.
-
-  !> A length scale over which to filter T & S when looking for spuriously
-  !! unstable water mass profiles, in m.
-  real :: halocline_filter_length = 2.0
-
-  !> A value of the stratification ratio that defines a problematic halocline region.
-  real :: halocline_strat_tol = 0.25
 
   !> If true, each interface is given a maximum depth based on a rescaling of
   !! the indexing of coordinateResolution.
@@ -255,11 +231,15 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
-    call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
-                 "When interpolating potential density profiles we can add\n"//&
-                 "some artificial compressibility solely to make homogenous\n"//&
-                 "regions appear stratified.", default=0.)
-    call set_regrid_params(CS, compress_fraction=tmpReal)
+    call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
+                 "When defined, a proper high-order reconstruction\n"//&
+                 "scheme is used within boundary cells rather\n"//&
+                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
+                 "PPM reconstruction will also be used within\n"//&
+                 "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
+    call set_regrid_params(CS, boundary_extrapolation=tmpLogical)
+  else
+    call set_regrid_params(CS, boundary_extrapolation=.false.)
   endif
 
   ! Read coordinate configuration parameter (main model = ALE_COORDINATE_CONFIG)
@@ -457,6 +437,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   endif
 
   CS%nk=ke
+
   ! Target resolution (for fixed coordinates)
   allocate( CS%coordinateResolution(CS%nk) ); CS%coordinateResolution(:) = -1.E30
   if (state_dependent(CS%regridding_scheme)) then
@@ -477,6 +458,17 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
              'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
   endif
 
+  ! initialise coordinate-specific control structure
+  call initCoord(CS, coord_mode)
+
+  if (main_parameters .and. coord_is_state_dependent) then
+    call get_param(param_file, mod, "REGRID_COMPRESSIBILITY_FRACTION", tmpReal, &
+                 "When interpolating potential density profiles we can add\n"//&
+                 "some artificial compressibility solely to make homogenous\n"//&
+                 "regions appear stratified.", default=0.)
+    call set_regrid_params(CS, compress_fraction=tmpReal)
+  endif
+
   if (main_parameters) then
     call get_param(param_file, mod, "MIN_THICKNESS", tmpReal, &
                  "When regridding, this is the minimum layer\n"//&
@@ -485,18 +477,6 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call set_regrid_params(CS, min_thickness=tmpReal)
   else
     call set_regrid_params(CS, min_thickness=0.)
-  endif
-
-  if (main_parameters .and. coord_is_state_dependent) then
-    call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", tmpLogical, &
-                 "When defined, a proper high-order reconstruction\n"//&
-                 "scheme is used within boundary cells rather\n"//&
-                 "than PCM. E.g., if PPM is used for remapping, a\n"//&
-                 "PPM reconstruction will also be used within\n"//&
-                 "boundary cells.", default=regriddingDefaultBoundaryExtrapolation)
-    call set_regrid_params(CS, boundary_extrapolation=tmpLogical)
-  else
-    call set_regrid_params(CS, boundary_extrapolation=.false.)
   endif
 
   if (coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
@@ -667,24 +647,6 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     endif
     deallocate(h_max)
   endif
-
-  select case (coordinateMode(coord_mode))
-  case (REGRIDDING_ZSTAR)
-    call init_coord_zlike(CS%zlike_CS, CS%min_thickness, CS%coordinateResolution)
-  case (REGRIDDING_SIGMA)
-    call init_coord_sigma(CS%sigma_CS, CS%min_thickness, CS%coordinateResolution)
-  case (REGRIDDING_RHO)
-    call init_coord_rho(CS%rho_CS, CS%min_thickness, CS%ref_pressure, CS%integrate_downward_for_e, &
-         CS%target_density, CS%interp_CS)
-  case (REGRIDDING_HYCOM1)
-    call init_coord_hycom(CS%hycom_CS, CS%interp_CS, CS%target_density, CS%coordinateResolution, &
-         CS%max_interface_depths, CS%max_layer_thickness)
-  case (REGRIDDING_SLIGHT)
-    call init_coord_slight(CS%slight_CS, CS%min_thickness, CS%Rho_ml_avg_depth, CS%nz_fixed_surface, &
-         CS%nlay_ml_offset, CS%fix_haloclines, CS%halocline_filter_length, CS%ref_pressure, &
-         CS%compressibility_fraction, CS%halocline_strat_tol, CS%dz_ml_min, CS%max_interface_depths, &
-         CS%max_layer_thickness, CS%target_density, CS%interp_CS)
-  end select
 
   if (allocated(dz)) deallocate(dz)
 end subroutine initialize_regridding
@@ -1761,6 +1723,23 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
 
 end function uniformResolution
 
+subroutine initCoord(CS, coord_mode)
+  type(regridding_CS), intent(inout) :: CS
+  character(len=*),    intent(in)    :: coord_mode
+
+  select case (coordinateMode(coord_mode))
+  case (REGRIDDING_ZSTAR)
+    call init_coord_zlike(CS%zlike_CS, CS%nk, CS%coordinateResolution)
+  case (REGRIDDING_SIGMA)
+    call init_coord_sigma(CS%sigma_CS, CS%nk, CS%coordinateResolution)
+  case (REGRIDDING_RHO)
+    call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+  case (REGRIDDING_HYCOM1)
+    call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, CS%interp_CS)
+  case (REGRIDDING_SLIGHT)
+    call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+  end select
+end subroutine initCoord
 
 !------------------------------------------------------------------------------
 ! Set the fixed resolution data
@@ -1832,6 +1811,13 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
     CS%max_interface_depths(K) = val_to_H * max_depths(K)
   enddo
 
+  ! set max depths for coordinate
+  select case (CS%regridding_scheme)
+  case (REGRIDDING_HYCOM1)
+    call set_hycom_params(CS%hycom_CS, max_interface_depths=CS%max_interface_depths)
+  case (REGRIDDING_SLIGHT)
+    call set_slight_params(CS%slight_CS, max_interface_depths=CS%max_interface_depths)
+  end select
 end subroutine set_regrid_max_depths
 
 !> Set maximum layer thicknesses based on a vector of input values.
@@ -1851,6 +1837,13 @@ subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
     CS%max_layer_thickness(k) = val_to_H * max_h(k)
   enddo
 
+  ! set max thickness for coordinate
+  select case (CS%regridding_scheme)
+  case (REGRIDDING_HYCOM1)
+    call set_hycom_params(CS%hycom_CS, max_layer_thickness=CS%max_layer_thickness)
+  case (REGRIDDING_SLIGHT)
+    call set_slight_params(CS%slight_CS, max_layer_thickness=CS%max_layer_thickness)
+  end select
 end subroutine set_regrid_max_thickness
 
 
@@ -1972,33 +1965,55 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
 
+  if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
-  if (present(min_thickness)) CS%min_thickness = min_thickness
+
   if (present(old_grid_weight)) then
     if (old_grid_weight<0. .or. old_grid_weight>1.) &
       call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
   endif
-  if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
   if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
   if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
     if (CS%depth_of_time_filter_deep<CS%depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
                      'set_regrid_params: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   endif
-  if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
-  if (present(dz_min_surface)) CS%dz_ml_min = dz_min_surface
-  if (present(nz_fixed_surface)) CS%nz_fixed_surface = nz_fixed_surface
-  if (present(Rho_ML_avg_depth)) CS%Rho_ML_avg_depth = Rho_ML_avg_depth
-  if (present(nlay_ML_to_interior)) CS%nlay_ML_offset = nlay_ML_to_interior
-  if (present(fix_haloclines)) CS%fix_haloclines = fix_haloclines
-  if (present(halocline_filt_len)) CS%halocline_filter_length = halocline_filt_len
-  if (present(halocline_strat_tol)) then
-    if (halocline_strat_tol > 1.0) call MOM_error(FATAL, "set_regrid_params: "//&
-        "HALOCLINE_STRAT_TOL must not exceed 1.0.")
-    CS%halocline_strat_tol = halocline_strat_tol
+
+  if (present(min_thickness)) then
+    CS%min_thickness = min_thickness
+
+    select case (CS%regridding_scheme)
+    case (REGRIDDING_ZSTAR)
+      call set_zlike_params(CS%zlike_CS, min_thickness=min_thickness)
+    case (REGRIDDING_SIGMA)
+      call set_sigma_params(CS%sigma_CS, min_thickness=min_thickness)
+    case (REGRIDDING_RHO)
+      call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
+    case (REGRIDDING_SLIGHT)
+      call set_slight_params(CS%slight_CS, min_thickness=min_thickness)
+    end select
   endif
-  if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+
+  if (present(compress_fraction)) then
+    CS%compressibility_fraction = compress_fraction
+
+    ! SLight additionally needs compressibility fraction within its build_column method
+    if (CS%regridding_scheme == REGRIDDING_SLIGHT) &
+      call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
+  endif
+
+  ! SLight-specific parameters
+  if (present(dz_min_surface))      call set_slight_params(CS%slight_CS, dz_ml_min=dz_min_surface)
+  if (present(nz_fixed_surface))    call set_slight_params(CS%slight_CS, nz_fixed_surface=nz_fixed_surface)
+  if (present(Rho_ML_avg_depth))    call set_slight_params(CS%slight_CS, Rho_ML_avg_depth=Rho_ML_avg_depth)
+  if (present(nlay_ML_to_interior)) call set_slight_params(CS%slight_CS, nlay_ML_offset=nlay_ML_to_interior)
+  if (present(fix_haloclines))      call set_slight_params(CS%slight_CS, fix_haloclines=fix_haloclines)
+  if (present(halocline_filt_len))  call set_slight_params(CS%slight_CS, halocline_filter_length=halocline_filt_len)
+  if (present(halocline_strat_tol)) call set_slight_params(CS%slight_CS, halocline_strat_tol=halocline_strat_tol)
+
+  ! rho-specific parameters
+  if (present(integrate_downward_for_e)) call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
 
 end subroutine set_regrid_params
 

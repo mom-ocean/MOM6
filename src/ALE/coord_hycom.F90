@@ -11,43 +11,68 @@ implicit none ; private
 type, public :: hycom_CS
   private
 
-  !> Interpolation control structure
-  type(interp_CS_type), pointer :: interp_CS
-
-  !> Nominal density of interfaces
-  real, dimension(:),   pointer :: target_density
+  !> Number of layers/levels
+  integer :: nk
 
   !> Nominal near-surface resolution
-  real, dimension(:),   pointer :: coordinateResolution
+  real, allocatable, dimension(:) :: coordinateResolution
+
+  !> Nominal density of interfaces
+  real, allocatable, dimension(:) :: target_density
 
   !> Maximum depths of interfaces
-  real, dimension(:),   pointer :: max_interface_depths
+  real, allocatable, dimension(:) :: max_interface_depths
 
-  !> Maximum thicknessoes of layers
-  real, dimension(:),   pointer :: max_layer_thickness
+  !> Maximum thicknesses of layers
+  real, allocatable, dimension(:) :: max_layer_thickness
+
+  !> Interpolation control structure
+  type(interp_CS_type) :: interp_CS
 end type hycom_CS
 
-public init_coord_hycom, build_hycom1_column
+public init_coord_hycom, set_hycom_params, build_hycom1_column
 
 contains
 
 !> Initialise a hycom_CS with pointers to parameters
-subroutine init_coord_hycom(CS, interp_CS, target_density, coordinateResolution, &
-     max_interface_depths, max_layer_thickness)
-  type(hycom_CS),       pointer :: CS !< Unassociated pointer to hold the control structure
-  type(interp_CS_type), target  :: interp_CS
-  real, dimension(:),   target  :: target_density, coordinateResolution, &
-       max_interface_depths, max_layer_thickness
+subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
+  type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
+  integer,              intent(in) :: nk
+  real, dimension(:),   intent(in) :: coordinateResolution, target_density
+  type(interp_CS_type), intent(in) :: interp_CS
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
   allocate(CS)
+  allocate(CS%coordinateResolution(nk))
+  allocate(CS%target_density(nk))
 
-  CS%interp_CS            => interp_CS
-  CS%target_density       => target_density
-  CS%coordinateResolution => coordinateResolution
-  CS%max_interface_depths => max_interface_depths
-  CS%max_layer_thickness  => max_layer_thickness
+  CS%nk                   = nk
+  CS%coordinateResolution = coordinateResolution
+  CS%target_density       = target_density
+  CS%interp_CS            = interp_CS
 end subroutine init_coord_hycom
+
+subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness)
+  type(hycom_CS),               pointer    :: CS
+  real, optional, dimension(:), intent(in) :: max_interface_depths
+  real, optional, dimension(:), intent(in) :: max_layer_thickness
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
+
+  if (present(max_interface_depths)) then
+    if (size(max_interface_depths) /= CS%nk) &
+      call MOM_error(FATAL, "set_hycom_params: max_interface_depths inconsistent size")
+    allocate(CS%max_interface_depths(CS%nk))
+    CS%max_interface_depths = max_interface_depths
+  endif
+
+  if (present(max_layer_thickness)) then
+    if (size(max_layer_thickness) /= CS%nk) &
+      call MOM_error(FATAL, "set_hycom_params: max_layer_thickness inconsistent size")
+    allocate(CS%max_layer_thickness(CS%nk))
+    CS%max_layer_thickness = max_layer_thickness
+  endif
+end subroutine set_hycom_params
 
 !> Build a HyCOM coordinate column
 subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)

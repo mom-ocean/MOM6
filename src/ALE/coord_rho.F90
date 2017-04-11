@@ -12,21 +12,24 @@ implicit none ; private
 type, public :: rho_CS
   private
 
+  !> Number of layers
+  integer :: nk
+
   !> Minimum thickness allowed for layers
-  real,                 pointer :: min_thickness
+  real :: min_thickness
 
   !> Reference pressure for density calculations
-  real,                 pointer :: ref_pressure
+  real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
   !! If false, integrate from the bottom upward, as does the rest of the model.
-  logical,              pointer :: integrate_downward_for_e
+  logical :: integrate_downward_for_e
 
   !> Nominal density of interfaces
-  real, dimension(:),   pointer :: target_density
+  real, allocatable, dimension(:) :: target_density
 
   !> Interpolation control structure
-  type(interp_CS_type), pointer :: interp_CS
+  type(interp_CS_type) :: interp_CS
 end type rho_CS
 
 !> Maximum number of regridding iterations
@@ -35,29 +38,38 @@ integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
 real, parameter    :: DEVIATION_TOLERANCE = 1e-10
 ! This CPP macro embeds some safety checks
 
-public init_coord_rho, build_rho_column, old_inflate_layers_1d
+public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d
 
 contains
 
 !> Initialise a rho_CS with pointers to parameters
-subroutine init_coord_rho(CS, min_thickness, ref_pressure, integrate_downward_for_e, &
-     target_density, interp_CS)
-  type(rho_CS),         pointer :: CS !< Unassociated pointer to hold the control structure
-  real,                 target  :: min_thickness, ref_pressure
-  logical,              target  :: integrate_downward_for_e
-  real, dimension(:),   target  :: target_density
-  type(interp_CS_type), target  :: interp_CS
+subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
+  type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
+  integer,              intent(in) :: nk
+  real,                 intent(in) :: ref_pressure
+  real, dimension(:),   intent(in) :: target_density
+  type(interp_CS_type), intent(in) :: interp_CS
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
   allocate(CS)
+  allocate(CS%target_density(nk))
 
-  CS%min_thickness            => min_thickness
-  CS%ref_pressure             => ref_pressure
-  CS%integrate_downward_for_e => integrate_downward_for_e
-  CS%target_density => target_density
-
-  CS%interp_CS => interp_CS
+  CS%nk             = nk
+  CS%ref_pressure   = ref_pressure
+  CS%target_density = target_density
+  CS%interp_CS      = interp_CS
 end subroutine init_coord_rho
+
+subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e)
+  type(rho_CS),      pointer    :: CS
+  real,    optional, intent(in) :: min_thickness
+  logical, optional, intent(in) :: integrate_downward_for_e
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "set_rho_params: CS not associated")
+
+  if (present(min_thickness)) CS%min_thickness = min_thickness
+  if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+end subroutine set_rho_params
 
 subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)
   !< Build a rho coordinate column

@@ -9,29 +9,42 @@ implicit none ; private
 type, public :: zlike_CS
   private
 
+  !> Number of levels
+  integer :: nk
+
   !> Minimum thickness allowed for layers
-  real,               pointer :: min_thickness
+  real :: min_thickness
 
   !> Target coordinate resolution
-  real, dimension(:), pointer :: coordinateResolution
+  real, allocatable, dimension(:) :: coordinateResolution
 end type zlike_CS
 
-public init_coord_zlike, build_zstar_column
+public init_coord_zlike, set_zlike_params, build_zstar_column
 
 contains
 
 !> Initialise a zlike_CS with pointers to parameters
-subroutine init_coord_zlike(CS, min_thickness, coordinateResolution)
-  type(zlike_CS),     pointer :: CS !< Unassociated pointer to hold the control structure
-  real,               target  :: min_thickness
-  real, dimension(:), target  :: coordinateResolution
+subroutine init_coord_zlike(CS, nk, coordinateResolution)
+  type(zlike_CS),     pointer    :: CS !< Unassociated pointer to hold the control structure
+  integer,            intent(in) :: nk
+  real, dimension(:), intent(in) :: coordinateResolution
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_zlike: CS already associated!")
   allocate(CS)
+  allocate(CS%coordinateResolution(nk))
 
-  CS%min_thickness => min_thickness
-  CS%coordinateResolution => coordinateResolution
+  CS%nk                   = nk
+  CS%coordinateResolution = coordinateResolution
 end subroutine init_coord_zlike
+
+subroutine set_zlike_params(CS, min_thickness)
+  type(zlike_CS), pointer    :: CS
+  real, optional, intent(in) :: min_thickness
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "set_zlike_params: CS not associated")
+
+  if (present(min_thickness)) CS%min_thickness = min_thickness
+end subroutine set_zlike_params
 
 !> Builds a z* coordinate with a minimum thickness
 subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigid_top, eta_orig)
