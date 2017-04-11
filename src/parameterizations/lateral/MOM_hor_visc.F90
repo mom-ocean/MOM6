@@ -94,7 +94,8 @@ use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
+use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_io,                    only : read_data, slasher
 
@@ -375,10 +376,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo ; enddo
 
     ! Interpolate the thicknesses to velocity points.
-    do j=js-1,je+1 ; do I=Isq-1,Ieq+1
+    ! The extra wide halos are to accomodate the cross-corner-point projections
+    ! in OBCs, which are not ordinarily be necessary, and might not be necessary
+    ! even with OBCs if the accelerations are zeroed at OBC points, in which
+    ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
+    do j=js-2,je+2 ; do I=Isq-1,Ieq+1
       h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
     enddo ; enddo
-    do J=Jsq-1,Jeq+1 ; do i=is-1,ie+1
+    do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
       h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
     enddo ; enddo
     
@@ -405,33 +410,64 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           enddo
         endif
       endif
-!     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
-!         do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
-!           h_v(i,J) = h(i,j,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
-!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
-!         do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
-!           h_v(i,J) = h(i,j+1,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
-!         do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
-!           h_u(I,j) = h(i,j,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
-!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
-!         do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
-!           h_u(I,j) = h(i+1,j,k)
-!         enddo
-!       endif
-!     else
-!       call MOM_error(fatal, "horizontal_viscosity encountered an OBC segment of indeterminate direction.")
-!     endif
+      if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+        ! There are extra wide halos here to accomodate the cross-corner-point
+        ! OBC projections, but they might not be necessary if the accelerations
+        ! are always zeroed out at OBC points, in which case the i-loop below
+        ! becomes do i=is-1,ie+1. -RWH
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do i = max(is-2,OBC%segment(n)%HI%isd), min(ie+2,OBC%segment(n)%HI%ied)
+            h_v(i,J) = h(i,j,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do i = max(is-2,OBC%segment(n)%HI%isd), min(ie+2,OBC%segment(n)%HI%ied)
+            h_v(i,J) = h(i,j+1,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do j = max(js-2,OBC%segment(n)%HI%jsd), min(je+2,OBC%segment(n)%HI%jed)
+            h_u(I,j) = h(i,j,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do j = max(js-2,OBC%segment(n)%HI%jsd), min(je+2,OBC%segment(n)%HI%jed)
+            h_u(I,j) = h(i+1,j,k)
+          enddo
+        endif
+      endif
+    enddo ; endif
+    ! Now project thicknesses across corner points on OBCs.
+    if (apply_OBC) then ; do n=1,OBC%number_of_segments
+      J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
+      if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+        if ((J >= js-2) .and. (J <= je)) then
+          do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+            h_u(I,j+1) = h_u(I,j)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+        if ((J >= js-1) .and. (J <= je+1)) then
+          do I = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
+            h_u(I,j) = h_u(i,j+1)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+        if ((I >= is-2) .and. (I <= ie)) then
+          do J = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+            h_v(i+1,J) = h_v(i,J)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+        if ((I >= is-1) .and. (I <= ie+1)) then
+          do J = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+            h_v(i,J) = h_v(i+1,J)
+          enddo
+        endif
+      endif
     enddo ; endif
 
     if (CS%no_slip) then
@@ -580,6 +616,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         enddo
       endif ; endif
     endif
+
     do J=js-1,Jeq ; do I=is-1,Ieq
       if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) &
         Shear_mag = sqrt(sh_xy(I,J)*sh_xy(I,J) + &
