@@ -1378,23 +1378,27 @@ subroutine apply_OBC_normal_flow(OBC, G, u, v)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
   ! Local variables
   integer :: i, j, k, n
+  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(OBC)) return ! Bail out if OBC is not available
 
   do n=1,OBC%number_of_segments
-     if (.not. OBC%segment(n)%on_pe) then
-       cycle
-     elseif (OBC%segment(n)%is_E_or_W) then
-       I=OBC%segment(n)%HI%IscB
-       do k=1,G%ke ;  do j=OBC%segment(n)%HI%jsc,OBC%segment(n)%HI%jec
-         u(I,j,k) = OBC%segment(n)%normal_vel(I,j,k)
-       enddo; enddo
-     elseif (OBC%segment(n)%is_N_or_S) then
-       J=OBC%segment(n)%HI%JscB
-       do k=1,G%ke ;  do i=OBC%segment(n)%HI%isc,OBC%segment(n)%HI%iec
-         v(i,J,k) = OBC%segment(n)%normal_vel(i,J,k)
-       enddo; enddo
-     endif
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) then
+      cycle
+    elseif (segment%radiation .or. segment%oblique .or. segment%gradient) then
+      if (segment%is_E_or_W) then
+        I=segment%HI%IscB
+        do k=1,G%ke ;  do j=segment%HI%jsc,segment%HI%jec
+          u(I,j,k) = segment%normal_vel(I,j,k)
+        enddo; enddo
+      elseif (segment%is_N_or_S) then
+        J=segment%HI%JscB
+        do k=1,G%ke ;  do i=segment%HI%isc,segment%HI%iec
+          v(i,J,k) = segment%normal_vel(i,J,k)
+        enddo; enddo
+      endif
+    endif
   enddo
 
 end subroutine apply_OBC_normal_flow
