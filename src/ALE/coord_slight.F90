@@ -13,62 +13,126 @@ implicit none ; private
 type, public :: slight_CS
   private
 
-  real,    pointer :: min_thickness
-  real,    pointer :: Rho_ml_avg_depth
-  integer, pointer :: nz_fixed_surface
-  real,    pointer :: nlay_ml_offset
-  logical, pointer :: fix_haloclines
-  real,    pointer :: halocline_filter_length
-  real,    pointer :: ref_pressure
-  real,    pointer :: compressibility_fraction
-  real,    pointer :: halocline_strat_tol
-  real,    pointer :: dz_ml_min
+  !> Number of layers/levels
+  integer :: nk
 
-  real, dimension(:), pointer :: max_interface_depths
-  real, dimension(:), pointer :: max_layer_thickness
-  real, dimension(:), pointer :: target_density
+  !> Minimum thickness allowed when building the new grid through regridding
+  real :: min_thickness
 
-  type(interp_CS_type), pointer :: interp_CS
+  !> Reference pressure for potential density calculations (Pa)
+  real :: ref_pressure
+
+  !> Fraction (between 0 and 1) of compressibility to add to potential density
+  !! profiles when interpolating for target grid positions. (nondim)
+  real :: compressibility_fraction = 0.
+
+  ! The following 4 parameters were introduced for use with the SLight coordinate:
+  !> Depth over which to average to determine the mixed layer potential density (m)
+  real :: Rho_ML_avg_depth = 1.0
+
+  !> Number of layers to offset the mixed layer density to find resolved stratification (nondim)
+  real :: nlay_ml_offset = 2.0
+
+  !> The number of fixed-thickess layers at the top of the model
+  integer :: nz_fixed_surface = 2
+
+  !> The fixed resolution in the topmost SLight_nkml_min layers (m)
+  real :: dz_ml_min = 1.0
+
+  !> If true, detect regions with much weaker stratification in the coordinate
+  !! than based on in-situ density, and use a stretched coordinate there.
+  logical :: fix_haloclines = .false.
+
+  !> A length scale over which to filter T & S when looking for spuriously
+  !! unstable water mass profiles, in m.
+  real :: halocline_filter_length = 2.0
+
+  !> A value of the stratification ratio that defines a problematic halocline region.
+  real :: halocline_strat_tol = 0.25
+
+  !> Nominal density of interfaces
+  real, allocatable, dimension(:) :: target_density
+
+  !> Maximum depths of interfaces
+  real, allocatable, dimension(:) :: max_interface_depths
+
+  !> Maximum thicknesses of layers
+  real, allocatable, dimension(:) :: max_layer_thickness
+
+  !> Interpolation control structure
+  type(interp_CS_type) :: interp_CS
 end type slight_CS
 
-public init_coord_slight, build_slight_column
+public init_coord_slight, set_slight_params, build_slight_column
 
 contains
 
 !> Initialise a slight_CS with pointers to parameters
-subroutine init_coord_slight(CS, min_thickness, Rho_ml_avg_depth, nz_fixed_surface, &
-     nlay_ml_offset, fix_haloclines, halocline_filter_length, ref_pressure, &
-     compressibility_fraction, halocline_strat_tol, dz_ml_min, max_interface_depths, &
-     max_layer_thickness, target_density, interp_CS)
-
-  type(slight_CS), pointer :: CS !< Unassociated pointer to hold the control structure
-  real, target :: min_thickness, Rho_ml_avg_depth, nlay_ml_offset, halocline_filter_length, &
-       ref_pressure, compressibility_fraction, halocline_strat_tol, dz_ml_min
-  integer, target :: nz_fixed_surface
-  logical, target :: fix_haloclines
-  real, dimension(:), target :: max_interface_depths, max_layer_thickness, target_density
-  type(interp_CS_type), target :: interp_CS
+subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS)
+  type(slight_CS),      pointer    :: CS !< Unassociated pointer to hold the control structure
+  integer,              intent(in) :: nk
+  real,                 intent(in) :: ref_pressure
+  real, dimension(:),   intent(in) :: target_density
+  type(interp_CS_type), intent(in) :: interp_CS
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_slight: CS already associated!")
   allocate(CS)
+  allocate(CS%target_density(nk))
 
-  CS%min_thickness            => min_thickness
-  CS%Rho_ml_avg_depth         => Rho_ml_avg_depth
-  CS%nz_fixed_surface         => nz_fixed_surface
-  CS%nlay_ml_offset           => nlay_ml_offset
-  CS%fix_haloclines           => fix_haloclines
-  CS%halocline_filter_length  => halocline_filter_length
-  CS%ref_pressure             => ref_pressure
-  CS%compressibility_fraction => compressibility_fraction
-  CS%halocline_strat_tol      => halocline_strat_tol
-  CS%dz_ml_min                => dz_ml_min
-
-  CS%max_interface_depths => max_interface_depths
-  CS%max_layer_thickness  => max_layer_thickness
-  CS%target_density       => target_density
-
-  CS%interp_CS => interp_CS
+  CS%nk             = nk
+  CS%ref_pressure   = ref_pressure
+  CS%target_density = target_density
+  CS%interp_CS      = interp_CS
 end subroutine init_coord_slight
+
+subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
+     min_thickness, compressibility_fraction, &
+     dz_ml_min, nz_fixed_surface, Rho_ML_avg_depth, nlay_ML_offset, fix_haloclines, &
+     halocline_filter_length, halocline_strat_tol)
+  type(slight_CS),                 pointer     :: CS
+  real,    optional, dimension(:), intent(in)  :: max_interface_depths
+  real,    optional, dimension(:), intent(in)  :: max_layer_thickness
+  real,    optional,               intent(in)  :: min_thickness
+  real,    optional,               intent(in)  :: compressibility_fraction
+  real,    optional,               intent(in)  :: dz_ml_min
+  integer, optional,               intent(in)  :: nz_fixed_surface
+  real,    optional,               intent(in)  :: Rho_ML_avg_depth
+  real,    optional,               intent(in)  :: nlay_ML_offset
+  logical, optional,               intent(in)  :: fix_haloclines
+  real,    optional,               intent(in)  :: halocline_filter_length
+  real,    optional,               intent(in)  :: halocline_strat_tol
+
+  if (.not. associated(CS)) call MOM_error(FATAL, "set_slight_params: CS not associated")
+
+  if (present(max_interface_depths)) then
+    if (size(max_interface_depths) /= CS%nk) &
+      call MOM_error(FATAL, "set_slight_params: max_interface_depths inconsistent size")
+    allocate(CS%max_interface_depths(CS%nk))
+    CS%max_interface_depths = max_interface_depths
+  endif
+
+  if (present(max_layer_thickness)) then
+    if (size(max_layer_thickness) /= CS%nk) &
+      call MOM_error(FATAL, "set_slight_params: max_layer_thickness inconsistent size")
+    allocate(CS%max_layer_thickness(CS%nk))
+    CS%max_layer_thickness = max_layer_thickness
+  endif
+
+  if (present(min_thickness)) CS%min_thickness = min_thickness
+  if (present(compressibility_fraction)) CS%compressibility_fraction = compressibility_fraction
+
+  if (present(dz_ml_min)) CS%dz_ml_min = dz_ml_min
+  if (present(nz_fixed_surface)) CS%nz_fixed_surface = nz_fixed_surface
+  if (present(Rho_ML_avg_depth)) CS%Rho_ML_avg_depth = Rho_ML_avg_depth
+  if (present(nlay_ML_offset)) CS%nlay_ML_offset = nlay_ML_offset
+  if (present(fix_haloclines)) CS%fix_haloclines = fix_haloclines
+  if (present(halocline_filter_length)) CS%halocline_filter_length = halocline_filter_length
+  if (present(halocline_strat_tol)) then
+    if (halocline_strat_tol > 1.0) call MOM_error(FATAL, "set_slight_params: "//&
+        "HALOCLINE_STRAT_TOL must not exceed 1.0.")
+    CS%halocline_strat_tol = halocline_strat_tol
+  endif
+end subroutine set_slight_params
 
 !> Build a SLight coordinate column
 subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff, &
