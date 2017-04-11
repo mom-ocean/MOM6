@@ -69,15 +69,17 @@ subroutine end_coord_rho(CS)
   deallocate(CS)
 end subroutine end_coord_rho
 
-subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e)
-  type(rho_CS),      pointer    :: CS
-  real,    optional, intent(in) :: min_thickness
-  logical, optional, intent(in) :: integrate_downward_for_e
+subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS)
+  type(rho_CS),                   pointer    :: CS
+  real,                 optional, intent(in) :: min_thickness
+  logical,              optional, intent(in) :: integrate_downward_for_e
+  type(interp_CS_type), optional, intent(in) :: interp_CS
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_rho_params: CS not associated")
 
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(interp_CS)) CS%interp_CS = interp_CS
 end subroutine set_rho_params
 
 subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)

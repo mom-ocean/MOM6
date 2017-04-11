@@ -1991,6 +1991,11 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   case (REGRIDDING_RHO)
     if (present(min_thickness)) call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
     if (present(integrate_downward_for_e)) call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
+    if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
+      call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
+  case (REGRIDDING_HYCOM1)
+    if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
+      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_SLIGHT)
     if (present(min_thickness))       call set_slight_params(CS%slight_CS, min_thickness=min_thickness)
     if (present(dz_min_surface))      call set_slight_params(CS%slight_CS, dz_ml_min=dz_min_surface)
@@ -2001,6 +2006,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (present(halocline_filt_len))  call set_slight_params(CS%slight_CS, halocline_filter_length=halocline_filt_len)
     if (present(halocline_strat_tol)) call set_slight_params(CS%slight_CS, halocline_strat_tol=halocline_strat_tol)
     if (present(compress_fraction))   call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
+    if (associated(CS%slight_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
+      call set_slight_params(CS%slight_CS, interp_CS=CS%interp_CS)
   end select
 
 end subroutine set_regrid_params
