@@ -38,7 +38,7 @@ integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
 real, parameter    :: DEVIATION_TOLERANCE = 1e-10
 ! This CPP macro embeds some safety checks
 
-public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d
+public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d, end_coord_rho
 
 contains
 
@@ -59,6 +59,15 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   CS%target_density = target_density
   CS%interp_CS      = interp_CS
 end subroutine init_coord_rho
+
+subroutine end_coord_rho(CS)
+  type(rho_CS), pointer :: CS
+
+  ! nothing to do
+  if (.not. associated(CS)) return
+  deallocate(CS%target_density)
+  deallocate(CS)
+end subroutine end_coord_rho
 
 subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e)
   type(rho_CS),      pointer    :: CS

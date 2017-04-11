@@ -19,7 +19,7 @@ type, public :: zlike_CS
   real, allocatable, dimension(:) :: coordinateResolution
 end type zlike_CS
 
-public init_coord_zlike, set_zlike_params, build_zstar_column
+public init_coord_zlike, set_zlike_params, build_zstar_column, end_coord_zlike
 
 contains
 
@@ -36,6 +36,15 @@ subroutine init_coord_zlike(CS, nk, coordinateResolution)
   CS%nk                   = nk
   CS%coordinateResolution = coordinateResolution
 end subroutine init_coord_zlike
+
+subroutine end_coord_zlike(CS)
+  type(zlike_CS), pointer :: CS
+
+  ! nothing to do
+  if (.not. associated(CS)) return
+  deallocate(CS%coordinateResolution)
+  deallocate(CS)
+end subroutine end_coord_zlike
 
 subroutine set_zlike_params(CS, min_thickness)
   type(zlike_CS), pointer    :: CS
