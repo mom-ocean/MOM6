@@ -63,7 +63,7 @@ type, public :: slight_CS
   type(interp_CS_type) :: interp_CS
 end type slight_CS
 
-public init_coord_slight, set_slight_params, build_slight_column
+public init_coord_slight, set_slight_params, build_slight_column, end_coord_slight
 
 contains
 
@@ -84,6 +84,15 @@ subroutine init_coord_slight(CS, nk, ref_pressure, target_density, interp_CS)
   CS%target_density = target_density
   CS%interp_CS      = interp_CS
 end subroutine init_coord_slight
+
+subroutine end_coord_slight(CS)
+  type(slight_CS), pointer :: CS
+
+  ! nothing to do
+  if (.not. associated(CS)) return
+  deallocate(CS%target_density)
+  deallocate(CS)
+end subroutine end_coord_slight
 
 subroutine set_slight_params(CS, max_interface_depths, max_layer_thickness, &
      min_thickness, compressibility_fraction, &

@@ -19,7 +19,7 @@ type, public :: sigma_CS
   real, allocatable, dimension(:) :: coordinateResolution
 end type sigma_CS
 
-public init_coord_sigma, set_sigma_params, build_sigma_column
+public init_coord_sigma, set_sigma_params, build_sigma_column, end_coord_sigma
 
 contains
 
@@ -36,6 +36,15 @@ subroutine init_coord_sigma(CS, nk, coordinateResolution)
   CS%nk                   = nk
   CS%coordinateResolution = coordinateResolution
 end subroutine init_coord_sigma
+
+subroutine end_coord_sigma(CS)
+  type(sigma_CS), pointer :: CS
+
+  ! nothing to do
+  if (.not. associated(CS)) return
+  deallocate(CS%coordinateResolution)
+  deallocate(CS)
+end subroutine end_coord_sigma
 
 subroutine set_sigma_params(CS, min_thickness)
   type(sigma_CS), pointer    :: CS

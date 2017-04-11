@@ -30,7 +30,7 @@ type, public :: hycom_CS
   type(interp_CS_type) :: interp_CS
 end type hycom_CS
 
-public init_coord_hycom, set_hycom_params, build_hycom1_column
+public init_coord_hycom, set_hycom_params, build_hycom1_column, end_coord_hycom
 
 contains
 
@@ -51,6 +51,18 @@ subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp
   CS%target_density       = target_density
   CS%interp_CS            = interp_CS
 end subroutine init_coord_hycom
+
+subroutine end_coord_hycom(CS)
+  type(hycom_CS), pointer :: CS
+
+  ! nothing to do
+  if (.not. associated(CS)) return
+  deallocate(CS%coordinateResolution)
+  deallocate(CS%target_density)
+  if (allocated(CS%max_interface_depths)) deallocate(CS%max_interface_depths)
+  if (allocated(CS%max_layer_thickness)) deallocate(CS%max_layer_thickness)
+  deallocate(CS)
+end subroutine end_coord_hycom
 
 subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness)
   type(hycom_CS),               pointer    :: CS

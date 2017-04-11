@@ -22,12 +22,12 @@ use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
 
-use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column
-use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column
-use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_column
+use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column, end_coord_zlike
+use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column, end_coord_sigma
+use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_column, end_coord_rho
 use coord_rho,    only : old_inflate_layers_1d
-use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column
-use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column
+use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
+use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column, end_coord_slight
 
 use netcdf ! Used by check_grid_def()
 
@@ -704,11 +704,11 @@ end subroutine check_grid_def
 subroutine end_regridding(CS)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
 
-  if (associated(CS%zlike_CS)) deallocate(CS%zlike_CS)
-  if (associated(CS%sigma_CS)) deallocate(CS%sigma_CS)
-  if (associated(CS%rho_CS)) deallocate(CS%rho_CS)
-  if (associated(CS%hycom_CS)) deallocate(CS%hycom_CS)
-  if (associated(CS%slight_CS)) deallocate(CS%slight_CS)
+  if (associated(CS%zlike_CS))  call end_coord_zlike(CS%zlike_CS)
+  if (associated(CS%sigma_CS))  call end_coord_sigma(CS%sigma_CS)
+  if (associated(CS%rho_CS))    call end_coord_rho(CS%rho_CS)
+  if (associated(CS%hycom_CS))  call end_coord_hycom(CS%hycom_CS)
+  if (associated(CS%slight_CS)) call end_coord_slight(CS%slight_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
