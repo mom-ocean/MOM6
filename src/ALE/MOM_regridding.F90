@@ -1982,6 +1982,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
 
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
+  if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
