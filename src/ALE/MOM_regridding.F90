@@ -466,11 +466,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
 
   if (allocated(dz)) call setCoordinateResolution(dz, CS)
 
-  if ((coordinateMode(coord_mode) == REGRIDDING_RHO) .and. (allocated(rho_target))) then
-    call set_target_densities(CS, rho_target)
-    deallocate(rho_target)
-
-  elseif (allocated(rho_target)) then
+  if (allocated(rho_target)) then
     call set_target_densities(CS, rho_target)
     deallocate(rho_target)
 
