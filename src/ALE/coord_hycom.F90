@@ -37,19 +37,20 @@ contains
 !> Initialise a hycom_CS with pointers to parameters
 subroutine init_coord_hycom(CS, nk, coordinateResolution, target_density, interp_CS)
   type(hycom_CS),       pointer    :: CS !< Unassociated pointer to hold the control structure
-  integer,              intent(in) :: nk
-  real, dimension(:),   intent(in) :: coordinateResolution, target_density
-  type(interp_CS_type), intent(in) :: interp_CS
+  integer,              intent(in) :: nk !< Number of layers in generated grid
+  real, dimension(:),   intent(in) :: coordinateResolution !< Z-space thicknesses (m)
+  real, dimension(:),   intent(in) :: target_density !< Interface target densities (kg/m3)
+  type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_hycom: CS already associated!")
   allocate(CS)
   allocate(CS%coordinateResolution(nk))
-  allocate(CS%target_density(nk))
+  allocate(CS%target_density(nk+1))
 
-  CS%nk                   = nk
-  CS%coordinateResolution = coordinateResolution
-  CS%target_density       = target_density
-  CS%interp_CS            = interp_CS
+  CS%nk                      = nk
+  CS%coordinateResolution(:) = coordinateResolution(:)
+  CS%target_density(:)       = target_density(:)
+  CS%interp_CS               = interp_CS
 end subroutine init_coord_hycom
 
 subroutine end_coord_hycom(CS)
@@ -72,17 +73,17 @@ subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness)
   if (.not. associated(CS)) call MOM_error(FATAL, "set_hycom_params: CS not associated")
 
   if (present(max_interface_depths)) then
-    if (size(max_interface_depths) /= CS%nk) &
+    if (size(max_interface_depths) /= CS%nk+1) &
       call MOM_error(FATAL, "set_hycom_params: max_interface_depths inconsistent size")
-    allocate(CS%max_interface_depths(CS%nk))
-    CS%max_interface_depths = max_interface_depths
+    allocate(CS%max_interface_depths(CS%nk+1))
+    CS%max_interface_depths(:) = max_interface_depths(:)
   endif
 
   if (present(max_layer_thickness)) then
     if (size(max_layer_thickness) /= CS%nk) &
       call MOM_error(FATAL, "set_hycom_params: max_layer_thickness inconsistent size")
     allocate(CS%max_layer_thickness(CS%nk))
-    CS%max_layer_thickness = max_layer_thickness
+    CS%max_layer_thickness(:) = max_layer_thickness(:)
   endif
 end subroutine set_hycom_params
 

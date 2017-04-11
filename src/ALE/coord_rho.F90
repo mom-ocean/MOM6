@@ -52,12 +52,12 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
   allocate(CS)
-  allocate(CS%target_density(nk))
+  allocate(CS%target_density(nk+1))
 
-  CS%nk             = nk
-  CS%ref_pressure   = ref_pressure
-  CS%target_density = target_density
-  CS%interp_CS      = interp_CS
+  CS%nk                = nk
+  CS%ref_pressure      = ref_pressure
+  CS%target_density(:) = target_density(:)
+  CS%interp_CS         = interp_CS
 end subroutine init_coord_rho
 
 subroutine end_coord_rho(CS)
