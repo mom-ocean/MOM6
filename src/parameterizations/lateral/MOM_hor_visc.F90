@@ -249,8 +249,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !   v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
 !  with a similarly sized halo in the y-direction.
 
-  real, dimension(SZIB_(G),SZJ_(G)) :: u0 ! Laplacian of u (m-1 s-1)
-  real, dimension(SZI_(G),SZJB_(G)) :: v0 ! Laplacian of v (m-1 s-1)
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    u0, &   ! Laplacian of u (m-1 s-1)
+    h_u     ! Thickness interpolated to u points, in H.
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    v0, &   ! Laplacian of v (m-1 s-1)
+    h_v     ! Thickness interpolated to v points, in H.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
@@ -278,10 +282,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: AhSm       ! Smagorinsky biharmonic viscosity (m4/s)
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: h2uq, h2vq   ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
-  real :: hu, hv     ! thicknesses at velocity points in units of H (i.e. m or kg m-2).
+  real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
+  real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
+                     ! points; these are first interpolated to u or v velocity
+                     ! points where masks are applied, in units of H (i.e. m or kg m-2).
   real :: hq         ! harmonic mean of the harmonic means of the u- & v-
-                     ! point thicknesses, in H; guarantees that hq/hu < 4.
+                     ! point thicknesses, in H; This form guarantees that hq/hu < 4.
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected (H)
   real :: h_neglect3 ! h_neglect^3, in H3
   real :: hrat_min   ! minimum thicknesses at the 4 neighboring
@@ -339,7 +345,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
-!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv,         &
+!$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
@@ -367,11 +373,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
-    ! Adjust contributions to shearing strain on open boundaries.
-    if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
-      do n=1,OBC%number_of_segments
-        if (OBC%segment(n)%is_N_or_S) then
-          J = OBC%segment(n)%HI%JsdB
+
+    ! Interpolate the thicknesses to velocity points.
+    do j=js-1,je+1 ; do I=Isq-1,Ieq+1
+      h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
+    enddo ; enddo
+    do J=Jsq-1,Jeq+1 ; do i=is-1,ie+1
+      h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+    enddo ; enddo
+    
+    ! Adjust contributions to shearing strain and interpolated values of
+    ! thicknesses on open boundaries.
+    if (apply_OBC) then ; do n=1,OBC%number_of_segments
+      J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
+      if (OBC%zero_strain .or. OBC%freeslip_strain) then
+        if (OBC%segment(n)%is_N_or_S .and. (J >= js-2) .and. (J <= Jeq+1)) then
           do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
@@ -379,8 +395,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               dudy(I,J) = 0.
             endif
           enddo
-        elseif (OBC%segment(n)%is_E_or_W) then
-          I = OBC%segment(n)%HI%IsdB
+        elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-2) .and. (I <= Ieq+1)) then
           do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
             if (OBC%zero_strain) then
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
@@ -389,8 +404,36 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             endif
           enddo
         endif
-      enddo
-    endif ; endif
+      endif
+!     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+!         do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
+!           h_v(i,J) = h(i,j,k)
+!         enddo
+!       endif
+!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+!         do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
+!           h_v(i,J) = h(i,j+1,k)
+!         enddo
+!       endif
+!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+!         do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
+!           h_u(I,j) = h(i,j,k)
+!         enddo
+!       endif
+!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+!         do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
+!           h_u(I,j) = h(i+1,j,k)
+!         enddo
+!       endif
+!     else
+!       call MOM_error(fatal, "horizontal_viscosity encountered an OBC segment of indeterminate direction.")
+!     endif
+    enddo ; endif
+
     if (CS%no_slip) then
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
@@ -433,10 +476,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-        hrat_min = min(1.0, &
-            0.5*min((h(i+1,j,k) + h(i,j,k)), (h(i,j,k) + h(i-1,j,k)), &
-                    (h(i,j+1,k) + h(i,j,k)), (h(i,j-1,k) + h(i,j,k))) / &
-            (h(i,j,k) + h_neglect) )
+        hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
+                            (h(i,j,k) + h_neglect) )
         visc_bound_rem = 1.0
       endif
 
@@ -545,16 +586,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
 
-      h2uq = (h(i,j,k) + h(i+1,j,k)) * (h(i,j+1,k) + h(i+1,j+1,k))
-      h2vq = (h(i,j,k) + h(i,j+1,k)) * (h(i+1,j,k) + h(i+1,j+1,k))
+      h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
+      h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
+!      hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
+!          ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
       hq = 2.0 * h2uq * h2vq / (h_neglect3 + (h2uq + h2vq) * &
-          ((h(i,j,k) + h(i+1,j+1,k)) + (h(i,j+1,k) + h(i+1,j,k))))
+          ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
 
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-        hrat_min = min(1.0, &
-            0.5*min((h(i,j,k) + h(i+1,j,k)), (h(i,j+1,k) + h(i+1,j+1,k)), &
-                    (h(i,j,k) + h(i,j+1,k)), (h(i+1,j,k) + h(i+1,j+1,k))) / &
-                   (hq + h_neglect) )
+        hrat_min = min(1.0, min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J)) / &
+                            (hq + h_neglect) )
         visc_bound_rem = 1.0
       endif
 
@@ -563,10 +604,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             (G%mask2dCv(i,J) + G%mask2dCv(i+1,J)) > 0.0) then
           ! This is a coastal vorticity point, so modify hq and hrat_min.
 
-          hu = 0.5 * (G%mask2dCu(I,j)   * (h(i,j,k) + h(i+1,j,k)) + &
-                      G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k)))
-          hv = 0.5 * (G%mask2dCv(i,J)   * (h(i,j,k) + h(i,j+1,k)) + &
-                      G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k)))
+          hu = G%mask2dCu(I,j) * h_u(I,j) + G%mask2dCu(I,j+1) * h_u(I,j+1)
+          hv = G%mask2dCv(i,J) * h_v(i,J) + G%mask2dCv(i+1,J) * h_v(i+1,J)
           if ((G%mask2dCu(I,j) + G%mask2dCu(I,j+1)) * &
               (G%mask2dCv(i,J) + G%mask2dCv(i+1,J)) == 0.0) then
             ! Only one of hu and hv is nonzero, so just add them.
@@ -659,7 +698,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
                        G%IdxCu(I,j)*(CS%DX2q(I,J-1)*str_xy(I,J-1) - &
                                     CS%DX2q(I,J) *str_xy(I,J))) * &
-                     G%IareaCu(I,j)) / (0.5*(h(i+1,j,k) + h(i,j,k)) + h_neglect)
+                     G%IareaCu(I,j)) / (h_u(i,j) + h_neglect)
 
     enddo ; enddo
     if (apply_OBC) then
@@ -681,7 +720,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     CS%DY2q(I,J) *str_xy(I,J)) - &
                        G%IdxCv(i,J)*(CS%DX2h(i,j) *str_xx(i,j) - &
                                     CS%DX2h(i,j+1)*str_xx(i,j+1))) * &
-                     G%IareaCv(i,J)) / (0.5*(h(i,j+1,k) + h(i,j,k)) + h_neglect)
+                     G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
     enddo ; enddo
     if (apply_OBC) then
       ! This is not the right boundary condition. If all the masking of tendencies are done
