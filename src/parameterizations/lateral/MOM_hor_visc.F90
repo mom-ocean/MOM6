@@ -386,7 +386,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
       h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
     enddo ; enddo
-    
+
     ! Adjust contributions to shearing strain and interpolated values of
     ! thicknesses on open boundaries.
     if (apply_OBC) then ; do n=1,OBC%number_of_segments
