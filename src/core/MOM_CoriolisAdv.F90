@@ -10,7 +10,8 @@ use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
+use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -256,9 +257,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     ! velocity points on open boundaries.
     if (associated(OBC)) then ; do n=1,OBC%number_of_segments
       if (.not. OBC%segment(n)%on_pe) cycle
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
       if (OBC%zero_vorticity .or. OBC%freeslip_vorticity) then
         if (OBC%segment(n)%is_N_or_S) then
-          J = OBC%segment(n)%HI%JsdB
           if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
             do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
               if (OBC%zero_vorticity) then
@@ -269,7 +270,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
             enddo
           endif
         elseif (OBC%segment(n)%is_E_or_W) then
-          I = OBC%segment(n)%HI%IsdB
           if ((I >= Isq-1) .and. (I <= Ieq+1)) then
             do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
               if (OBC%zero_vorticity) then
@@ -281,38 +281,77 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
           endif
         endif
       endif
-!     if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-!       J = OBC%segment(n)%HI%JsdB
-!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
-!         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Isq+2,OBC%segment(n)%HI%ied)
-!           hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
-!       J = OBC%segment(n)%HI%JsdB
-!       if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
-!         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Isq+2,OBC%segment(n)%HI%ied)
-!           hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-!       I = OBC%segment(n)%HI%IsdB
-!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
-!         do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
-!           hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
-!         enddo
-!       endif
-!     elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
-!       I = OBC%segment(n)%HI%IsdB
-!       if ((I >= Isq-1) .and. (I <= Ieq+1)) then
-!         do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
-!           hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
-!         enddo
-!       endif
-!     else
-!       call MOM_error(fatal, "CorAdCalc encountered an OBC segment of indeterminate direction.")
-!     endif
+      if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
+          enddo
+        endif
+      endif
     enddo ; endif
+    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      ! Now project thicknesses across cell-corner points in the OBCs.  The two
+      ! projections have to occur in sequence and can not be combined easily.
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+            if (Area_h(i,j) + Area_h(i+1,j) > 0.0) then
+              hArea_u(I,j+1) = hArea_u(I,j) * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / &
+                                               (Area_h(i,j) + Area_h(i+1,j)))
+            else ; hArea_u(I,j+1) = 0.0 ; endif
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+            if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.0) then
+              hArea_u(I,j) = hArea_u(I,j+1) * ((Area_h(i,j) + Area_h(i+1,j)) / &
+                                               (Area_h(i,j+1) + Area_h(i+1,j+1)))
+            else ; hArea_u(I,j) = 0.0 ; endif
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do J = max(Jsq-1,OBC%segment(n)%HI%JsdB), min(Jeq+1,OBC%segment(n)%HI%JedB)
+            if (Area_h(i,j) + Area_h(i,j+1) > 0.0) then
+              hArea_v(i+1,J) = hArea_v(i,J) * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / &
+                                               (Area_h(i,j) + Area_h(i,j+1)))
+            else ; hArea_v(i+1,J) = 0.0 ; endif
+          enddo
+        endif
+      elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+          do J = max(Jsq-1,OBC%segment(n)%HI%JsdB), min(Jeq+1,OBC%segment(n)%HI%JedB)
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+            if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.0) then
+              hArea_v(i,J) = hArea_v(i+1,J) * ((Area_h(i,j) + Area_h(i,j+1)) / &
+                                               (Area_h(i+1,j) + Area_h(i+1,j+1)))
+            else ; hArea_v(i,J) = 0.0 ; endif
+          enddo
+        endif
+      endif
+    enddo ; endif
+
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * &
@@ -324,9 +363,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
       if (Area_q(i,j) > 0.0) then
-!      The previous form (below) was mathematically equivalent.
-!        hArea_q = ((Area_h(i,j) * h(i,j,k) + Area_h(i+1,j+1) * h(i+1,j+1,k)) + &
-!                   (Area_h(i,j+1) * h(i,j+1,k) + Area_h(i+1,j) * h(i+1,j,k)))
         hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
         Ih = Area_q(i,j) / (hArea_q + h_neglect*Area_q(i,j))
       endif
