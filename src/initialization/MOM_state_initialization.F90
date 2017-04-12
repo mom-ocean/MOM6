@@ -1560,15 +1560,15 @@ subroutine compute_global_grid_integrals(G)
   type(ocean_grid_type), intent(inout) :: G
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
-  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming  
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
   tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  G%areaT_global = reproducing_sum(tmpForSumming)  
+  G%areaT_global = reproducing_sum(tmpForSumming)
   G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 
