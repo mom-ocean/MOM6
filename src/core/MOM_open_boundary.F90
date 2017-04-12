@@ -27,6 +27,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+public open_boundary_apply_normal_flow
 public open_boundary_config
 public open_boundary_init
 public open_boundary_query
@@ -39,7 +40,7 @@ public update_obc_segment_data
 public fill_OBC_halos
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
-
+public open_boundary_zero_normal_flow
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -1361,7 +1362,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   enddo
 
   ! Actually update u_new, v_new
-  call apply_OBC_normal_flow(OBC, G, u_new, v_new)
+  call open_boundary_apply_normal_flow(OBC, G, u_new, v_new)
 
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u_new, v_new, G%Domain)
@@ -1370,7 +1371,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
 end subroutine radiation_open_bdry_conds
 
 !> Applies OBC values stored in segments to 3d u,v fields
-subroutine apply_OBC_normal_flow(OBC, G, u, v)
+subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
   ! Arguments
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
   type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
@@ -1401,7 +1402,39 @@ subroutine apply_OBC_normal_flow(OBC, G, u, v)
     endif
   enddo
 
-end subroutine apply_OBC_normal_flow
+end subroutine open_boundary_apply_normal_flow
+
+!> Applies zero values to 3d u,v fields on OBC segments
+subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
+  ! Arguments
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open boundaries
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
+  ! Local variables
+  integer :: i, j, k, n
+  type(OBC_segment_type), pointer :: segment
+
+  if (.not.associated(OBC)) return ! Bail out if OBC is not available
+
+  do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) then
+      cycle
+    elseif (segment%is_E_or_W) then
+      I=segment%HI%IscB
+      do k=1,G%ke ;  do j=segment%HI%jsc,segment%HI%jec
+        u(I,j,k) = 0.
+      enddo; enddo
+    elseif (segment%is_N_or_S) then
+      J=segment%HI%JscB
+      do k=1,G%ke ;  do i=segment%HI%isc,segment%HI%iec
+        v(i,J,k) = 0.
+      enddo; enddo
+    endif
+  enddo
+
+end subroutine open_boundary_zero_normal_flow
 
 !> Calculate the tangential gradient of the normal flow at the boundary q-points.
 subroutine gradient_at_q_points(G,segment,uvel,vvel)
