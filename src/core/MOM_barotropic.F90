@@ -145,6 +145,28 @@ implicit none ; private
 public btcalc, bt_mass_source, btstep, barotropic_init, barotropic_end
 public register_barotropic_restarts, set_dtbt
 
+type, private :: BT_OBC_type
+  real, dimension(:,:), pointer :: &
+    Cg_u => NULL(), &     ! The external wave speed at u-points, in m s-1.
+    Cg_v => NULL(), &     ! The external wave speed at u-points, in m s-1.
+    H_u => NULL(), &      ! The total thickness at the u-points, in m or kg m-2.
+    H_v => NULL(), &      ! The total thickness at the v-points, in m or kg m-2.
+    uhbt => NULL(), &     ! The zonal and meridional barotropic thickness fluxes
+    vhbt => NULL(), &     ! specified for open boundary conditions (if any),
+                          ! in units of m3 s-1.
+    ubt_outer => NULL(), & ! The zonal and meridional velocities just outside
+    vbt_outer => NULL(), & ! the domain, as set by the open boundary conditions,
+                           ! in units of m s-1.
+    eta_outer_u => NULL(), & ! The surface height outside of the domain at a
+    eta_outer_v => NULL()    ! u- or v- point with an open boundary condition,
+                             ! in units of m or kg m-2.
+  logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
+  logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
+  integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
+  integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
+  logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
+end type BT_OBC_type
+
 type, public :: barotropic_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: frhatu
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: frhatv
@@ -200,6 +222,9 @@ type, public :: barotropic_CS ; private
     q_D             ! f / D at PV points, in m-1 s-1.
 
   real, pointer, dimension(:,:,:) :: frhatu1 => NULL(), frhatv1 => NULL() ! Predictor values.
+
+  type(BT_OBC_type) :: BT_OBC !< A structure with all of this module's fields
+                              !! for applying open boundary conditions.
 
   real    :: Rho0            !   The density used in the Boussinesq
                              ! approximation, in kg m-3.
@@ -355,28 +380,6 @@ end type local_BT_cont_v_type
 type, private :: memory_size_type
   integer :: isdw, iedw, jsdw, jedw ! The memory limits of the wide halo arrays.
 end type memory_size_type
-
-
-type, private :: BT_OBC_type
-  real, dimension(:,:), pointer :: &
-    Cg_u => NULL(), &     ! The external wave speed at u-points, in m s-1.
-    Cg_v => NULL(), &     ! The external wave speed at u-points, in m s-1.
-    H_u => NULL(), &      ! The total thickness at the u-points, in m or kg m-2.
-    H_v => NULL(), &      ! The total thickness at the v-points, in m or kg m-2.
-    uhbt => NULL(), &     ! The zonal and meridional barotropic thickness fluxes
-    vhbt => NULL(), &     ! specified for open boundary conditions (if any),
-                          ! in units of m3 s-1.
-    ubt_outer => NULL(), & ! The zonal and meridional velocities just outside
-    vbt_outer => NULL(), & ! the domain, as set by the open boundary conditions,
-                           ! in units of m s-1.
-    eta_outer_u => NULL(), & ! The surface height outside of the domain at a
-    eta_outer_v => NULL()    ! u- or v- point with an open boundary condition,
-                             ! in units of m or kg m-2.
-  logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
-  logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
-  integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
-  integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
-end type BT_OBC_type
 
 integer :: id_clock_sync=-1, id_clock_calc=-1
 integer :: id_clock_calc_pre=-1, id_clock_calc_post=-1
@@ -659,8 +662,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   integer :: nfilter
 
   logical :: apply_OBCs, apply_OBC_flather, apply_OBC_open
-  type(BT_OBC_type) :: BT_OBC  ! A structure with all of this module's fields
-                               ! for applying open boundary conditions.
   type(memory_size_type) :: MS
   character(len=200) :: mesg
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
@@ -719,12 +720,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-  apply_OBCs = .false. ; BT_OBC%apply_u_OBCs = .false. ; BT_OBC%apply_v_OBCs = .false.
+  apply_OBCs = .false. ; CS%BT_OBC%apply_u_OBCs = .false. ; CS%BT_OBC%apply_v_OBCs = .false.
   apply_OBC_open = .false.
   apply_OBC_flather = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
-    BT_OBC%apply_u_OBCs = OBC%open_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
-    BT_OBC%apply_v_OBCs = OBC%open_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
+    CS%BT_OBC%apply_u_OBCs = OBC%open_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
+    CS%BT_OBC%apply_v_OBCs = OBC%open_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
     apply_OBC_flather = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
     apply_OBC_open = OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally
     apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
@@ -1001,8 +1002,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, ievf-ie, use_BT_cont, &
-                                     Datu, Datv, BTCL_u, BTCL_v)
+    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, G, GV, MS, ievf-ie, use_BT_cont, &
+                       Datu, Datv, BTCL_u, BTCL_v)
   endif
 
 !   Here the vertical average accelerations due to the Coriolis, advective,
@@ -1644,7 +1645,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         ioff = 0; joff = 1
       endif
 
-      if (BT_OBC%apply_u_OBCs) then  ! save the old value of ubt and uhbt
+      if (CS%BT_OBC%apply_u_OBCs) then  ! save the old value of ubt and uhbt
 !GOMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,ubt_prev,ubt,uhbt_prev,  &
 !GOMP                                  uhbt,ubt_sum_prev,ubt_sum,uhbt_sum_prev, &
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -1654,7 +1655,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         enddo ; enddo
       endif
 
-      if (BT_OBC%apply_v_OBCs) then  ! save the old value of vbt and vhbt
+      if (CS%BT_OBC%apply_v_OBCs) then  ! save the old value of vbt and vhbt
 !GOMP parallel do default(none) shared(isv,iev,jsv,jev,ioff,joff,vbt_prev,vbt,vhbt_prev,  &
 !GOMP                                  vhbt,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
 !GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
@@ -1672,7 +1673,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !GOMP                               use_BT_cont,BTCL_v,vhbt0,Datv,wt_vel,azon,bzon,czon, &
 !GOMP                               dzon,Cor_ref_u,gtot_E,gtot_W,u_accel_bt,bt_rem_u,    &
 !GOMP                               BT_force_u,uhbt,BTCL_u,uhbt0,Datu,Cor_u,Cor_v,       &
-!GOMP                               PFu,PFv,ubt_trans,vbt_trans,apply_v_OBCs,BT_OBC,     &
+!GOMP                               PFu,PFv,ubt_trans,vbt_trans,apply_v_OBCs,            &
 !GOMP                               vbt_prev,vhbt_prev,apply_u_OBCs,ubt_prev,uhbt_prev ) &
 !GOMP                       private(vel_prev)
     if (MOD(n+G%first_direction,2)==1) then
@@ -1711,7 +1712,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP do
         do J=jsv-1,jev ; do i=isv-1,iev+1 ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
           vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
@@ -1754,7 +1755,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
-     if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP do
         do j=jsv,jev ; do I=isv-1,iev ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
           ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
@@ -1798,7 +1799,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
         enddo ; enddo
       endif
-      if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+      if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP do
         do j=jsv-1,jev+1 ; do I=isv-1,iev ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
           ubt(I,j) = ubt_prev(I,j); uhbt(I,j) = uhbt_prev(I,j)
@@ -1840,7 +1841,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
         enddo ; enddo
       endif
-      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP do
         do J=jsv-1,jev ; do i=isv,iev ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
           vbt(i,J) = vbt_prev(i,J); vhbt(i,J) = vhbt_prev(i,J)
@@ -1891,9 +1892,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !GOMP end parallel
 
     if (apply_OBCs) then
-      if (BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+      if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
-!GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd,BT_OBC)
+!GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
         do j=js,je ; do I=is-1,ie
           if (OBC%segnum_u(I,j) /= OBC_NONE) then
             ubt_sum(I,j)=ubt_sum_prev(I,j); uhbt_sum(I,j)=uhbt_sum_prev(I,j) ; ubt_wtd(I,j)=ubt_wtd_prev(I,j)
@@ -1901,9 +1902,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         enddo ; enddo
       endif
 
-      if (BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+      if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
-!GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd,BT_OBC)
+!GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
         do J=js-1,je ; do I=is,ie
           if (OBC%segnum_v(i,J) /= OBC_NONE) then
             vbt_sum(i,J)=vbt_sum_prev(i,J); vhbt_sum(i,J)=vhbt_sum_prev(i,J) ; vbt_wtd(i,J)=vbt_wtd_prev(i,J)
@@ -1912,17 +1913,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       endif
 
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
-           ubt_trans, vbt_trans, eta, ubt_old, vbt_old, BT_OBC, &
+           ubt_trans, vbt_trans, eta, ubt_old, vbt_old, CS%BT_OBC, &
            G, MS, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
            uhbt0, vhbt0)
-      if (BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
+      if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
         if (OBC%segnum_u(I,j) /= OBC_NONE) then
           ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
           uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
           ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
         endif
       enddo ; enddo ; endif
-      if (BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
+      if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
         if (OBC%segnum_v(i,J) /= OBC_NONE) then
           vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
           vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
@@ -1943,7 +1944,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
       ! Should there be a concern if eta drops below 0 or G%bathyT?
     enddo ; enddo
-    if (apply_OBCs) call apply_eta_OBCs(OBC, eta, ubt_old, vbt_old, BT_OBC, &
+    if (apply_OBCs) call apply_eta_OBCs(OBC, eta, ubt_old, vbt_old, CS%BT_OBC, &
                                         G, MS, iev-ie, dtbt)
 
     if (do_hifreq_output) then
@@ -2147,8 +2148,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (find_etaav) call complete_group_pass(CS%pass_etaav, G%Domain)
     call complete_group_pass(CS%pass_ubta_uhbta, G%Domain)
   endif
-
-  if (apply_OBCs) call destroy_BT_OBC(BT_OBC)
 
 end subroutine btstep
 
@@ -2729,23 +2728,29 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
                            "yet fully implemented with wide barotropic halos.")
   endif
 
-  allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%Cg_u(:,:) = 0.0
-  allocate(BT_OBC%H_u(isdw-1:iedw,jsdw:jedw))         ; BT_OBC%H_u(:,:) = 0.0
-  allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%uhbt(:,:) = 0.0
-  allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw))   ; BT_OBC%ubt_outer(:,:) = 0.0
-  allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw)) ; BT_OBC%eta_outer_u(:,:) = 0.0
+  if (.not. BT_OBC%is_alloced) then
+    allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%Cg_u(:,:) = 0.0
+    allocate(BT_OBC%H_u(isdw-1:iedw,jsdw:jedw))         ; BT_OBC%H_u(:,:) = 0.0
+    allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%uhbt(:,:) = 0.0
+    allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw))   ; BT_OBC%ubt_outer(:,:) = 0.0
+    allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw)) ; BT_OBC%eta_outer_u(:,:) = 0.0
 
-  allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%Cg_v(:,:) = 0.0
-  allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw))         ; BT_OBC%H_v(:,:) = 0.0
-  allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%vhbt(:,:) = 0.0
-  allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
-  allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
+    allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%Cg_v(:,:) = 0.0
+    allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw))         ; BT_OBC%H_v(:,:) = 0.0
+    allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%vhbt(:,:) = 0.0
+    allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
+    allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
+    BT_OBC%is_alloced = .true.
+  endif
 
   if (BT_OBC%apply_u_OBCs) then
     if (OBC%specified_u_BCs_exist_globally) then
       do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_E_or_W .and. segment%specified) then
+          do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
+            BT_OBC%uhbt(I,j) = 0.
+          enddo ; enddo
           do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
             BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + segment%normal_trans(I,j,k)
           enddo ; enddo ; enddo
@@ -2784,6 +2789,9 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
       do n = 1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (segment%is_N_or_S .and. segment%specified) then
+          do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
+            BT_OBC%vhbt(i,J) = 0.
+          enddo ; enddo
           do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
             BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + segment%normal_trans(i,J,k)
           enddo ; enddo ; enddo
@@ -2822,19 +2830,21 @@ end subroutine set_up_BT_OBC
 subroutine destroy_BT_OBC(BT_OBC)
   type(BT_OBC_type), intent(inout) :: BT_OBC
 
-  deallocate(BT_OBC%Cg_u)
-  deallocate(BT_OBC%H_u)
-  deallocate(BT_OBC%uhbt)
-  deallocate(BT_OBC%ubt_outer)
-  deallocate(BT_OBC%eta_outer_u)
+  if (BT_OBC%is_alloced) then
+    deallocate(BT_OBC%Cg_u)
+    deallocate(BT_OBC%H_u)
+    deallocate(BT_OBC%uhbt)
+    deallocate(BT_OBC%ubt_outer)
+    deallocate(BT_OBC%eta_outer_u)
 
-  deallocate(BT_OBC%Cg_v)
-  deallocate(BT_OBC%H_v)
-  deallocate(BT_OBC%vhbt)
-  deallocate(BT_OBC%vbt_outer)
-  deallocate(BT_OBC%eta_outer_v)
+    deallocate(BT_OBC%Cg_v)
+    deallocate(BT_OBC%H_v)
+    deallocate(BT_OBC%vhbt)
+    deallocate(BT_OBC%vbt_outer)
+    deallocate(BT_OBC%eta_outer_v)
+    BT_OBC%is_alloced = .false.
+  endif
 end subroutine destroy_BT_OBC
-
 
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_grid_type),                  intent(inout) :: G
@@ -4437,6 +4447,8 @@ subroutine barotropic_end(CS)
   if (CS%bound_BT_corr) then
     DEALLOC_(CS%eta_cor_bound)
   endif
+
+  call destroy_BT_OBC(CS%BT_OBC)
 
   deallocate(CS)
 end subroutine barotropic_end
