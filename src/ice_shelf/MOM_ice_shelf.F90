@@ -2063,7 +2063,7 @@ end subroutine initialize_shelf_mass
 
 !> Updates the ice shelf mass using data from a file.
 subroutine update_shelf_mass(G, CS, Time, fluxes)
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(inout) :: G
   type(ice_shelf_CS),         pointer    :: CS
   type(time_type),            intent(in) :: Time
   type(forcing),       intent(inout) :: fluxes
