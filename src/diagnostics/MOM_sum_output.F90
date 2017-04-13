@@ -110,7 +110,6 @@ type, public :: sum_output_CS ; private
                                 ! 0 by default.
   logical :: use_temperature    !   If true, temperature and salinity are state
                                 ! variables.
-  logical :: use_repro_sum      !   If true, use a bitwise reproducing sum.
   real    :: fresh_water_input  !   The total mass of fresh water added by
                                 ! surface fluxes since the last time that
   real    :: mass_prev          !   The total ocean mass the last time that
@@ -199,10 +198,6 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   call get_param(param_file, mod, "WRITE_STOCKS", CS%write_stocks, &
                  "If true, write the integrated tracer amounts to stdout \n"//&
                  "when the energy files are written.", default=.true.)
-  CS%use_repro_sum = .true.
-!  call get_param(param_file, mod, "USE_REPRODUCING_SUM", CS%use_repro_sum, &
-!                 "If true, use the integer sums that reproduce across PE count.", &
-!                 default = .true.)
   call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
@@ -454,73 +449,33 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   enddo ; enddo
 
   if (GV%Boussinesq) then
-    if (CS%use_repro_sum) then
-      tmp1(:,:,:) = 0.0
+    tmp1(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
+    enddo ; enddo ; enddo
+    mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+    do k=1,nz ; vol_lay(k) = (H_to_m/H_to_kg_m2)*mass_lay(k) ; enddo
+  else
+    tmp1(:,:,:) = 0.0
+    if (CS%do_APE_calc) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
+        tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = (H_to_m/H_to_kg_m2)*mass_lay(k) ; enddo
+
+      call find_eta(h, tv, GV%g_Earth, G, GV, eta)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
+      enddo ; enddo ; enddo
+      vol_tot = H_to_m*reproducing_sum(tmp1, sums=vol_lay)
     else
-      do k=1,nz
-        vol_lay(k) = 0.0
-        do j=js,je ; do i=is,ie
-          vol_lay(k) = vol_lay(k) + h(i,j,k) * areaTm(i,j)
-        enddo ; enddo
-      enddo
-      call sum_across_PEs(vol_lay,nz)
-      do k=1,nz ; mass_lay(k) = H_to_kg_m2*vol_lay(k) ; enddo
-      do k=1,nz ; vol_lay(k) = H_to_m*vol_lay(k) ; enddo
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+      enddo ; enddo ; enddo
+      mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+      do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
     endif
-  else
-    if (CS%use_repro_sum) then
-      tmp1(:,:,:) = 0.0
-      if (CS%do_APE_calc) then
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-
-        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        vol_tot = H_to_m*reproducing_sum(tmp1, sums=vol_lay)
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
-      endif
-    else ! not use_repro_sum
-      do k=1,nz
-        mass_lay(k) = 0.0
-        do j=js,je ; do i=is,ie
-          mass_lay(k) = mass_lay(k) + H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo
-      enddo
-      if (CS%do_APE_calc) then
-        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-
-        do k=1,nz
-          vol_lay(k) = 0.0
-          do j=js,je ; do i=is,ie
-            vol_lay(k) = vol_lay(k) + (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
-          enddo ; enddo
-        enddo
-        call sum_across_PEs(vol_lay,nz)
-        call sum_across_PEs(mass_lay,nz)
-      else
-        call sum_across_PEs(mass_lay,nz)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
-      endif
-    endif ! use_repro_sum
   endif ! Boussinesq
-  if (.not.CS%use_repro_sum) then
-    mass_tot = 0.0
-    do k=1,nz ; mass_tot = mass_tot + mass_lay(k) ; enddo
-  endif
 
   nTr_stocks = 0
   if (present(tracer_CSp)) then
@@ -540,10 +495,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
 
   if (CS%previous_calls == 0) then
     CS%mass_prev = mass_tot ; CS%fresh_water_input = 0.0
-    if (CS%use_repro_sum) then
-      CS%mass_prev_EFP = mass_EFP
-      CS%fresh_water_in_EFP = real_to_EFP(0.0)
-    endif
+
+    CS%mass_prev_EFP = mass_EFP
+    CS%fresh_water_in_EFP = real_to_EFP(0.0)
 
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
@@ -634,22 +588,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   endif
 
 ! Calculate the Kinetic Energy integrated over each layer.
-  if (CS%use_repro_sum) then
-    tmp1(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
-              (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
-    enddo ; enddo ; enddo
-  else
-    do k=1,nz
-      KE(k) = 0.0
-      do j=js,je ; do i=is,ie
-         KE(k) = KE(k) + 0.25 * (areaTm(i,j) * h(i,j,k)) * &
-              (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
-      enddo ; enddo
-      KE(k) = H_to_kg_m2 * KE(k)
-    enddo
-  endif
+  tmp1(:,:,:) = 0.0
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
+            (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
+  enddo ; enddo ; enddo
 
 !   Calculate the Available Potential Energy integrated over each
 ! interface.  With a nonlinear equation of state or with a bulk
@@ -680,56 +623,25 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo
       enddo ; enddo
     endif
-    if (.not. CS%use_repro_sum) then
-      do j=js,je ; do i=is,ie ; do k=nz,1,-1
-        PE(K) = PE(K) + PE_pt(i,j,K)
-      enddo ; enddo ; enddo
-    endif
   endif
 
-  if (CS%use_repro_sum) then
-    KE_tot = reproducing_sum(tmp1, sums=KE)
-    PE_tot = 0.0
-    if (CS%do_APE_calc) &
-      PE_tot = reproducing_sum(PE_pt, sums=PE)
-    toten = KE_tot + PE_tot
-  else
-    pe_num = pe_here()+1-root_pe()
-    allocate(toten_PE(num_pes()))
-    toten_PE(:) = 0.0
-    do k=1,nz ; toten_PE(pe_num) = toten_PE(pe_num) + (PE(K)+KE(k)) ; enddo
-
-    call sum_across_PEs(toten_PE,num_pes())
-    toten = 0.0
-    do k=1,num_pes() ; toten = toten + toten_PE(k) ; enddo
-    deallocate(toten_PE)
-
-    call sum_across_PEs(KE,nz)
-    if (CS%do_APE_calc) call sum_across_PEs(PE,nz)
-  endif
+  KE_tot = reproducing_sum(tmp1, sums=KE)
+  PE_tot = 0.0
+  if (CS%do_APE_calc) &
+    PE_tot = reproducing_sum(PE_pt, sums=PE)
+  toten = KE_tot + PE_tot
 
   Salt = 0.0 ; Heat = 0.0
   if (CS%use_temperature) then
-    if (CS%use_repro_sum) then
-      Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
-                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
-        Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
-                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
-      enddo ; enddo ; enddo
-      Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
-      Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
-    else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Salt = Salt + tv%S(i,j,k)*h(i,j,k)*areaTm(i,j)
-        Heat = Heat + tv%T(i,j,k)*h(i,j,k)*areaTm(i,j)
-      enddo ; enddo ; enddo
-      Salt = H_to_kg_m2 * Salt
-      Heat = (H_to_kg_m2) * (tv%C_p * Heat)
-      call sum_across_PEs(Salt)
-      call sum_across_PEs(Heat)
-    endif
+    Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
+                      (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
+      Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
+                      (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
+    enddo ; enddo ; enddo
+    Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
+    Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
   endif
 
 ! Calculate the maximum CFL numbers.
@@ -755,56 +667,44 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
 
-! Sum the various quantities across all the processors.  This sum
-! is NOT guaranteed to be bitwise reproducible, even on the same
-! decomposition.
   call sum_across_PEs(CS%ntrunc)
+  !   Sum the various quantities across all the processors.  This sum is NOT
+  ! guaranteed to be bitwise reproducible, even on the same decomposition.
+  !   The sum of Tr_stocks should be reimplemented using the reproducing sums.
   if (nTr_stocks > 0) call sum_across_PEs(Tr_stocks,nTr_stocks)
+
   call max_across_PEs(max_CFL(1))
   call max_across_PEs(max_CFL(2))
   if (CS%use_temperature .and. CS%previous_calls == 0) then
     CS%salt_prev = Salt ; CS%net_salt_input = 0.0
     CS%heat_prev = Heat ; CS%net_heat_input = 0.0
-    if (CS%use_repro_sum) then
-      CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
-      CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
-    endif
+
+    CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
+    CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
   Irho0 = 1.0/GV%Rho0
 
-  if (CS%use_repro_sum) then
-    if (CS%use_temperature) then
-      Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
-      Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
-      Salt_chg = EFP_to_real(Salt_chg_EFP) ; Salt_anom = EFP_to_real(Salt_anom_EFP)
-      Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
-      Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
-      Heat_chg = EFP_to_real(Heat_chg_EFP) ; Heat_anom = EFP_to_real(Heat_anom_EFP)
-    endif
-
-    mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
-    salin_mass_in = 0.0
-    if (GV%Boussinesq) then
-      mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-    else
-      ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
-      mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-      if (CS%use_temperature) &
-        salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)
-    endif
-    mass_chg = EFP_to_real(mass_chg_EFP)
-    mass_anom = EFP_to_real(mass_anom_EFP) - salin_mass_in
-  else
-    Salt_chg = Salt - CS%salt_prev  ; Salt_anom = Salt_chg - CS%net_salt_input
-    Heat_chg = Heat - CS%heat_prev  ; Heat_anom = Heat_chg - CS%net_heat_input
-    mass_chg = mass_tot - CS%mass_prev
-    if (GV%Boussinesq) then
-      mass_anom = mass_chg - CS%fresh_water_input
-    else
-      ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
-      mass_anom = mass_chg - (CS%fresh_water_input + 0.001*CS%net_salt_input)
-    endif
+  if (CS%use_temperature) then
+    Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
+    Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
+    Salt_chg = EFP_to_real(Salt_chg_EFP) ; Salt_anom = EFP_to_real(Salt_anom_EFP)
+    Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
+    Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
+    Heat_chg = EFP_to_real(Heat_chg_EFP) ; Heat_anom = EFP_to_real(Heat_anom_EFP)
   endif
+
+  mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
+  salin_mass_in = 0.0
+  if (GV%Boussinesq) then
+    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
+  else
+    ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
+    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
+    if (CS%use_temperature) &
+      salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)
+  endif
+  mass_chg = EFP_to_real(mass_chg_EFP)
+  mass_anom = EFP_to_real(mass_anom_EFP) - salin_mass_in
 
   if (CS%use_temperature) then
     salin = Salt / mass_tot ; salin_anom = Salt_anom / mass_tot
@@ -961,12 +861,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     CS%salt_prev = Salt ; CS%net_salt_input = 0.0
     CS%heat_prev = Heat ; CS%net_heat_input = 0.0
   endif
-  if (CS%use_repro_sum) then
-    CS%mass_prev_EFP = mass_EFP ; CS%fresh_water_in_EFP = real_to_EFP(0.0)
-    if (CS%use_temperature) then
-      CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
-      CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
-    endif
+
+  CS%mass_prev_EFP = mass_EFP ; CS%fresh_water_in_EFP = real_to_EFP(0.0)
+  if (CS%use_temperature) then
+    CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
+    CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
 end subroutine write_energy
 
@@ -1078,30 +977,17 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
   if ((CS%use_temperature) .or. ASSOCIATED(fluxes%lprec) .or. &
       ASSOCIATED(fluxes%evap)) then
-    if (CS%use_repro_sum) then
-      FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
-      heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
-      salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
-    else
-      FW_input = 0.0 ; heat_input = 0.0 ; salt_input = 0.0
-      do j=js,je ; do i=is,ie
-        FW_input   = FW_input   + FW_in(i,j)
-        heat_input = heat_input + heat_in(i,j)
-        salt_input = salt_input + salt_in(i,j)
-      enddo ; enddo
-      inputs(1) = FW_input ; inputs(2) = heat_input ; inputs(3) = salt_input
-      call sum_across_PEs(inputs,3)
-      FW_input = inputs(1) ; heat_input = inputs(2) ; salt_input = inputs(3)
-    endif
+    FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
+    heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
+    salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
 
     CS%fresh_water_input = CS%fresh_water_input + FW_input
     CS%net_salt_input    = CS%net_salt_input    + salt_input
     CS%net_heat_input    = CS%net_heat_input    + heat_input
-    if (CS%use_repro_sum) then
-      CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
-      CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
-      CS%net_heat_in_EFP    = CS%net_heat_in_EFP    + heat_in_EFP
-    endif
+
+    CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
+    CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
+    CS%net_heat_in_EFP    = CS%net_heat_in_EFP    + heat_in_EFP
   endif
 
 end subroutine accumulate_net_input
@@ -1176,6 +1062,7 @@ subroutine create_depth_list(G, CS)
     Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
+  ! These sums reproduce across PEs because the arrays are only nonzero on one PE.
   call sum_across_PEs(Dlist, mls+1)
   call sum_across_PEs(Arealist, mls+1)
 
