@@ -653,19 +653,19 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     enddo
     
     ! Project thickness outward across OBCs using a zero-gradient condition.
-!## if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-!##   do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-!##     if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-!##       do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
-!##       Dmin(I) = G%bathyT(i,j) * m_to_H
-!##       zi_dir(I) = -1
-!##     elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-!##       do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; enddo
-!##       Dmin(I) = G%bathyT(i+1,j) * m_to_H
-!##       zi_dir(I) = 1
-!##     endif
-!##   endif ; enddo
-!## endif ; endif
+    if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+      do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
+          Dmin(I) = G%bathyT(i,j) * m_to_H
+          zi_dir(I) = -1
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+          do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; enddo
+          Dmin(I) = G%bathyT(i+1,j) * m_to_H
+          zi_dir(I) = 1
+        endif
+      endif ; enddo
+    endif ; endif
 
 !    The following block calculates the thicknesses at velocity
 !  grid points for the vertical viscosity (hvel[k]).  Near the
@@ -815,19 +815,19 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     enddo
 
     ! Project thickness outward across OBCs using a zero-gradient condition.
-!## if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-!##   do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-!##     if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-!##       do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
-!##       Dmin(I) = G%bathyT(i,j) * m_to_H
-!##       zi_dir(I) = -1
-!##     elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-!##       do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; enddo
-!##       Dmin(i) = G%bathyT(i,j+1) * m_to_H
-!##       zi_dir(i) = 1
-!##     endif
-!##   endif ; enddo
-!## endif ; endif
+    if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+      do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
+          Dmin(I) = G%bathyT(i,j) * m_to_H
+          zi_dir(I) = -1
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+          do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; enddo
+          Dmin(i) = G%bathyT(i,j+1) * m_to_H
+          zi_dir(i) = 1
+        endif
+      endif ; enddo
+    endif ; endif
 
 !    The following block calculates the thicknesses at velocity
 !  grid points for the vertical viscosity (hvel[k]).  Near the
@@ -1100,15 +1100,15 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
       endif ; enddo ; enddo
-!##   if (do_OBCs) then
-!##     do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-!##       if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-!##         do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
-!##       elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-!##         do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i+1,j,k) ; enddo
-!##       endif
-!##     endif ; enddo
-!##   endif
+      if (do_OBCs) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i+1,j,k) ; enddo
+          endif
+        endif ; enddo
+      endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         a(i,K) = a(i,K) + Kv_add(i,K)
       endif ; enddo ; enddo
@@ -1116,15 +1116,15 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
       endif ; enddo ; enddo
-!##   if (do_OBCs) then
-!##     do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-!##       if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-!##         do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
-!##       elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-!##         do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j+1,k) ; enddo
-!##       endif
-!##     endif ; enddo
-!##   endif
+      if (do_OBCs) then
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j+1,k) ; enddo
+          endif
+        endif ; enddo
+      endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         a(i,K) = a(i,K) + Kv_add(i,K)
       endif ; enddo ; enddo
@@ -1210,21 +1210,21 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       max_nk = max(max_nk,ceiling(nk_visc(i) - 1.0))
     endif ; enddo
 
-!## if (do_OBCS) then ; if (work_on_u) then
-!##   do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-!##     if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
-!##       u_star(I) = fluxes%ustar(i,j)
-!##     if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
-!##       u_star(I) = fluxes%ustar(i+1,j)
-!##   endif ; enddo
-!## else
-!##   do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-!##     if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
-!##       u_star(i) = fluxes%ustar(i,j)
-!##     if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
-!##       u_star(i) = fluxes%ustar(i,j+1)
-!##   endif ; enddo
-!## endif ; endif
+    if (do_OBCS) then ; if (work_on_u) then
+      do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
+          u_star(I) = fluxes%ustar(i,j)
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
+          u_star(I) = fluxes%ustar(i+1,j)
+      endif ; enddo
+    else
+      do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
+          u_star(i) = fluxes%ustar(i,j)
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
+          u_star(i) = fluxes%ustar(i,j+1)
+      endif ; enddo
+    endif ; endif
 
     do k=1,max_nk ; do i=is,ie ; if (do_i(i)) then
       if (k+1 <= nk_visc(i)) then ! This layer is all in the ML.
