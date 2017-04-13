@@ -374,7 +374,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, &
+                     CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -437,7 +438,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, &
+                     CS%vertvisc_CSp, CS%OBC)
   call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -507,7 +509,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
