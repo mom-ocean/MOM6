@@ -353,7 +353,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) D_v(i,J) = G%bathyT(i,j)
         if (OBC%segment(n)%direction == OBC_DIRECTION_S) D_v(i,J) = G%bathyT(i,j+1)
       enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= je)) then
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
       do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) D_u(I,j) = G%bathyT(i,j)
         if (OBC%segment(n)%direction == OBC_DIRECTION_W) D_u(I,j) = G%bathyT(i+1,j)
@@ -374,7 +374,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           D_u(I,j) = D_u(I,j+1) ; mask_u(I,j) = 0.0
         endif
       enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= je)) then
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
       do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           D_v(i+1,J) = D_v(i,J) ; mask_v(i+1,J) = 0.0
