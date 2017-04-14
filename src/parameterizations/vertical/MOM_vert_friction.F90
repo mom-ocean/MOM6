@@ -651,7 +651,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
       Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * m_to_H
       zi_dir(I) = 0
     enddo
-    
+
     ! Project thickness outward across OBCs using a zero-gradient condition.
     if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
       do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
