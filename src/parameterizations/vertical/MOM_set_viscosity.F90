@@ -203,7 +203,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
                 ! velocity point, in PSU.
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
                 ! to a velocity point, in kg m-3.
-        
+
   real :: h_vel_pos        ! The arithmetic mean thickness at a velocity point
                            ! plus H_neglect to avoid 0 values, in H.
   real :: ustarsq          ! 400 times the square of ustar, times
@@ -461,20 +461,28 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             do k=1,nz
               h_at_vel(I,k) = h(i,j,k) ; h_vel(I,k) = h(i,j,k)
             enddo
-            do k=1,nkmb
-              if (use_BBL_EOS) then
+            if (use_BBL_EOS) then
+              do k=1,nz
                 T_vel(I,k) = tv%T(i,j,k) ; S_vel(I,k) = tv%S(i,j,k)
-              else ; Rml_vel(I,k) = Rml(i,j,k) ; endif
-            enddo
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(I,k) = Rml(i,j,k)
+              enddo
+            endif
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             do k=1,nz
               h_at_vel(I,k) = h(i+1,j,k) ; h_vel(I,k) = h(i+1,j,k)
             enddo
-            do k=1,nkmb
-              if (use_BBL_EOS) then
+            if (use_BBL_EOS) then
+              do k=1,nz
                 T_vel(I,k) = tv%T(i+1,j,k) ; S_vel(I,k) = tv%S(i+1,j,k)
-              else ; Rml_vel(I,k) = Rml(i+1,j,k) ; endif
-            enddo
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(I,k) = Rml(i+1,j,k)
+              enddo
+            endif
           endif
         endif ; enddo
       else
@@ -483,20 +491,28 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             do k=1,nz
               h_at_vel(i,k) = h(i,j,k) ; h_vel(i,k) = h(i,j,k)
             enddo
-            do k=1,nkmb
-              if (use_BBL_EOS) then
+            if (use_BBL_EOS) then
+              do k=1,nz
                 T_vel(i,k) = tv%T(i,j,k) ; S_vel(i,k) = tv%S(i,j,k)
-              else ; Rml_vel(i,k) = Rml(i,j,k) ; endif
-            enddo
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(i,k) = Rml(i,j,k)
+              enddo
+            endif
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             do k=1,nz
               h_at_vel(i,k) = h(i,j+1,k) ; h_vel(i,k) = h(i,j+1,k)
             enddo
-            do k=1,nkmb
-              if (use_BBL_EOS) then
+            if (use_BBL_EOS) then
+              do k=1,nz
                 T_vel(i,k) = tv%T(i,j+1,k) ; S_vel(i,k) = tv%S(i,j+1,k)
-              else ; Rml_vel(i,k) = Rml(i,j+1,k) ; endif
-            enddo
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(i,k) = Rml(i,j+1,k)
+              enddo
+            endif
           endif
         endif ; enddo
       endif
