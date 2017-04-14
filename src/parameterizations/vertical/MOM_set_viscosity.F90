@@ -460,6 +460,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
             do k=1,nz
               h_at_vel(I,k) = h(i,j,k) ; h_vel(I,k) = h(i,j,k)
+            enddo
+            do k=1,nkmb
               if (use_BBL_EOS) then
                 T_vel(I,k) = tv%T(i,j,k) ; S_vel(I,k) = tv%S(i,j,k)
               else ; Rml_vel(I,k) = Rml(i,j,k) ; endif
@@ -467,6 +469,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
             do k=1,nz
               h_at_vel(I,k) = h(i+1,j,k) ; h_vel(I,k) = h(i+1,j,k)
+            enddo
+            do k=1,nkmb
               if (use_BBL_EOS) then
                 T_vel(I,k) = tv%T(i+1,j,k) ; S_vel(I,k) = tv%S(i+1,j,k)
               else ; Rml_vel(I,k) = Rml(i+1,j,k) ; endif
@@ -478,6 +482,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
             do k=1,nz
               h_at_vel(i,k) = h(i,j,k) ; h_vel(i,k) = h(i,j,k)
+            enddo
+            do k=1,nkmb
               if (use_BBL_EOS) then
                 T_vel(i,k) = tv%T(i,j,k) ; S_vel(i,k) = tv%S(i,j,k)
               else ; Rml_vel(i,k) = Rml(i,j,k) ; endif
@@ -485,6 +491,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
             do k=1,nz
               h_at_vel(i,k) = h(i,j+1,k) ; h_vel(i,k) = h(i,j+1,k)
+            enddo
+            do k=1,nkmb
               if (use_BBL_EOS) then
                 T_vel(i,k) = tv%T(i,j+1,k) ; S_vel(i,k) = tv%S(i,j+1,k)
               else ; Rml_vel(i,k) = Rml(i,j+1,k) ; endif
