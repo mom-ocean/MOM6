@@ -33,8 +33,40 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public Kelvin_set_OBC_data
+public Kelvin_initialize
 
 contains
+
+!> This subroutine sets the properties of flow at open boundary conditions.
+subroutine Kelvin_initialize(OBC, G, h, param_file)
+  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
+                                             !! whether, where, and what open boundary
+                                             !! conditions are used.
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
+  type(param_file_type),  intent(in) :: param_file !< Parameter file structure
+
+  ! The following variables are used to set up the transport in the Kelvin example.
+  real :: time_sec, cff
+  real :: PI
+  character(len=40)  :: mod = "Kelvin_initialize" ! This subroutine's name.
+  integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: IsdB, IedB, JsdB, JedB
+  integer :: mode
+  real    :: fac, omega, x, y
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (.not.associated(OBC)) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
+        'Kelvin_set_OBC_data() was called but OBC type was not initialized!')
+
+  call get_param(param_file, mod, "KELVIN_WAVE_MODE", mode, &
+                 "Vertical Kelvin wave mode imposed at upstream open boundary.", &
+                 default=0)
+
+end subroutine Kelvin_initialize
 
 !> This subroutine sets the properties of flow at open boundary conditions.
 subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
@@ -51,6 +83,7 @@ subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
   character(len=40)  :: mod = "Kelvin_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
+  integer :: mode = 0
   real    :: fac, omega, x, y
   real    :: val1, val2
   type(OBC_segment_type), pointer :: segment
@@ -59,32 +92,43 @@ subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not.associated(OBC)) return
+  if (.not.associated(OBC)) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
+        'Kelvin_set_OBC_data() was called but OBC type was not initialized!')
+
+  time_sec = time_type_to_real(Time)
+  PI = 4.0*atan(1.0)
+
+  if (mode == 0) then
+    fac = 1.0
+    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
+    val1 = sin(omega * time_sec)
+  else
+    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
+  endif
 
   do n=1,OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
-
-    time_sec = time_type_to_real(Time)
-    PI = 4.0*atan(1.0)
-    fac = 1.0
-    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = sin(omega * time_sec)
+    ! Apply values to the inflow end only.
+    if (segment%Is_obc /= is - 1) cycle
 
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed
     do j=jsd,jed ; do I=IsdB,IedB
       x = 0.5 * 1000. * (G%geoLonT(i+1,j) + G%geoLonT(i,j))
       y = 0.5 * 1000. * (G%geoLatT(i+1,j) + G%geoLatT(i,j))
-      cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
-      val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
-      OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
-      OBC%ubt_outer(I,j) = val1 * cff / (0.5 *              &
+      if (mode == 0) then
+        cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+        val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
+        OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
+        OBC%ubt_outer(I,j) = val1 * cff / (0.5 *              &
                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
 ! New way, not yet
-!     segment%eta(I,j) = val2 * cos(omega * time_sec)
-!     segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
-!              (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+!       segment%eta(I,j) = val2 * cos(omega * time_sec)
+!       segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
+!                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+      else
+      endif
     enddo ; enddo
   enddo
 

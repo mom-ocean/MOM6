@@ -10,7 +10,8 @@ use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type
+use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
+use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_string_functions, only : uppercase
 use MOM_variables,     only : accel_diag_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -137,9 +138,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
                 ! average thickness in the denominator of q.  0 for land points.
     KE          ! Kinetic energy per unit mass, KE = (u^2 + v^2)/2, in m2 s-2.
   real, dimension(SZIB_(G),SZJ_(G)) :: &
+    hArea_u, &  ! The cell area weighted thickness interpolated to u points
+                ! times the effective areas, in H m2.
     KEx         ! The zonal gradient of Kinetic energy per unit mass,
                 ! KEx = d/dx KE, in m s-2.
   real, dimension(SZI_(G),SZJB_(G)) :: &
+    hArea_v, &  ! The cell area weighted thickness interpolated to v points
+                ! times the effective areas, in H m2.
     KEy         ! The meridonal gradient of Kinetic energy per unit mass,
                 ! KEy = d/dy KE, in m s-2.
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -213,26 +218,18 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   h_neglect = GV%H_subroundoff
   h_tiny = GV%Angstrom  ! Perhaps this should be set to h_neglect instead.
 
-!$OMP parallel default(none) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,nz,RV,PV, &
-!$OMP                               is,ie,js,je,Isq,Ieq,Jsq,Jeq,h_neglect,h_tiny,dvdx,dudy,OBC) &
-!$OMP                       private(relative_vorticity,absolute_vorticity,Ih,hArea_q,q, &
-!$OMP                               abs_vort,Ih_q,fv1,fv2,fu1,fu2,max_fvq,max_fuq,      &
-!$OMP                               min_fvq,min_fuq,q2,a,b,c,d,ep_u,ep_v,Fe_m2,rat_lin, &
-!$OMP                               min_Ihq,max_Ihq,rat_m1,AL_wt,Sad_wt,c1,c2,c3,slope, &
-!$OMP                               uhc,uhm,uh_min,uh_max,vhc,vhm,vh_min,vh_max,KE,KEx, &
-!$OMP                               KEy,temp1,temp2,Heff1,Heff2,Heff3,Heff4,VHeff,      &
-!$OMP                               QVHeff,max_fv,min_fv,UHeff,QUHeff,max_fu,min_fu)
-!$OMP do
+  !$OMP parallel do default(private)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
-!$OMP do
+  !$OMP parallel do default(private)
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
 
-!$OMP do
+  !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,CS,AD,Area_h,Area_q,&
+  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,h_neglect,h_tiny,OBC)
   do k=1,nz
     ! Here the second order accurate layer potential vorticities, q,
     ! are calculated.  hq is  second order accurate in space.  Relative
@@ -243,45 +240,102 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       dvdx(I,J) = v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J)
       dudy(I,J) = u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j)
     enddo ; enddo
-    ! Adjust circulation components to relative vorticity on open boundaries.
-    if (associated(OBC)) then ; if (OBC%zero_vorticity .or. OBC%freeslip_vorticity) then
-      do n=1,OBC%number_of_segments
-        if (OBC%segment(n)%is_N_or_S) then
-          J = OBC%segment(n)%HI%JsdB
-          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-            if (OBC%zero_vorticity) then
-              dvdx(I,J) = 0.
-              dudy(I,J) = 0.
-            elseif (OBC%freeslip_vorticity) then
-              dudy(I,J) = 0.
-            endif
-          enddo
-        elseif (OBC%segment(n)%is_E_or_W) then
-          I = OBC%segment(n)%HI%IsdB
-          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-            if (OBC%zero_vorticity) then
-              dvdx(I,J) = 0.
-              dudy(I,J) = 0.
-            elseif (OBC%freeslip_vorticity) then
-              dvdx(I,J) = 0.
-            endif
-          enddo
-        endif
-      enddo
-    endif ; endif
+    do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+      hArea_v(i,J) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i,j+1) * h(i,j+1,k))
+    enddo ; enddo
+    do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
+      hArea_u(I,j) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i+1,j) * h(i+1,j,k))
+    enddo ; enddo
+
+    ! Adjust circulation components to relative vorticity and thickness projected onto
+    ! velocity points on open boundaries.
+    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+        if (OBC%zero_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          dvdx(I,J) = 0. ; dudy(I,J) = 0.
+        enddo ; endif
+        if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+          dudy(I,J) = 0.
+        enddo ; endif
+
+        ! Project thicknesses across OBC points with a no-gradient condition.
+        do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+          endif
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+        if (OBC%zero_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          dvdx(I,J) = 0. ; dudy(I,J) = 0.
+        enddo ; endif
+        if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          dvdx(I,J) = 0.
+        enddo ; endif
+
+        ! Project thicknesses across OBC points with a no-gradient condition.
+        do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
+          endif
+        enddo
+      endif
+    enddo ; endif
+
+    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      ! Now project thicknesses across cell-corner points in the OBCs.  The two
+      ! projections have to occur in sequence and can not be combined easily.
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+        do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            if (Area_h(i,j) + Area_h(i+1,j) > 0.0) then
+              hArea_u(I,j+1) = hArea_u(I,j) * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / &
+                                               (Area_h(i,j) + Area_h(i+1,j)))
+            else ; hArea_u(I,j+1) = 0.0 ; endif
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.0) then
+              hArea_u(I,j) = hArea_u(I,j+1) * ((Area_h(i,j) + Area_h(i+1,j)) / &
+                                               (Area_h(i,j+1) + Area_h(i+1,j+1)))
+            else ; hArea_u(I,j) = 0.0 ; endif
+          endif
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+        do J = max(Jsq-1,OBC%segment(n)%HI%JsdB), min(Jeq+1,OBC%segment(n)%HI%JedB)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            if (Area_h(i,j) + Area_h(i,j+1) > 0.0) then
+              hArea_v(i+1,J) = hArea_v(i,J) * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / &
+                                               (Area_h(i,j) + Area_h(i,j+1)))
+            else ; hArea_v(i+1,J) = 0.0 ; endif
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+            if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.0) then
+              hArea_v(i,J) = hArea_v(i+1,J) * ((Area_h(i,j) + Area_h(i,j+1)) / &
+                                               (Area_h(i+1,j) + Area_h(i+1,j+1)))
+            else ; hArea_v(i,J) = 0.0 ; endif
+          endif
+        enddo
+      endif
+    enddo ; endif
+
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       if (CS%no_slip ) then
         relative_vorticity = (2.0-G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * &
-            (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
+                             G%IareaBu(I,J)
       else
         relative_vorticity = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * &
-            (G%IdxBu(I,J) * G%IdyBu(I,J)) ! ### Using G%IareaBu(I,J) changes answers.
+                             G%IareaBu(I,J)
       endif
       absolute_vorticity = G%CoriolisBu(I,J) + relative_vorticity
       Ih = 0.0
       if (Area_q(i,j) > 0.0) then
-        hArea_q = ((Area_h(i,j) * h(i,j,k) + Area_h(i+1,j+1) * h(i+1,j+1,k)) + &
-                   (Area_h(i,j+1) * h(i,j+1,k) + Area_h(i+1,j) * h(i+1,j,k)))
+        hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
         Ih = Area_q(i,j) / (hArea_q + h_neglect*Area_q(i,j))
       endif
       q(I,J) = absolute_vorticity * Ih
@@ -689,7 +743,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     endif
 
   enddo ! k-loop.
-!$OMP end parallel
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
