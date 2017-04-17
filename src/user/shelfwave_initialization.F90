@@ -124,6 +124,7 @@ subroutine shelfwave_set_OBC_data(OBC, G, h, Time)
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
+    if (segment%Is_obc /= is - 1) cycle
 
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed
@@ -132,11 +133,13 @@ subroutine shelfwave_set_OBC_data(OBC, G, h, Time)
       y = ( 0.5 * (G%geoLatT(i,j) + G%geoLatT(i+1,j)) - G%south_lat ) / G%len_lat
       sin_wt = sin(rLx*x - omega*time_sec)
       cos_wt = cos(rLx*x - omega*time_sec)
-      sin_ly = sin(jj * PI * y * rLy)
-      cos_ly = cos(jj * PI * y * rLy)
+      sin_ly = sin(jj * PI * y)
+      cos_ly = cos(jj * PI * y)
       segment%normal_vel_bt(I,j) = my_amp * exp(- rLy * y) * cos_wt * &
            (rLy * sin_ly + jj * PI * rLy * cos_ly)
 !     segment%tangential_vel_bt(I,j) = my_amp * rLx * exp(- rLy * y) * sin_wt * sin_ly
+      segment%vorticity_bt(I,j) = my_amp * exp(- rLy * y) * cos_wt * &
+            (rLy**2 + rLx**2 + (jj*PI)**2)
     enddo ; enddo
   enddo
 
