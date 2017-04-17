@@ -110,7 +110,7 @@ subroutine Kelvin_set_OBC_data(OBC, G, h, Time)
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
     ! Apply values to the inflow end only.
-    if (segment%Is_obc /= 4) cycle
+    if (segment%Is_obc /= is - 1) cycle
 
     isdB = segment%HI%isdB ; iedB = segment%HI%iedB
     Jsd = segment%HI%Jsd ; Jed = segment%HI%Jed
