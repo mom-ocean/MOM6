@@ -10,7 +10,7 @@ use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
 use MOM_io,            only : create_file, write_field, close_file, slasher
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : EOS_type, calculate_density, calculate_density_derivs
+use MOM_EOS,           only : EOS_type, calculate_density
 use MOM_string_functions,only : uppercase, extractWord, extract_integer, extract_real
 
 use MOM_remapping, only : remapping_CS
@@ -28,6 +28,7 @@ use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_colum
 use coord_rho,    only : old_inflate_layers_1d
 use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
 use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column, end_coord_slight
+use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
 
 use netcdf ! Used by check_grid_def()
 
@@ -104,19 +105,12 @@ type, public :: regridding_CS
   !! If false, integrate from the bottom upward, as does the rest of the model.
   logical :: integrate_downward_for_e = .true.
 
-  real :: adaptTimeRatio = 1e-1
-  real :: adaptAlpha     = 1.0
-  real :: adaptZoom      = 200.0
-  real :: adaptZoomCoeff = 0.0
-  real :: adaptBuoyCoeff = 0.0
-  real :: adaptDrho0     = 0.5
-  logical :: adaptDoMin  = .false.
-
   type(zlike_CS),  pointer :: zlike_CS  => null()
   type(sigma_CS),  pointer :: sigma_CS  => null()
   type(rho_CS),    pointer :: rho_CS    => null()
   type(hycom_CS),  pointer :: hycom_CS  => null()
   type(slight_CS), pointer :: slight_CS => null()
+  type(adapt_CS),  pointer :: adapt_CS  => null()
 
 end type
 
@@ -744,6 +738,7 @@ subroutine end_regridding(CS)
   if (associated(CS%rho_CS))    call end_coord_rho(CS%rho_CS)
   if (associated(CS%hycom_CS))  call end_coord_hycom(CS%hycom_CS)
   if (associated(CS%slight_CS)) call end_coord_slight(CS%slight_CS)
+  if (associated(CS%adapt_CS))  call end_coord_adapt(CS%adapt_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
@@ -1418,20 +1413,17 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! local variables
   integer :: i, j, k, nz ! indices and dimension lengths
-  real :: h_up, b1, b_denom_1, d1, depth, drdz, nominal_z, stretching
   ! temperature, salinity and pressure on interfaces
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: tInt, sInt
   ! current interface positions and after tendency term is applied
   ! positive downward
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zInt, zNext
-  real, dimension(SZK_(GV)+1) :: alpha, beta ! drho/dT and drho/dS
-  real, dimension(SZK_(GV)) :: kGrid, c1 ! grid diffusivity on layers, and tridiagonal work array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zInt
+  real, dimension(SZK_(GV)+1) :: zNext
 
   nz = GV%ke
 
   ! position surface at z = 0.
   zInt(:,:,1) = 0.
-  zNext(:,:,1) = 0.
 
   ! work on interior interfaces
   do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -1447,153 +1439,18 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! set the bottom interface depth
   zInt(:,:,nz+1)  = zInt(:,:,nz) + h(:,:,nz)
-  zNext(:,:,nz+1) = zInt(:,:,nz+1)
 
   ! calculate horizontal density derivatives (alpha/beta)
   ! between cells in a 5-point stencil, columnwise
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    dzInterface(i,j,:) = 0. ! initially no change in interface position
-
-    ! land point, don't bother!
-    if (G%mask2dT(i,j) < 0.5) cycle
-
-    ! up (j-1)
-    if (G%mask2dT(i,j-1) > 0.) then
-      call calculate_density_derivs( &
-           0.5 * (tInt(i,j,2:nz) + tInt(i,j-1,2:nz)), &
-           0.5 * (sInt(i,j,2:nz) + sInt(i,j-1,2:nz)), &
-           0.5 * (zInt(i,j,2:nz) + zInt(i,j-1,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 2, nz - 1, tv%eqn_of_state)
-
-      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (alpha(2:nz) * (tInt(i,j-1,2:nz) - tInt(i,j,2:nz)) + &
-                  beta(2:nz)  * (sInt(i,j-1,2:nz) - sInt(i,j,2:nz)))
-    endif
-    ! down (j+1)
-    if (G%mask2dT(i,j+1) > 0.) then
-      call calculate_density_derivs( &
-           0.5 * (tInt(i,j,2:nz) + tInt(i,j+1,2:nz)), &
-           0.5 * (sInt(i,j,2:nz) + sInt(i,j+1,2:nz)), &
-           0.5 * (zInt(i,j,2:nz) + zInt(i,j+1,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 2, nz - 1, tv%eqn_of_state)
-
-      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (alpha(2:nz) * (tInt(i,j+1,2:nz) - tInt(i,j,2:nz)) + &
-                  beta(2:nz)  * (sInt(i,j+1,2:nz) - sInt(i,j,2:nz)))
-    endif
-    ! left (i-1)
-    if (G%mask2dT(i-1,j) > 0.) then
-      call calculate_density_derivs( &
-           0.5 * (tInt(i,j,2:nz) + tInt(i-1,j,2:nz)), &
-           0.5 * (sInt(i,j,2:nz) + sInt(i-1,j,2:nz)), &
-           0.5 * (zInt(i,j,2:nz) + zInt(i-1,j,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 2, nz - 1, tv%eqn_of_state)
-
-      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (alpha(2:nz) * (tInt(i-1,j,2:nz) - tInt(i,j,2:nz)) + &
-                  beta(2:nz)  * (sInt(i-1,j,2:nz) - sInt(i,j,2:nz)))
-    endif
-    ! right (i+1)
-    if (G%mask2dT(i+1,j) > 0.) then
-      call calculate_density_derivs( &
-           0.5 * (tInt(i,j,2:nz) + tInt(i+1,j,2:nz)), &
-           0.5 * (sInt(i,j,2:nz) + sInt(i+1,j,2:nz)), &
-           0.5 * (zInt(i,j,2:nz) + zInt(i+1,j,2:nz)) * GV%H_to_Pa, &
-           alpha, beta, 2, nz - 1, tv%eqn_of_state)
-
-      dzInterface(i,j,2:nz) = dzInterface(i,j,2:nz) + &
-                 (alpha(2:nz) * (tInt(i+1,j,2:nz) - tInt(i,j,2:nz)) + &
-                  beta(2:nz)  * (sInt(i+1,j,2:nz) - sInt(i,j,2:nz)))
+    if (G%mask2dT(i,j) < 0.5) then
+      dzInterface(i,j,:) = 0. ! land point, don't move interfaces, and skip
+      cycle
     endif
 
-    ! at this point, dzInterface contains the local neutral density curvature at
-    ! h-points, on interfaces
-    ! we need to divide by drho/dz to give an interfacial displacement
-    !
-    ! a positive curvature means we're too light relative to adjacent columns,
-    ! so dzInterface needs to be positive too (push the interface deeper)
-    call calculate_density_derivs(tInt(i,j,:), sInt(i,j,:), zInt(i,j,:) * GV%H_to_Pa, &
-         alpha, beta, 1, nz + 1, tv%eqn_of_state)
-    do K = 2, nz
-      ! TODO make lower bound here configurable
-      dzInterface(i,j,K) = dzInterface(i,j,K) * (0.5 * (h(i,j,k-1) + h(i,j,k))) / &
-           max(alpha(K) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
-               beta(K)  * (tv%S(i,j,k) - tv%S(i,j,k-1)), 1e-20)
+    call build_adapt_column(CS%adapt_CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
 
-      ! don't move the interface so far that it would tangle with another
-      ! interface in the direction we're moving (or exceed a Nyquist limit
-      ! that could cause oscillations of the interface)
-      h_up = merge(h(i,j,k), h(i,j,k-1), dzInterface(i,j,K) > 0.)
-      dzInterface(i,j,K) = 0.5 * CS%adaptAlpha * &
-           sign(min(abs(dzInterface(i,j,K)), 0.5 * h_up), dzInterface(i,j,K))
-
-      ! update interface positions so we can diffuse them
-      zNext(i,j,K) = zInt(i,j,K) + dzInterface(i,j,K)
-    enddo
-
-    ! solve diffusivity equation to smooth grid
-    ! upper diagonal coefficients: -kGrid(2:nz)
-    ! lower diagonal coefficients: -kGrid(1:nz-1)
-    ! diagonal coefficients:       1 + (kGrid(1:nz-1) + kGrid(2:nz))
-    !
-    ! first, calculate the diffusivities within layers
-    do k = 1, nz
-      ! local depth for scaling diffusivity
-      depth = G%bathyT(i,j) * GV%m_to_H
-
-      ! calculate the dr bit of drdz
-      drdz = 0.5 * (alpha(K) + alpha(K+1)) * (tInt(i,j,K+1) - tInt(i,j,K)) + &
-             0.5 * (beta(K)  + beta(K+1))  * (sInt(i,j,K+1) - sInt(i,j,K))
-      ! divide by dz from the new interface positions
-      drdz = drdz / (zNext(i,j,K) - zNext(i,j,K+1) + GV%H_subroundoff)
-      ! don't do weird stuff in unstably-stratified regions
-      drdz = max(drdz, 0.)
-
-      ! set vertical grid diffusivity
-      kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
-           (CS%adaptZoomCoeff / (CS%adaptZoom * GV%m_to_H + 0.5*(zNext(i,j,K) + zNext(i,j,K+1))) + &
-           (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
-           (1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff) / depth)
-    enddo
-
-    ! initial denominator (first diagonal element)
-    b1 = 1.0
-    ! initial Q_1 = 1 - q_1 = 1 - 0/1
-    d1 = 1.0
-    ! work on all interior interfaces
-    do K = 2, nz
-      ! calculate numerator of Q_k
-      b_denom_1 = 1. + d1 * kGrid(k-1)
-      ! update denominator for k
-      b1 = 1.0 / (b_denom_1 + kGrid(k))
-
-      ! calculate q_k
-      c1(K) = kGrid(k) * b1
-      ! update Q_k = 1 - q_k
-      d1 = b_denom_1 * b1
-
-      ! update RHS
-      zNext(i,j,K) = b1 * (zNext(i,j,K) + kGrid(k-1)*zNext(i,j,K-1))
-    enddo
-    ! final substitution
-    do K = nz, 2, -1
-      zNext(i,j,K) = zNext(i,j,K) + c1(K)*zNext(i,j,K+1)
-    enddo
-
-    if (CS%adaptDoMin) then
-      nominal_z = 0.
-      stretching = zInt(i,j,nz+1) / depth
-
-      do k = 2, nz+1
-        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
-        ! take the deeper of the calculated and nominal positions
-        zNext(i,j,K) = max(zNext(i,j,K), nominal_z)
-        ! interface can't go below topography
-        zNext(i,j,K) = min(zNext(i,j,K), zInt(i,j,nz+1))
-      enddo
-    endif
-
-    call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext(i,j,:), dzInterface(i,j,:))
+    call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
     ! convert from depth to z
     do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
     call adjust_interface_motion(nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:))
@@ -1970,6 +1827,8 @@ subroutine initCoord(CS, coord_mode)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, CS%interp_CS)
   case (REGRIDDING_SLIGHT)
     call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+  case (REGRIDDING_ADAPTIVE)
+    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution)
   end select
 end subroutine initCoord
 
@@ -2220,12 +2079,6 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
-  if (present(adaptTimeRatio)) CS%adaptTimeRatio = adaptTimeRatio
-  if (present(adaptZoom)) CS%adaptZoom = adaptZoom
-  if (present(adaptZoomCoeff)) CS%adaptZoomCoeff = adaptZoomCoeff
-  if (present(adaptBuoyCoeff)) CS%adaptBuoyCoeff = adaptBuoyCoeff
-  if (present(adaptAlpha)) CS%adaptAlpha = adaptAlpha
-  if (present(adaptDoMin)) CS%adaptDoMin = adaptDoMin
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
@@ -2252,6 +2105,13 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (present(compress_fraction))   call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
     if (associated(CS%slight_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_slight_params(CS%slight_CS, interp_CS=CS%interp_CS)
+  case (REGRIDDING_ADAPTIVE)
+    if (present(adaptTimeRatio)) call set_adapt_params(CS%adapt_CS, adaptTimeRatio=adaptTimeRatio)
+    if (present(adaptZoom))      call set_adapt_params(CS%adapt_CS, adaptZoom=adaptZoom)
+    if (present(adaptZoomCoeff)) call set_adapt_params(CS%adapt_CS, adaptZoomCoeff=adaptZoomCoeff)
+    if (present(adaptBuoyCoeff)) call set_adapt_params(CS%adapt_CS, adaptBuoyCoeff=adaptBuoyCoeff)
+    if (present(adaptAlpha))     call set_adapt_params(CS%adapt_CS, adaptAlpha=adaptAlpha)
+    if (present(adaptDoMin))     call set_adapt_params(CS%adapt_CS, adaptDoMin=adaptDoMin)
   end select
 
 end subroutine set_regrid_params
