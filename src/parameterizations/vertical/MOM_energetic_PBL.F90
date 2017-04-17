@@ -160,19 +160,20 @@ type, public :: energetic_PBL_CS ; private
   real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
   real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
                              !  ends of the linear fit within the well constrained region.
-  real :: C_EK = 0.17       ! MSTAR Coefficient in rotation limit for mstar_mode=2
-  real :: MSTAR_COEF = 0.3  ! MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
-  real :: LaC_MLDoEK        ! Coefficients for Langmuir number modification based on
-  real :: LaC_MLDoOB_stab   !  length scale ratios, MLD is boundary, EK is Ekman,
-  real :: LaC_EKoOB_stab   !  and OB is Obukhov, the "o" in the name is for division.
-  real :: LaC_MLDoOB_un     !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
-  real :: LaC_EKoOB_un     !   ...
-  real :: LaDepthRatio=0.04 ! The ratio of OBL depth to average Stokes drift over
-  real :: Max_Enhance_M = 5.! The maximum allowed LT enhancement to the mixing.
+  real :: C_EK = 0.17        ! MSTAR Coefficient in rotation limit for mstar_mode=2
+  real :: MSTAR_COEF = 0.3   ! MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
+  real :: LaC_MLDoEK         ! Coefficients for Langmuir number modification based on
+  real :: LaC_MLDoOB_stab    !  length scale ratios, MLD is boundary, EK is Ekman,
+  real :: LaC_EKoOB_stab     !  and OB is Obukhov, the "o" in the name is for division.
+  real :: LaC_MLDoOB_un      !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
+  real :: LaC_EKoOB_un       !   ...
+  real :: LaDepthRatio=0.04  ! The ratio of OBL depth to average Stokes drift over
+  real :: Max_Enhance_M = 5. ! The maximum allowed LT enhancement to the mixing.
+  real :: CNV_MST_FAC        ! Factor to reduce mstar when statically unstable.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement function
-  integer :: MSTAR_MODE = 0 ! An integer to determine which formula is used to
-                            !  set mstar
+  integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement form
+  integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
+                             !  set mstar
   integer :: CONST_MSTAR=0,MLD_o_OBUKHOV=1,EKMAN_o_OBUKHOV=2
   logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
@@ -500,7 +501,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   integer, save :: NOTCONVERGED!
   !-End BGR iteration parameters-----------------------------------------
   real :: N2_dissipation
-  real :: B_STAR ! Buoyancy flux over ustar
+  real :: Bf_STABLE ! Buoyancy flux, capped at 0 (negative only)
+  real :: Bf_UNSTABLE ! Buoyancy flux, floored at 0 (positive only)
   real :: STAB_SCALE ! Composite of Stabilizing length scales:
                      !  Ekman scale and Monin-Obukhov scale.
   real :: iL_Ekman ! Inverse of Ekman length scale
@@ -517,6 +519,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   real :: MSTAR_MIX! The value of mstar (Proportionality of TKE to drive mixing to ustar
                     ! cubed) which is computed as a function of latitude, boundary layer depth,
                     ! and the Monin-Obukhov depth.
+  real :: MSTAR_LT ! The added mstar contribution due to Langmuir turbulence
+  real :: MSTAR_Conv_Adj ! Adjustment made to mstar due to convection reducing mechanical mixing.
   real :: MSTAR_STAB, MSTAR_ROT ! Mstar in each limit, max is used.
   logical :: debug=.false.  ! Change this hard-coded value for debugging.
 !  The following arrays are used only for debugging purposes.
@@ -650,8 +654,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                     fluxes%frac_shelf_h(i,j) * fluxes%ustar_shelf(i,j)
       endif
       if (U_Star < CS%ustar_min) U_Star = CS%ustar_min
-      ! Computing B_Star, or the Buoyancy flux over the friction velocity.
-      B_Star = min(0.0,-buoy_Flux(i,j)/U_Star)
+      ! Computing Bf w/ limiters.
+      Bf_Stable = max(0.0,buoy_Flux(i,j)) ! Positive for stable
+      Bf_Unstable = min(0.0,buoy_flux(i,j)) ! Negative for unstable
       if (CS%omega_frac >= 1.0) then ; absf(i) = 2.0*CS%omega
       else
         absf(i) = 0.25*((abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I-1,J-1))) + &
@@ -661,10 +666,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       endif
       ! Computing stability scale which correlates with TKE for mixing, where
       ! TKE for mixing = TKE production minus TKE dissipation
-      Stab_Scale = -u_star**2 / ( VonKar * ( C_MO * B_STAR +  C_EK * u_star * absf(i)))
+      Stab_Scale = u_star**2 / ( VonKar * ( C_MO * BF_Stable/u_star -  C_EK * u_star * absf(i)))
       ! Inverse of Ekman and Obukhov
       iL_Ekman   = absf(i)/U_star
-      iL_Obukhov = -buoy_flux(i,j)*vonkar/U_Star**3
+      iL_Obukhov = buoy_flux(i,j)*vonkar/U_Star**3
 
       if (CS%Mstar_Mode.eq.CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
@@ -746,8 +751,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 
       ! Iterate up to MAX_OBL_IT times to determine a converged EPBL depth.
       OBL_CONVERGED = .false.
-      ! Initialize ENHANCE_M to 1
+      ! Initialize ENHANCE_M to 1 and mstar_lt to 0
       ENHANCE_M=1.e0
+      MSTAR_LT = 0.0
       do OBL_IT=1,MAX_OBL_IT ; if (.not. OBL_CONVERGED) then
 
         ! Reset ML_depth
@@ -783,7 +789,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
               endif
             endif
           elseif (CS%MSTAR_MODE.eq.CS%EKMAN_o_OBUKHOV) then
-            mstar_STAB = CS%MSTAR_COEF*sqrt(-b_star/u_star/(absf(i)+1.e-10))
+            mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable/u_star**2/(absf(i)+1.e-10))
             mstar_ROT =  CS%C_EK*log(max(1.,u_star/(absf(i)+1.e-10)/mld_guess))
             if ( CS%MSTAR_CAP.le.0.0) then !No cap.
               MSTAR_MIX = max(mstar_STAB,& ! 1st term if balance of rotation and stabilizing
@@ -804,35 +810,44 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                                  mstar_ROT)))
             endif!cap for mstar_mode==2
           endif!mstar_mode==1 or ==2
-
-        if (CS%Use_LA_windsea) then
-          call get_LA_windsea( u_star_mean, MLD_guess*CS%LaDepthRatio, GV, LA)
-          if (CS%LT_Enhance_Form==1) then
-            !Original w'/ust scaling w/ Van Roekel's scaling
-            ENHANCE_M = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
-          elseif (CS%LT_Enhance_Form==2) then
-            ! Compute ratios of 3 length scales that might modify LT relationships
+          ! Adjustment for unstable buoyancy flux.
+          !  Convection reduces mechanical mixing because there
+          !  is less density gradient to mix. (Statically unstable near surface)
+          MSTAR_Conv_Adj = 1. - CS%CNV_MST_FAC * (-BF_Unstable+1.e-10) / &
+                                 ( (-Bf_Unstable+1.e-10)+                 &
+                                   2. *MSTAR_MIX *U_STAR**3 / MLD_GUESS )
+          if (CS%Use_LA_windsea) then
+            ! 1. Get LA
+            call get_LA_windsea( u_star_mean, MLD_guess*CS%LaDepthRatio, GV, LA)
+            ! 2. Get parameters for modified LA
             MLD_o_Ekman = abs(MLD_guess*iL_Ekman)
             MLD_o_Obukhov_stab = abs(max(0.,MLD_guess*iL_Obukhov))
             MLD_o_Obukhov_un = abs(min(0.,MLD_guess*iL_Obukhov))
             Ekman_o_Obukhov_stab = abs(max(0.,iL_Obukhov/(iL_Ekman+1.e-10)))
             Ekman_o_Obukhov_un = abs(min(0.,iL_Obukhov/(iL_Ekman+1.e-10)))
-            !Assumes linear factors based on length scale ratios to adjust LA
-            ! Note when these coefficients are set to 0 recovers simple LA.
-            ! - These are split into regimes to try to avoid over estimating
-            !   the low enhancement values
+            ! 3. Adjust LA based on various parameters.
+            !    Assumes linear factors based on length scale ratios to adjust LA
+            !    Note when these coefficients are set to 0 recovers simple LA.
             LAmod = LA * (1.0 + max(-0.5,CS%LaC_MLDoEK * MLD_o_Ekman) +   &
                  CS%LaC_EKoOB_stab * Ekman_o_Obukhov_stab + &
                  CS%LaC_EKoOB_un * Ekman_o_Obukhov_un + &
                  CS%LaC_MLDoOB_stab * MLD_o_Obukhov_stab  + &
                  CS%LaC_MLDoOB_un * MLD_o_Obukhov_un )
-             ENHANCE_M = min(CS%Max_Enhance_M,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
+            if (CS%LT_Enhance_Form==1) then
+              !Original w'/ust scaling w/ Van Roekel's scaling
+              ENHANCE_M = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
+            elseif (CS%LT_Enhance_Form==2) then
+              ! Enhancement is multiplied (added mst_lt set to 0)
+              ENHANCE_M = min(CS%Max_Enhance_M,(1.+CS%LT_ENHANCE_COEF*LAmod**CS%LT_ENHANCE_EXP))
+              MSTAR_LT = 0.0
+            elseif (CS%LT_ENHANCE_Form == 3) then
+              ! or Enhancement is additive (multiplied enhance_m set to 1)
+              MSTAR_LT = CS%LT_ENHANCE_COEF * LAmod**CS%LT_ENHANCE_EXP
+              ENHANCE_M = 1.0
+            endif
           endif
-        endif
-
-
           !Reset mech_tke and conv_perel values (based on new mstar)
-          mech_TKE(i) = (dt*MSTAR_mix*ENHANCE_M*GV%Rho0)*((U_Star**3))
+          mech_TKE(i) = ( MSTAR_mix * MSTAR_conv_adj * ENHANCE_M + MSTAR_LT) * (dt*GV%Rho0*U_Star**3)
           conv_PErel(i) = 0.0
           if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
@@ -2054,6 +2069,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "Maximum value of mstar allowed in model if non-negative\n"//&
                  "(used if MSTAR_MODE>0).",&
                  "units=nondim", default=-1.0)
+  call get_param(param_file, mod, "MSTAR_CONV_ADJ", CS%cnv_mst_fac, &
+                 "Factor used for reducing mstar during convection \n"//&
+                 " due to reduction of stable density gradient.",&
+                 "units=nondim", default=0.0)
   call get_param(param_file, mod, "MSTAR_SLOPE", CS%mstar_slope, &
                  "The slope of the linear relationship between mstar \n"//&
                  "and the length scale ratio (used if MSTAR_MODE=1).",&
@@ -2096,119 +2115,120 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 !                 "The minimum mixed layer depth if the mixed layer depth \n"//&
 !                 "is determined dynamically.", units="m", default=0.0)
 
-  call get_param(param_file, mod, "OMEGA",CS%omega, &
+  call get_param(param_file, mod, "OMEGA",CS%omega,              &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
-  call get_param(param_file, mod, "ML_USE_OMEGA", use_omega, &
+  call get_param(param_file, mod, "ML_USE_OMEGA", use_omega,                  &
                  "If true, use the absolute rotation rate instead of the \n"//&
-                 "vertical component of rotation when setting the decay \n"//&
+                 "vertical component of rotation when setting the decay \n"// &
                  "scale for turbulence.", default=.false., do_not_log=.true.)
   omega_frac_dflt = 0.0
   if (use_omega) then
     call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
     omega_frac_dflt = 1.0
   endif
-  call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%omega_frac, &
-                 "When setting the decay scale for turbulence, use this \n"//&
+  call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%omega_frac,              &
+                 "When setting the decay scale for turbulence, use this \n"//  &
                  "fraction of the absolute rotation rate blended with the \n"//&
-                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
+                 "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).",      &
                  units="nondim", default=omega_frac_dflt)
-  call get_param(param_file, mod, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef, &
+  call get_param(param_file, mod, "WSTAR_USTAR_COEF", CS%wstar_ustar_coef,     &
                  "A ratio relating the efficiency with which convectively \n"//&
-                 "released energy is converted to a turbulent velocity, \n"//&
+                 "released energy is converted to a turbulent velocity, \n"//  &
                  "relative to mechanically forced TKE. Making this larger \n"//&
                  "increases the BL diffusivity", units="nondim", default=1.0)
   call get_param(param_file, mod, "VSTAR_SCALE_FACTOR", CS%vstar_scale_fac, &
-                 "An overall nondimensional scaling factor for v*. \n"//&
-                 "Making this larger decreases the PBL diffusivity.", &
+                 "An overall nondimensional scaling factor for v*. \n"//    &
+                 "Making this larger decreases the PBL diffusivity.",       &
                  units="nondim", default=1.0)
-  call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef, &
-                 "A nondimensional scaling factor controlling the inhibition \n"//&
+  call get_param(param_file, mod, "EKMAN_SCALE_COEF", CS%Ekman_scale_coef,           &
+                 "A nondimensional scaling factor controlling the inhibition \n"//   &
                  "of the diffusive length scale by rotation. Making this larger \n"//&
                  "decreases the PBL diffusivity.", units="nondim", default=1.0)
-  call get_param(param_file, mod, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION, &
-                 "A logical that specifies whether or not to use the \n"//&
+  call get_param(param_file, mod, "USE_MLD_ITERATION", CS%USE_MLD_ITERATION,    &
+                 "A logical that specifies whether or not to use the \n"//      &
                  "distance to the bottom of the actively turblent boundary \n"//&
                  "layer to help set the EPBL length scale.", default=.false.)
-  call get_param(param_file, mod, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION, &
-                 "A logical that specifies whether or not to use the \n"//&
+  call get_param(param_file, mod, "ORIG_MLD_ITERATION", CS%ORIG_MLD_ITERATION,  &
+                 "A logical that specifies whether or not to use the \n"//      &
                  "old method for determining MLD depth in iteration, which \n"//&
                  "is limited to resolution.", default=.true.)
-  call get_param(param_file, mod, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS, &
-                 "A logical that specifies whether or not to use the \n"//&
-                 "previous timestep MLD as a first guess in the MLD iteration.\n"//&
+  call get_param(param_file, mod, "MLD_ITERATION_GUESS", CS%MLD_ITERATION_GUESS,       &
+                 "A logical that specifies whether or not to use the \n"//             &
+                 "previous timestep MLD as a first guess in the MLD iteration.\n"//    &
                  "The default is false to facilitate reproducibility.", default=.false.)
-  call get_param(param_file, mod, "EPBL_MLD_TOLERANCE", CS%MLD_tol, &
-                 "The tolerance for the iteratively determined mixed \n"//&
+  call get_param(param_file, mod, "EPBL_MLD_TOLERANCE", CS%MLD_tol,         &
+                 "The tolerance for the iteratively determined mixed \n"//  &
                  "layer depth.  This is only used with USE_MLD_ITERATION.", &
                  units="meter", default=1.0)
-  call get_param(param_file, mod, "EPBL_MIN_MIX_LEN", CS%min_mix_len, &
+  call get_param(param_file, mod, "EPBL_MIN_MIX_LEN", CS%min_mix_len,    &
                  "The minimum mixing length scale that will be used \n"//&
-                 "by ePBL.  The default (0) does not set a minimum.", &
+                 "by ePBL.  The default (0) does not set a minimum.",    &
                  units="meter", default=0.0)
-  call get_param(param_file, mod, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc, &
-                 "If true, the ePBL code uses the original form of the \n"//&
-                 "potential energy change code.  Otherwise, the newer \n"//&
-                 "version that can work with successive increments to the \n"//&
+  call get_param(param_file, mod, "EPBL_ORIGINAL_PE_CALC", CS%orig_PE_calc,         &
+                 "If true, the ePBL code uses the original form of the \n"//        &
+                 "potential energy change code.  Otherwise, the newer \n"//         &
+                 "version that can work with successive increments to the \n"//     &
                  "diffusivity in upward or downward passes is used.", default=.true.)
   call get_param(param_file, mod, "EPBL_TRANSITION_SCALE", CS%transLay_scale, &
-                 "A scale for the mixing length in the transition layer \n"//&
+                 "A scale for the mixing length in the transition layer \n"// &
                  "at the edge of the boundary layer as a fraction of the \n"//&
                  "boundary layer thickness.  The default is 0.1.", &
                  units="nondim", default=0.1)
   if ( CS%USE_MLD_ITERATION .and. abs(CS%transLay_scale-0.5).ge.0.5) then
-    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//&
+    call MOM_error(FATAL, "If flag USE_MLD_ITERATION is true, then "//       &
                  "EPBL_TRANSITION should be greater than 0 and less than 1.")
   endif
   call get_param(param_file, mod, "N2_DISSIPATION_POS", CS%N2_Dissipation_Scale_Pos, &
-                 "A scale for the dissipation of TKE due to stratification \n"//&
-                 "in the boundary layer, applied when local stratification \n"//&
-                 "is positive.  The default is 0, but should probably be ~0.4.", &
+                 "A scale for the dissipation of TKE due to stratification \n"//     &
+                 "in the boundary layer, applied when local stratification \n"//     &
+                 "is positive.  The default is 0, but should probably be ~0.4.",     &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg, &
-                 "A scale for the dissipation of TKE due to stratification \n"//&
-                 "in the boundary layer, applied when local stratification \n"//&
-                 "is negative.  The default is 0, but should probably be ~1.", &
+  call get_param(param_file, mod, "N2_DISSIPATION_NEG", CS%N2_Dissipation_Scale_Neg,&
+                 "A scale for the dissipation of TKE due to stratification \n"//    &
+                 "in the boundary layer, applied when local stratification \n"//    &
+                 "is negative.  The default is 0, but should probably be ~1.",      &
                  units="nondim", default=0.0)
-   call get_param(param_file, mod, "USE_LA_LI2016", CS%USE_LA_Windsea, &
+   call get_param(param_file, mod, "USE_LA_LI2016", CS%USE_LA_Windsea,            &
                  "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
-                 " determine the Langmuir number.",&
+                 " determine the Langmuir number.",                               &
                  units="nondim", default=.false.)
-   call get_param(param_file, mod, "LA_DEPTH_RATIO", CS%LaDepthRatio, &
+   call get_param(param_file, mod, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
                  "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-                 " Lanmguir number calculation, where La = sqrt(ust/Stokes).",&
+                 " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
                  units="nondim",default=0.04)
-   call get_param(param_file, mod, "LT_ENHANCE", CS%LT_ENHANCE_FORM, &
-                 "Integer for LT enhancement function mode. \n"//&
-                 " *Requires USE_LA_LI2016 to be set to True. \n"//&
-                 "Options: 0 - no LT enhancement \n"//&
+   call get_param(param_file, mod, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
+                 "Integer for Langmuir number mode. \n"//                   &
+                 " *Requires USE_LA_LI2016 to be set to True. \n"//         &
+                 "Options: 0 - No Langmuir \n"//                            &
                  "         1 - Van Roekel et al. 2014/Li et al., 2016  \n"//&
-                 "         2 - New LES net mixing based derivation (requires coefficients)",&
+                 "         2 - Multiplied w/ adjusted La. \n"//             &
+                 "         3 - Added w/ adjusted La.",                      &
                  units="nondim", default=0)
    call get_param(param_file, mod, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
                  "Coefficient for Langmuir enhancement if LT_ENHANCE > 1",&
                  units="nondim", default=0.447)
    call get_param(param_file, mod, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
-                 "Exponent for Langmuir enhancement if LT_ENHANCE > 1",&
+                 "Exponent for Langmuir enhancement if LT_ENHANCE > 1", &
                  units="nondim", default=-1.33)
-   call get_param(param_file, mod, "LT_MOD_LAC1", CS%LaC_MLDoEK, &
+   call get_param(param_file, mod, "LT_MOD_LAC1", CS%LaC_MLDoEK,             &
                  "Coefficient for modification of Langmuir number due to\n"//&
-                 " MLD approaching Ekman depth if LT_ENHANCE=2.",&
+                 " MLD approaching Ekman depth if LT_ENHANCE=2.",            &
                  units="nondim", default=-0.87)
-   call get_param(param_file, mod, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab, &
+   call get_param(param_file, mod, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab,        &
                  "Coefficient for modification of Langmuir number due to\n"//&
-                 " MLD approaching stable Obukhov depth if LT_ENHANCE=2.",&
+                 " MLD approaching stable Obukhov depth if LT_ENHANCE=2.",   &
                   units="nondim", default=0.0)
-   call get_param(param_file, mod, "LT_MOD_LAC3", CS%LaC_MLDoOB_un, &
+   call get_param(param_file, mod, "LT_MOD_LAC3", CS%LaC_MLDoOB_un,          &
                  "Coefficient for modification of Langmuir number due to\n"//&
-                 " MLD approaching unstable Obukhov depth if LT_ENHANCE=2.",&
+                 " MLD approaching unstable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.0)
-   call get_param(param_file, mod, "LT_MOD_LAC4", CS%Lac_EKoOB_stab, &
+   call get_param(param_file, mod, "LT_MOD_LAC4", CS%Lac_EKoOB_stab,         &
                  "Coefficient for modification of Langmuir number due to\n"//&
-                 " ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.",&
+                 " ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.95)
-   call get_param(param_file, mod, "LT_MOD_LAC5", CS%Lac_EKoOB_un, &
-                 "Coefficient for modification of Langmuir number due to\n"//&
+   call get_param(param_file, mod, "LT_MOD_LAC5", CS%Lac_EKoOB_un,            &
+                 "Coefficient for modification of Langmuir number due to\n"// &
                  " ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.",&
                   units="nondim", default=0.95)
    if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then

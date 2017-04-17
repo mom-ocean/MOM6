@@ -68,7 +68,8 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_variables, only : vertvisc_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_open_boundary, only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_E
+use MOM_open_boundary, only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_open_boundary, only : OBC_segment_type
 implicit none ; private
 
@@ -129,8 +130,6 @@ type, public :: set_visc_CS ; private
   integer :: id_Ray_u = -1, id_Ray_v = -1
   integer :: id_nkml_visc_u = -1, id_nkml_visc_v = -1
   type(ocean_OBC_type), pointer :: OBC => NULL()
-  real, allocatable, dimension(:,:) :: mask2dCu, mask2dCv  ! masks used to disable contributions from
-                            ! velocities outside of the domain where open boundaries are active.
 end type set_visc_CS
 
 contains
@@ -184,12 +183,29 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
   real :: Rhtot            ! Running sum of thicknesses times the
                            ! layer potential densities in H kg m-3.
-  real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at a velocity point,
-                           ! using an upwind-biased second order
-                           ! accurate estimate based on the previous
-                           ! velocity direction, in H.
-  real :: h_vel            ! The arithmetic mean thickness at a velocity point,
-                           ! in H.
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    D_u, &      ! Bottom depth interpolated to u points, in m.
+    mask_u      ! A mask that disables any contributions from u points that
+                ! are land or past open boundary conditions, nondim., 0 or 1.
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    D_v, &      ! Bottom depth interpolated to v points, in m.
+    mask_v      ! A mask that disables any contributions from v points that
+                ! are land or past open boundary conditions, nondim., 0 or 1.
+  real, dimension(SZIB_(G),SZK_(G)) :: &
+    h_at_vel, & ! Layer thickness at a velocity point, using an upwind-biased
+                ! second order accurate estimate based on the previous velocity
+                ! direction, in H.
+    h_vel, &    ! Arithmetic mean of the layer thicknesses adjacent to a
+                ! velocity point, in H.
+    T_vel, &    ! Arithmetic mean of the layer temperatures adjacent to a
+                ! velocity point, in deg C.
+    S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
+                ! velocity point, in PSU.
+    Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
+                ! to a velocity point, in kg m-3.
+
+  real :: h_vel_pos        ! The arithmetic mean thickness at a velocity point
+                           ! plus H_neglect to avoid 0 values, in H.
   real :: ustarsq          ! 400 times the square of ustar, times
                            ! Rho0 divided by G_Earth and the conversion
                            ! from m to thickness units, in kg m-2 or kg2 m-5.
@@ -202,10 +218,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   real :: Dh               ! The increment in layer thickness from
                            ! the present layer, in H.
   real :: bbl_thick        ! The thickness of the bottom boundary layer in m.
-  real :: Rl               ! The potential density of the current layer and the
-  real :: Rla              ! layer above, in kg m-3.
-  real :: TLay, Tabove     ! The temperature and salinity of the current layer
-  real :: SLay, Sabove     ! and the layer above, in deg C and PSU.
   real :: C2f              ! C2f = 2*f at velocity points.
 
   real :: U_bg_sq          ! The square of an assumed background
@@ -283,10 +295,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0
   real :: C2pi_3           ! An irrational constant, 2/3 pi.
   real :: tmp              ! A temporary variable.
-  logical :: use_BBL_EOS, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, K2, nkmb, nkml
-  integer :: itt, maxitt=20
   real :: tmp_val_m1_to_p1
+  logical :: use_BBL_EOS, do_i(SZIB_(G))
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
+  integer :: itt, maxitt=20
+  type(ocean_OBC_type), pointer :: OBC => NULL()
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nkmb = GV%nk_rho_varies ; nkml = GV%nkml
@@ -301,6 +315,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   if (.not.CS%bottomdraglaw) return
 
   use_BBL_EOS = associated(tv%eqn_of_state) .and. CS%BBL_use_EOS
+  OBC => CS%OBC
 
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt=sqrt(CS%cdrag)
@@ -311,24 +326,78 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
     do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
-!$OMP parallel do default(none) shared(Jsq,Jeq,Isq,Ieq,nkmb,tv,p_ref,Rml)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do k=1,nkmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
                       Rml(:,j,k), Isq, Ieq-Isq+2, tv%eqn_of_state)
     enddo ; enddo
   endif
 
+  !$OMP parallel do default(shared)
+  do J=js-1,je ; do i=is-1,ie+1
+    D_v(i,J) = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
+    mask_v(i,J) = G%mask2dCv(i,J)
+  enddo ; enddo
+  !$OMP parallel do default(shared)
+  do j=js-1,je+1 ; do I=is-1,ie
+    D_u(I,j) = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
+    mask_u(I,j) = G%mask2dCu(I,j)
+  enddo ; enddo
+
+  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+    if (.not. OBC%segment(n)%on_pe) cycle
+    ! Use a one-sided projection of bottom depths at OBC points.
+    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+    if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
+      do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) D_v(i,J) = G%bathyT(i,j)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_S) D_v(i,J) = G%bathyT(i,j+1)
+      enddo
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
+      do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) D_u(I,j) = G%bathyT(i,j)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_W) D_u(I,j) = G%bathyT(i+1,j)
+      enddo
+    endif
+  enddo ; endif
+  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+    ! Now project bottom depths across cell-corner points in the OBCs.  The two
+    ! projections have to occur in sequence and can not be combined easily.
+    if (.not. OBC%segment(n)%on_pe) cycle
+    ! Use a one-sided projection of bottom depths at OBC points.
+    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+    if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
+      do I = max(is-1,OBC%segment(n)%HI%IsdB), min(ie,OBC%segment(n)%HI%IedB)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+          D_u(I,j+1) = D_u(I,j) ;  mask_u(I,j+1) = 0.0
+        elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
+          D_u(I,j) = D_u(I,j+1) ; mask_u(I,j) = 0.0
+        endif
+      enddo
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
+      do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          D_v(i+1,J) = D_v(i,J) ; mask_v(i+1,J) = 0.0
+        elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
+          D_v(i,J) = D_v(i+1,J) ;  mask_v(i,J) = 0.0
+        endif
+      enddo
+    endif
+  enddo ; endif
+
+  if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
+
 !$OMP parallel do default(none) shared(u, v, h, tv, visc, G, GV, CS, Rml, is, ie, js, je,  &
 !$OMP                                  nz, Isq, Ieq, Jsq, Jeq, nkmb, h_neglect, Rho0x400_G,&
-!$OMP                                  C2pi_3, U_bg_sq, cdrag_sqrt,K2,use_BBL_EOS,         &
-!$OMP                                  maxitt,nkml,m_to_H,H_to_m,Vol_quit)                 &
+!$OMP                                  C2pi_3, U_bg_sq, cdrag_sqrt,K2,use_BBL_EOS,OBC,     &
+!$OMP                                  maxitt,nkml,m_to_H,H_to_m,Vol_quit,D_u,D_v,mask_u,mask_v) &
 !$OMP                          private(do_i,h_at_vel,htot_vel,hwtot,hutot,Thtot,Shtot,     &
 !$OMP                                  hweight,v_at_u,u_at_v,ustar,T_EOS,S_EOS,press,      &
-!$OMP                                  dR_dT, dR_dS,ustarsq,htot,TLay,SLay,Tabove,Sabove,  &
-!$OMP                                  oldfn,Dfn,Dh,Rhtot,Rla,Rl,C2f,ustH,root,bbl_thick,  &
+!$OMP                                  dR_dT, dR_dS,ustarsq,htot,T_vel,S_vel,Rml_vel,      &
+!$OMP                                  oldfn,Dfn,Dh,Rhtot,C2f,ustH,root,bbl_thick,         &
 !$OMP                                  D_vel,tmp,Dp,Dm,a_3,a,a_12,slope,Vol_open,Vol_2_reg,&
 !$OMP                                  C24_a,apb_4a,Iapb,a2x48_apb3,ax2_3apb,Vol_direct,   &
-!$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,            &
+!$OMP                                  L_direct,Ibma_2,L,vol,vol_below,Vol_err,h_vel_pos,  &
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
 !$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
@@ -350,14 +419,22 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     endif
 
     if (m==1) then
-      do k=1,nz ; do i=is,ie ; if (do_i(i)) then
+      do k=1,nz ; do I=is,ie ; if (do_i(I)) then
         if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
-          h_at_vel(i,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
+          h_at_vel(I,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
                           (h(i,j,k) + h(i+1,j,k) + h_neglect)
         else
-          h_at_vel(i,k) =  0.5 * (h(i,j,k) + h(i+1,j,k))
+          h_at_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
         endif
+        h_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
       endif ; enddo ; enddo
+      if (use_BBL_EOS) then ; do k=1,nz ; do I=is,ie
+        ! Perhaps these should be thickness weighted.
+        T_vel(I,k) = 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
+        S_vel(I,k) = 0.5 * (tv%S(i,j,k) + tv%S(i+1,j,k))
+      enddo ; enddo ; else ; do k=1,nkmb ; do I=is,ie
+        Rml_vel(I,k) = 0.5 * (Rml(i,j,k) + Rml(i+1,j,k))
+      enddo ; enddo ; endif
     else
       do k=1,nz ; do i=is,ie ; if (do_i(i)) then
         if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
@@ -366,8 +443,80 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         else
           h_at_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
         endif
+        h_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       endif ; enddo ; enddo
+      if (use_BBL_EOS) then ; do k=1,nz ; do i=is,ie
+        T_vel(i,k) = 0.5 * (tv%T(i,j,k) + tv%T(i,j+1,k))
+        S_vel(i,k) = 0.5 * (tv%S(i,j,k) + tv%S(i,j+1,k))
+      enddo ; enddo ; else ; do k=1,nkmb ; do i=is,ie
+        Rml_vel(i,k) = 0.5 * (Rml(i,j,k) + Rml(i,j+1,k))
+      enddo ; enddo ; endif
     endif
+
+    if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+      ! Apply a zero gradient projection of thickness across OBC points.
+      if (m==1) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            do k=1,nz
+              h_at_vel(I,k) = h(i,j,k) ; h_vel(I,k) = h(i,j,k)
+            enddo
+            if (use_BBL_EOS) then
+              do k=1,nz
+                T_vel(I,k) = tv%T(i,j,k) ; S_vel(I,k) = tv%S(i,j,k)
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(I,k) = Rml(i,j,k)
+              enddo
+            endif
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            do k=1,nz
+              h_at_vel(I,k) = h(i+1,j,k) ; h_vel(I,k) = h(i+1,j,k)
+            enddo
+            if (use_BBL_EOS) then
+              do k=1,nz
+                T_vel(I,k) = tv%T(i+1,j,k) ; S_vel(I,k) = tv%S(i+1,j,k)
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(I,k) = Rml(i+1,j,k)
+              enddo
+            endif
+          endif
+        endif ; enddo
+      else
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            do k=1,nz
+              h_at_vel(i,k) = h(i,j,k) ; h_vel(i,k) = h(i,j,k)
+            enddo
+            if (use_BBL_EOS) then
+              do k=1,nz
+                T_vel(i,k) = tv%T(i,j,k) ; S_vel(i,k) = tv%S(i,j,k)
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(i,k) = Rml(i,j,k)
+              enddo
+            endif
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            do k=1,nz
+              h_at_vel(i,k) = h(i,j+1,k) ; h_vel(i,k) = h(i,j+1,k)
+            enddo
+            if (use_BBL_EOS) then
+              do k=1,nz
+                T_vel(i,k) = tv%T(i,j+1,k) ; S_vel(i,k) = tv%S(i,j+1,k)
+              enddo
+            else
+              do k=1,nkmb
+                Rml_vel(i,k) = Rml(i,j+1,k)
+              enddo
+            endif
+          endif
+        endif ; enddo
+      endif
+    endif ; endif
 
     if (use_BBL_EOS .or. .not.CS%linear_drag) then
       do i=is,ie ; if (do_i(i)) then
@@ -387,22 +536,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           hwtot = hwtot + hweight
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
-            u_at_v = set_u_at_v(u, h, G, i, j, k, CS%mask2dCu)
+            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
             hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
 
-          if (use_BBL_EOS .and. (hweight >= 0.0)) then ; if (m==1) then
-            Thtot = Thtot + hweight * 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
-            Shtot = Shtot + hweight * 0.5 * (tv%S(i,j,k) + tv%S(i+1,j,k))
-          else
-            Thtot = Thtot + hweight * 0.5 * (tv%T(i,j,k) + tv%T(i,j+1,k))
-            Shtot = Shtot + hweight * 0.5 * (tv%S(i,j,k) + tv%S(i,j+1,k))
-          endif ; endif
+          if (use_BBL_EOS .and. (hweight >= 0.0)) then
+            Thtot = Thtot + hweight * T_vel(i,k)
+            Shtot = Shtot + hweight * S_vel(i,k)
+          endif
         enddo ! end of k loop
 
         if (.not.CS%linear_drag .and. (hwtot > 0.0)) then
@@ -426,11 +572,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         press(i) = 0.0 ! or = fluxes%p_surf(i,j)
         if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
       enddo
-      if (m==1) then ; do k=1,nz ; do i=is,ie
-        press(I) = press(I) + GV%H_to_Pa * 0.5 * (h(i,j,k) + h(i+1,j,k))
-      enddo ; enddo ; else ; do k=1,nz ; do i=is,ie
-        press(i) = press(i) + GV%H_to_Pa * 0.5 * (h(i,j,k) + h(i,j+1,k))
-      enddo ; enddo ; endif
+      do k=1,nz ; do i=is,ie
+        press(i) = press(i) + GV%H_to_Pa * h_vel(i,k)
+      enddo ; enddo
       call calculate_density_derivs(T_EOS, S_EOS, press, dR_dT, dR_dS, &
                                     is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
     endif
@@ -450,23 +594,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         do k=nz,2,-1
           if (h_at_vel(i,k) <= 0.0) cycle
 
-          if (m==1) then ! Work on a u-point
-            ! Perhaps these should be thickness weighted?
-            TLay = 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
-            SLay = 0.5 * (tv%S(i,j,k) + tv%S(i+1,j,k))
-            Tabove = 0.5 * (tv%T(i,j,k-1) + tv%T(i+1,j,k-1))
-            Sabove = 0.5 * (tv%S(i,j,k-1) + tv%S(i+1,j,k-1))
-          else ! Work on a v-point
-            TLay = 0.5 * (tv%T(i,j,k) + tv%T(i,j+1,k))
-            SLay = 0.5 * (tv%S(i,j,k) + tv%S(i,j+1,k))
-            Tabove = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j+1,k-1))
-            Sabove = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j+1,k-1))
-          endif
-          oldfn = dR_dT(i)*(Thtot - TLay*htot) + dR_dS(i)*(Shtot - SLay*htot)
+          oldfn = dR_dT(i)*(Thtot - T_vel(i,k)*htot) + &
+                  dR_dS(i)*(Shtot - S_vel(i,k)*htot)
           if (oldfn >= ustarsq) exit
 
-          Dfn = (dR_dT(i)*(TLay - Tabove) + dR_dS(i)*(SLay-Sabove)) * &
-                (h_at_vel(i,k)+htot)
+          Dfn = (dR_dT(i)*(T_vel(i,k) - T_vel(i,k-1)) + &
+                 dR_dS(i)*(S_vel(i,k) - S_vel(i,k-1))) * &
+                (h_at_vel(i,k) + htot)
 
           if ((oldfn + Dfn) <= ustarsq) then
             Dh = h_at_vel(i,k)
@@ -475,18 +609,12 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           endif
 
           htot = htot + Dh
-          Thtot = Thtot + TLay*Dh ; Shtot = Shtot + SLay*Dh
+          Thtot = Thtot + T_vel(i,k)*Dh ; Shtot = Shtot + S_vel(i,k)*Dh
         enddo
         if ((oldfn < ustarsq) .and. h_at_vel(i,1) > 0.0) then
           ! Layer 1 might be part of the BBL.
-          if (m==1) then ! Work on a u-point
-            TLay = 0.5 * (tv%T(i,j,1) + tv%T(i+1,j,1))
-            SLay = 0.5 * (tv%S(i,j,1) + tv%S(i+1,j,1))
-          else ! Work on a v-point
-            TLay = 0.5 * (tv%T(i,j,1) +tv%T(i,j+1,1))
-            SLay = 0.5 * (tv%S(i,j,1) +tv%S(i,j+1,1))
-          endif
-          if (dR_dT(i)*(Thtot-TLay*htot) + dR_dS(i)*(Shtot-SLay*htot) < ustarsq) &
+          if (dR_dT(i) * (Thtot - T_vel(i,1)*htot) + &
+              dR_dS(i) * (Shtot - S_vel(i,1)*htot) < ustarsq) &
             htot = htot + h_at_vel(i,1)
         endif ! Examination of layer 1.
       else  ! Use Rlay and/or the coordinate density as density variables.
@@ -507,21 +635,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           Rhtot = Rhtot + GV%Rlay(k)*Dh
         enddo
         if (nkml>0) then
-          if (m==1) then
-            Rla = 0.5*(Rml(i,j,nkmb) + Rml(i+1,j,nkmb))
-          else
-            Rla = 0.5*(Rml(i,j,nkmb) + Rml(i,j+1,nkmb))
-          endif
           do k=nkmb,2,-1
-            Rl = Rla
-            if (m==1) then
-              Rla = 0.5*(Rml(i,j,k-1) + Rml(i+1,j,k-1))
-            else
-              Rla = 0.5*(Rml(i,j,k-1) + Rml(i,j+1,k-1))
-            endif
-
-            oldfn = Rhtot - Rl*htot
-            Dfn = (Rl - Rla)*(h_at_vel(i,k)+htot)
+            oldfn = Rhtot - Rml_vel(i,k)*htot
+            Dfn = (Rml_vel(i,k) - Rml_vel(i,k-1)) * (h_at_vel(i,k)+htot)
 
             if (oldfn >= ustarsq) then
               cycle
@@ -532,9 +648,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             endif
 
             htot = htot + Dh
-            Rhtot = Rhtot + Rl*Dh
+            Rhtot = Rhtot + Rml_vel(i,k)*Dh
           enddo
-          if (Rhtot - Rla*htot < ustarsq) htot = htot + h_at_vel(i,1)
+          if (Rhtot - Rml_vel(i,1)*htot < ustarsq) htot = htot + h_at_vel(i,1)
         else
           if (Rhtot - GV%Rlay(1)*htot < ustarsq) htot = htot + h_at_vel(i,1)
         endif
@@ -574,16 +690,16 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         ! an enhanced bottom viscosity, while above this the drag is applied
         ! directly to the layers in question as a Rayleigh drag term.
         if (m==1) then
-          D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i+1,j))
-          tmp = G%mask2dCu(I,j+1) * 0.5*(G%bathyT(i,j+1) + G%bathyT(i+1,j+1))
+          D_vel = D_u(I,j)
+          tmp = G%mask2dCu(I,j+1) * D_u(I,j+1)
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%mask2dCu(I,j-1) * 0.5*(G%bathyT(i,j-1) + G%bathyT(i+1,j-1))
+          tmp = G%mask2dCu(I,j-1) * D_u(I,j-1)
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         else
-          D_vel = 0.5*(G%bathyT(i,j) + G%bathyT(i,j+1))
-          tmp = G%mask2dCv(i+1,J) * 0.5*(G%bathyT(i+1,j) + G%bathyT(i+1,j+1))
+          D_vel = D_v(i,J)
+          tmp = G%mask2dCv(i+1,J) * D_v(i+1,J)
           Dp = 2.0 * D_vel * tmp / (D_vel + tmp)
-          tmp = G%mask2dCv(i-1,J) * 0.5*(G%bathyT(i-1,j) + G%bathyT(i-1,j+1))
+          tmp = G%mask2dCv(i-1,J) * D_v(i-1,J)
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
@@ -633,10 +749,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         ! Determine the normalized open length at each interface.
         do K=nz,1,-1
           vol_below = vol
-          if (m==1) then ; h_vel = 0.5*(h(i,j,k) + h(i+1,j,k))
-          else ; h_vel = 0.5*(h(i,j,k) + h(i,j+1,k)) ; endif
-          vol = vol + h_vel
-          h_vel = h_vel + h_neglect
+
+          vol = vol + h_vel(i,k)
+          h_vel_pos = h_vel(i,k) + h_neglect
 
           if (vol >= Vol_open) then ; L(K) = 1.0
           elseif (a == 0) then ! The bottom has no curvature.
@@ -647,7 +762,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             if (vol < Vol_2_reg) then
               ! In this case, there is a contiguous open region and
               !   vol = 0.5*L^2*(slope + a/3*(3-4L)).
-               if (a2x48_apb3*vol < 1e-8) then ! Could be 1e-7?
+              if (a2x48_apb3*vol < 1e-8) then ! Could be 1e-7?
                 ! There is a very good approximation here for massless layers.
                 L0 = sqrt(2.0*vol*Iapb) ; L(K) = L0*(1.0 + ax2_3apb*L0)
               else
@@ -750,7 +865,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
             else ; Cell_width = G%dx_Cv(i,J) ; endif
             gam = 1.0 - L(K+1)/L(K)
             Rayleigh = CS%cdrag * (L(K)-L(K+1)) * (1.0-BBL_frac) * &
-                (12.0*CS%c_Smag*h_vel) /  (12.0*CS%c_Smag*h_vel + m_to_H * &
+                (12.0*CS%c_Smag*h_vel_pos) /  (12.0*CS%c_Smag*h_vel_pos + m_to_H * &
                  CS%cdrag * gam*(1.0-gam)*(1.0-1.5*gam) * L(K)**2 * Cell_width)
           else ! This layer feels no drag.
             Rayleigh = 0.0
@@ -758,13 +873,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
           if (m==1) then
             if (Rayleigh > 0.0) then
-              v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
+              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
               visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
-              u_at_v = set_u_at_v(u, h, G, i, j, k,CS%mask2dCu)
+              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
               visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
@@ -829,13 +944,12 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
   integer,                                   intent(in) :: i, j, k
-  real, dimension(SZI_(G),SZJB_(G)),  intent(in) :: mask2dCv
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
   real                                                  :: set_v_at_u
-  integer                                            :: n
+
   ! This subroutine finds a thickness-weighted value of v at the u-points.
   real :: hwt(4)           ! Masked weights used to average v onto u, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
-  type(OBC_segment_type), pointer :: segment
 
   hwt(1) = (h(i,j-1,k) + h(i,j,k)) * mask2dCv(i,J-1)
   hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
@@ -856,11 +970,10 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
-  integer                                            :: n
+
   ! This subroutine finds a thickness-weighted value of u at the v-points.
   real :: hwt(4)           ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
-  type(OBC_segment_type), pointer :: segment
 
   hwt(1) = (h(i-1,j,k) + h(i,j,k)) * mask2dCu(I-1,j)
   hwt(2) = (h(i,j,k) + h(i+1,j,k)) * mask2dCu(I,j)
@@ -930,6 +1043,12 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     press, &    ! The pressure at which dR_dT and dR_dS are evaluated, in Pa.
     T_EOS, &    ! T_EOS and S_EOS are the potential temperature and salnity at which dR_dT and dR_dS
     S_EOS       ! which dR_dT and dR_dS are evaluated, in degC and PSU.
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    mask_u      ! A mask that disables any contributions from u points that
+                ! are land or past open boundary conditions, nondim., 0 or 1.
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    mask_v      ! A mask that disables any contributions from v points that
+                ! are land or past open boundary conditions, nondim., 0 or 1.
   real :: h_at_vel(SZIB_(G),SZK_(G))! Layer thickness at velocity points,
                 ! using an upwind-biased second order accurate estimate based
                 ! on the previous velocity direction, in H.
@@ -993,7 +1112,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   real :: ustar1    ! ustar in units of H/s
   real :: h2f2      ! (h*2*f)^2
   logical :: use_EOS, do_any, do_any_shelf, do_i(SZIB_(G))
-  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, K2, nkmb, nkml, n
+  type(ocean_OBC_type), pointer :: OBC => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -1007,6 +1127,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt=sqrt(CS%cdrag)
 
+  OBC => CS%OBC
   use_EOS = associated(tv%eqn_of_state)
   dt_Rho0 = dt/GV%H_to_kg_m2
   h_neglect = GV%H_subroundoff
@@ -1052,9 +1173,37 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !    if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
   endif
 
+  !$OMP parallel do default(shared)
+  do J=js-1,je ; do i=is-1,ie+1
+    mask_v(i,J) = G%mask2dCv(i,J)
+  enddo ; enddo
+  !$OMP parallel do default(shared)
+  do j=js-1,je+1 ; do I=is-1,ie
+    mask_u(I,j) = G%mask2dCu(I,j)
+  enddo ; enddo
+
+  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
+    ! Now project bottom depths across cell-corner points in the OBCs.  The two
+    ! projections have to occur in sequence and can not be combined easily.
+    if (.not. OBC%segment(n)%on_pe) cycle
+    ! Use a one-sided projection of bottom depths at OBC points.
+    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+    if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
+      do I = max(is-1,OBC%segment(n)%HI%IsdB), min(ie,OBC%segment(n)%HI%IedB)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) mask_u(I,j+1) = 0.0
+        if (OBC%segment(n)%direction == OBC_DIRECTION_S) mask_u(I,j) = 0.0
+      enddo
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= je)) then
+      do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) mask_v(i+1,J) = 0.0
+        if (OBC%segment(n)%direction == OBC_DIRECTION_W) mask_v(i,J) = 0.0
+      enddo
+    endif
+  enddo ; endif
+
 !$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS, &
 !$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,        &
-!$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,             &
+!$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,mask_v,      &
 !$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_Star, &
 !$OMP                                  Idecay_len_TKE,press,k2,I_2hlay,T_EOS,S_EOS,dR_dT,   &
@@ -1196,7 +1345,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, CS%mask2dCv)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
@@ -1297,7 +1446,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS,&
 !$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,       &
 !$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
-!$OMP                                  m_to_H,H_to_m) &
+!$OMP                                  m_to_H,H_to_m,mask_u) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
 !$OMP                                  U_Star,Idecay_len_TKE,press,k2,I_2hlay,T_EOS,     &
 !$OMP                                  S_EOS,dR_dT, dR_dS,hlay,u_at_v,Uh2,               &
@@ -1441,7 +1590,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            u_at_v = set_u_at_v(u, h, G, i, J, k,CS%mask2dCu)
+            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u)
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + &
                                            u_at_v**2 + U_bg_sq)
           endif
@@ -1660,37 +1809,6 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-
-  allocate(CS%mask2dCu(IsdB:IedB,jsd:jed)) ; CS%mask2dCu = G%mask2dCu
-  allocate(CS%mask2dCv(isd:ied,JsdB:JedB)) ; CS%mask2dCv = G%mask2dCv
-
-  if (associated(CS%OBC)) then
-    do n=1,CS%OBC%number_of_segments
-      segment=>CS%OBC%segment(n)
-      if  (.not. segment%on_pe) cycle
-      if (segment%direction == OBC_DIRECTION_E) then
-        I=segment%HI%IscB
-        do J=segment%HI%JsdB,segment%HI%JedB
-          CS%mask2dCv(i+1,J)=0.0
-        enddo
-      else if (segment%direction == OBC_DIRECTION_W) then
-        I=segment%HI%IscB
-        do J=segment%HI%JsdB,segment%HI%JedB
-          CS%mask2dCv(i,J)=0.0
-        enddo
-      else if (segment%direction == OBC_DIRECTION_N) then
-        J=segment%HI%JscB
-        do I=segment%HI%IsdB,segment%HI%IedB
-          CS%mask2dCu(I,j+1)=0.0
-        enddo
-      else if (segment%direction == OBC_DIRECTION_S) then
-        J=segment%HI%JscB
-        do I=segment%HI%IsdB,segment%HI%IedB
-          CS%mask2dCu(I,j)=0.0
-        enddo
-      endif
-    enddo
-  endif
 
   CS%diag => diag
 

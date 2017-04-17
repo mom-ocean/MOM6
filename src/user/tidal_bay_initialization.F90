@@ -19,6 +19,7 @@ module tidal_bay_initialization
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 
+use MOM_coms,           only : reproducing_sum
 use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
@@ -46,9 +47,10 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
   type(time_type),        intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the tidal_bay example.
-  real :: time_sec, cff, cff2, tide_flow
-  real :: my_area, my_flux
+  real :: time_sec, cff, tide_flow
+  real :: my_flux, total_area
   real :: PI
+  real, allocatable :: my_area(:,:)
   character(len=40)  :: mod = "tidal_bay_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
@@ -62,37 +64,40 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
 
   if (.not.associated(OBC)) return
 
+  allocate(my_area(1:1,js:je))
+
   time_sec = time_type_to_real(Time)
   cff = 0.1*sin(2.0*PI*time_sec/(12.0*3600.0))
   tide_flow = 3.0e6
   my_area=0.0
   my_flux=0.0
-  do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+  segment => OBC%segment(1)
+
+  do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
+    if (OBC%segnum_u(I,j) /= OBC_NONE) then
       do k=1,nz
-        cff2 = h(I,j,k)*G%dyCu(I,j)
-        my_area = my_area + cff2
+        my_area(1,j) = my_area(1,j) + h(I,j,k)*G%dyCu(I,j)
       enddo
     endif
   enddo ; enddo
+  total_area = reproducing_sum(my_area)
   my_flux = -tide_flow*SIN(2.0*PI*time_sec/(12.0*3600.0))
 
   ! Old way
-  segment => OBC%segment(1)
   do j=jsd,jed ; do I=IsdB,IedB
-    if (OBC%OBC_segment_u(I,j) /= OBC_NONE) then
+    if (OBC%segnum_u(I,j) /= OBC_NONE) then
       OBC%eta_outer_u(I,j) = cff
-      OBC%ubt_outer(I,j) = my_flux/my_area
-      if (segment%nudged) then
-        do k=1,nz
-          OBC%u(I,j,k) = my_flux/my_area
-          OBC%uh(I,j,k) = 0.5*OBC%u(I,j,k)*(h(i,j,k) + h(i+1,j,k))
-        enddo
-      endif
+      OBC%ubt_outer(I,j) = my_flux/total_area
+!     if (segment%nudged) then
+!       do k=1,nz
+!         OBC%u(I,j,k) = my_flux/total_area
+!         OBC%uh(I,j,k) = 0.5*OBC%u(I,j,k)*(h(i,j,k) + h(i+1,j,k))
+!       enddo
+!     endif
     endif
   enddo ; enddo
   do J=JsdB,JedB ; do i=isd,ied
-    if (OBC%OBC_segment_v(i,J) /= OBC_NONE) then
+    if (OBC%segnum_v(i,J) /= OBC_NONE) then
       OBC%eta_outer_v(i,J) = cff
       OBC%vbt_outer(i,J) = 0.0
     endif
@@ -104,7 +109,7 @@ subroutine tidal_bay_set_OBC_data(OBC, G, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux/my_area
+    segment%normal_vel_bt(:,:) = my_flux/total_area
     segment%eta(:,:) = cff
 
   enddo ! end segment loop

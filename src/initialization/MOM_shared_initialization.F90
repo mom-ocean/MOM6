@@ -4,7 +4,7 @@ module MOM_shared_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : max_across_PEs
+use MOM_coms, only : max_across_PEs, reproducing_sum
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_dyn_horgrid, only : dyn_horgrid_type
@@ -1044,13 +1044,15 @@ subroutine compute_global_grid_integrals(G)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
+  tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  call sum_across_PEs( G%areaT_global )
+  G%areaT_global = reproducing_sum(tmpForSumming)
 
   if (G%areaT_global == 0.0) &
     call MOM_error(FATAL, "compute_global_grid_integrals: "//&
