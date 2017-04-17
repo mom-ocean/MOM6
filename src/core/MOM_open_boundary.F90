@@ -108,6 +108,10 @@ type, public :: OBC_segment_type
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
                                                             !! that values should be nudged towards (m s-1).
+  real, pointer, dimension(:,:,:) :: T=>NULL()              !< The temperature on the OB segment
+                                                            !! velocity points (C).
+  real, pointer, dimension(:,:,:) :: S=>NULL()              !< The salinity on the OB segment
+                                                            !! velocity points ().
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
@@ -841,6 +845,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   end function interpret_int_expr
 end subroutine parse_segment_str
 
+!> Parse an OBC_SEGMENT_%%%_DATA string
  subroutine parse_segment_data_str(segment_str, var, value, filenam, fieldnam, fields, num_fields, debug )
    character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
    character(len=*), intent(in),  optional  :: var         !< The name of the variable for which parameters are needed
@@ -1513,17 +1518,18 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
   character(len=40)  :: mod = "set_Flather_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
   real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
   real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
 
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), &
-    OBC_S_v => NULL()
+! real, pointer, dimension(:,:,:) :: &
+!   OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
+!   OBC_T_v => NULL(), &    ! specify the values of T and S that should come
+!   OBC_S_u => NULL(), &
+!   OBC_S_v => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1591,10 +1597,10 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   ! used to enforce the near-boundary layer structure.
 
   if (associated(tv%T)) then
-    allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-    allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
-    allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
+!   allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
+!   allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
+!   allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
+!   allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
 
     if (read_OBC_TS) then
       call read_data(filename, 'OBC_T_u', OBC_T_u, &
