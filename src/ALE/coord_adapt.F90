@@ -206,7 +206,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
     kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
          (CS%adaptZoomCoeff / (CS%adaptZoom * GV%m_to_H + 0.5*(zNext(K) + zNext(K+1))) + &
          (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
-         (1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff) / depth)
+         max(1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff, 0.0) / depth)
   enddo
 
   ! initial denominator (first diagonal element)
