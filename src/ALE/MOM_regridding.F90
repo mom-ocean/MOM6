@@ -110,6 +110,7 @@ type, public :: regridding_CS
   real :: adaptZoomCoeff = 0.0
   real :: adaptBuoyCoeff = 0.0
   real :: adaptDrho0     = 0.5
+  logical :: adaptDoMin  = .false.
 
   type(zlike_CS),  pointer :: zlike_CS  => null()
   type(sigma_CS),  pointer :: sigma_CS  => null()
@@ -546,9 +547,14 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call get_param(param_file, mod, "ADAPT_ALPHA", adaptAlpha, &
          "Scaling on optimisation tendency.", &
          units="nondim", default=1.0)
+    call get_param(param_file, mod, "ADAPT_DO_MIN_DEPTH", tmpLogical, &
+         "If true, make a HyCOM-like mixed layer by preventing interfaces\n"//&
+         "from being shallower than the depths specified by the regridding coordinate.", &
+         default=.false.)
 
     call set_regrid_params(CS, adaptTimeRatio=adaptTimeRatio, adaptZoom=adaptZoom, &
-         adaptZoomCoeff=adaptZoomCoeff, adaptBuoyCoeff=adaptBuoyCoeff, adaptAlpha=adaptAlpha)
+         adaptZoomCoeff=adaptZoomCoeff, adaptBuoyCoeff=adaptBuoyCoeff, adaptAlpha=adaptAlpha, &
+         adaptDoMin=tmpLogical)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -1412,7 +1418,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! local variables
   integer :: i, j, k, nz ! indices and dimension lengths
-  real :: h_up, b1, b_denom_1, d1, depth, drdz
+  real :: h_up, b1, b_denom_1, d1, depth, drdz, nominal_z, stretching
   ! temperature, salinity and pressure on interfaces
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: tInt, sInt
   ! current interface positions and after tendency term is applied
@@ -1573,6 +1579,19 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
     do K = nz, 2, -1
       zNext(i,j,K) = zNext(i,j,K) + c1(K)*zNext(i,j,K+1)
     enddo
+
+    if (CS%adaptDoMin) then
+      nominal_z = 0.
+      stretching = zInt(i,j,nz+1) / depth
+
+      do k = 2, nz+1
+        nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+        ! take the deeper of the calculated and nominal positions
+        zNext(i,j,K) = max(zNext(i,j,K), nominal_z)
+        ! interface can't go below topography
+        zNext(i,j,K) = min(zNext(i,j,K), zInt(i,j,nz+1))
+      enddo
+    endif
 
     call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext(i,j,:), dzInterface(i,j,:))
     ! convert from depth to z
@@ -2163,7 +2182,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
              halocline_strat_tol, integrate_downward_for_e, &
-             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha)
+             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -2181,6 +2200,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
   real, optional, intent(in) :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
+  logical, optional, intent(in) :: adaptDoMin
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
@@ -2205,6 +2225,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(adaptZoomCoeff)) CS%adaptZoomCoeff = adaptZoomCoeff
   if (present(adaptBuoyCoeff)) CS%adaptBuoyCoeff = adaptBuoyCoeff
   if (present(adaptAlpha)) CS%adaptAlpha = adaptAlpha
+  if (present(adaptDoMin)) CS%adaptDoMin = adaptDoMin
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
