@@ -9,6 +9,7 @@ module MOM_ALE
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_EOS,              only : calculate_density
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery
@@ -106,6 +107,7 @@ public ALE_main
 public ALE_main_offline
 public ALE_offline_tracer_final
 public ALE_build_grid
+public ALE_regrid_accelerated
 public ALE_remap_scalar
 public pressure_gradient_plm
 public pressure_gradient_ppm
@@ -600,6 +602,61 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
 
   if (show_call_tree) call callTree_leave("ALE_build_grid()")
 end subroutine ALE_build_grid
+
+!> For a state-based coordinate, accelerate the process of regridding by
+!! repeatedly applying the grid calculation algorithm
+subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new)
+  type(ALE_CS),                             intent(in)     :: CS
+  type(ocean_grid_type),                    intent(inout)  :: G
+  type(verticalGrid_type),                  intent(in)     :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)     :: h_orig
+  type(thermo_var_ptrs),                    intent(inout)  :: tv
+  integer,                                  intent(in)     :: n
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)    :: h_new
+
+  ! Local variables
+  integer :: i, j, k, nz
+  type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
+  type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))         :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: T, S ! temporary state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dzInterface ! required but not used
+
+  nz = GV%ke
+
+  call create_group_pass(pass_T_S_h, T, G%domain)
+  call create_group_pass(pass_T_S_h, S, G%domain)
+  call create_group_pass(pass_T_S_h, h, G%domain)
+
+  ! copy original temp/salt and set our local tv_pointers to them
+  tv_local = tv
+  T(:,:,:) = tv%T(:,:,:)
+  S(:,:,:) = tv%S(:,:,:)
+  tv_local%T => T
+  tv_local%S => S
+
+  ! get local copy of thickness
+  h(:,:,:) = h_orig(:,:,:)
+
+  do k = 1, n
+    call do_group_pass(pass_T_S_h, G%domain)
+
+    ! generate new grid
+    call regridding_main(CS%remapCS, CS%regridCS, G, GV, h, tv_local, h_new, dzInterface)
+
+    ! remap from original grid onto new grid
+    do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), tv_local%S(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), tv_local%T(i,j,:))
+    enddo ; enddo
+
+    h(:,:,:) = h_new(:,:,:)
+  enddo
+
+  ! save the final temp/salt
+  tv%S(:,:,:) = S(:,:,:)
+  tv%T(:,:,:) = T(:,:,:)
+end subroutine ALE_regrid_accelerated
 
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
