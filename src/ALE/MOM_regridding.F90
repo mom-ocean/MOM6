@@ -19,7 +19,7 @@ use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
-use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT
+use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_ADAPTIVE
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap
 
 use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column, end_coord_zlike
@@ -28,6 +28,7 @@ use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_colum
 use coord_rho,    only : old_inflate_layers_1d
 use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
 use coord_slight, only : init_coord_slight, slight_CS, set_slight_params, build_slight_column, end_coord_slight
+use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
 
 use netcdf ! Used by check_grid_def()
 
@@ -109,6 +110,7 @@ type, public :: regridding_CS
   type(rho_CS),    pointer :: rho_CS    => null()
   type(hycom_CS),  pointer :: hycom_CS  => null()
   type(slight_CS), pointer :: slight_CS => null()
+  type(adapt_CS),  pointer :: adapt_CS  => null()
 
 end type
 
@@ -134,7 +136,8 @@ character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
-                 " SLIGHT - stretched coordinates above continuous isopycnal"
+                 " SLIGHT - stretched coordinates above continuous isopycnal\n"//&
+                 " ADAPTIVE - optimise for smooth neutral density surfaces"
 
 ! Documentation for regridding interpolation schemes
 character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
@@ -178,6 +181,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
   logical :: coord_is_state_dependent, ierr
   real :: filt_len, strat_tol, index_scale, tmpReal
   real :: dz_fixed_sfc, Rho_avg_depth, nlay_sfc_int
+  real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
   integer :: nz_fixed_sfc, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses, in m.
@@ -420,7 +424,8 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     ! This is a work around to apparently needed to work with the from_Z initialization...  ???
     if (coordinateMode(coord_mode) == REGRIDDING_ZSTAR .or. &
         coordinateMode(coord_mode) == REGRIDDING_HYCOM1 .or. &
-        coordinateMode(coord_mode) == REGRIDDING_SLIGHT) then
+        coordinateMode(coord_mode) == REGRIDDING_SLIGHT .or. &
+        coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
       ! Adjust target grid to be consistent with max_depth
       tmpReal = sum( dz(:) )
       if (tmpReal < max_depth) then
@@ -520,6 +525,30 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                              halocline_strat_tol=strat_tol)
     endif
 
+  endif
+
+  if (coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
+    call get_param(param_file, mod, "ADAPT_TIME_RATIO", adaptTimeRatio, &
+         "Ratio of ALE timestep to grid timescale.", units="s", default=1e-1)
+    call get_param(param_file, mod, "ADAPT_ZOOM_DEPTH", adaptZoom, &
+         "Depth of near-surface zooming region.", units="m", default=200.0)
+    call get_param(param_file, mod, "ADAPT_ZOOM_COEFF", adaptZoomCoeff, &
+         "Coefficient of near-surface zooming diffusivity.", &
+         units="nondim", default=0.2)
+    call get_param(param_file, mod, "ADAPT_BUOY_COEFF", adaptBuoyCoeff, &
+         "Coefficient of buoyancy diffusivity.", &
+         units="nondim", default=0.8)
+    call get_param(param_file, mod, "ADAPT_ALPHA", adaptAlpha, &
+         "Scaling on optimisation tendency.", &
+         units="nondim", default=1.0)
+    call get_param(param_file, mod, "ADAPT_DO_MIN_DEPTH", tmpLogical, &
+         "If true, make a HyCOM-like mixed layer by preventing interfaces\n"//&
+         "from being shallower than the depths specified by the regridding coordinate.", &
+         default=.false.)
+
+    call set_regrid_params(CS, adaptTimeRatio=adaptTimeRatio, adaptZoom=adaptZoom, &
+         adaptZoomCoeff=adaptZoomCoeff, adaptBuoyCoeff=adaptBuoyCoeff, adaptAlpha=adaptAlpha, &
+         adaptDoMin=tmpLogical)
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
@@ -709,6 +738,7 @@ subroutine end_regridding(CS)
   if (associated(CS%rho_CS))    call end_coord_rho(CS%rho_CS)
   if (associated(CS%hycom_CS))  call end_coord_hycom(CS%hycom_CS)
   if (associated(CS%slight_CS)) call end_coord_slight(CS%slight_CS)
+  if (associated(CS%adapt_CS))  call end_coord_adapt(CS%adapt_CS)
 
   deallocate( CS%coordinateResolution )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
@@ -790,6 +820,10 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
 
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, h, tv, dzInterface, CS )
+      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+
+    case ( REGRIDDING_ADAPTIVE )
+      call build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case default
@@ -1368,6 +1402,60 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
 
 end subroutine build_grid_HyCOM1
 
+subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
+  type(ocean_grid_type),                       intent(in)    :: G
+  type(verticalGrid_type),                     intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h
+  type(thermo_var_ptrs),                       intent(in)    :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface
+  type(remapping_CS),                          intent(in)    :: remapCS
+  type(regridding_CS),                         intent(in)    :: CS
+
+  ! local variables
+  integer :: i, j, k, nz ! indices and dimension lengths
+  ! temperature, salinity and pressure on interfaces
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: tInt, sInt
+  ! current interface positions and after tendency term is applied
+  ! positive downward
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: zInt
+  real, dimension(SZK_(GV)+1) :: zNext
+
+  nz = GV%ke
+
+  ! position surface at z = 0.
+  zInt(:,:,1) = 0.
+
+  ! work on interior interfaces
+  do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+    tInt(i,j,K) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
+    sInt(i,j,K) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
+    zInt(i,j,K) = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
+  enddo ; enddo ; enddo
+
+  ! top and bottom temp/salt interfaces are just the layer
+  ! average values
+  tInt(:,:,1) = tv%T(:,:,1) ; tInt(:,:,nz+1) = tv%T(:,:,nz)
+  sInt(:,:,1) = tv%S(:,:,1) ; sInt(:,:,nz+1) = tv%S(:,:,nz)
+
+  ! set the bottom interface depth
+  zInt(:,:,nz+1)  = zInt(:,:,nz) + h(:,:,nz)
+
+  ! calculate horizontal density derivatives (alpha/beta)
+  ! between cells in a 5-point stencil, columnwise
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j) < 0.5) then
+      dzInterface(i,j,:) = 0. ! land point, don't move interfaces, and skip
+      cycle
+    endif
+
+    call build_adapt_column(CS%adapt_CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
+
+    call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
+    ! convert from depth to z
+    do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
+    call adjust_interface_motion(nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:))
+  enddo ; enddo
+end subroutine build_grid_adaptive
 
 !> Builds a grid that tracks density interfaces for water that is denser than
 !! the surface density plus an increment of some number of layers, and uses all
@@ -1706,7 +1794,8 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   scheme = coordinateMode(coordMode)
   select case ( scheme )
 
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_SIGMA_SHELF_ZSTAR )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_SIGMA_SHELF_ZSTAR, &
+           REGRIDDING_ADAPTIVE )
       uniformResolution(:) = maxDepth / real(nk)
 
     case ( REGRIDDING_RHO )
@@ -1738,6 +1827,8 @@ subroutine initCoord(CS, coord_mode)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, CS%interp_CS)
   case (REGRIDDING_SLIGHT)
     call init_coord_slight(CS%slight_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+  case (REGRIDDING_ADAPTIVE)
+    call init_coord_adapt(CS%adapt_CS, CS%nk, CS%coordinateResolution)
   end select
 end subroutine initCoord
 
@@ -1894,7 +1985,7 @@ function getCoordinateUnits( CS )
   character(len=20)               :: getCoordinateUnits
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_ADAPTIVE )
       getCoordinateUnits = 'meter'
     case ( REGRIDDING_SIGMA_SHELF_ZSTAR )
       getCoordinateUnits = 'meter/fraction'
@@ -1935,6 +2026,8 @@ function getCoordinateShortName( CS )
       getCoordinateShortName = 'z-rho'
     case ( REGRIDDING_SLIGHT )
       getCoordinateShortName = 's-rho'
+    case ( REGRIDDING_ADAPTIVE )
+      getCoordinateShortName = 'adaptive'
     case default
       call MOM_error(FATAL,'MOM_regridding, getCoordinateShortName: '//&
                      'Unknown regridding scheme selected!')
@@ -1947,7 +2040,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
              compress_fraction, dz_min_surface, nz_fixed_surface, Rho_ML_avg_depth, &
              nlay_ML_to_interior, fix_haloclines, halocline_filt_len, &
-             halocline_strat_tol, integrate_downward_for_e)
+             halocline_strat_tol, integrate_downward_for_e, &
+             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness !< Minimum thickness allowed when building the new grid (m)
@@ -1964,6 +2058,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: halocline_filt_len !< Length scale over which to filter T & S when looking for spuriously unstable water mass profiles (m)
   real,    optional, intent(in) :: halocline_strat_tol !< Value of the stratification ratio that defines a problematic halocline region.
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward from the top.
+  real, optional, intent(in) :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
+  logical, optional, intent(in) :: adaptDoMin
 
   if (present(interp_scheme)) call set_interp_scheme(CS%interp_CS, interp_scheme)
   if (present(boundary_extrapolation)) call set_interp_extrap(CS%interp_CS, boundary_extrapolation)
@@ -2009,6 +2105,13 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (present(compress_fraction))   call set_slight_params(CS%slight_CS, compressibility_fraction=compress_fraction)
     if (associated(CS%slight_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_slight_params(CS%slight_CS, interp_CS=CS%interp_CS)
+  case (REGRIDDING_ADAPTIVE)
+    if (present(adaptTimeRatio)) call set_adapt_params(CS%adapt_CS, adaptTimeRatio=adaptTimeRatio)
+    if (present(adaptZoom))      call set_adapt_params(CS%adapt_CS, adaptZoom=adaptZoom)
+    if (present(adaptZoomCoeff)) call set_adapt_params(CS%adapt_CS, adaptZoomCoeff=adaptZoomCoeff)
+    if (present(adaptBuoyCoeff)) call set_adapt_params(CS%adapt_CS, adaptBuoyCoeff=adaptBuoyCoeff)
+    if (present(adaptAlpha))     call set_adapt_params(CS%adapt_CS, adaptAlpha=adaptAlpha)
+    if (present(adaptDoMin))     call set_adapt_params(CS%adapt_CS, adaptDoMin=adaptDoMin)
   end select
 
 end subroutine set_regrid_params
@@ -2055,7 +2158,7 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_SLIGHT, REGRIDDING_ADAPTIVE )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk
