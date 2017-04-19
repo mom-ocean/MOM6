@@ -7,7 +7,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_RO
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var, pass_vector
 use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
@@ -41,6 +41,7 @@ public fill_OBC_halos
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
+public register_OBC, OBC_registry_init
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -181,6 +182,19 @@ type, public :: ocean_OBC_type
   character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
 end type ocean_OBC_type
+
+!> Type to carry something (what??) for the OBC registry.
+type, public :: OBC_struct_type
+  character(len=32)               :: name             !< OBC name used for error messages
+end type OBC_struct_type
+
+!> Type to carry basic OBC information needed for updating values.
+type, public :: OBC_registry_type
+  integer               :: nobc = 0          !< number of registered open boundary types.
+  type(OBC_struct_type) :: OB(MAX_FIELDS_)   !< array of registered boundary types.
+  logical               :: locked = .false.  !< New tracers may be registered if locked=.false.
+                                             !! When locked=.true.,no more boundaries can be registered.
+end type OBC_registry_type
 
 integer :: id_clock_pass
 
@@ -2229,10 +2243,61 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       endif
     enddo
 
-
   enddo ! end segment loop
 
 end subroutine update_OBC_segment_data
+
+!> register open boundary objects for boundary updates.
+subroutine register_OBC(name, param_file, Reg)
+  character(len=32),     intent(in)  :: name        !< OBC name used for error messages
+  type(param_file_type), intent(in)  :: param_file  !< file to parse for  model parameter values
+  type(OBC_registry_type), pointer   :: Reg         !< pointer to the tracer registry
+  integer :: nobc
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not. associated(Reg)) call OBC_registry_init(param_file, Reg)
+
+  if (Reg%nobc>=MAX_FIELDS_) then
+    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
+        &all the open boundaries being registered via register_OBC.")') Reg%nobc+1
+    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+  endif
+  Reg%nobc = Reg%nobc + 1
+  nobc     = Reg%nobc
+
+  Reg%OB(nobc)%name = name
+
+  if (Reg%locked) call MOM_error(FATAL, &
+      "MOM register_tracer was called for variable "//trim(Reg%OB(nobc)%name)//&
+      " with a locked tracer registry.")
+
+end subroutine register_OBC
+
+!> This routine include declares and sets the variable "version".
+subroutine OBC_registry_init(param_file, Reg)
+  type(param_file_type),   intent(in) :: param_file !< open file to parse for model parameters
+  type(OBC_registry_type), pointer    :: Reg        !< pointer to OBC registry
+
+  integer, save :: init_calls = 0
+
+#include "version_variable.h"
+  character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not.associated(Reg)) then ; allocate(Reg)
+  else ; return ; endif
+
+  ! Read all relevant parameters and write them to the model log.
+! call log_version(param_file, mod, version, "")
+
+  init_calls = init_calls + 1
+  if (init_calls > 1) then
+    write(mesg,'("OBC_registry_init called ",I3, &
+      &" times with different registry pointers.")') init_calls
+    if (is_root_pe()) call MOM_error(WARNING,"MOM_open_boundary"//mesg)
+  endif
+
+end subroutine OBC_registry_init
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary

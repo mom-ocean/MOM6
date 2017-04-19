@@ -65,6 +65,7 @@ use MOM_time_manager,         only : increment_date
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
+use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -104,6 +105,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_ini
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
+use MOM_open_boundary,         only : OBC_registry_type
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -389,6 +391,8 @@ type, public :: MOM_control_struct
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
   type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
+  type(OBC_registry_type),       pointer :: OBC_Reg                => NULL()
+  type(update_OBC_CS),           pointer :: update_OBC_CSp         => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
   type(sponge_CS),               pointer :: sponge_CSp             => NULL()
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
@@ -2217,6 +2221,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call call_tracer_register(dG%HI, GV, param_file, CS%tracer_flow_CSp, &
                             CS%tracer_Reg, CS%restart_CSp)
 
+  call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC_Reg)
+
   call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
@@ -2383,27 +2389,29 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     if (CS%legacy_split) then
-      call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+      call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
                   G, GV, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
-                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE,  &
-                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE,    &
+                  CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc,  &
+                  dirs, CS%ntrunc)
     else
       call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
                   G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
                   CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  CS%OBC, CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+                  CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
+                  CS%visc, dirs, CS%ntrunc)
     endif
   else
     if (CS%use_RK2) then
-      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,       &
-              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,    &
-              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
-              CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,         &
+              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,      &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
+              CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     else
-      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,           &
-              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,        &
-              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%ALE_CSp, &
-              CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
+      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,             &
+              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,          &
+              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
+              CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
     endif
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
