@@ -23,17 +23,17 @@ integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8   !< z* coordinates at th
                                                     !! lightest water, isopycnal below
 integer, parameter :: REGRIDDING_ADAPTIVE = 9
 
-character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
-character(len=6), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
-character(len=6), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
-character(len=6), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
-character(len=6), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
-character(len=6), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
-character(len=6), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
-character(len=6), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
-character(len=17), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
-character(len=8), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE"
-character(len=6), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
+character(len=*), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
+character(len=*), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
+character(len=*), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
+character(len=*), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
+character(len=*), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
+character(len=*), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
+character(len=*), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
+character(len=*), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
+character(len=*), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
+character(len=*), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE"
+character(len=*), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
 
 integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
   (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR /)

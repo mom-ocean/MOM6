@@ -129,7 +129,7 @@ public DEFAULT_COORDINATE_MODE
 public get_zlike_CS, get_sigma_CS, get_rho_CS
 
 !> Documentation for coordinate options
-character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
+character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " LAYER - Isopycnal or stacked shallow water layers\n"//&
                  " ZSTAR, Z* - stetched geopotential z*\n"//&
                  " SIGMA_SHELF_ZSTAR - stetched geopotential z* ignoring shelf\n"//&
@@ -137,10 +137,10 @@ character(len=322), parameter, public :: regriddingCoordinateModeDoc = &
                  " RHO   - continuous isopycnal\n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
                  " SLIGHT - stretched coordinates above continuous isopycnal\n"//&
-                 " ADAPTIVE - optimise for smooth neutral density surfaces"
+                 " ADAPTIVE - optimize for smooth neutral density surfaces"
 
 ! Documentation for regridding interpolation schemes
-character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
+character(len=*), parameter, public :: regriddingInterpSchemeDoc = &
                  " P1M_H2     (2nd-order accurate)\n"//&
                  " P1M_H4     (2nd-order accurate)\n"//&
                  " P1M_IH4    (2nd-order accurate)\n"//&
@@ -151,7 +151,7 @@ character(len=338), parameter, public :: regriddingInterpSchemeDoc = &
                  " P3M_IH6IH5 (4th-order accurate)\n"//&
                  " PQM_IH4IH3 (4th-order accurate)\n"//&
                  " PQM_IH6IH5 (5th-order accurate)"
-character(len=6), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
+character(len=*), parameter, public :: regriddingDefaultInterpScheme = "P1M_H2"
 logical, parameter, public :: regriddingDefaultBoundaryExtrapolation = .false.
 real, parameter, public :: regriddingDefaultMinThickness = 1.e-3
 
@@ -539,7 +539,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
          "Coefficient of buoyancy diffusivity.", &
          units="nondim", default=0.8)
     call get_param(param_file, mod, "ADAPT_ALPHA", adaptAlpha, &
-         "Scaling on optimisation tendency.", &
+         "Scaling on optimization tendency.", &
          units="nondim", default=1.0)
     call get_param(param_file, mod, "ADAPT_DO_MIN_DEPTH", tmpLogical, &
          "If true, make a HyCOM-like mixed layer by preventing interfaces\n"//&
