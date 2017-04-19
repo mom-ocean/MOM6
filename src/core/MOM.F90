@@ -3689,6 +3689,7 @@ subroutine MOM_end(CS)
       call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif ; endif
   DEALLOC_(CS%ave_ssh)
+  call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(CS%GV)
   call MOM_grid_end(CS%G)
