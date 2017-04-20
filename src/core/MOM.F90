@@ -121,6 +121,7 @@ use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_ty
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
+use MOM_tracer_flow_control,   only : tracer_flow_control_end
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
@@ -3643,6 +3644,7 @@ subroutine MOM_end(CS)
   call tracer_advect_end(CS%tracer_adv_CSp)
   call tracer_hor_diff_end(CS%tracer_diff_CSp)
   call tracer_registry_end(CS%tracer_Reg)
+  call tracer_flow_control_end(CS%tracer_flow_CSp)
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
   if (CS%split) then ; if (CS%legacy_split) then
