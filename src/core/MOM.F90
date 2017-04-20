@@ -1790,6 +1790,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "\t0 = Only FATAL messages\n" // &
                  "\t2 = Only FATAL, WARNING, NOTE [default]\n" // &
                  "\t9 = All)", default=2)
+  call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, &
+                 "If True, exercises unit tests at model start up.", &
+                 default=.false.)
+  if (do_unit_tests) then
+    call unit_tests
+  endif
+
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (CS%split) then
@@ -2534,11 +2541,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   CS%write_IC = save_IC .and. &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
-
-  ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unit_tests s/r
-  ! which calls unit tests provided by some modules.
-  call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
-  if (do_unit_tests) call unit_tests
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
