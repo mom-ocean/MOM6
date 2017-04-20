@@ -27,7 +27,7 @@ subroutine unit_tests(verbosity)
        "MOM_unit_tests: remapping_unit_tests FAILED")
     if (neutral_diffusion_unit_tests()) call MOM_error(FATAL, &
        "MOM_unit_tests: neutralDiffusionUnitTests FAILED")
-    if (diag_vkernels_unit_tests()) call MOM_error(FATAL, &
+    if (diag_vkernels_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: diag_vkernels_unit_tests FAILED")
   endif
 
