@@ -669,7 +669,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
             ! Build the start and final grids
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
-            call remapping_core_h( nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column, CS_remapping )
+            call remapping_core_h(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column)
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not
@@ -764,7 +764,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
           endif
-          call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
+          call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, u_column)
           u(I,j,:) = u_column(:)
         endif
       enddo
@@ -789,7 +789,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
           endif
-          call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
+          call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, u_column)
           v(i,J,:) = u_column(:)
         endif
       enddo
@@ -849,7 +849,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
           call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
           call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, dx, s_dst(i,j,:))
         else
-          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
+          call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:))
         endif
       else
         s_dst(i,j,:) = 0.

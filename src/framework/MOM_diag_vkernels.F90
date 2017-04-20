@@ -10,9 +10,6 @@ public diag_vkernels_unit_tests
 public interpolate_column
 public reintegrate_column
 
-! Module data used only for debugging
-logical :: verbose_diag_vkernels_unit_tests = .true. ! If true, always write out unit tests results
-
 contains
 
 !> Linearly interpolate interface data, u_src, from grid h_src to a grid h_dest
@@ -168,187 +165,192 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value,
 end subroutine reintegrate_column
 
 !> Returns true if any unit tests for module MOM_diag_vkernels fail
-logical function diag_vkernels_unit_tests()
+logical function diag_vkernels_unit_tests(verbose)
+  logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
-  real, parameter :: missing_value=-9.999999999E9 ! Value to use for vanished layers
-  logical :: fail
+  real, parameter :: mv=-9.999999999E9 ! Value to use for vanished layers
+  logical :: fail, v
 
-  write(0,*) '============ MOM_diag_kernels: diag_vkernels_unit_tests =================='
-  write(0,*) '- - - - - - - - - - interpolation tests  - - - - - - - - - - - - - - - - -'
+  v = verbose
 
-  fail = test_interp('Identity: 3 layer', &
+  write(0,*) '==== MOM_diag_kernels: diag_vkernels_unit_tests =========='
+  if (v) write(0,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
+
+  fail = test_interp(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./) )
   diag_vkernels_unit_tests = fail
 
-  fail = test_interp('A: 3 layer to 2', &
+  fail = test_interp(v,mv,'A: 3 layer to 2', &
                      3, (/1.,1.,1./), (/1.,2.,3.,4./), &
                      2, (/1.5,1.5/), (/1.,2.5,4./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('B: 2 layer to 3', &
+  fail = test_interp(v,mv,'B: 2 layer to 3', &
                      2, (/1.5,1.5/), (/1.,4.,7./), &
                      3, (/1.,1.,1./), (/1.,3.,5.,7./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('C: 3 layer (vanished middle) to 2', &
+  fail = test_interp(v,mv,'C: 3 layer (vanished middle) to 2', &
                      3, (/1.,0.,2./), (/1.,2.,2.,3./), &
                      2, (/1.,2./), (/1.,2.,3./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('D: 3 layer (deep) to 3', &
+  fail = test_interp(v,mv,'D: 3 layer (deep) to 3', &
                      3, (/1.,2.,3./), (/1.,2.,4.,7./), &
                      2, (/2.,2./), (/1.,3.,5./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('E: 3 layer to 3 (deep)', &
+  fail = test_interp(v,mv,'E: 3 layer to 3 (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      3, (/2.,3.,4./), (/1.,3.,6.,8./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('F: 3 layer to 4 with vanished top/botton', &
+  fail = test_interp(v,mv,'F: 3 layer to 4 with vanished top/botton', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,5.,0./), (/missing_value,1.,3.,8.,missing_value/) )
+                     4, (/0.,2.,5.,0./), (/mv,1.,3.,8.,mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('Fs: 3 layer to 4 with vanished top/botton (shallow)', &
+  fail = test_interp(v,mv,'Fs: 3 layer to 4 with vanished top/botton (shallow)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,4.,0./), (/missing_value,1.,3.,7.,missing_value/) )
+                     4, (/0.,2.,4.,0./), (/mv,1.,3.,7.,mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_interp('Fd: 3 layer to 4 with vanished top/botton (deep)', &
+  fail = test_interp(v,mv,'Fd: 3 layer to 4 with vanished top/botton (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
-                     4, (/0.,2.,6.,0./), (/missing_value,1.,3.,8.,missing_value/) )
+                     4, (/0.,2.,6.,0./), (/mv,1.,3.,8.,mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - - - - - - - - - -'
+  if (v) write(0,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
 
-  fail = test_reintegrate('Identity: 3 layer', &
+  fail = test_reintegrate(v,mv,'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/-5.,2.,1./), &
                      3, (/1.,2.,3./), (/-5.,2.,1./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('A: 3 layer to 2', &
+  fail = test_reintegrate(v,mv,'A: 3 layer to 2', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,3./), (/-4.,2./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('A: 3 layer to 2 (deep)', &
+  fail = test_reintegrate(v,mv,'A: 3 layer to 2 (deep)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,4./), (/-4.,2./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('A: 3 layer to 2 (shallow)', &
+  fail = test_reintegrate(v,mv,'A: 3 layer to 2 (shallow)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,2./), (/-4.,1.5/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('B: 3 layer to 4 with vanished top/bottom', &
+  fail = test_reintegrate(v,mv,'B: 3 layer to 4 with vanished top/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      4, (/0.,3.,3.,0./), (/0.,-4.,2.,0./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('C: 3 layer to 4 with vanished top//middle/bottom', &
+  fail = test_reintegrate(v,mv,'C: 3 layer to 4 with vanished top//middle/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      5, (/0.,3.,0.,3.,0./), (/0.,-4.,0.,2.,0./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('D: 3 layer to 3 (vanished)', &
+  fail = test_reintegrate(v,mv,'D: 3 layer to 3 (vanished)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      3, (/0.,0.,0./), (/0.,0.,0./) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('D: 3 layer (vanished) to 3', &
+  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
-                     3, (/2.,2.,2./), (/missing_value, missing_value, missing_value/) )
+                     3, (/2.,2.,2./), (/mv, mv, mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('D: 3 layer (vanished) to 3 (vanished)', &
+  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
-                     3, (/0.,0.,0./), (/missing_value, missing_value, missing_value/) )
+                     3, (/0.,0.,0./), (/mv, mv, mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  fail = test_reintegrate('D: 3 layer (vanished) to 3 (vanished)', &
+  fail = test_reintegrate(v,mv,'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/0.,0.,0./), &
-                     3, (/0.,0.,0./), (/missing_value, missing_value, missing_value/) )
+                     3, (/0.,0.,0./), (/mv, mv, mv/) )
   diag_vkernels_unit_tests = diag_vkernels_unit_tests .or. fail
 
-  write(0,*) '=========================================================================='
-
-  contains
-
-  !> Returns true if a test of interpolate_column() produces the wrong answer
-  logical function test_interp(msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
-    character(len=*),         intent(in) :: msg !< Message to label test
-    integer,                  intent(in) :: nsrc !< Number of source cells
-    real, dimension(nsrc),    intent(in) :: h_src !< Thickness of source cells
-    real, dimension(nsrc+1),  intent(in) :: u_src !< Values at source cell interfaces
-    integer,                  intent(in) :: ndest !< Number of destination cells
-    real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells
-    real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces
-    ! Local variables
-    real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces
-    integer :: k
-    real :: error
-    logical :: print_results
-
-    ! Interpolate from src to dest
-    call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, u_dest)
-
-    test_interp = .false.
-    do k=1,ndest+1
-      if (u_dest(k)/=u_true(k)) test_interp = .true.
-    enddo
-    if (verbose_diag_vkernels_unit_tests .or. test_interp) then
-      write(0,'(2a)') ' Test: ',msg
-      write(0,'(a3,3(a24))') 'k','u_result','u_true','error'
-      do k=1,ndest+1
-        error = u_dest(k)-u_true(k)
-        if (error==0.) then
-          write(0,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
-        else
-          write(0,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
-        endif
-      enddo
-    endif
-  end function test_interp
-
-  !> Returns true if a test of reintegrate_column() produces the wrong answer
-  logical function test_reintegrate(msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
-    character(len=*),       intent(in) :: msg !< Message to label test
-    integer,                intent(in) :: nsrc !< Number of source cells
-    real, dimension(nsrc),  intent(in) :: h_src !< Thickness of source cells
-    real, dimension(nsrc),  intent(in) :: uh_src !< Values of source cell stuff
-    integer,                intent(in) :: ndest !< Number of destination cells
-    real, dimension(ndest), intent(in) :: h_dest !< Thickness of destination cells
-    real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff
-    ! Local variables
-    real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells
-    integer :: k
-    real :: error
-    logical :: print_results
-
-    ! Interpolate from src to dest
-    call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
-
-    test_reintegrate = .false.
-    do k=1,ndest
-      if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
-    enddo
-    if (verbose_diag_vkernels_unit_tests .or. test_reintegrate) then
-      write(0,'(2a)') ' Test: ',msg
-      write(0,'(a3,3(a24))') 'k','uh_result','uh_true','error'
-      do k=1,ndest
-        error = uh_dest(k)-uh_true(k)
-        if (error==0.) then
-          write(0,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
-        else
-          write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
-        endif
-      enddo
-    endif
-  end function test_reintegrate
+  if (.not. fail) write(*,*) 'Pass'
 
 end function diag_vkernels_unit_tests
+
+!> Returns true if a test of interpolate_column() produces the wrong answer
+logical function test_interp(verbose, missing_value, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
+  logical,                  intent(in) :: verbose !< If true, write results to stdout
+  real,                     intent(in) :: missing_value !< Value to indicate missing data
+  character(len=*),         intent(in) :: msg !< Message to label test
+  integer,                  intent(in) :: nsrc !< Number of source cells
+  real, dimension(nsrc),    intent(in) :: h_src !< Thickness of source cells
+  real, dimension(nsrc+1),  intent(in) :: u_src !< Values at source cell interfaces
+  integer,                  intent(in) :: ndest !< Number of destination cells
+  real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells
+  real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces
+  ! Local variables
+  real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces
+  integer :: k
+  real :: error
+  logical :: print_results
+
+  ! Interpolate from src to dest
+  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, missing_value, u_dest)
+
+  test_interp = .false.
+  do k=1,ndest+1
+    if (u_dest(k)/=u_true(k)) test_interp = .true.
+  enddo
+  if (verbose .or. test_interp) then
+    write(0,'(2a)') ' Test: ',msg
+    write(0,'(a3,3(a24))') 'k','u_result','u_true','error'
+    do k=1,ndest+1
+      error = u_dest(k)-u_true(k)
+      if (error==0.) then
+        write(0,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
+      else
+        write(0,'(i3,3(1pe24.16),x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
+      endif
+    enddo
+  endif
+end function test_interp
+
+!> Returns true if a test of reintegrate_column() produces the wrong answer
+logical function test_reintegrate(verbose, missing_value, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
+  logical,                intent(in) :: verbose !< If true, write results to stdout
+  real,                   intent(in) :: missing_value !< Value to indicate missing data
+  character(len=*),       intent(in) :: msg !< Message to label test
+  integer,                intent(in) :: nsrc !< Number of source cells
+  real, dimension(nsrc),  intent(in) :: h_src !< Thickness of source cells
+  real, dimension(nsrc),  intent(in) :: uh_src !< Values of source cell stuff
+  integer,                intent(in) :: ndest !< Number of destination cells
+  real, dimension(ndest), intent(in) :: h_dest !< Thickness of destination cells
+  real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff
+  ! Local variables
+  real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells
+  integer :: k
+  real :: error
+  logical :: print_results
+
+  ! Interpolate from src to dest
+  call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, missing_value, uh_dest)
+
+  test_reintegrate = .false.
+  do k=1,ndest
+    if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
+  enddo
+  if (verbose .or. test_reintegrate) then
+    write(0,'(2a)') ' Test: ',msg
+    write(0,'(a3,3(a24))') 'k','uh_result','uh_true','error'
+    do k=1,ndest
+      error = uh_dest(k)-uh_true(k)
+      if (error==0.) then
+        write(0,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
+      else
+        write(0,'(i3,3(1pe24.16),x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+      endif
+    enddo
+  endif
+end function test_reintegrate
 
 end module MOM_diag_vkernels
