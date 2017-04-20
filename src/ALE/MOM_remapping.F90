@@ -76,7 +76,7 @@ real, parameter :: h_neglect = 1.E-30 !< A dimensional (H units) number that can
                                       !! changing the numerical result, except where
                                       !! a division by zero would otherwise occur.
 
-logical, parameter :: old_algorithm = .true.  !< Use the old "broken" algorithm.
+logical, parameter :: old_algorithm = .false. !< Use the old "broken" algorithm.
                                               !! This is a temporary measure to assist
                                               !! debugging until we delete the old algorithm.
 
@@ -1723,6 +1723,13 @@ logical function remapping_unit_tests(verbose)
   remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 5, ppoly0_coefficients(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: P0')
   remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 5, ppoly0_coefficients(:,2), (/0.,6.,0.,0.,0./), 'Limits PPM: P1')
   remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 5, ppoly0_coefficients(:,3), (/0.,-3.,3.,0.,0./), 'Limits PPM: P2')
+
+  call PLM_reconstruction(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E(1:4,:), ppoly0_coefficients(1:4,:) )
+  remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 4, ppoly0_E(1:4,1), (/5.,5.,3.,1./), 'PPM: left edges h=0110')
+  remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 4, ppoly0_E(1:4,2), (/5.,3.,1.,1./), 'PPM: right edges h=0110')
+  call remap_via_sub_cells( 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E(1:4,:), ppoly0_coefficients(1:4,:), &
+                            2, (/1.,1./), INTEGRATION_PLM, .false., u2, err )
+  remapping_unit_tests = remapping_unit_tests .or. test_answer(v, 2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11')
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefficients)
 
