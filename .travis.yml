@@ -54,11 +54,12 @@ script:
  - (cd MOM6-examples/ocean_only/benchmark && mkdir -p RESTART && mpirun -n 1 ../../../build/ocn/MOM6 1> log)
  - (cd MOM6-examples/ocean_only/circle_obcs && mkdir -p RESTART && mpirun -n 1 ../../../build/symocn/MOM6 1> log)
  - md5sum MOM6-examples/ocean_only/{*,*/*}/ocean.stats > stats.md5
+ - (cd MOM6-examples/ocean_only/unit_tests && mkdir -p RESTART && mpirun -n 1 ../../../build/ocn/MOM6 1> log)
  - (cd MOM6-examples/ocean_only/double_gyre && mkdir -p RESTART && mpirun -n 2 ../../../build/symocn/MOM6 1> log)
- - (cd MOM6-examples/ocean_only/flow_downslope/layer && mkdir -p RESTART && mpirun -n 2 ../../../../build/ocn/MOM6 1>log)
- - (cd MOM6-examples/ocean_only/flow_downslope/rho && mkdir -p RESTART && mpirun -n 2 ../../../../build/ocn/MOM6 1>log)
- - (cd MOM6-examples/ocean_only/flow_downslope/sigma && mkdir -p RESTART && mpirun -n 2 ../../../../build/ocn/MOM6 1>log)
- - (cd MOM6-examples/ocean_only/flow_downslope/z && mkdir -p RESTART && mpirun -n 2 ../../../../build/ocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/layer && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/rho && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/sigma && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/z && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
  - (cd MOM6-examples/ocean_only/benchmark && mkdir -p RESTART && mpirun -n 4 ../../../build/symocn/MOM6 1> log)
  - (cd MOM6-examples/ocean_only/circle_obcs && mkdir -p RESTART && mpirun -n 4 ../../../build/symocn/MOM6 1> log)
  - md5sum -c stats.md5
