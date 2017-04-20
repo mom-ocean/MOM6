@@ -21,7 +21,7 @@ subroutine unit_tests(verbosity)
   verbose = verbosity>=5
 
   if (is_root_pe()) then ! The following need only be tested on 1 PE
-    if (string_functions_unit_tests()) call MOM_error(FATAL, &
+    if (string_functions_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: string_functions_unit_tests FAILED")
     if (remapping_unit_tests()) call MOM_error(FATAL, &
        "MOM_unit_tests: remapping_unit_tests FAILED")
