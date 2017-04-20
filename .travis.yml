@@ -4,7 +4,67 @@
 # This is a not a c-language project but we use the same environment.
 language: c
 
+# For saving time...
+cache:
+  directories:
+    - my_cache
+
+# Environment
+before_install:
+ - sudo apt-get install tcsh pkg-config gfortran netcdf-bin libnetcdf-dev openmpi-bin libopenmpi-dev
+
+# Install tools and dependencies
+install:
+ - git clone https://github.com/adcroft/house_cleaning.git
+ - test -d MOM6-examples || git clone https://github.com/NOAA-GFDL/MOM6-examples.git
+ - (cd MOM6-examples/ ; git checkout dev/master ; git pull)
+ - (cd MOM6-examples/src/ && git submodule init mkmf FMS && git submodule update mkmf FMS)
+ - test -f my_cache/FMS-src.tgz && tar zxf my_cache/FMS-src.tgz || echo "No cache of FMS src"
+ - (cd MOM6-examples/src/ && git submodule update FMS)
+ - test -f my_cache/FMS-obj.tgz && (tar zxf my_cache/FMS-obj.tgz) || echo "No cache of FMS objects"
+
+# Build FMS
+before_script:
+ - echo "Building FMS library"
+   && mkdir -p build/FMS && (cd build/FMS
+   && rm -f path_names
+   && ../../MOM6-examples/src/mkmf/bin/list_paths ../../MOM6-examples/src/FMS/{platform,include,memutils,constants,mpp,fms,time_manager,diag_manager,data_override,coupler/ensemble_manager.F90,axis_utils,horiz_interp,time_interp,astronomy,mosaic} 
+   && ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/linux-gnu.mk -p libfms.a -c '-Duse_libMPI -Duse_netCDF -DSPMD -DUSE_LOG_DIAG_FIELD_INFO -DMAXFIELDMETHODS_=500 -Duse_AM3_physics' path_names
+   && make FC=mpif90 CC=mpicc NETCDF=3 REPRO=1 libfms.a)
+ - echo -e '#override DAYMAX=0.125\n#override ENERGYSAVEDAYS=0.01\n#override NIGLOBAL=120\n#override NJGLOBAL=60' > MOM6-examples/ocean_only/benchmark/MOM_override
+
 # Tests to run
 script:
- - git clone https://github.com/adcroft/house_cleaning.git
  - ./house_cleaning/trailer.py -e TEOS10 src config_src
+ - echo "Compiling non-symmetric MOM6"
+   && mkdir -p build/ocn && (cd build/ocn
+   && ../../MOM6-examples/src/mkmf/bin/list_paths ../../{config_src/dynamic,config_src/solo_driver,src/{*,*/*}}/
+   && ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/linux-gnu.mk -o '-I../FMS' -p MOM6 -l '-L../FMS -lfms' -c '-Duse_libMPI -Duse_netCDF -DSPMD -DUSE_LOG_DIAG_FIELD_INFO -DMAXFIELDMETHODS_=500 -Duse_AM3_physics' path_names
+   && make FC=mpif90 CC=mpicc LD=mpif90 NETCDF=3 REPRO=1 MOM6)
+ - echo "Compiling symmetric MOM6"
+   && mkdir -p build/symocn && (cd build/symocn
+   && ../../MOM6-examples/src/mkmf/bin/list_paths ../../{config_src/dynamic_symmetric,config_src/solo_driver,src/{*,*/*}}/
+   && ../../MOM6-examples/src/mkmf/bin/mkmf -t ../../MOM6-examples/src/mkmf/templates/linux-gnu.mk -o '-I../FMS' -p MOM6 -l '-L../FMS -lfms' -c '-Duse_libMPI -Duse_netCDF -DSPMD -DUSE_LOG_DIAG_FIELD_INFO -DMAXFIELDMETHODS_=500 -Duse_AM3_physics' path_names
+   && make FC=mpif90 CC=mpicc LD=mpif90 NETCDF=3 REPRO=1 MOM6)
+ - (cd MOM6-examples/ocean_only/double_gyre && mkdir -p RESTART && mpirun -n 1 ../../../build/ocn/MOM6 1> log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/layer && mkdir -p RESTART && mpirun -n 1 ../../../../build/ocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/rho && mkdir -p RESTART && mpirun -n 1 ../../../../build/ocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/sigma && mkdir -p RESTART && mpirun -n 1 ../../../../build/ocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/z && mkdir -p RESTART && mpirun -n 1 ../../../../build/ocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/benchmark && mkdir -p RESTART && mpirun -n 1 ../../../build/ocn/MOM6 1> log)
+ - (cd MOM6-examples/ocean_only/circle_obcs && mkdir -p RESTART && mpirun -n 1 ../../../build/symocn/MOM6 1> log)
+ - md5sum MOM6-examples/ocean_only/{*,*/*}/ocean.stats > stats.md5
+ - (cd MOM6-examples/ocean_only/unit_tests && mkdir -p RESTART && mpirun -n 1 ../../../build/ocn/MOM6 1> log)
+ - (cd MOM6-examples/ocean_only/double_gyre && mkdir -p RESTART && mpirun -n 2 ../../../build/symocn/MOM6 1> log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/layer && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/rho && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/sigma && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/flow_downslope/z && mkdir -p RESTART && mpirun -n 2 ../../../../build/symocn/MOM6 1>log)
+ - (cd MOM6-examples/ocean_only/benchmark && mkdir -p RESTART && mpirun -n 4 ../../../build/symocn/MOM6 1> log)
+ - (cd MOM6-examples/ocean_only/circle_obcs && mkdir -p RESTART && mpirun -n 4 ../../../build/symocn/MOM6 1> log)
+ - md5sum -c stats.md5
+
+# Move items into cache
+before_cache:
+ - tar zcf my_cache/FMS-src.tgz MOM6-examples/src/FMS
+ - tar zcf my_cache/FMS-obj.tgz build/FMS
