@@ -50,6 +50,7 @@ function register_tidal_bay_OBC(param_file, CS, OBC_Reg)
   type(tidal_bay_OBC_CS),   pointer    :: CS         !< tidal bay control structure.
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_tidal_bay_OBC
+  character(len=32)  :: casename = "tidal bay"       !< This case's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_tidal_bay_OBC called with an "// &
@@ -59,7 +60,7 @@ function register_tidal_bay_OBC(param_file, CS, OBC_Reg)
   allocate(CS)
 
   ! Register the tracer for horizontal advection & diffusion.
-  call register_OBC('tidal_bay', param_file, OBC_Reg)
+  call register_OBC(casename, param_file, OBC_Reg)
   register_tidal_bay_OBC = .true.
 
 end function register_tidal_bay_OBC
