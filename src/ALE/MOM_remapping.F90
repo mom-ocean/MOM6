@@ -159,14 +159,14 @@ end function isPosSumErrSignificant
 
 !> Remaps column of values u0 on grid h0 to grid h1
 !! assuming the top edge is aligned.
-subroutine remapping_core_h( n0, h0, u0, n1, h1, u1, CS )
+subroutine remapping_core_h(CS,  n0, h0, u0, n1, h1, u1)
+  type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   integer,             intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid
   real, dimension(n0), intent(in)  :: u0 !< Cell averages on source grid
   integer,             intent(in)  :: n1 !< Number of cells on target grid
   real, dimension(n1), intent(in)  :: h1 !< Cell widths on target grid
   real, dimension(n1), intent(out) :: u1 !< Cell averages on target grid
-  type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   ! Local variables
   integer :: iMethod
   real, dimension(n0,2)           :: ppoly_r_E            !Edge value of polynomial
