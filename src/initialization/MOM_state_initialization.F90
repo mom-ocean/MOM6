@@ -196,7 +196,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                "and salnities from a Z-space file on a latitude- \n"//&
                "longitude grid.", default=.false.)
     ! h will be converted from m to H below
-    h(:,:,:) = GV%Angstrom_z
+    h(:,:,:) = 0.001
 
     if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
@@ -384,6 +384,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
 !  from a previously generated file.                                 !
+    ! Does h need to be converted from m to H?
+    h(:,:,:) = 0.001
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, restart_CS)
     if (present(Time_in)) Time = Time_in
