@@ -1152,7 +1152,8 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
                  "If true, optional arguments may be used to specify the \n"//&
                  "The width of the halos that are updated with each call.", &
-                 default=.true., layoutParam=.true.)
+                 default=.false., layoutParam=.true.)
+            !### THIS DEFAULT SHOULD BE CHANGED TO TRUE ONCE FMS IS FIXED. -RWH
 
   nihalo_dflt = 4 ; njhalo_dflt = 4
   if (present(NIHALO)) nihalo_dflt = NIHALO
