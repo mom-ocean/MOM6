@@ -60,6 +60,7 @@ use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : increment_date
+use MOM_unit_tests,           only : unit_tests
 
 ! MOM core modules
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
@@ -1790,6 +1791,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "\t0 = Only FATAL messages\n" // &
                  "\t2 = Only FATAL, WARNING, NOTE [default]\n" // &
                  "\t9 = All)", default=2)
+  call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, &
+                 "If True, exercises unit tests at model start up.", &
+                 default=.false.)
+  if (do_unit_tests) then
+    call unit_tests(verbosity)
+  endif
+
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (CS%split) then
@@ -2535,11 +2543,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
 
-  ! Undocumented parameter: set DO_UNIT_TESTS=True to invoke unit_tests s/r
-  ! which calls unit tests provided by some modules.
-  call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, default=.false.)
-  if (do_unit_tests) call unit_tests
-
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
 
@@ -2584,32 +2587,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
   call cpu_clock_end(id_clock_init)
 
 end subroutine finish_MOM_initialization
-
-
-!> Calls unit tests for other modules. These are NOT normally invoked
-!! and so we provide the module use statements here rather than in the module
-!! header. This is an exception to our usual coding standards.
-!! Note that if a unit test returns true, a FATAL error is triggered.
-subroutine unit_tests
-  use MOM_string_functions,  only : string_functions_unit_tests
-  use MOM_remapping,         only : remapping_unit_tests
-  use MOM_neutral_diffusion, only : neutral_diffusion_unit_tests
-  use MOM_diag_vkernels,     only : diag_vkernels_unit_tests
-
-  if (is_root_pe()) then ! The following need only be tested on 1 PE
-    if (string_functions_unit_tests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unit_tests: string_functions_unit_tests FAILED")
-    if (remapping_unit_tests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unit_tests: remapping_unit_tests FAILED")
-    if (neutral_diffusion_unit_tests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unit_tests: neutralDiffusionUnitTests FAILED")
-    if (diag_vkernels_unit_tests()) call MOM_error(FATAL, &
-       "MOM/initialize_MOM/unit_tests: diag_vkernels_unit_tests FAILED")
-
-  endif
-
-end subroutine unit_tests
-
 
 !> Register the diagnostics
 subroutine register_diags(Time, G, GV, CS, ADp)

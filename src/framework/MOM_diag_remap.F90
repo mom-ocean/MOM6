@@ -317,9 +317,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
-        call remapping_core_h(nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I,j,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k) == 0.) remapped_field(i, j, k:nz_dest) = missing_value
@@ -336,9 +335,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call remapping_core_h(nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k) == 0.) remapped_field(i,j,k) = missing_value
@@ -354,9 +352,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
           if (mask(i,j, 1) == 0.) cycle
         endif
         h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(nz_src, h(i,j,:), field(i,j,:), &
-                              nz_dest, h_dest(:), remapped_field(i,j,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
+                              nz_dest, h_dest(:), remapped_field(i,j,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k)==0.) remapped_field(i,j,k) = missing_value
