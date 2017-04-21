@@ -596,17 +596,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain)
   endif
 
-  !### I think that the following line is no longer needed.
-  if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
-    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kd_turb, G%Domain, To_All+Omit_Corners, halo=1)
   if (associated(CS%visc%Kv_turb)) &
     call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
 
   !---------- End setup for group halo pass
 
 
-  do_pass_kd_kv_turb = ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
-                       .OR. associated(CS%visc%Kv_turb)
+  do_pass_kd_kv_turb = associated(CS%visc%Kv_turb)
 
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
