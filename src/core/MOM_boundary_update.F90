@@ -11,8 +11,8 @@ use MOM_file_parser,           only : get_param, log_version, param_file_type, l
 use MOM_grid,                  only : ocean_grid_type
 use MOM_dyn_horgrid,           only : dyn_horgrid_type
 use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data
-use MOM_open_boundary,         only : OBC_registry_type
-!use MOM_open_boundary,         only : register_file_OBC
+use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
+use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_tracer_registry,       only : add_tracer_OBC_values, tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
@@ -32,7 +32,7 @@ type, public :: update_OBC_CS ; private
   logical :: use_files = .false.
   logical :: use_Kelvin = .false.
   logical :: use_tidal_bay = .false.
-! type(file_OBC_CS), pointer :: file_OBC_CSp => NULL()
+  type(file_OBC_CS), pointer :: file_OBC_CSp => NULL()
   type(Kelvin_OBC_CS), pointer :: Kelvin_OBC_CSp => NULL()
   type(tidal_bay_OBC_CS), pointer :: tidal_bay_OBC_CSp => NULL()
 end type update_OBC_CS
@@ -62,6 +62,9 @@ subroutine call_OBC_register(param_file, CS, OBC_Reg)
 
   call log_version(param_file, mod, version, "")
 
+  call get_param(param_file, mod, "USE_FILE_OBC", CS%use_files, &
+                 "If true, use external files for the open boundary.", &
+                 default=.false.)
   call get_param(param_file, mod, "USE_TIDAL_BAY_OBC", CS%use_tidal_bay, &
                  "If true, use the tidal_bay open boundary.", &
                  default=.false.)
@@ -69,6 +72,9 @@ subroutine call_OBC_register(param_file, CS, OBC_Reg)
                  "If true, use the Kelvin wave open boundary.", &
                  default=.false.)
 
+  if (CS%use_files) CS%use_files = &
+    register_file_OBC(param_file, CS%file_OBC_CSp, &
+                         OBC_Reg)
   if (CS%use_tidal_bay) CS%use_tidal_bay = &
     register_tidal_bay_OBC(param_file, CS%tidal_bay_OBC_CSp, &
                          OBC_Reg)
@@ -101,6 +107,9 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
+! Something here... with CS%file_OBC_CSp?
+! if (CS%use_files) &
+!     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   if (CS%use_tidal_bay) &
       call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC_CSp, G, h, Time)
   if (CS%use_Kelvin)  &
@@ -114,7 +123,7 @@ end subroutine update_OBC_data
 subroutine OBC_register_end(CS)
   type(update_OBC_CS),       pointer    :: CS !< Control structure for OBCs
 
-! if (CS%use_files) call something_end(CS%file_OBC_CSp)
+  if (CS%use_files) call file_OBC_end(CS%file_OBC_CSp)
   if (CS%use_tidal_bay) call tidal_bay_OBC_end(CS%tidal_bay_OBC_CSp)
   if (CS%use_Kelvin) call Kelvin_OBC_end(CS%Kelvin_OBC_CSp)
 

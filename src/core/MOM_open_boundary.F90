@@ -42,6 +42,7 @@ public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
 public register_OBC, OBC_registry_init
+public register_file_OBC, file_OBC_end
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -182,6 +183,12 @@ type, public :: ocean_OBC_type
   character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
 end type ocean_OBC_type
+
+!> Control structure for open boundaries that read from files.
+!! Probably lots to update here.
+type, public :: file_OBC_CS ; private
+  real :: tide_flow = 3.0e6         !< Placeholder for now...
+end type file_OBC_CS
 
 !> Type to carry something (what??) for the OBC registry.
 type, public :: OBC_struct_type
@@ -2299,6 +2306,36 @@ subroutine OBC_registry_init(param_file, Reg)
   endif
 
 end subroutine OBC_registry_init
+
+!> Add file to OBC registry.
+function register_file_OBC(param_file, CS, OBC_Reg)
+  type(param_file_type),    intent(in) :: param_file !< parameter file.
+  type(file_OBC_CS),        pointer    :: CS         !< file control structure.
+  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
+  logical                              :: register_file_OBC
+  character(len=32)  :: casename = "OBC file"        !< This case's name.
+
+  if (associated(CS)) then
+    call MOM_error(WARNING, "register_file_OBC called with an "// &
+                            "associated control structure.")
+    return
+  endif
+  allocate(CS)
+
+  ! Register the file for boundary updates.
+  call register_OBC(casename, param_file, OBC_Reg)
+  register_file_OBC = .true.
+
+end function register_file_OBC
+
+!> Clean up the file OBC from registry.
+subroutine file_OBC_end(CS)
+  type(file_OBC_CS), pointer    :: CS   !< OBC file control structure.
+
+  if (associated(CS)) then
+    deallocate(CS)
+  endif
+end subroutine file_OBC_end
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
