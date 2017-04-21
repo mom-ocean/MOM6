@@ -169,7 +169,7 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo)
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position, &
                         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -212,7 +212,7 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo)
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position, &
                         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -253,7 +253,7 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo)
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -293,7 +293,7 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo)
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -329,7 +329,7 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, h
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -366,7 +366,7 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
   dirflag = To_All ! 60
   if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -420,7 +420,7 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
                    gridtype=stagger_local, complete = block_til_complete, &
                    whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -548,7 +548,7 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete,
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
                    gridtype=stagger_local, complete = block_til_complete, &
                    whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -600,7 +600,7 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   dirflag = To_All ! 60
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_vector_start_2d = mpp_start_update_domains(u_cmpt, v_cmpt, &
         MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -652,7 +652,7 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   dirflag = To_All ! 60
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_vector_start_3d = mpp_start_update_domains(u_cmpt, v_cmpt, &
         MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -701,7 +701,7 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   dirflag = To_All ! 60
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
              MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
              whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -750,7 +750,7 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   dirflag = To_All ! 60
   if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  if (present(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
              MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
                    whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -791,7 +791,7 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
                                  shalo=halo, nhalo=halo)
@@ -831,7 +831,7 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
                                  shalo=halo, nhalo=halo)
@@ -883,7 +883,7 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
             shalo=halo, nhalo=halo)
@@ -935,7 +935,7 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
             shalo=halo, nhalo=halo)
