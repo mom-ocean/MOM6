@@ -382,8 +382,9 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
     I1pdamp = 1.0 / (1.0 + damp)
         do m=1,CS%fldno
             tmp_val2(1:CS%nz_data) = CS%Ref_val(m)%p(1:CS%nz_data,c)
-            call remapping_core_h(CS%nz_data, CS%Ref_h(:,c), tmp_val2, &
-                  CS%nz, h(i,j,:), tmp_val1, CS%remap_cs)
+            call remapping_core_h(CS%remap_cs, &
+                  CS%nz_data, CS%Ref_h(:,c), tmp_val2, &
+                  CS%nz, h(i,j,:), tmp_val1)
 
             !Backward Euler method
             CS%var(m)%p(i,j,:) = I1pdamp * &
@@ -412,8 +413,9 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
        damp = dt*CS%Iresttime_col_u(c)
        I1pdamp = 1.0 / (1.0 + damp)
        tmp_val2(1:CS%nz_data) = CS%Ref_val_u(1:CS%nz_data,c)
-       call remapping_core_h(CS%nz_data, CS%Ref_hu(:,c), tmp_val2, &
-                  CS%nz, hu(i,j,:), tmp_val1, CS%remap_cs)
+       call remapping_core_h(CS%remap_cs, &
+                  CS%nz_data, CS%Ref_hu(:,c), tmp_val2, &
+                  CS%nz, hu(i,j,:), tmp_val1)
 
        !Backward Euler method
        CS%var_u(i,j,:) = I1pdamp * (CS%var_u(i,j,:) + tmp_val1 * damp)
@@ -429,8 +431,9 @@ subroutine apply_ALE_sponge(h, dt, G, CS)
        damp = dt*CS%Iresttime_col_v(c)
        I1pdamp = 1.0 / (1.0 + damp)
        tmp_val2(1:CS%nz_data) = CS%Ref_val_v(1:CS%nz_data,c)
-       call remapping_core_h(CS%nz_data, CS%Ref_hv(:,c), tmp_val2, &
-                  CS%nz, hv(i,j,:), tmp_val1, CS%remap_cs)
+       call remapping_core_h(CS%remap_cs, &
+                  CS%nz_data, CS%Ref_hv(:,c), tmp_val2, &
+                  CS%nz, hv(i,j,:), tmp_val1)
        !Backward Euler method
        CS%var_v(i,j,:) = I1pdamp * (CS%var_v(i,j,:) + tmp_val1 * damp)
     enddo

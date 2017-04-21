@@ -2179,9 +2179,10 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
                 ! Pretty sure we need to check for source/target grid consistency here
                 segment%field(m)%buffer_dst(i,j,:)=0.0  ! initialize remap destination buffer
                 if (G%mask2dT(i,j)>0.) then
-                   call remapping_core_h(segment%field(m)%nk_src,segment%field(m)%dz_src(i,j,:),&
-                        segment%field(m)%buffer_src(i,j,:),G%ke, h(i,j,:),&
-                        segment%field(m)%buffer_dst(i,j,:),OBC%remap_CS)
+                   call remapping_core_h(OBC%remap_CS, &
+                         segment%field(m)%nk_src,segment%field(m)%dz_src(i,j,:), &
+                         segment%field(m)%buffer_src(i,j,:), &
+                         G%ke, h(i,j,:), segment%field(m)%buffer_dst(i,j,:))
                 endif
              enddo
           enddo

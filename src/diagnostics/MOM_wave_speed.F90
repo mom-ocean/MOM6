@@ -438,7 +438,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
             else
               mode_struct(1:kc)=0.
             endif
-            call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
+            call remapping_core_h(CS%remapping_CS, kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:))
           endif
         else
           cg1(i,j) = 0.0
