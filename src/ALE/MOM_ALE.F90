@@ -95,7 +95,7 @@ type, public :: ALE_CS
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency     !< diagnostic id
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency_2d  !< diagnostic id
   logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics
-  integer                            :: id_dzRegrid
+  integer                            :: id_dzRegrid = -1              !< diagnostic id
 
 end type
 
