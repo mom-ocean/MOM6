@@ -42,7 +42,7 @@ use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_domains,              only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
-use MOM_domains,              only : start_group_pass, complete_group_pass
+use MOM_domains,              only : start_group_pass, complete_group_pass, Omit_Corners
 use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
@@ -585,10 +585,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
     if (CS%use_temperature) then
-      call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain)
-      call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain)
+      call create_group_pass(CS%pass_T_S_h, CS%tv%T, G%Domain, To_All+Omit_Corners, halo=1)
+      call create_group_pass(CS%pass_T_S_h, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
     endif
-    call create_group_pass(CS%pass_T_S_h, h, G%Domain)
+    call create_group_pass(CS%pass_T_S_h, h, G%Domain, To_All+Omit_Corners, halo=1)
   endif
 
   if ((CS%adiabatic .OR. CS%diabatic_first) .AND. CS%use_temperature) then
@@ -596,10 +596,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain)
   endif
 
+  !### I think that the following line is no longer needed.
   if ((CS%visc%Prandtl_turb > 0) .and. associated(CS%visc%Kd_turb)) &
-    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kd_turb, G%Domain)
+    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kd_turb, G%Domain, To_All+Omit_Corners, halo=1)
   if (associated(CS%visc%Kv_turb)) &
-    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain)
+    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
 
   !---------- End setup for group halo pass
 
