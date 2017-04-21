@@ -628,6 +628,8 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefficients, n1, h
       isrc_max(i0) = i_max
       i_max = i_sub + 1
       dh_max = 0.
+      ! Record the source cell thickness found by summing the sub-cell thicknesses.
+      h0_eff(i0) = dh0_eff
       if (i0 < n0) then
         i0 = i0 + 1
         h0_supply = h0(i0)
