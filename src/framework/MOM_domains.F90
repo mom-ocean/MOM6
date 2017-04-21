@@ -102,24 +102,37 @@ interface clone_MOM_domain
   module procedure clone_MD_to_MD, clone_MD_to_d2D
 end interface clone_MOM_domain
 
+!> The MOM_domain_type contains information about the domain decompositoin.
 type, public :: MOM_domain_type
-  type(domain2D), pointer :: mpp_domain => NULL() ! The domain with halos on
-                                        ! this processor, centered at h points.
-  integer :: niglobal, njglobal         ! The total horizontal domain sizes.
-  integer :: nihalo, njhalo             ! The X- and Y- halo sizes in memory.
-  logical :: symmetric                  ! True if symmetric memory is used with
-                                        ! this domain.
-  logical :: nonblocking_updates        ! If true, non-blocking halo updates are
-                                        ! allowed.  The default is .false. (for now).
-  integer :: layout(2), io_layout(2)    ! Saved data for sake of constructing
-  integer :: X_FLAGS, Y_FLAGS           ! new domains of different resolution.
-  logical :: use_io_layout              ! True if an I/O layout is available.
-  logical, pointer :: maskmap(:,:) => NULL() ! A pointer to an array indicating
-                                ! which logical processors are actually used for
-                                ! the ocean code. The other logical processors
-                                ! would be all land points and are not assigned
-                                ! to actual processors. This need not be
-                                ! assigned if all logical processors are used.
+  type(domain2D), pointer :: mpp_domain => NULL() !< The FMS domain with halos
+                                !! on this processor, centered at h points.
+  integer :: niglobal           !< The total horizontal i-domain size.
+  integer :: njglobal           !< The total horizontal j-domain size.
+  integer :: nihalo             !< The i-halo size in memory.
+  integer :: njhalo             !< The j-halo size in memory.
+  logical :: symmetric          !< True if symmetric memory is used with
+                                !! this domain.
+  logical :: nonblocking_updates  !< If true, non-blocking halo updates are
+                                !! allowed.  The default is .false. (for now).
+  logical :: thin_halo_updates  !< If true, optional arguments may be used to
+                                !! specify the width of the halos that are
+                                !! updated with each call.
+  integer :: layout(2)          !< This domain's processor layout.  This is
+                                !! saved to enable the construction of related
+                                !! new domains with different resolutions or
+                                !! other properties.
+  integer :: io_layout(2)       !< The IO-layout used with this domain.
+  integer :: X_FLAGS            !< Flag that specifies the properties of the
+                                !! domain in the i-direction in a define_domain call.
+  integer :: Y_FLAGS            !< Flag that specifies the properties of the
+                                !! domain in the j-direction in a define_domain call.
+  logical :: use_io_layout      !< True if an I/O layout is available.
+  logical, pointer :: maskmap(:,:) => NULL() !< A pointer to an array indicating
+                                !! which logical processors are actually used for
+                                !! the ocean code. The other logical processors
+                                !! would be contain only land points and are not
+                                !! assigned to actual processors. This need not be
+                                !! assigned if all logical processors are used.
 end type MOM_domain_type
 
 integer, parameter :: To_All = To_East + To_West + To_North + To_South
@@ -152,11 +165,11 @@ subroutine pass_var_3d(array, MOM_dom, sideflag, complete, position, halo)
   logical :: block_til_complete
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position, &
                         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -195,11 +208,11 @@ subroutine pass_var_2d(array, MOM_dom, sideflag, complete, position, halo)
   logical :: block_til_complete
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
   block_til_complete = .true.
-  if (PRESENT(complete)) block_til_complete = complete
+  if (present(complete)) block_til_complete = complete
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_update_domains(array, MOM_dom%mpp_domain, flags=dirflag, &
                         complete=block_til_complete, position=position, &
                         whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -238,9 +251,9 @@ function pass_var_start_2d(array, MOM_dom, sideflag, position, complete, halo)
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_var_start_2d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -278,9 +291,9 @@ function pass_var_start_3d(array, MOM_dom, sideflag, position, complete, halo)
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     pass_var_start_3d = mpp_start_update_domains(array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -314,9 +327,9 @@ subroutine pass_var_complete_2d(id_update, array, MOM_dom, sideflag, position, h
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -351,9 +364,9 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
-  if (PRESENT(halo)) then
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_complete_update_domains(id_update, array, MOM_dom%mpp_domain, &
                             flags=dirflag, position=position, &
                             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
@@ -365,12 +378,13 @@ subroutine pass_var_complete_3d(id_update, array, MOM_dom, sideflag, position, h
 end subroutine pass_var_complete_3d
 
 
-subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
+subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo)
   real, dimension(:,:),  intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type), intent(inout) :: MOM_dom
   integer,     optional, intent(in)    :: direction
   integer,     optional, intent(in)    :: stagger
   logical,     optional, intent(in)    :: complete
+  integer,     optional, intent(in)    :: halo
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
@@ -392,6 +406,7 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
 !  (in)      complete - An optional argument indicating whether the halo updates
 !                       should be completed before progress resumes.  Omitting
 !                       complete is the same as setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
   integer :: stagger_local
   integer :: dirflag
@@ -401,12 +416,19 @@ subroutine pass_vector_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                          gridtype=stagger_local, complete = block_til_complete)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                   gridtype=stagger_local, complete = block_til_complete, &
+                   whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                   gridtype=stagger_local, complete = block_til_complete)
+  endif
+
 end subroutine pass_vector_2d
 
 subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scalar)
@@ -449,7 +471,7 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
   IscB = isc ; IecB = iec+1 ; JscB = jsc ; JecB = jec+1
 
   dirflag = To_All ! 60
-  if (PRESENT(scalar)) then ; if (scalar) dirflag = To_All+SCALAR_PAIR ; endif
+  if (present(scalar)) then ; if (scalar) dirflag = To_All+SCALAR_PAIR ; endif
 
   if (stagger_local == CGRID_NE) then
     allocate(wbuff_x(jsc:jec)) ; allocate(sbuff_y(isc:iec))
@@ -484,12 +506,13 @@ subroutine fill_vector_symmetric_edges_2d(u_cmpt, v_cmpt, MOM_dom, stagger, scal
 
 end subroutine fill_vector_symmetric_edges_2d
 
-subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
+subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo)
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: halo
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
 !  (inout)   v_cmpt - The nominal meridional (v) component of the vector pair
@@ -511,6 +534,7 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
 !  (in)      complete - An optional argument indicating whether the halo updates
 !                       should be completed before progress resumes.  Omitting
 !                       complete is the same as setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
   integer :: stagger_local
   integer :: dirflag
@@ -520,20 +544,28 @@ subroutine pass_vector_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
   block_til_complete = .true.
   if (present(complete)) block_til_complete = complete
 
-  call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
-                          gridtype=stagger_local, complete = block_til_complete)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                   gridtype=stagger_local, complete = block_til_complete, &
+                   whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_update_domains(u_cmpt, v_cmpt, MOM_dom%mpp_domain, flags=dirflag, &
+                   gridtype=stagger_local, complete = block_til_complete)
+  endif
+
 end subroutine pass_vector_3d
 
-function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
+function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo)
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: halo
   integer                               :: pass_vector_start_2d
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
@@ -557,6 +589,7 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 !                       should be initiated immediately or wait for second
 !                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
   integer :: dirflag
@@ -565,19 +598,26 @@ function pass_vector_start_2d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  pass_vector_start_2d = mpp_start_update_domains(u_cmpt, v_cmpt, &
-      MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    pass_vector_start_2d = mpp_start_update_domains(u_cmpt, v_cmpt, &
+        MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
+        whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    pass_vector_start_2d = mpp_start_update_domains(u_cmpt, v_cmpt, &
+        MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  endif
 
 end function pass_vector_start_2d
 
-function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete)
+function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, complete, halo)
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
   logical,      optional, intent(in)    :: complete
+  integer,      optional, intent(in)    :: halo
   integer                               :: pass_vector_start_3d
 ! Arguments: u_cmpt - The nominal zonal (u) component of the vector pair which
 !                     is having its halos points exchanged.
@@ -601,6 +641,7 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
 !                       should be initiated immediately or wait for second
 !                       pass_..._start call.  Omitting complete is the same as
 !                       setting complete to .true.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
   integer :: dirflag
@@ -609,19 +650,26 @@ function pass_vector_start_3d(u_cmpt, v_cmpt, MOM_dom, direction, stagger, compl
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  pass_vector_start_3d = mpp_start_update_domains(u_cmpt, v_cmpt, &
-      MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    pass_vector_start_3d = mpp_start_update_domains(u_cmpt, v_cmpt, &
+        MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
+        whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    pass_vector_start_3d = mpp_start_update_domains(u_cmpt, v_cmpt, &
+        MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  endif
 
 end function pass_vector_start_3d
 
-subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo)
   integer,                intent(in)    :: id_update
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
+  integer,      optional, intent(in)    :: halo
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
@@ -642,6 +690,7 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 !                      or CGRID_NE, indicating where the two components of the
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
   integer :: dirflag
@@ -650,19 +699,26 @@ subroutine pass_vector_complete_2d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
-           MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
+             MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
+             whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
+             MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  endif
 
 end subroutine pass_vector_complete_2d
 
-subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo)
   integer,                intent(in)    :: id_update
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
+  integer,      optional, intent(in)    :: halo
 ! Arguments: id_update - The integer id of this update which has been returned
 !                        from a previous call to pass_var_start.
 !  (inout)   u_cmpt - The nominal zonal (u) component of the vector pair which
@@ -683,6 +739,7 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
 !                      or CGRID_NE, indicating where the two components of the
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 !  (return value) - The integer index for this update.
   integer :: stagger_local
   integer :: dirflag
@@ -691,10 +748,16 @@ subroutine pass_vector_complete_3d(id_update, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
-  call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
-           MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  if (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
+             MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local, &
+                   whalo=halo, ehalo=halo, shalo=halo, nhalo=halo)
+  else
+    call mpp_complete_update_domains(id_update, u_cmpt, v_cmpt, &
+             MOM_dom%mpp_domain, flags=dirflag, gridtype=stagger_local)
+  endif
 
 end subroutine pass_vector_complete_3d
 
@@ -724,11 +787,11 @@ subroutine create_var_group_pass_2d(group, array, MOM_dom, sideflag, position, &
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
                                  shalo=halo, nhalo=halo)
@@ -764,11 +827,11 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
   integer :: dirflag
 
   dirflag = To_All ! 60
-  if (PRESENT(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
+  if (present(sideflag)) then ; if (sideflag > 0) dirflag = sideflag ; endif
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,array)
-  elseif (present(halo)) then
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
     call mpp_create_group_update(group, array, MOM_dom%mpp_domain, flags=dirflag, &
                                  position=position, whalo=halo, ehalo=halo, &
                                  shalo=halo, nhalo=halo)
@@ -780,12 +843,13 @@ subroutine create_var_group_pass_3d(group, array, MOM_dom, sideflag, position, h
 end subroutine create_var_group_pass_3d
 
 
-subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo)
   type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:),   intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
+  integer,      optional, intent(in)    :: halo
 ! Arguments:
 !  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
@@ -807,6 +871,7 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
 !                      or CGRID_NE, indicating where the two components of the
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
   integer :: stagger_local
   integer :: dirflag
 
@@ -814,10 +879,14 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
+            flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
+            shalo=halo, nhalo=halo)
   else
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local)
@@ -825,12 +894,13 @@ subroutine create_vector_group_pass_2d(group, u_cmpt, v_cmpt, MOM_dom, direction
 
 end subroutine create_vector_group_pass_2d
 
-subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger)
+subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction, stagger, halo)
   type(group_pass_type),  intent(inout) :: group
   real, dimension(:,:,:), intent(inout) :: u_cmpt, v_cmpt
   type(MOM_domain_type),  intent(inout) :: MOM_dom
   integer,      optional, intent(in)    :: direction
   integer,      optional, intent(in)    :: stagger
+  integer,      optional, intent(in)    :: halo
 ! Arguments:
 !  (inout)   group - The data type that store information for group update.
 !                    This data will be used in do_group_pass.
@@ -852,6 +922,7 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
 !                      or CGRID_NE, indicating where the two components of the
 !                      vector are discretized.  Omitting stagger is the same as
 !                      setting it to CGRID_NE.
+!  (in,opt)  halo - The size of the halo to update - the full halo by default.
 
   integer :: stagger_local
   integer :: dirflag
@@ -860,10 +931,14 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
   if (present(stagger)) stagger_local = stagger
 
   dirflag = To_All ! 60
-  if (PRESENT(direction)) then ; if (direction > 0) dirflag = direction ; endif
+  if (present(direction)) then ; if (direction > 0) dirflag = direction ; endif
 
   if (mpp_group_update_initialized(group)) then
     call mpp_reset_group_update_field(group,u_cmpt, v_cmpt)
+  elseif (present(halo) .and. MOM_dom%thin_halo_updates) then
+    call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
+            flags=dirflag, gridtype=stagger_local, whalo=halo, ehalo=halo, &
+            shalo=halo, nhalo=halo)
   else
     call mpp_create_group_update(group, u_cmpt, v_cmpt, MOM_dom%mpp_domain, &
             flags=dirflag, gridtype=stagger_local)
@@ -1074,6 +1149,11 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, "NONBLOCKING_UPDATES", MOM_dom%nonblocking_updates, &
                  "If true, non-blocking halo updates may be used.", &
                  default=.false., layoutParam=.true.)
+  call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
+                 "If true, optional arguments may be used to specify the \n"//&
+                 "The width of the halos that are updated with each call.", &
+                 default=.false., layoutParam=.true.)
+            !### THIS DEFAULT SHOULD BE CHANGED TO TRUE ONCE FMS IS FIXED. -RWH
 
   nihalo_dflt = 4 ; njhalo_dflt = 4
   if (present(NIHALO)) nihalo_dflt = NIHALO

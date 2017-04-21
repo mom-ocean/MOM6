@@ -21,7 +21,7 @@ use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_en
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
-use MOM_domains,             only : pass_var, To_West, To_South
+use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
@@ -1295,13 +1295,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_All+Omit_Corners,halo=1)
   else
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South+Omit_Corners,halo=1)
   endif
   call do_group_pass(CS%pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
