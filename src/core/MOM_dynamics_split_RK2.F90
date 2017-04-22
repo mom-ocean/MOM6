@@ -35,6 +35,7 @@ use MOM_time_manager,      only : operator(-), operator(>), operator(*), operato
 use MOM_ALE,                   only : ALE_CS
 use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_source
 use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
+use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
@@ -47,7 +48,6 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type
 use MOM_open_boundary,         only : radiation_open_bdry_conds
-use MOM_boundary_update,       only : update_OBC_data
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -167,6 +167,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
      !! condition type that specifies whether, where, and  what open boundary
      !! conditions are used.  If no open BCs are used, this pointer stays
      !! nullified.  Flather OBCs use open boundary_CS as well.
+  type(update_OBC_CS),    pointer :: update_OBC_CSp => NULL()
 
   ! This is a copy of the pointer in the top-level control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
@@ -420,7 +421,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2)")
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
 
   if (G%nonblocking_updates) then
@@ -977,7 +978,8 @@ end subroutine register_restarts_dyn_split_RK2
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
-                      VarMix, MEKE, OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
+                      VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                      visc, dirs, ntrunc)
   type(ocean_grid_type),                     intent(inout) :: G           !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV          !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u           !< zonal velocity (m/s)
@@ -998,12 +1000,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   type(VarMix_CS),                           pointer       :: VarMix      !< points to spatially variable viscosities
   type(MEKE_type),                           pointer       :: MEKE        !< points to mesoscale eddy kinetic energy fields
   type(ocean_OBC_type),                      pointer       :: OBC         !< points to OBC related fields
+  type(update_OBC_CS),                       pointer       :: update_OBC_CSp !< points to OBC update related fields
   type(ALE_CS),                              pointer       :: ALE_CSp     !< points to ALE control structure
   type(set_visc_CS),                         pointer       :: setVisc_CSp !< points to the set_visc control structure.
   type(vertvisc_type),                       intent(inout) :: visc        !< vertical viscosities, bottom drag, and related
   type(directories),                         intent(in)    :: dirs        !< contains directory paths
   integer, target,                           intent(inout) :: ntrunc      !< A target for the variable that records the number of times
-                                                                        !! the velocity is truncated (this should be 0).
+                                                                          !! the velocity is truncated (this should be 0).
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mod = "MOM_dynamics_split_RK2" ! This module's name.
@@ -1114,6 +1117,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC
+  if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq

@@ -313,6 +313,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for age tracer fluxes, either
                                 ! years m3 s-1 or years kg s-1.
+  character(len=72) :: cmorname ! The CMOR name of that variable.
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -379,11 +380,15 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
-    ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_ideal_age_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+                       cmor_field_name=cmorname, caller="initialize_ideal_age_tracer")
+    if (len_trim(cmorname)==0) then
+      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
+    else
+      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+        day, trim(longname) , trim(units), cmor_field_name=cmorname)
+    endif
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
         CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))

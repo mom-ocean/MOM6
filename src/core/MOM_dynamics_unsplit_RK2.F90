@@ -91,6 +91,7 @@ use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
+use MOM_boundary_update, only : update_OBC_data, update_OBC_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_debugging, only : check_redundant
@@ -101,7 +102,6 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : radiation_open_bdry_conds
-use MOM_boundary_update, only : update_OBC_data
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -166,6 +166,7 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
      ! conditions are used.  If no open BCs are used, this pointer stays
      ! nullified.  Flather OBCs use open boundary_CS as well.
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
+  type(update_OBC_CS), pointer :: update_OBC_CSp => NULL()
 
 ! This is a copy of the pointer in the top-level control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
@@ -321,7 +322,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call cpu_clock_end(id_clock_pass)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h_in, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h_in, CS%update_OBC_CSp, Time_local)
   endif; endif
 
 ! up+[n-1/2] = u[n-1] + dt_pred * (PFu + CAu)
@@ -534,7 +535,8 @@ end subroutine register_restarts_dyn_unsplit_RK2
 
 subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS, &
                                       restart_CS, Accel_diag, Cont_diag, MIS, &
-                                      OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
+                                      OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                                      visc, dirs, ntrunc)
   type(ocean_grid_type),                     intent(inout) :: G
   type(verticalGrid_type),                   intent(in)    :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
@@ -549,6 +551,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
   type(ocean_internal_state),                intent(inout) :: MIS
   type(ocean_OBC_type),                      pointer       :: OBC
+  type(update_OBC_CS),                       pointer       :: update_OBC_CSp
   type(ALE_CS),                              pointer       :: ALE_CSp
   type(set_visc_CS),                         pointer       :: setVisc_CSp
   type(vertvisc_type),                       intent(inout) :: visc
@@ -575,6 +578,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
 !                  pointers to various arrays for diagnostic purposes.
 !  (in)      OBC - If open boundary conditions are used, this points to the
 !                  ocean_OBC_type that was set up in MOM_initialization.
+!  (in)      update_OBC_CSp - If open boundary condition updates are used,
+!                  this points to the appropriate control structure.
 !  (in)      ALE_CS - This points to the ALE control structure.
 !  (in)      setVisc_CSp - This points to the set_visc control structure.
 !  (inout)   visc - A structure containing vertical viscosities, bottom drag
