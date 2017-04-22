@@ -490,7 +490,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
 
   ! Do the tracer sources and sinks and also the vertical mixing
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
-      fluxes, dt, CS%G, CS%GV, CS%tv, &
+      fluxes, CS%mld, dt, CS%G, CS%GV, CS%tv, &
       CS%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
@@ -585,7 +585,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First do vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -625,7 +625,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_pre(i,j,k) = h_new(i,j,k)
