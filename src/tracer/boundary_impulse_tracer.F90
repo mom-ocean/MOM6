@@ -124,7 +124,11 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
                  "into the mixed layer. After this time has elapsed, the\n"//&
                  "surface becomes a sink for the boundary impulse tracer.", &
                  default=31536000.0)
-
+  call get_param(param_file, mod, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+                 "If true, tracers may go through the initialization code \n"//&
+                 "if they are not found in the restart files.  Otherwise \n"//&
+                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "restart files of a restarted run.", default=.false.)
   CS%ntr = NTR_MAX
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
