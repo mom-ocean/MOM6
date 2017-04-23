@@ -199,8 +199,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed
     do j=jsd,jed ; do I=IsdB,IedB
-      x1 = 0.5 * 1000. * (G%geoLonT(i+1,j) + G%geoLonT(i,j))
-      y1 = 0.5 * 1000. * (G%geoLatT(i+1,j) + G%geoLatT(i,j))
+      x1 = 0.5 * 1000. * G%geoLonCu(i,j)
+      y1 = 0.5 * 1000. * G%geoLatCu(i,j)
       x = (x1 - CS%coast_offset) * cosa + y1 * sina
       y = - (x1 - CS%coast_offset) * sina + y1 * cosa
       if (CS%mode == 0) then
