@@ -196,31 +196,49 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
     if (segment%direction == OBC_DIRECTION_E) cycle
     if (segment%direction == OBC_DIRECTION_N) cycle
 
-    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
-    jsd = segment%HI%jsd ; jed = segment%HI%jed
-    do j=jsd,jed ; do I=IsdB,IedB
-      x1 = 0.5 * 1000. * G%geoLonCu(i,j)
-      y1 = 0.5 * 1000. * G%geoLatCu(i,j)
-      x = (x1 - CS%coast_offset) * cosa + y1 * sina
-      y = - (x1 - CS%coast_offset) * sina + y1 * cosa
-      if (CS%mode == 0) then
-        cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
-        val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
-        OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
-        if (segment%direction == OBC_DIRECTION_W) then
+    if (segment%direction == OBC_DIRECTION_W) then
+      IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+      jsd = segment%HI%jsd ; jed = segment%HI%jed
+      do j=jsd,jed ; do I=IsdB,IedB
+        x1 = 1000. * G%geoLonCu(I,j)
+        y1 = 1000. * G%geoLatCu(I,j)
+        x = (x1 - CS%coast_offset) * cosa + y1 * sina
+        y = - (x1 - CS%coast_offset) * sina + y1 * cosa
+        if (CS%mode == 0) then
+          cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
+          OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
           OBC%ubt_outer(I,j) = val1 * cff * cosa /               &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
-        else
-          OBC%ubt_outer(I,j) = val1 * cff * sina /               &
-                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
-        endif
+                   (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
 ! New way, not yet
-!       segment%eta(I,j) = val2 * cos(omega * time_sec)
-!       segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
+!         segment%eta(I,j) = val2 * cos(omega * time_sec)
+!         segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
 !                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
-      else
-      endif
-    enddo ; enddo
+        else
+        endif
+      enddo ; enddo
+    else
+      isd = segment%HI%isd ; ied = segment%HI%ied
+      JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+      do J=JsdB,JedB ; do i=isd,ied
+        x1 = 1000. * G%geoLonCv(i,J)
+        y1 = 1000. * G%geoLatCv(i,J)
+        x = (x1 - CS%coast_offset) * cosa + y1 * sina
+        y = - (x1 - CS%coast_offset) * sina + y1 * cosa
+        if (CS%mode == 0) then
+          cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
+          OBC%eta_outer_v(i,J) = val2 * cos(omega * time_sec)
+          OBC%vbt_outer(I,j) = val1 * cff * sina /               &
+                   (0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))) * val2
+! New way, not yet
+!         segment%eta(I,j) = val2 * cos(omega * time_sec)
+!         segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
+!                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+        else
+        endif
+      enddo ; enddo
+    endif
   enddo
 
 end subroutine Kelvin_set_OBC_data
