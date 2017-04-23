@@ -106,6 +106,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying boundary_impulse
   real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: rem_time_ptr => NULL()
   logical :: register_boundary_impulse_tracer
   integer :: isd, ied, jsd, jed, nz, m, i, j
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -155,6 +156,12 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
       CS%ind_tr(m) = aof_set_coupler_flux(trim(var_name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_boundary_impulse_tracer")
   enddo
+  ! Register remaining source time as a restart field
+  rem_time_ptr => CS%remaining_source_time
+  call register_restart_field(rem_time_ptr,                                                                 &
+                              var_desc(trim("bir_remain_time"), "s", "Remaining time to apply BIR source",  &
+                                             hor_grid = "1", z_grid = "1", caller=mod),                     &
+                              .not. CS%tracers_may_reinit, restart_CS)
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
