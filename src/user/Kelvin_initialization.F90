@@ -207,13 +207,9 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
-          OBC%eta_outer_u(I,j) = val2 * cos(omega * time_sec)
-          OBC%ubt_outer(I,j) = val1 * cff * cosa /               &
-                   (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
-! New way, not yet
-!         segment%eta(I,j) = val2 * cos(omega * time_sec)
-!         segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
-!                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+          segment%eta(I,j) = val2 * cos(omega * time_sec)
+          segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
+                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
         endif
       enddo ; enddo
@@ -228,13 +224,9 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
-          OBC%eta_outer_v(i,J) = val2 * cos(omega * time_sec)
-          OBC%vbt_outer(I,j) = val1 * cff * sina /               &
-                   (0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j))) * val2
-! New way, not yet
-!         segment%eta(I,j) = val2 * cos(omega * time_sec)
-!         segment%normal_vel_bt(I,j) = val1 * cff / (0.5 *      &
-!                (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
+          segment%eta(I,j) = val2 * cos(omega * time_sec)
+          segment%normal_vel_bt(I,j) = val1 * cff * sina /       &
+                 (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
         endif
       enddo ; enddo

@@ -43,14 +43,6 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
                  "Constant zonal flow imposed at upstream open boundary.", &
                  units="m/s", default=8.57)
 
-  allocate(OBC%ubt_outer(G%IsdB:G%IedB,G%jsd:G%jed)) ; OBC%ubt_outer(:,:) = 0.0
-
-  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
-    if (OBC%segnum_u(I,j)>0) then
-      OBC%ubt_outer(I,j) = zonal_flow
-    endif
-  enddo ; enddo
-
   do l=1, OBC%number_of_segments
     segment => OBC%segment(l)
     if (.not. segment%on_pe) cycle
