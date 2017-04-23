@@ -157,16 +157,6 @@ type, public :: ocean_OBC_type
     segnum_u => NULL(), &   !< Segment number of u-points.
     segnum_v => NULL()      !< Segment number of v-points.
 
-  !   The following can be used to specify the outer-domain values of the
-  ! surface height and barotropic velocity.  If these are not allocated, the
-  ! default with Flather boundary conditions is the same as if they were
-  ! filled with zeros.  With simple OBCs, these should not be allocated.
-  real, pointer, dimension(:,:) :: &
-    ubt_outer => NULL(), &    !< The u-velocity in the outer domain, in m s-1.
-    vbt_outer => NULL(), &    !< The v-velocity in the outer domain, in m s-1.
-    eta_outer_u => NULL(), &  !< The SSH anomaly in the outer domain, in m or kg m-2.
-    eta_outer_v => NULL()     !< The SSH anomaly in the outer domain, in m or kg m-2.
-
   ! The following parameters are used in the baroclinic radiation code:
   real :: gamma_uv !< The relative weighting for the baroclinic radiation
                    !! velocities (or speed of characteristics) at the
@@ -1008,10 +998,6 @@ subroutine open_boundary_dealloc(OBC)
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (associated(OBC%segnum_v)) deallocate(OBC%segnum_v)
-  if (associated(OBC%ubt_outer)) deallocate(OBC%ubt_outer)
-  if (associated(OBC%vbt_outer)) deallocate(OBC%vbt_outer)
-  if (associated(OBC%eta_outer_u)) deallocate(OBC%eta_outer_u)
-  if (associated(OBC%eta_outer_v)) deallocate(OBC%eta_outer_v)
   deallocate(OBC)
 end subroutine open_boundary_dealloc
 
@@ -1528,9 +1514,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
   type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
   ! Local variables
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
@@ -1550,63 +1533,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
-                 "If true, read the values for the velocity open boundary \n"//&
-                 "conditions from the file specified by OBC_FILE.", &
-                 default=.false.)
-  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
-                 "If true, read the values for the sea surface height \n"//&
-                 "open boundary conditions from the file specified by \n"//&
-                 "OBC_FILE.", default=.false.)
-  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
-                 "If true, read the values for the temperature and \n"//&
-                 "salinity open boundary conditions from the file \n"//&
-                 "specified by OBC_FILE.", default=.false.)
-  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
-    call get_param(PF, mod, "OBC_FILE", OBC_file, &
-                 "The file from which the appropriate open boundary \n"//&
-                 "condition values are read.", default="MOM_OBC_FILE.nc")
-    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-    filename = trim(inputdir)//trim(OBC_file)
-    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
-  endif
-
-  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
-    if (.not.associated(OBC%vbt_outer)) then
-      allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%ubt_outer)) then
-      allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%eta_outer_u)) then
-      allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%eta_outer_v)) then
-      allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-    endif
-
-    if (read_OBC_uv) then
-      call read_data(filename, 'ubt', OBC%ubt_outer, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'vbt', OBC%vbt_outer, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    endif
-
-    if (read_OBC_eta) then
-      call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    endif
-
-    call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-  endif
-
   ! For now, there are no radiation conditions applied to the thicknesses, since
   ! the thicknesses might not be physically motivated.  Instead, sponges should be
   ! used to enforce the near-boundary layer structure.
@@ -1617,17 +1543,17 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
     allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
 
-    if (read_OBC_TS) then
-      call read_data(filename, 'OBC_T_u', OBC_T_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'OBC_S_u', OBC_S_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+!   if (read_OBC_TS) then
+!     call read_data(filename, 'OBC_T_u', OBC_T_u, &
+!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
+!     call read_data(filename, 'OBC_S_u', OBC_S_u, &
+!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
 
-      call read_data(filename, 'OBC_T_v', OBC_T_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-      call read_data(filename, 'OBC_S_v', OBC_S_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    else
+!     call read_data(filename, 'OBC_T_v', OBC_T_v, &
+!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
+!     call read_data(filename, 'OBC_S_v', OBC_S_v, &
+!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
+!   else
       call pass_var(tv%T, G%Domain)
       call pass_var(tv%S, G%Domain)
       do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -1675,7 +1601,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
           OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
         endif
       enddo; enddo ; enddo
-    endif
+!   endif
 
     call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
     call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
