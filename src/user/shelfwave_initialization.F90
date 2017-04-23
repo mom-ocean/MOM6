@@ -24,7 +24,7 @@ use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
-use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_time_manager,   only : time_type, set_time, time_type_to_real
@@ -44,9 +44,14 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 
 !> Control structure for shelfwave open boundaries.
 type, public :: shelfwave_OBC_CS ; private
-  real :: Lx = 20e3         !< Long-shore length scale.
-  real :: Ly = 10e3         !< Cross-shore length scale.
+  real :: Lx = 20.0         !< Long-shore length scale of bathymetry.
+  real :: Ly = 10.0         !< Cross-shore length scale.
   real :: f0 = 1.e-4        !< Coriolis parameter.
+  real :: jj = 1            !< Cross-shore wave mode.
+  real :: kk                !< Parameter.
+  real :: ll                !< Longshore wavenumber.
+  real :: alpha             !< 1/Ly.
+  real :: omega             !< Frequency.
 end type shelfwave_OBC_CS
 
 contains
@@ -57,7 +62,12 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
   type(shelfwave_OBC_CS),   pointer    :: CS         !< shelfwave control structure.
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_shelfwave_OBC
+  ! Local variables
+  real :: kk, ll, PI, len_lat
+
   character(len=32)  :: casename = "shelfwave"       !< This case's name.
+
+  PI = 4.0*atan(1.0)
 
   if (associated(CS)) then
     call MOM_error(WARNING, "register_shelfwave_OBC called with an "// &
@@ -70,14 +80,23 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
   call register_OBC(casename, param_file, OBC_Reg)
   call get_param(param_file,mod,"F_0",CS%f0, &
                  do_not_log=.true.)
-  call get_param(param_file,mod,"SHELFWAVE_X_LENGTH_SCALE",CS%Lx, &
-                 "Length scale of shelfwave in x-direction.\n"//&
-                 "Set to zero make wave uniform in the x-direction.", &
-                 units="Same as x,y", default=20.)
+  call get_param(param_file,mod,"LENLAT",len_lat, &
+                 do_not_log=.true.)
+  call get_param(param_file,mod,"SHELFWAVE_X_WAVELENGTH",CS%Lx, &
+                 "Length scale of shelfwave in x-direction.",&
+                 units="Same as x,y", default=100.)
   call get_param(param_file,mod,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
-                 "Length scale of shelfwave bathymetry in y-direction.\n"//&
-                 "Set to zero make topography uniform in the y-direction.", &
+                 "Length scale of exponential dropoff of topography\n"//&
+                 "in the y-direction.", &
                  units="Same as x,y", default=10.)
+  call get_param(param_file,mod,"SHELFWAVE_Y_MODE",CS%jj, &
+                 "Cross-shore wave mode.",               &
+                 units="nondim", default=1.)
+  CS%alpha = 1. / CS%Ly
+  CS%ll = 2. * PI / CS%Lx
+  CS%kk = CS%jj * PI / len_lat
+  CS%omega = 2 * CS%alpha * CS%f0 * CS%ll / &
+             (CS%kk*CS%kk + CS%alpha*CS%alpha + CS%ll*CS%ll)
   register_shelfwave_OBC = .true.
 
 end function register_shelfwave_OBC
@@ -102,20 +121,18 @@ subroutine shelfwave_initialize_topography ( D, G, param_file, max_depth )
 
   ! Local variables
   integer   :: i, j
-  real      :: x, y, delta, rLy, Ly, H0
+  real      :: y, rLy, Ly, H0
 
   call get_param(param_file,mod,"SHELFWAVE_Y_LENGTH_SCALE",Ly, &
                  default=10., do_not_log=.true.)
   call get_param(param_file,mod,"MINIMUM_DEPTH",H0, &
                  default=10., do_not_log=.true.)
 
-  Ly = Ly / G%len_lat
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
   do i=G%isc,G%iec
     do j=G%jsc,G%jec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
+      y = ( G%geoLatT(i,j) - G%south_lat )
       D(i,j) = H0 * exp(2 * rLy * y)
     enddo
   enddo
@@ -134,10 +151,10 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
 
   ! The following variables are used to set up the transport in the tidal_bay example.
   real :: my_amp, time_sec
-  real :: PI, cos_wt, cos_ly, sin_wt, sin_ly, omega
-  real :: x, y, delta, Lx, rLx, Ly, rLy, f0
+  real :: cos_wt, cos_ky, sin_wt, sin_ky, omega, alpha
+  real :: x, y, jj, kk, ll
   character(len=40)  :: mod = "shelfwave_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, jj, n
+  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment
 
@@ -147,36 +164,33 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
 
   if (.not.associated(OBC)) return
 
-  PI = 4.0*atan(1.0) ;
-
-  Lx = CS%Lx / G%len_lon
-  Ly = CS%Ly / G%len_lat
-  rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
-  rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
-
   time_sec = time_type_to_real(Time)
-  omega = 2.0 * rLy * Lx * f0
+  omega = CS%omega
+  alpha = CS%alpha
   my_amp = 1.0
-  jj = 1
+  jj = CS%jj
+  kk = CS%kk
+  ll = CS%ll
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
-    if (segment%Is_obc /= is - 1) cycle
+    if (segment%direction /= OBC_DIRECTION_W) cycle
 
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed
     do j=jsd,jed ; do I=IsdB,IedB
-      x = ( 0.5 * (G%geoLonT(i,j) + G%geoLonT(i+1,j)) - G%west_lon ) / G%len_lon
-      y = ( 0.5 * (G%geoLatT(i,j) + G%geoLatT(i+1,j)) - G%south_lat ) / G%len_lat
-      sin_wt = sin(rLx*x - omega*time_sec)
-      cos_wt = cos(rLx*x - omega*time_sec)
-      sin_ly = sin(jj * PI * y)
-      cos_ly = cos(jj * PI * y)
-      segment%normal_vel_bt(I,j) = my_amp * exp(- rLy * y) * cos_wt * &
-           (rLy * sin_ly + jj * PI * rLy * cos_ly)
-!     segment%tangential_vel_bt(I,j) = my_amp * rLx * exp(- rLy * y) * sin_wt * sin_ly
-!     segment%vorticity_bt(I,j) = my_amp * exp(- rLy * y) * cos_wt * &
-!           (rLy**2 + rLx**2 + (jj*PI)**2)
+      x = G%geoLonCu(i,j) - G%west_lon
+      y = G%geoLatCu(i,j) - G%south_lat
+      sin_wt = sin(ll*x - omega*time_sec)
+      cos_wt = cos(ll*x - omega*time_sec)
+      sin_ky = sin(kk * y)
+      cos_ky = cos(kk * y)
+      segment%normal_vel_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * &
+           (alpha * sin_ky + kk * cos_ky)
+      OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
+!     segment%tangential_vel_bt(I,j) = my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
+!     segment%vorticity_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * sin_ky&
+!           (ll*ll + kk*kk + alpha*alpha)
     enddo ; enddo
   enddo
 
