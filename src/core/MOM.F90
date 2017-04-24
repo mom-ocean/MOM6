@@ -1622,8 +1622,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     endif
     CS%offline_CSp%iter_no = CS%offline_CSp%iter_no + 1
     ! The functions related to column physics of tracers is performed separately in ALE mode
-    fluxes%netMassIn = CS%offline_CSp%netMassIn
-    fluxes%netMassOut = CS%offline_CSp%netMassOut
+    fluxes%netMassIn(:,:) = CS%offline_CSp%netMassIn(:,:)
+    fluxes%netMassOut(:,:) = CS%offline_CSp%netMassOut(:,:)
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
         CS%h, eatr, ebtr)
     call pass_var(CS%h,G%Domain)
