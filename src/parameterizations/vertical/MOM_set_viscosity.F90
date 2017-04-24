@@ -419,15 +419,17 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
     endif
 
     if (m==1) then
-      do k=1,nz ; do I=is,ie ; if (do_i(I)) then
-        if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
-          h_at_vel(I,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
-                          (h(i,j,k) + h(i+1,j,k) + h_neglect)
-        else
-          h_at_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
+      do k=1,nz ; do I=is,ie
+        if (do_i(I)) then
+          if (u(I,j,k) *(h(i+1,j,k) - h(i,j,k)) >= 0) then
+            h_at_vel(I,k) = 2.0*h(i,j,k)*h(i+1,j,k) / &
+                            (h(i,j,k) + h(i+1,j,k) + h_neglect)
+          else
+            h_at_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
+          endif
         endif
         h_vel(I,k) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-      endif ; enddo ; enddo
+      enddo ; enddo
       if (use_BBL_EOS) then ; do k=1,nz ; do I=is,ie
         ! Perhaps these should be thickness weighted.
         T_vel(I,k) = 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
@@ -436,15 +438,17 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
         Rml_vel(I,k) = 0.5 * (Rml(i,j,k) + Rml(i+1,j,k))
       enddo ; enddo ; endif
     else
-      do k=1,nz ; do i=is,ie ; if (do_i(i)) then
-        if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
-          h_at_vel(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / &
-                          (h(i,j,k) + h(i,j+1,k) + h_neglect)
-        else
-          h_at_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+      do k=1,nz ; do i=is,ie
+        if (do_i(i)) then
+          if (v(i,J,k) * (h(i,j+1,k) - h(i,j,k)) >= 0) then
+            h_at_vel(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / &
+                            (h(i,j,k) + h(i,j+1,k) + h_neglect)
+          else
+            h_at_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+          endif
         endif
         h_vel(i,k) = 0.5 * (h(i,j,k) + h(i,j+1,k))
-      endif ; enddo ; enddo
+      enddo ; enddo
       if (use_BBL_EOS) then ; do k=1,nz ; do i=is,ie
         T_vel(i,k) = 0.5 * (tv%T(i,j,k) + tv%T(i,j+1,k))
         S_vel(i,k) = 0.5 * (tv%S(i,j,k) + tv%S(i,j+1,k))
