@@ -110,8 +110,9 @@ type, public :: offline_transport_CS
       temp_mean, salt_mean, &
       h_end
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-      netMassIn, netMassOut, mld
-
+      netMassIn, netMassOut
+  real, allocatable, dimension(:,:) :: &
+      mld          ! Mixed layer depths at thickness points, in H.
 
 end type offline_transport_CS
 
@@ -746,10 +747,12 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
     if (.not. ASSOCIATED(fluxes%netMassOut)) then
-      ALLOC_(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassOut(:,:) = 0.0
     endif
     if (.not. ASSOCIATED(fluxes%netMassIn)) then
-      ALLOC_(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassIn(:,:) = 0.0
     endif
 
     CS%netMassOut(:,:) = 0.0
@@ -769,9 +772,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
   endif
 
   if (CS%read_mld) then
-    if (.not. ALLOCATED(CS%MLD)) then
-      ALLOC_(CS%mld(G%isd:G%ied,G%jsd:G%jed))
-    endif
     call read_data(CS%mean_file,'MLD', CS%mld, domain=G%Domain%mpp_domain, timelevel=CS%ridx_sum)
   endif
 
@@ -1020,6 +1020,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
+  if (CS%read_mld) then
+    allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed)) ; CS%mld(:,:) = 0.0
+  endif
 
   call callTree_leave("offline_transport_init")
 
