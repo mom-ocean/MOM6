@@ -52,10 +52,10 @@ contains
 !> The following subroutines and associated definitions provide the
 !! machinery to register and call the subroutines that initialize
 !! open boundary conditions.
-subroutine call_OBC_register(param_file, CS, OBC_Reg)
+subroutine call_OBC_register(param_file, CS, OBC)
   type(param_file_type),     intent(in) :: param_file !< Parameter file to parse
   type(update_OBC_CS),       pointer    :: CS         !< Control structure for OBCs
-  type(OBC_registry_type),   pointer    :: OBC_Reg    !< OBC registry
+  type(ocean_OBC_type),      pointer    :: OBC        !< Open boundary structure
   character(len=40)  :: mod = "MOM_boundary_update" ! This module's name.
 
   if (associated(CS)) then
@@ -81,16 +81,16 @@ subroutine call_OBC_register(param_file, CS, OBC_Reg)
 
   if (CS%use_files) CS%use_files = &
     register_file_OBC(param_file, CS%file_OBC_CSp, &
-                         OBC_Reg)
+               OBC%OBC_Reg)
   if (CS%use_tidal_bay) CS%use_tidal_bay = &
     register_tidal_bay_OBC(param_file, CS%tidal_bay_OBC_CSp, &
-                         OBC_Reg)
+               OBC%OBC_Reg)
   if (CS%use_Kelvin) CS%use_Kelvin = &
     register_Kelvin_OBC(param_file, CS%Kelvin_OBC_CSp, &
-                         OBC_Reg)
+               OBC%OBC_Reg)
   if (CS%use_shelfwave) CS%use_shelfwave = &
     register_shelfwave_OBC(param_file, CS%shelfwave_OBC_CSp, &
-                         OBC_Reg)
+               OBC%OBC_Reg)
 
 end subroutine call_OBC_register
 

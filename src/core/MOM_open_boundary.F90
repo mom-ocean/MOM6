@@ -172,6 +172,7 @@ type, public :: ocean_OBC_type
   logical :: OBC_pe !< Is there an open boundary on this tile?
   character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
+  type(OBC_registry_type),       pointer :: OBC_Reg                => NULL()
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
