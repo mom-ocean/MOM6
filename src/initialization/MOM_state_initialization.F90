@@ -452,6 +452,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
                  "   supercritical - now only needed here for the allocations\n"//&
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
+                 "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
                  "   USER - user specified", default="none")
     if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
     if (trim(config) == "DOME") then
@@ -461,6 +462,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "Kelvin") then
+      OBC%update_OBC = .true.
+    elseif (trim(config) == "shelfwave") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
