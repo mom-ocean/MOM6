@@ -72,6 +72,7 @@ type, public :: offline_transport_CS
   logical :: print_adv_offline ! Prints out some updates each advection sub interation
   logical :: skip_diffusion    ! Skips horizontal diffusion of tracers
   logical :: read_sw           ! Read in averaged values for shortwave radiation
+  logical :: read_mld          ! Check to see whether mixed layer depths should be read in
   logical :: diurnal_sw        ! Adds a synthetic diurnal cycle on shortwave radiation
   logical :: debug
   !> Variables controlling some of the numerical considerations of offline transport
@@ -109,7 +110,7 @@ type, public :: offline_transport_CS
       temp_mean, salt_mean, &
       h_end
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-      netMassIn, netMassOut
+      netMassIn, netMassOut, mld
 
 
 end type offline_transport_CS
@@ -767,7 +768,14 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
 
   endif
 
-  if(CS%read_sw) then
+  if (CS%read_mld) then
+    if (.not. ALLOCATED(CS%MLD)) then
+      ALLOC_(CS%mld(G%isd:G%ied,G%jsd:G%jed))
+    endif
+    call read_data(CS%mean_file,'MLD', CS%mld, domain=G%Domain%mpp_domain, timelevel=CS%ridx_sum)
+  endif
+
+  if (CS%read_sw) then
 
     ! Shortwave radiation is only needed for offline mode with biogeochemistry.
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
@@ -973,6 +981,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     "Do not do horizontal diffusion",default=.false.)
   call get_param(param_file, mod, "READ_SW", CS%read_sw, &
     "Read in shortwave radiation field instead of using values from the coupler"//&
+    "when in offline tracer mode",default=.false.)
+  call get_param(param_file, mod, "READ_MLD", CS%read_mld, &
+    "Read in mixed layer depths for tracers which exchange with the atmosphere"//&
     "when in offline tracer mode",default=.false.)
   call get_param(param_file, mod, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
     "Adds a synthetic diurnal cycle in the same way that the ice model would have"//&

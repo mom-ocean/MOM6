@@ -1,3 +1,7 @@
+[![Build Status](https://travis-ci.org/NOAA-GFDL/MOM6.svg?branch=dev/master)](https://travis-ci.org/NOAA-GFDL/MOM6)
+[![Read The Docs Status](https://readthedocs.org/projects/mom6/badge/?badge=latest)](http://mom6.readthedocs.io/)
+[![codecov](https://codecov.io/gh/NOAA-GFDL/MOM6/branch/dev%2Fmaster/graph/badge.svg)](https://codecov.io/gh/NOAA-GFDL/MOM6)
+
 # MOM6
 
 This is the MOM6 source code.
@@ -5,6 +9,8 @@ This is the MOM6 source code.
 # Where to find information
 
 Start at the [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki) which has installation instructions.
+
+[Source code documentation](http://mom6.readthedocs.io/) is hosted on read the docs.
 
 # What files are what
 

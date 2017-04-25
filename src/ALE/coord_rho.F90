@@ -198,10 +198,10 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
       h1(k) = x1(k+1) - x1(k)
     end do
 
-    call remapping_core_h(nz, h0, S, nz, h1, Tmp, remapCS)
+    call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp)
     S_tmp(:) = Tmp(:)
 
-    call remapping_core_h(nz, h0, T, nz, h1, Tmp, remapCS)
+    call remapping_core_h(remapCS, nz, h0, T, nz, h1, Tmp)
     T_tmp(:) = Tmp(:)
 
     ! Compute the deviation between two successive grids
