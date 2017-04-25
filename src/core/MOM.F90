@@ -1626,8 +1626,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     endif
     CS%offline_CSp%iter_no = CS%offline_CSp%iter_no + 1
     ! The functions related to column physics of tracers is performed separately in ALE mode
-    fluxes%netMassIn = CS%offline_CSp%netMassIn
-    fluxes%netMassOut = CS%offline_CSp%netMassOut
+    fluxes%netMassIn(:,:) = CS%offline_CSp%netMassIn(:,:)
+    fluxes%netMassOut(:,:) = CS%offline_CSp%netMassOut(:,:)
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
         CS%h, eatr, ebtr)
     call pass_var(CS%h,G%Domain)
@@ -2237,7 +2237,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
-  call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
+  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
                             dirs%output_directory, CS%tv, dG%max_depth)
@@ -2891,7 +2891,7 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! salt tendencies from lateral advection
   CS%id_S_advection_xy = register_diag_field('ocean_model', 'S_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
+      'Horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)', v_extensive=.true.)
   CS%id_S_advection_xy_2d = register_diag_field('ocean_model', 'S_advection_xy_2d', diag%axesT1, Time,&
       'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
   if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
@@ -3665,7 +3665,7 @@ subroutine MOM_end(CS)
       call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif ; endif
   DEALLOC_(CS%ave_ssh)
-  call OBC_register_end(CS%update_OBC_CSp)
+  if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(CS%GV)
   call MOM_grid_end(CS%G)

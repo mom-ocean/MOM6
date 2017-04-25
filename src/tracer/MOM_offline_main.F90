@@ -110,8 +110,9 @@ type, public :: offline_transport_CS
       temp_mean, salt_mean, &
       h_end
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-      netMassIn, netMassOut, mld
-
+      netMassIn, netMassOut
+  real, allocatable, dimension(:,:) :: &
+      mld          ! Mixed layer depths at thickness points, in H.
 
 end type offline_transport_CS
 
@@ -490,7 +491,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
 
   ! Do the tracer sources and sinks and also the vertical mixing
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
-      fluxes, dt, CS%G, CS%GV, CS%tv, &
+      fluxes, CS%mld, dt, CS%G, CS%GV, CS%tv, &
       CS%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
@@ -585,7 +586,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First do vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -625,7 +626,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -746,10 +747,12 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
     if (.not. ASSOCIATED(fluxes%netMassOut)) then
-      ALLOC_(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassOut(:,:) = 0.0
     endif
     if (.not. ASSOCIATED(fluxes%netMassIn)) then
-      ALLOC_(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassIn(:,:) = 0.0
     endif
 
     CS%netMassOut(:,:) = 0.0
@@ -769,9 +772,6 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
   endif
 
   if (CS%read_mld) then
-    if (.not. ALLOCATED(CS%MLD)) then
-      ALLOC_(CS%mld(G%isd:G%ied,G%jsd:G%jed))
-    endif
     call read_data(CS%mean_file,'MLD', CS%mld, domain=G%Domain%mpp_domain, timelevel=CS%ridx_sum)
   endif
 
@@ -1020,6 +1020,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
+  if (CS%read_mld) then
+    allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed)) ; CS%mld(:,:) = 0.0
+  endif
 
   call callTree_leave("offline_transport_init")
 
