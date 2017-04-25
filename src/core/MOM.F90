@@ -2421,7 +2421,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     if (.not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
-    if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) call pass_var(CS%visc%MLD, G%domain)
+    if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) &
+      call pass_var(CS%visc%MLD, G%domain, halo=1)
   endif
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
