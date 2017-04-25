@@ -7,7 +7,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_RO
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_domains, only : pass_var, pass_vector
 use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
 use MOM_grid, only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid, only : dyn_horgrid_type
@@ -41,6 +41,8 @@ public fill_OBC_halos
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
+public register_OBC, OBC_registry_init
+public register_file_OBC, file_OBC_end
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -155,16 +157,6 @@ type, public :: ocean_OBC_type
     segnum_u => NULL(), &   !< Segment number of u-points.
     segnum_v => NULL()      !< Segment number of v-points.
 
-  !   The following can be used to specify the outer-domain values of the
-  ! surface height and barotropic velocity.  If these are not allocated, the
-  ! default with Flather boundary conditions is the same as if they were
-  ! filled with zeros.  With simple OBCs, these should not be allocated.
-  real, pointer, dimension(:,:) :: &
-    ubt_outer => NULL(), &    !< The u-velocity in the outer domain, in m s-1.
-    vbt_outer => NULL(), &    !< The v-velocity in the outer domain, in m s-1.
-    eta_outer_u => NULL(), &  !< The SSH anomaly in the outer domain, in m or kg m-2.
-    eta_outer_v => NULL()     !< The SSH anomaly in the outer domain, in m or kg m-2.
-
   ! The following parameters are used in the baroclinic radiation code:
   real :: gamma_uv !< The relative weighting for the baroclinic radiation
                    !! velocities (or speed of characteristics) at the
@@ -180,7 +172,27 @@ type, public :: ocean_OBC_type
   logical :: OBC_pe !< Is there an open boundary on this tile?
   character(len=200) :: OBC_user_config
   type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
+  type(OBC_registry_type),       pointer :: OBC_Reg                => NULL()
 end type ocean_OBC_type
+
+!> Control structure for open boundaries that read from files.
+!! Probably lots to update here.
+type, public :: file_OBC_CS ; private
+  real :: tide_flow = 3.0e6         !< Placeholder for now...
+end type file_OBC_CS
+
+!> Type to carry something (what??) for the OBC registry.
+type, public :: OBC_struct_type
+  character(len=32)               :: name             !< OBC name used for error messages
+end type OBC_struct_type
+
+!> Type to carry basic OBC information needed for updating values.
+type, public :: OBC_registry_type
+  integer               :: nobc = 0          !< number of registered open boundary types.
+  type(OBC_struct_type) :: OB(MAX_FIELDS_)   !< array of registered boundary types.
+  logical               :: locked = .false.  !< New tracers may be registered if locked=.false.
+                                             !! When locked=.true.,no more boundaries can be registered.
+end type OBC_registry_type
 
 integer :: id_clock_pass
 
@@ -987,10 +999,6 @@ subroutine open_boundary_dealloc(OBC)
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (associated(OBC%segnum_v)) deallocate(OBC%segnum_v)
-  if (associated(OBC%ubt_outer)) deallocate(OBC%ubt_outer)
-  if (associated(OBC%vbt_outer)) deallocate(OBC%vbt_outer)
-  if (associated(OBC%eta_outer_u)) deallocate(OBC%eta_outer_u)
-  if (associated(OBC%eta_outer_v)) deallocate(OBC%eta_outer_v)
   deallocate(OBC)
 end subroutine open_boundary_dealloc
 
@@ -1507,9 +1515,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
   type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
   ! Local variables
-  logical :: read_OBC_eta = .false.
-  logical :: read_OBC_uv = .false.
-  logical :: read_OBC_TS = .false.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
@@ -1529,63 +1534,6 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call get_param(PF, mod, "READ_OBC_UV", read_OBC_uv, &
-                 "If true, read the values for the velocity open boundary \n"//&
-                 "conditions from the file specified by OBC_FILE.", &
-                 default=.false.)
-  call get_param(PF, mod, "READ_OBC_ETA", read_OBC_eta, &
-                 "If true, read the values for the sea surface height \n"//&
-                 "open boundary conditions from the file specified by \n"//&
-                 "OBC_FILE.", default=.false.)
-  call get_param(PF, mod, "READ_OBC_TS", read_OBC_TS, &
-                 "If true, read the values for the temperature and \n"//&
-                 "salinity open boundary conditions from the file \n"//&
-                 "specified by OBC_FILE.", default=.false.)
-  if (read_OBC_uv .or. read_OBC_eta .or. read_OBC_TS) then
-    call get_param(PF, mod, "OBC_FILE", OBC_file, &
-                 "The file from which the appropriate open boundary \n"//&
-                 "condition values are read.", default="MOM_OBC_FILE.nc")
-    call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-    filename = trim(inputdir)//trim(OBC_file)
-    call log_param(PF, mod, "INPUTDIR/OBC_FILE", filename)
-  endif
-
-  if (open_boundary_query(OBC, apply_Flather_OBC=.true.)) then
-    if (.not.associated(OBC%vbt_outer)) then
-      allocate(OBC%vbt_outer(isd:ied,JsdB:JedB)) ; OBC%vbt_outer(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%ubt_outer)) then
-      allocate(OBC%ubt_outer(IsdB:IedB,jsd:jed)) ; OBC%ubt_outer(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%eta_outer_u)) then
-      allocate(OBC%eta_outer_u(IsdB:IedB,jsd:jed)) ; OBC%eta_outer_u(:,:) = 0.0
-    endif
-
-    if (.not.associated(OBC%eta_outer_v)) then
-      allocate(OBC%eta_outer_v(isd:ied,JsdB:JedB)) ; OBC%eta_outer_v(:,:) = 0.0
-    endif
-
-    if (read_OBC_uv) then
-      call read_data(filename, 'ubt', OBC%ubt_outer, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'vbt', OBC%vbt_outer, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    endif
-
-    if (read_OBC_eta) then
-      call read_data(filename, 'eta_outer_u', OBC%eta_outer_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'eta_outer_v', OBC%eta_outer_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    endif
-
-    call pass_vector(OBC%eta_outer_u,OBC%eta_outer_v,G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC%ubt_outer,OBC%vbt_outer,G%Domain)
-  endif
-
   ! For now, there are no radiation conditions applied to the thicknesses, since
   ! the thicknesses might not be physically motivated.  Instead, sponges should be
   ! used to enforce the near-boundary layer structure.
@@ -1596,17 +1544,17 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
     allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
     allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
 
-    if (read_OBC_TS) then
-      call read_data(filename, 'OBC_T_u', OBC_T_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
-      call read_data(filename, 'OBC_S_u', OBC_S_u, &
-                     domain=G%Domain%mpp_domain, position=EAST_FACE)
+!   if (read_OBC_TS) then
+!     call read_data(filename, 'OBC_T_u', OBC_T_u, &
+!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
+!     call read_data(filename, 'OBC_S_u', OBC_S_u, &
+!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
 
-      call read_data(filename, 'OBC_T_v', OBC_T_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-      call read_data(filename, 'OBC_S_v', OBC_S_v, &
-                     domain=G%Domain%mpp_domain, position=NORTH_FACE)
-    else
+!     call read_data(filename, 'OBC_T_v', OBC_T_v, &
+!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
+!     call read_data(filename, 'OBC_S_v', OBC_S_v, &
+!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
+!   else
       call pass_var(tv%T, G%Domain)
       call pass_var(tv%S, G%Domain)
       do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -1654,7 +1602,7 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
           OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
         endif
       enddo; enddo ; enddo
-    endif
+!   endif
 
     call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
     call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
@@ -2142,28 +2090,28 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (.not.associated(segment%field(m)%buffer_dst)) then
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
           if (segment%field(m)%nk_src > 1) then
-             allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
           else
-             allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
           endif
           segment%field(m)%buffer_dst(:,:,:)=0.0
           if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-             allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-             segment%field(m)%bt_vel(:,:)=0.0
+            allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
+            segment%field(m)%bt_vel(:,:)=0.0
           endif
         endif
         ! read source data interpolated to the current model time
         if (siz(1)==1) then
-           allocate(tmp_buffer(1,nj_seg*2+1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+          allocate(tmp_buffer(1,nj_seg*2+1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
         else
-           allocate(tmp_buffer(ni_seg*2+1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+          allocate(tmp_buffer(ni_seg*2+1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
         endif
 
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
         if (siz(1)==1) then
-           segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
+          segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
         else
-           segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
+          segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
         endif
         if (segment%field(m)%nk_src > 1) then
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer)
@@ -2173,67 +2121,148 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
             segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
           endif
           do j=js_obc,je_obc
-             do i=is_obc,ie_obc
+            do i=is_obc,ie_obc
 
-                ! Using the h remapping approach
-                ! Pretty sure we need to check for source/target grid consistency here
-                segment%field(m)%buffer_dst(i,j,:)=0.0  ! initialize remap destination buffer
-                if (G%mask2dT(i,j)>0.) then
-                   call remapping_core_h(OBC%remap_CS, &
-                         segment%field(m)%nk_src,segment%field(m)%dz_src(i,j,:), &
-                         segment%field(m)%buffer_src(i,j,:), &
-                         G%ke, h(i,j,:), segment%field(m)%buffer_dst(i,j,:))
-                endif
-             enddo
+              ! Using the h remapping approach
+              ! Pretty sure we need to check for source/target grid consistency here
+              segment%field(m)%buffer_dst(i,j,:)=0.0  ! initialize remap destination buffer
+              if (G%mask2dT(i,j)>0.) then
+                call remapping_core_h(OBC%remap_CS, &
+                     segment%field(m)%nk_src,segment%field(m)%dz_src(i,j,:), &
+                     segment%field(m)%buffer_src(i,j,:), &
+                     G%ke, h(i,j,:), segment%field(m)%buffer_dst(i,j,:))
+              endif
+            enddo
           enddo
         else  ! 2d data
           segment%field(m)%buffer_dst(:,:,1)=segment%field(m)%buffer_src(:,:,1)  ! initialize remap destination buffer
         endif
         deallocate(tmp_buffer)
       else ! fid <= 0
-         if (.not. ASSOCIATED(segment%field(m)%buffer_dst)) then
-           allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
-           segment%field(m)%buffer_dst(:,:,:)=segment%field(m)%value
-           if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-              allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
-              segment%field(m)%bt_vel(:,:)=segment%field(m)%value
-           endif
-         endif
+        if (.not. ASSOCIATED(segment%field(m)%buffer_dst)) then
+          allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+          segment%field(m)%buffer_dst(:,:,:)=segment%field(m)%value
+          if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
+            allocate(segment%field(m)%bt_vel(is_obc:ie_obc,js_obc:je_obc))
+            segment%field(m)%bt_vel(:,:)=segment%field(m)%value
+          endif
+        endif
       endif
 
       if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
-         if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
-           if((trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) .or.  &
-              (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S)) then
-             do j=js_obc,je_obc
-                do i=is_obc,ie_obc
-                   segment%normal_trans_bt(i,j) = 0.0
-                   do k=1,G%ke
-                      segment%normal_vel(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-                      segment%normal_trans(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k)
-                      segment%normal_trans_bt(i,j)= segment%normal_trans_bt(i,j)+segment%normal_trans(i,j,k)
-                   enddo
-                   segment%normal_vel_bt(i,j) = segment%normal_trans_bt(i,j)/max(segment%Htot(i,j),1.e-12)
-                   if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,j,:) = segment%normal_vel(i,j,:)
+        if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
+          if((trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) .or.  &
+             (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S)) then
+            do j=js_obc,je_obc
+              do i=is_obc,ie_obc
+                segment%normal_trans_bt(i,j) = 0.0
+                do k=1,G%ke
+                  segment%normal_vel(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
+                  segment%normal_trans(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k)
+                  segment%normal_trans_bt(i,j)= segment%normal_trans_bt(i,j)+segment%normal_trans(i,j,k)
                 enddo
-             enddo
-           endif
-         endif
+                segment%normal_vel_bt(i,j) = segment%normal_trans_bt(i,j)/max(segment%Htot(i,j),1.e-12)
+                if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,j,:) = segment%normal_vel(i,j,:)
+              enddo
+            enddo
+          endif
+        endif
       endif
 
       if (trim(segment%field(m)%name) == 'SSH') then
         do j=js_obc,je_obc
           do i=is_obc,ie_obc
-              segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
+            segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
           enddo
         enddo
       endif
     enddo
 
-
   enddo ! end segment loop
 
 end subroutine update_OBC_segment_data
+
+!> register open boundary objects for boundary updates.
+subroutine register_OBC(name, param_file, Reg)
+  character(len=32),     intent(in)  :: name        !< OBC name used for error messages
+  type(param_file_type), intent(in)  :: param_file  !< file to parse for  model parameter values
+  type(OBC_registry_type), pointer   :: Reg         !< pointer to the tracer registry
+  integer :: nobc
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not. associated(Reg)) call OBC_registry_init(param_file, Reg)
+
+  if (Reg%nobc>=MAX_FIELDS_) then
+    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
+        &all the open boundaries being registered via register_OBC.")') Reg%nobc+1
+    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+  endif
+  Reg%nobc = Reg%nobc + 1
+  nobc     = Reg%nobc
+
+  Reg%OB(nobc)%name = name
+
+  if (Reg%locked) call MOM_error(FATAL, &
+      "MOM register_tracer was called for variable "//trim(Reg%OB(nobc)%name)//&
+      " with a locked tracer registry.")
+
+end subroutine register_OBC
+
+!> This routine include declares and sets the variable "version".
+subroutine OBC_registry_init(param_file, Reg)
+  type(param_file_type),   intent(in) :: param_file !< open file to parse for model parameters
+  type(OBC_registry_type), pointer    :: Reg        !< pointer to OBC registry
+
+  integer, save :: init_calls = 0
+
+#include "version_variable.h"
+  character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not.associated(Reg)) then ; allocate(Reg)
+  else ; return ; endif
+
+  ! Read all relevant parameters and write them to the model log.
+! call log_version(param_file, mod, version, "")
+
+  init_calls = init_calls + 1
+  if (init_calls > 1) then
+    write(mesg,'("OBC_registry_init called ",I3, &
+      &" times with different registry pointers.")') init_calls
+    if (is_root_pe()) call MOM_error(WARNING,"MOM_open_boundary"//mesg)
+  endif
+
+end subroutine OBC_registry_init
+
+!> Add file to OBC registry.
+function register_file_OBC(param_file, CS, OBC_Reg)
+  type(param_file_type),    intent(in) :: param_file !< parameter file.
+  type(file_OBC_CS),        pointer    :: CS         !< file control structure.
+  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
+  logical                              :: register_file_OBC
+  character(len=32)  :: casename = "OBC file"        !< This case's name.
+
+  if (associated(CS)) then
+    call MOM_error(WARNING, "register_file_OBC called with an "// &
+                            "associated control structure.")
+    return
+  endif
+  allocate(CS)
+
+  ! Register the file for boundary updates.
+  call register_OBC(casename, param_file, OBC_Reg)
+  register_file_OBC = .true.
+
+end function register_file_OBC
+
+!> Clean up the file OBC from registry.
+subroutine file_OBC_end(CS)
+  type(file_OBC_CS), pointer    :: CS   !< OBC file control structure.
+
+  if (associated(CS)) then
+    deallocate(CS)
+  endif
+end subroutine file_OBC_end
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
