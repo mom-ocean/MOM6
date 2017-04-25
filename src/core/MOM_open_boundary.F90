@@ -35,9 +35,8 @@ public open_boundary_end
 public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public radiation_open_bdry_conds
-public set_Flather_data
+public set_tracer_data
 public update_obc_segment_data
-public fill_OBC_halos
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
@@ -1512,7 +1511,7 @@ end subroutine gradient_at_q_points
 
 !> Sets the initial definitions of the characteristic open boundary conditions.
 !! \author Mehmet Ilicak
-subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
   type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
@@ -1520,21 +1519,15 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   type(param_file_type),                     intent(in)    :: PF !< Parameter file handle
   type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
   ! Local variables
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
-  character(len=40)  :: mod = "set_Flather_data" ! This subroutine's name.
+  character(len=40)  :: mod = "set_tracer_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
   real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
   real :: temp_v(G%domain%niglobal,G%domain%njglobal+1)
-
-! real, pointer, dimension(:,:,:) :: &
-!   OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-!   OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-!   OBC_S_u => NULL(), &
-!   OBC_S_v => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1545,138 +1538,109 @@ subroutine set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
   ! used to enforce the near-boundary layer structure.
 
   if (associated(tv%T)) then
-!   allocate(OBC_T_u(IsdB:IedB,jsd:jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-!   allocate(OBC_S_u(IsdB:IedB,jsd:jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-!   allocate(OBC_T_v(isd:ied,JsdB:JedB,nz)) ; OBC_T_v(:,:,:) = 0.0
-!   allocate(OBC_S_v(isd:ied,JsdB:JedB,nz)) ; OBC_S_v(:,:,:) = 0.0
 
-!   if (read_OBC_TS) then
-!     call read_data(filename, 'OBC_T_u', OBC_T_u, &
-!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
-!     call read_data(filename, 'OBC_S_u', OBC_S_u, &
-!                    domain=G%Domain%mpp_domain, position=EAST_FACE)
+    call pass_var(tv%T, G%Domain)
+    call pass_var(tv%S, G%Domain)
 
-!     call read_data(filename, 'OBC_T_v', OBC_T_v, &
-!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
-!     call read_data(filename, 'OBC_S_v', OBC_S_v, &
-!                    domain=G%Domain%mpp_domain, position=NORTH_FACE)
-!   else
-      call pass_var(tv%T, G%Domain)
-      call pass_var(tv%S, G%Domain)
-      do k=1,nz ; do j=js,je ; do I=is-1,ie
-        if (OBC%segnum_u(I,j) /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            OBC_T_u(I,j,k) = tv%T(i,j,k)
-            OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
-            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
-            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-          endif
-        else
-          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
+    do n=1,OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe) cycle
+
+      if (segment%is_E_or_W) then
+        if (.not.ASSOCIATED(segment%T)) then
+          allocate(segment%T(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
+          allocate(segment%S(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
         endif
-      enddo; enddo ; enddo
-
-      do k=1,nz ; do J=js-1,je ; do i=is,ie
-        if (OBC%segnum_v(i,J) /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            OBC_T_v(i,J,k) = tv%T(i,j,k)
-            OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
-            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
-            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-          endif
-        else
-          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
+      else if (segment%is_N_or_S) then
+        if (.not.ASSOCIATED(segment%T)) then
+          allocate(segment%T(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
+          allocate(segment%S(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
         endif
-      enddo; enddo ; enddo
-!   endif
-
-    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-
-    call add_tracer_OBC_values("T", tracer_Reg, OBC_in_u=OBC_T_u, &
-                                                OBC_in_v=OBC_T_v)
-    call add_tracer_OBC_values("S", tracer_Reg, OBC_in_u=OBC_S_u, &
-                                                OBC_in_v=OBC_S_v)
-    do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-      if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-        tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
-      elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
       endif
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-      if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-        tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
-      elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
+
+      if (segment%direction == OBC_DIRECTION_E) then
+        I=segment%HI%IsdB
+        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+          segment%T(I,j,k) = tv%T(i,j,k)
+          segment%S(I,j,k) = tv%S(i,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_W) then
+        I=segment%HI%IsdB
+        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+          segment%T(I,j,k) = tv%T(i+1,j,k)
+          segment%S(I,j,k) = tv%S(i+1,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_N) then
+        J=segment%HI%JsdB
+        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+          segment%T(i,J,k) = tv%T(i,j,k)
+          segment%S(i,J,k) = tv%S(i,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_S) then
+        J=segment%HI%JsdB
+        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+          segment%T(i,J,k) = tv%T(i,j+1,k)
+          segment%S(i,J,k) = tv%S(i,j+1,k)
+        enddo; enddo
       endif
-    enddo ; enddo ; enddo
+    enddo
+
+    do n=1,OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe) cycle
+
+      if (segment%direction == OBC_DIRECTION_E) then
+        I=segment%HI%IsdB
+        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+          tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_W) then
+        I=segment%HI%IsdB
+        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+          tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_N) then
+        J=segment%HI%JsdB
+        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+          tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k)
+        enddo; enddo
+      elseif (segment%direction == OBC_DIRECTION_S) then
+        J=segment%HI%JsdB
+        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+          tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k)
+        enddo; enddo
+      endif
+    enddo
   endif
 
-  do k=1,nz ; do j=jsd,jed ; do I=isd,ied-1
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
-                        h(i+1,j,k) = h(i,j,k)
-    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
-                        h(i,j,k) = h(i+1,j,k)
-  enddo ; enddo ; enddo
-  do k=1,nz ; do J=jsd,jed-1 ; do i=isd,ied
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
-                       h(i,j+1,k) = h(i,j,k)
-    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
-                       h(i,j,k) = h(i,j+1,k)
-  enddo ; enddo ; enddo
-! When we do not extend segments, this commented block was needed to
-! get the same'ish h's.
-! do k=1,nz ; do j=jsd,jed-1 ; do i=isd,ied
-!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) h(i,j+1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd+1,jed ; do i=isd,ied
-!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S) h(i,j-1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd,jed ; do i=isd,ied-1
-!   if (OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd,jed ; do i=isd+1,ied
-!   if (OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd,jed-1 ; do i=isd,ied-1
-!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N .and. &
-!       OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j+1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd,jed-1 ; do i=isd+1,ied
-!   if (OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N .and. &
-!       OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j+1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd+1,jed ; do i=isd,ied-1
-!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S .and. &
-!       OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) h(i+1,j-1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
-! do k=1,nz ; do j=jsd+1,jed ; do i=isd+1,ied
-!   if (OBC%OBC_direction_v(i,J-1) == OBC_DIRECTION_S .and. &
-!       OBC%OBC_direction_u(I-1,j) == OBC_DIRECTION_W) h(i-1,j-1,k) = h(i,j,k)
-! enddo ; enddo ; enddo
+  do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle
 
-end subroutine set_Flather_data
+    if (segment%direction == OBC_DIRECTION_E) then
+      I=segment%HI%IsdB
+      do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+        h(i+1,j,k) = h(i,j,k)
+      enddo; enddo
+    elseif (segment%direction == OBC_DIRECTION_W) then
+      I=segment%HI%IsdB
+      do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
+        h(i,j,k) = h(i+1,j,k)
+      enddo; enddo
+    elseif (segment%direction == OBC_DIRECTION_N) then
+      J=segment%HI%JsdB
+      do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+        h(i,j+1,k) = h(i,j,k)
+      enddo; enddo
+    elseif (segment%direction == OBC_DIRECTION_S) then
+      J=segment%HI%JsdB
+      do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
+        h(i,j,k) = h(i,j+1,k)
+      enddo; enddo
+    endif
+  enddo
+
+end subroutine set_tracer_data
 
 function lookup_seg_field(OBC_seg,field)
   type(OBC_segment_type), pointer :: OBC_seg
@@ -1697,137 +1661,6 @@ function lookup_seg_field(OBC_seg,field)
 
 end function lookup_seg_field
 
-
-subroutine fill_OBC_halos(G, GV, OBC, tv, h, tracer_Reg)
-
-  type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !<  Ocean vertical grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout)    :: h !< Thickness
-  type(tracer_registry_type),                pointer       :: tracer_Reg !< Tracer registry
-  ! Local variables
-
-  integer :: i, j, k, isd, ied, jsd, jed, is, ie, js, je
-  integer :: n, nz
-  character(len=40)  :: mod = "fill_OBC_halos" ! This subroutine's name.
-  type(OBC_segment_type), pointer :: segment
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_u => NULL(), &    ! These arrays should be allocated and set to
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_u => NULL(), &
-    OBC_S_v => NULL()
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  nz=G%ke
-
-  if (.not. associated(OBC) .or. .not. associated(tv%T)) return
-
-  call pass_var(tv%T,G%Domain)
-  call pass_var(tv%S,G%Domain)
-
-  do n = 1, OBC%number_of_segments
-    segment => OBC%segment(n)
-
-    if (.not. segment%on_pe) cycle ! continue to next segment if not in computational domain
-
-    do j=G%jsdB+1,G%jedB ; do I=G%isdB,G%iedB-1
-      if (segment%direction == OBC_DIRECTION_E .and. OBC%segnum_u(I,j) /= OBC_NONE ) then
-        do k=1,nz
-          tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k); h(i+1,j,k) = h(i,j,k)
-        enddo
-      endif
-    enddo ; enddo
-
-    do j=G%jsdB+1,G%jedB ; do I=G%isdB+1,G%iedB
-      if (segment%direction == OBC_DIRECTION_W .and. OBC%segnum_u(I,j) /= OBC_NONE ) then
-        do k=1,nz
-          tv%T(i-1,j,k) = tv%T(i,j,k) ; tv%S(i-1,j,k) = tv%S(i,j,k); h(i-1,j,k) = h(i,j,k)
-        enddo
-      endif
-    enddo ; enddo
-
-    do j=G%jsdB,G%jedB-1 ; do I=G%isdB+1,G%iedB
-      if (segment%direction == OBC_DIRECTION_N .and. OBC%segnum_v(I,j) /= OBC_NONE ) then
-        do k=1,nz
-          tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k); h(i,j+1,k) = h(i,j,k)
-        enddo
-      endif
-    enddo ; enddo
-
-    do j=G%jsdB+1,G%jedB ; do I=G%isdB+1,G%iedB
-      if (segment%direction == OBC_DIRECTION_S .and. OBC%segnum_v(I,j) /= OBC_NONE ) then
-        do k=1,nz
-          tv%T(i,j-1,k) = tv%T(i,j,k) ; tv%S(i,j-1,k) = tv%S(i,j,k); h(i,j-1,k) = h(i,j,k)
-        enddo
-      endif
-    enddo ; enddo
-
-  enddo
-
-  if (associated(tv%T)) then
-     if (.not. associated(OBC_T_u)) then
-       allocate(OBC_T_u(G%IsdB:G%IedB,G%jsd:G%jed,nz)) ; OBC_T_u(:,:,:) = 0.0
-       allocate(OBC_S_u(G%IsdB:G%IedB,G%jsd:G%jed,nz)) ; OBC_S_u(:,:,:) = 0.0
-       allocate(OBC_T_v(G%Isd:G%Ied,G%jsdB:G%jedB,nz)) ; OBC_T_v(:,:,:) = 0.0
-       allocate(OBC_S_v(G%Isd:G%Ied,G%jsdB:G%jedB,nz)) ; OBC_S_v(:,:,:) = 0.0
-     endif
-     do k=1,nz ; do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-        if (OBC%segnum_u(I,j) /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            OBC_T_u(I,j,k) = tv%T(i,j,k)
-            OBC_S_u(I,j,k) = tv%S(i,j,k)
-          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            OBC_T_u(I,j,k) = tv%T(i+1,j,k)
-            OBC_S_u(I,j,k) = tv%S(i+1,j,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i+1,j) > 0) then
-            OBC_T_u(I,j,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i+1,j)*tv%T(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-            OBC_S_u(I,j,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i+1,j)*tv%S(i+1,j,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i+1,j))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-            OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-          endif
-        else
-          OBC_T_u(I,j,k) = 0.5*(tv%T(i,j,k)+tv%T(i+1,j,k))
-          OBC_S_u(I,j,k) = 0.5*(tv%S(i,j,k)+tv%S(i+1,j,k))
-        endif
-     enddo; enddo ; enddo
-
-     do k=1,nz ; do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-        if (OBC%segnum_v(i,J) /= OBC_NONE) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            OBC_T_v(i,J,k) = tv%T(i,j,k)
-            OBC_S_v(i,J,k) = tv%S(i,j,k)
-          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            OBC_T_v(i,J,k) = tv%T(i,j+1,k)
-            OBC_S_v(i,J,k) = tv%S(i,j+1,k)
-          elseif (G%mask2dT(i,j) + G%mask2dT(i,j+1) > 0) then
-            OBC_T_v(i,J,k) = (G%mask2dT(i,j)*tv%T(i,j,k) + G%mask2dT(i,j+1)*tv%T(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-            OBC_S_v(i,J,k) = (G%mask2dT(i,j)*tv%S(i,j,k) + G%mask2dT(i,j+1)*tv%S(i,j+1,k)) / &
-                             (G%mask2dT(i,j) + G%mask2dT(i,j+1))
-          else ! This probably shouldn't happen or maybe it doesn't matter?
-            OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-            OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-          endif
-        else
-          OBC_T_v(i,J,k) = 0.5*(tv%T(i,j,k)+tv%T(i,j+1,k))
-          OBC_S_v(i,J,k) = 0.5*(tv%S(i,j,k)+tv%S(i,j+1,k))
-        endif
-     enddo; enddo ; enddo
-
-    call pass_vector(OBC_T_u, OBC_T_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-    call pass_vector(OBC_S_u, OBC_S_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-
-    call add_tracer_OBC_values("T",tracer_Reg, OBC_in_u=OBC_T_u,OBC_in_v=OBC_T_v)
-    call add_tracer_OBC_values("S",tracer_Reg, OBC_in_u=OBC_S_u,OBC_in_v=OBC_S_v)
-
-
-  endif
-end subroutine fill_OBC_halos
 
 !> Allocate segment data fields
 subroutine allocate_OBC_segment_data(OBC, segment)
