@@ -768,7 +768,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
         call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
-        call pass_var(visc%MLD, G%domain)
+        call pass_var(visc%MLD, G%domain, halo=1)
         Hml(:,:) = visc%MLD(:,:)
       endif
 
