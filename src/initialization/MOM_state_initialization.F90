@@ -81,7 +81,7 @@ use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
+use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
@@ -148,6 +148,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                          ! by a large surface pressure by squeezing the column.
   logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
                          ! by a large surface pressure, such as with an ice sheet.
+  logical :: regrid_accelerate
+  integer :: regrid_iterations
   logical :: Analytic_FV_PGF, obsol_test
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
@@ -381,6 +383,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
     if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
     if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
+
+    ! Perhaps we want to run the regridding coordinate generator for multiple
+    ! iterations here so the initial grid is consistent with the coordinate
+    if (useALE) then
+      call get_param(PF, mod, "REGRID_ACCELERATE_INIT", regrid_accelerate, &
+           "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding\n"//&
+           "algorithm to push the initial grid to be consistent with the initial\n"//&
+           "condition. Useful only for state-based and iterative coordinates.", &
+           default=.false.)
+      if (regrid_accelerate) then
+        call get_param(PF, mod, "REGRID_ACCELERATE_ITERATIONS", regrid_iterations, &
+             "The number of regridding iterations to perform to generate\n"//&
+             "an initial grid that is consistent with the initial conditions.", &
+             default=1)
+
+        call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h, u, v)
+      endif
+    endif
 
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
