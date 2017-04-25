@@ -1509,8 +1509,9 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
 end subroutine gradient_at_q_points
 
 
-!> Sets the initial definitions of the characteristic open boundary conditions.
-!! \author Mehmet Ilicak
+!> Sets the initial values of the tracer and h open boundary conditions.
+!! Also allocates and fills the segment%T and segment%S arrays, but they
+!! are not yet used anywhere.
 subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
