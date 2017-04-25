@@ -23,7 +23,7 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_Flather_data
+use MOM_open_boundary, only : open_boundary_query, set_tracer_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
@@ -492,7 +492,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-      call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+      call set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
     endif
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
