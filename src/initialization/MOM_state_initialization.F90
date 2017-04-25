@@ -398,7 +398,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              "an initial grid that is consistent with the initial conditions.", &
              default=1)
 
-        call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h)
+        call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h, u, v)
       endif
     endif
 
