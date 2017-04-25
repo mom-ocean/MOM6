@@ -605,14 +605,16 @@ end subroutine ALE_build_grid
 
 !> For a state-based coordinate, accelerate the process of regridding by
 !! repeatedly applying the grid calculation algorithm
-subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new)
-  type(ALE_CS),                             intent(in)     :: CS
-  type(ocean_grid_type),                    intent(inout)  :: G
-  type(verticalGrid_type),                  intent(in)     :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)     :: h_orig
-  type(thermo_var_ptrs),                    intent(inout)  :: tv
-  integer,                                  intent(in)     :: n
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)    :: h_new
+subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
+  type(ALE_CS),                               intent(in)    :: CS
+  type(ocean_grid_type),                      intent(inout) :: G
+  type(verticalGrid_type),                    intent(in)    :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_orig
+  type(thermo_var_ptrs),                      intent(inout) :: tv
+  integer,                                    intent(in)    :: n
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h_new
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v
 
   ! Local variables
   integer :: i, j, k, nz
@@ -620,9 +622,14 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new)
   type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))         :: h
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: T, S ! temporary state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dzInterface ! required but not used
+  ! we have to keep track of the total dzInterface if for some reason
+  ! we're using the old remapping algorithm for u/v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dzInterface, dzIntTotal
 
   nz = GV%ke
+
+  ! initial total interface displacement due to successive regridding
+  dzIntTotal(:,:,:) = 0.
 
   call create_group_pass(pass_T_S_h, T, G%domain)
   call create_group_pass(pass_T_S_h, S, G%domain)
@@ -643,12 +650,16 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new)
 
     ! generate new grid
     call regridding_main(CS%remapCS, CS%regridCS, G, GV, h, tv_local, h_new, dzInterface)
+    dzIntTotal(:,:,:) = dzIntTotal(:,:,:) + dzInterface(:,:,:)
 
     ! remap from original grid onto new grid
+    ! we need to use remapping_core because there isn't a tracer registry set up in
+    ! the state initialization routine
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
       call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), tv_local%S(i,j,:))
       call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), tv_local%T(i,j,:))
     enddo ; enddo
+
 
     h(:,:,:) = h_new(:,:,:)
   enddo
@@ -656,6 +667,9 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new)
   ! save the final temp/salt
   tv%S(:,:,:) = S(:,:,:)
   tv%T(:,:,:) = T(:,:,:)
+
+  ! remap velocities
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h_new, dzIntTotal, null(), u, v)
 end subroutine ALE_regrid_accelerated
 
 !> This routine takes care of remapping all variable between the old and the
