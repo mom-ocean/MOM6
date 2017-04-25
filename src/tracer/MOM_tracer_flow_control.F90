@@ -88,7 +88,7 @@ implicit none ; private
 
 public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
-public get_chl_from_model
+public get_chl_from_model, tracer_flow_control_end
 
 type, public :: tracer_flow_control_CS ; private
   logical :: use_USER_tracer_example = .false.
@@ -368,10 +368,11 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
 
 end subroutine call_tracer_set_forcing
 
-subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, optics, CS, &
+subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, tv, optics, CS, &
                                   debug, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
+  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml !< Mixed layer depth (m)
   real,                                  intent(in) :: dt
   type(ocean_grid_type),                 intent(in) :: G
   type(verticalGrid_type),               intent(in) :: GV
@@ -456,7 +457,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
                                      minimum_forcing_depth=minimum_forcing_depth)
 #ifdef _USE_GENERIC_TRACER
     if (CS%use_MOM_generic_tracer) &
-      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, &
                                              G, GV, CS%MOM_generic_tracer_CSp, tv, optics, &
                                              evap_CFL_limit=evap_CFL_limit, &
                                              minimum_forcing_depth=minimum_forcing_depth)
@@ -500,7 +501,7 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, dt, G, GV, tv, o
                                      G, GV, CS%OCMIP2_CFC_CSp)
 #ifdef _USE_GENERIC_TRACER
     if (CS%use_MOM_generic_tracer) &
-      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+      call MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, &
                                      G, GV, CS%MOM_generic_tracer_CSp, tv, optics)
 #endif
     if (CS%use_pseudo_salt_tracer) &

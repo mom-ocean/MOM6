@@ -21,7 +21,7 @@ use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_en
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
-use MOM_domains,             only : pass_var, To_West, To_South
+use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
@@ -769,7 +769,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       if (associated(visc%MLD)) then
         call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
         call pass_var(visc%MLD, G%domain)
-        if (associated(Hml)) Hml(:,:) = visc%MLD(:,:)
+        Hml(:,:) = visc%MLD(:,:)
       endif
 
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
@@ -1154,12 +1154,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, Hml, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                 evap_CFL_limit = CS%evap_CFL_limit, &
                                 minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
@@ -1185,24 +1185,24 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug,&
                                   evap_CFL_limit = CS%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
                                   evap_CFL_limit = CS%evap_CFL_limit, &
                                   minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
@@ -1295,13 +1295,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_All+Omit_Corners,halo=1)
   else
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South+Omit_Corners,halo=1)
   endif
   call do_group_pass(CS%pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
@@ -1513,7 +1513,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic

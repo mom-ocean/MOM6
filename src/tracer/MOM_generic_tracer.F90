@@ -513,12 +513,13 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics, &
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),                 intent(in) :: G
     type(verticalGrid_type),               intent(in) :: GV
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
+    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml !< Mixed layer depth
     real,                                  intent(in) :: dt
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(thermo_var_ptrs),                 intent(in) :: tv
@@ -640,7 +641,7 @@ contains
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
+    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,Hml,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
 
