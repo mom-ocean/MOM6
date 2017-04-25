@@ -1084,8 +1084,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (CS%adjust_BT_cont) then
         ! Use the additional input transports to broaden the fits
         ! over which the bt_cont_type applies.
+
+        ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
+        if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
+        if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
+        call pass_vector(ubt, vbt, CS%BT_Domain, complete=.false., halo=1+ievf-ie)
+        call pass_vector(uhbt, vhbt, CS%BT_Domain, complete=.true., halo=1+ievf-ie)
+        if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
+        if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
+
         call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
-                                        G, MS, CS%BT_Domain, 1+ievf-ie)
+                                        G, MS, 1+ievf-ie)
       endif
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
@@ -3360,8 +3369,8 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   type(memory_size_type),                                intent(in)    :: MS
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(out) :: BTCL_u
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(out) :: BTCL_v
-  type(ocean_grid_type),                                 intent(inout) :: G
-  type(MOM_domain_type),                                intent(inout) :: BT_Domain
+  type(ocean_grid_type),                                 intent(in)    :: G
+  type(MOM_domain_type),                                 intent(inout) :: BT_Domain
   integer,                                     optional, intent(in)    :: halo
 !   This subroutine sets up reordered versions of the BT_cont type in the
 ! local_BT_cont types, which have wide halos properly filled in.
@@ -3483,28 +3492,27 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
 end subroutine set_local_BT_cont_types
 
 
+!>   adjust_local_BT_cont_types sets up reordered versions of the BT_cont type
+!! in the local_BT_cont types, which have wide halos properly filled in.
 subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
-                                      G, MS, BT_Domain, halo)
-  type(memory_size_type),                                intent(in)    :: MS
-  real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt, uhbt
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt, vhbt
-  type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(out) :: BTCL_u
-  type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(out) :: BTCL_v
-  type(ocean_grid_type),                                 intent(inout) :: G
-  type(MOM_domain_type),                                intent(inout) :: BT_Domain
-  integer,                                     optional, intent(in)    :: halo
-!   This subroutine sets up reordered versions of the BT_cont type in the
-! local_BT_cont types, which have wide halos properly filled in.
-! Arguments: ubt - The linearization zonal barotropic velocity in m s-1. (in+halo)
-!  (in+halo) uhbt - The linearization zonal barotropic transport in H m2 s-1.
-!  (in+halo) vbt - The linearization meridional barotropic velocity in m s-1.
-!  (in+halo) vhbt - The linearization meridional barotropic transport in H m2 s-1.
-!  (inout)   BTCL_u - A structure with the u information from BT_cont.
-!  (inout)   BTCL_v - A structure with the v information from BT_cont.
-!  (in)      G - The ocean's grid structure.
-!  (in)      MS - A type that describes the memory sizes of the argument arrays.
-!  (in)      BT_Domain - The domain to use for updating the halos of wide arrays.
-!  (in)      halo - The extra halo size to use here.
+                                      G, MS, halo)
+  type(memory_size_type), intent(in)  :: MS   !< A type that describes the memory sizes of the argument arrays.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), &
+                          intent(in)  :: ubt  !< The linearization zonal barotropic velocity in m s-1.
+  real, dimension(SZIBW_(MS),SZJW_(MS)), &
+                          intent(in)  :: uhbt !< The linearization zonal barotropic transport in H m2 s-1.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), &
+                          intent(in)  :: vbt  !< The linearization meridional barotropic velocity in m s-1.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), &
+                          intent(in)  :: vhbt !< The linearization meridional barotropic transport in H m2 s-1.
+  type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), &
+                          intent(out) :: BTCL_u !< A structure with the u information from BT_cont.
+  type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), &
+                          intent(out) :: BTCL_v !< A structure with the v information from BT_cont.
+  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure.
+  integer,      optional, intent(in)  :: halo !< The extra halo size to use here.
+
+  ! Local variables
   real, dimension(SZIBW_(MS),SZJW_(MS)) :: &
     u_polarity, uBT_EE, uBT_WW, FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW
   real, dimension(SZIW_(MS),SZJBW_(MS)) :: &
@@ -3514,16 +3522,7 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
-  ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
-  if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-  if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-  call pass_vector(ubt, vbt, BT_Domain, complete=.false.)
-  call pass_vector(uhbt, vhbt, BT_Domain, complete=.true.)
-  if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
-  if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-
-!$OMP parallel default(none) shared(is,ie,js,je,hs,BTCL_u,ubt,uhbt,BTCL_v,vbt,vhbt )
-!$OMP do
+  !$OMP parallel do default(shared)
   do j=js-hs,je+hs ; do I=is-hs-1,ie+hs
     if ((ubt(I,j) > BTCL_u(I,j)%uBT_WW) .and. (uhbt(I,j) > BTCL_u(I,j)%uh_WW)) then
       ! Expand the cubic fit to use this new point.  ubt is negative.
@@ -3553,7 +3552,7 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
 !     BTCL_u(I,j)%FA_u_EE = min(BTCL_u(I,j)%FA_u_EE, uhbt(I,j) / ubt(I,j))
     endif
   enddo ; enddo
-!$OMP do
+  !$OMP parallel do default(shared)
   do J=js-hs-1,je+hs ; do i=is-hs,ie+hs
     if ((vbt(i,J) > BTCL_v(i,J)%vBT_SS) .and. (vhbt(i,J) > BTCL_v(i,J)%vh_SS)) then
       ! Nxpand the cubic fit to use this new point.  vbt is negative.
@@ -3583,7 +3582,7 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
 !     BTCL_v(i,J)%FA_v_NN = min(BTCL_v(i,J)%FA_v_NN, vhbt(i,J) / vbt(i,J))
     endif
   enddo ; enddo
-!$OMP end parallel
+
 end subroutine adjust_local_BT_cont_types
 
 
