@@ -606,25 +606,25 @@ end subroutine ALE_build_grid
 !> For a state-based coordinate, accelerate the process of regridding by
 !! repeatedly applying the grid calculation algorithm
 subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
-  type(ALE_CS),                               intent(in)    :: CS
-  type(ocean_grid_type),                      intent(inout) :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h_orig
-  type(thermo_var_ptrs),                      intent(inout) :: tv
-  integer,                                    intent(in)    :: n
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h_new
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v
+  type(ALE_CS),                               intent(in)    :: CS     !< ALE control structure
+  type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_orig !< Original thicknesses
+  type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermo vars (T/S/EOS)
+  integer,                                    intent(in)    :: n      !< Number of times to regrid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(out)   :: h_new  !< Thicknesses after regridding
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u      !< Zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v      !< Meridional velocity
 
   ! Local variables
   integer :: i, j, k, nz
   type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
   type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))         :: h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target :: T, S ! temporary state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! temporary state
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: dzInterface, dzIntTotal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
 
   nz = GV%ke
 
