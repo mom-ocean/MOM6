@@ -178,7 +178,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(group_pass_type) :: pass_Ray_uv, pass_eta_PF_eta
   type(group_pass_type) :: pass_visc_rem, pass_uvp
   type(group_pass_type) :: pass_hp_uv, pass_eta_PF
-  type(group_pass_type) :: pass_huv, pass_uv
+  type(group_pass_type) :: pass_uv
   type(group_pass_type) :: pass_h, pass_av_uvh
 
 end type MOM_dyn_split_RK2_CS
@@ -293,7 +293,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
 
-!$OMP parallel do default(none) shared(nz,G,up,vp,hp,h)
+  !$OMP parallel do default(shared)
   do k = 1, nz
     do j=G%jsd,G%jed   ; do i=G%isdB,G%iedB ;  up(i,j,k) = 0.0 ; enddo ; enddo
     do j=G%jsdB,G%jedB ; do i=G%isd,G%ied   ;  vp(i,j,k) = 0.0 ; enddo ; enddo
@@ -372,10 +372,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call create_group_pass(CS%pass_eta_PF, CS%eta_PF, G%Domain)
   endif
 
-  if (BT_cont_BT_thick) then
-    call create_group_pass(CS%pass_huv, CS%BT_cont%h_u, CS%BT_cont%h_v, G%Domain, &
-                           To_All+SCALAR_PAIR, CGRID_NE)
-  endif
   call create_group_pass(CS%pass_uv, u, v, G%Domain)
   call create_group_pass(CS%pass_h, h, G%Domain)
   call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain)
@@ -414,7 +410,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                      CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
     Pa_to_eta = 1.0 / GV%H_to_Pa
-!$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,eta_PF_start,CS,Pa_to_eta,p_surf_begin,p_surf_end)
+    !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta_PF_start(i,j) = CS%eta_PF(i,j) - Pa_to_eta * &
                           (p_surf_begin(i,j) - p_surf_end(i,j))
@@ -443,7 +439,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! u_bc_accel = CAu + PFu + diffu(u[n-1])
   call cpu_clock_begin(id_clock_btforce)
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,u_bc_accel,v_bc_accel,CS)
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
       u_bc_accel(I,j,k) = (CS%Cau(I,j,k) + CS%PFu(I,j,k)) + CS%diffu(I,j,k)
@@ -476,8 +472,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   call cpu_clock_begin(id_clock_vertvisc)
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,up,G,u,dt, &
-!$OMP                                  u_bc_accel,vp,v,v_bc_accel)
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
       up(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * u_bc_accel(I,j,k))
@@ -531,9 +526,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                     visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_huv, G%Domain)
-      call cpu_clock_end(id_clock_pass)
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                   OBC=CS%OBC)
     endif
@@ -562,9 +554,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! up = u + dt_pred*( u_bc_accel + u_accel_bt )
   dt_pred = dt * CS%be
   call cpu_clock_begin(id_clock_mom_update)
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vp,G,v_init, &
-!$OMP                                  dt_pred,v_bc_accel,CS,up,u_init,u_bc_accel)
 
+  !$OMP parallel do default(shared)
   do k=1,nz
     do J=Jsq,Jeq ; do i=is,ie
       vp(i,J,k) = G%mask2dCv(i,J) * (v_init(i,J,k) + dt_pred * &
@@ -645,7 +636,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_pass)
 
   ! h_av = (h + hp)/2
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h,hp)
+  !$OMP parallel do default(shared)
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
     h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
   enddo ; enddo ; enddo
@@ -666,7 +657,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     ! hp <- (1-begw)*h_in + begw*hp
     ! Back up hp to the value it would have had after a time-step of
     ! begw*dt.  hp is not used again until recalculated by continuity.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,hp,CS,h)
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
       hp(i,j,k) = (1.0-CS%begw)*h(i,j,k) + CS%begw*hp(i,j,k)
     enddo ; enddo ; enddo
@@ -691,9 +682,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (BT_cont_BT_thick) then
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_huv, G%Domain)
-    call cpu_clock_end(id_clock_pass)
     call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                 OBC=CS%OBC)
     if (showCallTree) call callTree_wayPoint("done with btcalc[BT_cont_BT_thick] (step_MOM_dyn_split_RK2)")
@@ -726,8 +714,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 ! u_bc_accel = CAu + PFu + diffu(u[n-1])
   call cpu_clock_begin(id_clock_btforce)
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,CS, &
-!$OMP                                  u_bc_accel,v_bc_accel)
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
       u_bc_accel(I,j,k) = (CS%Cau(I,j,k) + CS%PFu(I,j,k)) + CS%diffu(I,j,k)
@@ -774,8 +761,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   ! u = u + dt*( u_bc_accel + u_accel_bt )
   call cpu_clock_begin(id_clock_mom_update)
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,u,G,u_init, &
-!$OMP                                  CS,dt,u_bc_accel,v,v_init,v_bc_accel)
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=Isq,Ieq
       u(I,j,k) = G%mask2dCu(I,j) * (u_init(I,j,k) + dt * &
@@ -814,7 +800,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
 
 ! Later, h_av = (h_in + h_out)/2, but for now use h_av to store h_in.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h)
+  !$OMP parallel do default(shared)
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
     h_av(i,j,k) = h(i,j,k)
   enddo ; enddo ; enddo
@@ -857,7 +843,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h_av,h)
+  !$OMP parallel do default(shared)
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
     h_av(i,j,k) = 0.5*(h_av(i,j,k) + h(i,j,k))
   enddo ; enddo ; enddo
@@ -867,7 +853,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call complete_group_pass(CS%pass_av_uvh, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
-!$OMP parallel do default(none) shared(is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,uhtr,uh,dt,vhtr,vh)
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
       uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*dt
