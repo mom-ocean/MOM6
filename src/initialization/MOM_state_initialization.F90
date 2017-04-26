@@ -23,7 +23,7 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_Flather_data
+use MOM_open_boundary, only : open_boundary_query, set_tracer_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
@@ -81,7 +81,7 @@ use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
 
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
-use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid
+use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
@@ -148,6 +148,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                          ! by a large surface pressure by squeezing the column.
   logical :: trim_ic_for_p_surf ! If true, remove the mass that would be displaced
                          ! by a large surface pressure, such as with an ice sheet.
+  logical :: regrid_accelerate
+  integer :: regrid_iterations
   logical :: Analytic_FV_PGF, obsol_test
   logical :: convert
   type(EOS_type), pointer :: eos => NULL()
@@ -382,6 +384,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
     if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
 
+    ! Perhaps we want to run the regridding coordinate generator for multiple
+    ! iterations here so the initial grid is consistent with the coordinate
+    if (useALE) then
+      call get_param(PF, mod, "REGRID_ACCELERATE_INIT", regrid_accelerate, &
+           "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding\n"//&
+           "algorithm to push the initial grid to be consistent with the initial\n"//&
+           "condition. Useful only for state-based and iterative coordinates.", &
+           default=.false.)
+      if (regrid_accelerate) then
+        call get_param(PF, mod, "REGRID_ACCELERATE_ITERATIONS", regrid_iterations, &
+             "The number of regridding iterations to perform to generate\n"//&
+             "an initial grid that is consistent with the initial conditions.", &
+             default=1)
+
+        call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h, u, v)
+      endif
+    endif
+
   else ! Previous block for new_sim=.T., this block restores state
 !    This line calls a subroutine that reads the initial conditions  !
 !  from a previously generated file.                                 !
@@ -452,6 +472,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
                  "   supercritical - now only needed here for the allocations\n"//&
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
+                 "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
                  "   USER - user specified", default="none")
     if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
     if (trim(config) == "DOME") then
@@ -462,6 +483,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       OBC%update_OBC = .true.
     elseif (trim(config) == "Kelvin") then
       OBC%update_OBC = .true.
+    elseif (trim(config) == "shelfwave") then
+      OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
     elseif (.not. trim(config) == "none") then
@@ -469,7 +492,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-      call set_Flather_data(OBC, tv, h, G, PF, tracer_Reg)
+      call set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
     endif
   endif
 ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then

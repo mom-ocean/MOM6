@@ -2785,12 +2785,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         endif
       endif
     endif ; enddo ; enddo
-    if (associated(OBC%ubt_outer)) then ; do j=js,je ; do I=is-1,ie
-      BT_OBC%ubt_outer(I,j) = OBC%ubt_outer(I,j)
-    enddo ; enddo ; endif
-    if (associated(OBC%eta_outer_u)) then ; do j=js,je ; do I=is-1,ie
-      BT_OBC%eta_outer_u(I,j) = OBC%eta_outer_u(I,j)
-    enddo ; enddo ; endif
+    if (OBC%Flather_u_BCs_exist_globally) then
+     do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_E_or_W .and. segment%Flather) then
+          do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
+            BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
+            BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
+          enddo ; enddo
+        endif
+      enddo
+    endif
   endif
 
   if (BT_OBC%apply_v_OBCs) then
@@ -2826,12 +2831,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         endif
       endif
     endif ; enddo ; enddo
-    if (associated(OBC%vbt_outer)) then ; do J=js-1,je ; do i=is,ie
-      BT_OBC%vbt_outer(i,J) = OBC%vbt_outer(i,J)
-    enddo ; enddo ; endif
-    if (associated(OBC%eta_outer_v)) then ; do J=js-1,je ; do i=is,ie
-      BT_OBC%eta_outer_v(i,J) = OBC%eta_outer_v(i,J)
-    enddo ; enddo ; endif
+    if (OBC%Flather_v_BCs_exist_globally) then
+     do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_N_or_S .and. segment%Flather) then
+          do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
+            BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
+            BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
+          enddo ; enddo
+        endif
+      enddo
+    endif
   endif
 
 end subroutine set_up_BT_OBC
