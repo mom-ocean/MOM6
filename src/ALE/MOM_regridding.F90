@@ -1426,7 +1426,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
   zInt(:,:,1) = 0.
 
   ! work on interior interfaces
-  do K = 2, nz ; do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+  do K = 2, nz ; do j = G%jsc-2,G%jec+2 ; do i = G%isc-2,G%iec+2
     tInt(i,j,K) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
     sInt(i,j,K) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
     zInt(i,j,K) = zInt(i,j,K-1) + h(i,j,k-1) ! zInt in [H]
@@ -1442,7 +1442,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
 
   ! calculate horizontal density derivatives (alpha/beta)
   ! between cells in a 5-point stencil, columnwise
-  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+  do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
     if (G%mask2dT(i,j) < 0.5) then
       dzInterface(i,j,:) = 0. ! land point, don't move interfaces, and skip
       cycle
