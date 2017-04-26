@@ -171,6 +171,13 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
   do k=1,nz ; do j=js,je ; do I=is-1,ie
     y_2 = (G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat) / G%len_lat
     x_2 = (G%geoLonCu(I,j) - G%west_lon - 0.5*G%len_lon) / G%len_lon
+    if (G%geoLonCu(I,j) == G%west_lon) then
+      ! This modification is required so that the perturbations are identical for
+      ! symmetric and non-symmetric memory.  It is exactly equivalent to
+      ! taking the longitude at the eastern edge of the domain, so that x_2 ~= 0.5.
+      x_2 = ((G%west_lon + G%len_lon*REAL(G%ieg-(G%isg-1))/REAL(G%Domain%niglobal)) - &
+             G%west_lon - 0.5*G%len_lon) / G%len_lon
+    endif
     u(I,j,k) = u(I,j,k) + velocity_amplitude * ((real(k)-0.5)/real(nz)) * &
            (0.5 - abs(2.0*x_2) + 0.1*abs(cos(10.0*pi*x_2)) - abs(sin(5.0*pi*y_2)))
     do m=1,10
