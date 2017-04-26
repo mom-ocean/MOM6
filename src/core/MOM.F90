@@ -466,6 +466,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: dt_therm        ! a limited and quantized version of CS%dt_therm (sec)
   real :: dtbt_reset_time ! value of CS%rel_time when DTBT was last calculated (sec)
 
+  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
   real :: wt_end, wt_beg
 
   logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
@@ -1052,30 +1053,34 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! Post mass transports, including SGS
       ! Build the remap grids using the layer thicknesses from before the dynamics
       call diag_update_remap_grids(CS%diag, alt_h = h_pre_dyn)
+
+      H_to_kg_m2_dt = GV%H_to_kg_m2 / CS%dt_trans
       if (CS%id_umo_2d > 0) then
-        umo2d(:,:) = CS%uhtr(:,:,1)
-        do k = 2, nz
-          umo2d(:,:) = umo2d(:,:) + CS%uhtr(:,:,k)
-        enddo
-        umo2d(:,:) = umo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        umo2d(:,:) = 0.0
+        do k=1,nz ; do j=js,je ; do I=is-1,ie
+          umo2d(I,j) = umo2d(I,j) + CS%uhtr(I,j,k) * H_to_kg_m2_dt
+        enddo ; enddo ; enddo
         call post_data(CS%id_umo_2d, umo2d, CS%diag)
       endif
       if (CS%id_umo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        umo(:,:,:) =  CS%uhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        do k=1,nz ; do j=js,je ; do I=is-1,ie
+          umo(I,j,k) =  CS%uhtr(I,j,k) * H_to_kg_m2_dt
+        enddo ; enddo ; enddo
         call post_data(CS%id_umo, umo, CS%diag, alt_h = h_pre_dyn)
       endif
       if (CS%id_vmo_2d > 0) then
-        vmo2d(:,:) = CS%vhtr(:,:,1)
-        do k = 2, nz
-          vmo2d(:,:) = vmo2d(:,:) + CS%vhtr(:,:,k)
-        enddo
-        vmo2d(:,:) = vmo2d(:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        vmo2d(:,:) = 0.0
+        do k=1,nz ; do J=js-1,je ; do i=is,ie
+          vmo2d(i,J) = vmo2d(i,J) + CS%vhtr(i,J,k) * H_to_kg_m2_dt
+        enddo ; enddo ; enddo
         call post_data(CS%id_vmo_2d, vmo2d, CS%diag)
       endif
       if (CS%id_vmo > 0) then
         ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        vmo(:,:,:) =  CS%vhtr(:,:,:) * ( GV%H_to_kg_m2 / CS%dt_trans )
+        do k=1,nz ; do J=js-1,je ; do i=is,ie
+          vmo(i,J,k) = CS%vhtr(i,J,k) * H_to_kg_m2_dt
+        enddo ; enddo ; enddo
         call post_data(CS%id_vmo, vmo, CS%diag, alt_h = h_pre_dyn)
       endif
 
