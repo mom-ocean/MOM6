@@ -18,6 +18,7 @@ use MOM_diag_mediator,     only : register_diag_field, register_static_field
 use MOM_diag_mediator,     only : set_diag_mediator_grid, diag_ctrl, diag_update_remap_grids
 use MOM_domains,           only : MOM_domains_init
 use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
+use MOM_domains,           only : To_North, To_East, Omit_Corners
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : start_group_pass, complete_group_pass
 use MOM_debugging,         only : hchksum, uvchksum
@@ -336,21 +337,24 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   !--- begin set up for group halo pass
   call cpu_clock_begin(id_clock_pass)
   do_pass_Ray_uv = .FALSE.
-  if (visc%calc_bbl .AND. associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
+  if (.not.G%Domain%symmetric .and. visc%calc_bbl .AND. &
+      associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
     call create_group_pass(CS%pass_Ray_uv, visc%Ray_u, visc%Ray_v, G%Domain, &
-          To_All+SCALAR_PAIR, CGRID_NE)
+          To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
     do_pass_Ray_uv = .TRUE.
   endif
   do_pass_kv_bbl_thick = .FALSE.
-  if (visc%calc_bbl) then
+  if (.not.G%Domain%symmetric .and. visc%calc_bbl) then
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
       call create_group_pass(CS%pass_kv_bbl_thick, visc%bbl_thick_u, visc%bbl_thick_v, &
-                             G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+                             G%Domain, To_North+To_East+SCALAR_PAIR+Omit_corners, &
+                             CGRID_NE, halo=1)
       do_pass_kv_bbl_thick = .TRUE.
     endif
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call create_group_pass(CS%pass_kv_bbl_thick, visc%kv_bbl_u, visc%kv_bbl_v, &
-                             G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+                             G%Domain, To_North+To_East+SCALAR_PAIR+Omit_corners, &
+                             CGRID_NE, halo=1)
       do_pass_kv_bbl_thick = .TRUE.
     endif
   endif
