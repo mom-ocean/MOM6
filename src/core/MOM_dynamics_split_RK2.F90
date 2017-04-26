@@ -175,9 +175,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
 
   ! for group halo pass
   type(group_pass_type) :: pass_kv_bbl_thick
-  type(group_pass_type) :: pass_Ray_uv, pass_eta_PF_eta
+  type(group_pass_type) :: pass_Ray_uv, pass_eta
   type(group_pass_type) :: pass_visc_rem, pass_uvp
-  type(group_pass_type) :: pass_hp_uv, pass_eta_PF
+  type(group_pass_type) :: pass_hp_uv
   type(group_pass_type) :: pass_uv
   type(group_pass_type) :: pass_h, pass_av_uvh
 
@@ -359,18 +359,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       do_pass_kv_bbl_thick = .TRUE.
     endif
   endif
-  call create_group_pass(CS%pass_eta_PF_eta, CS%eta_PF, G%Domain)
-  call create_group_pass(CS%pass_eta_PF_eta, eta, G%Domain)
+  call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE)
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain)
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain)
   call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain)
   call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain)
-
-  if (CS%begw /= 0.0 ) then
-    call create_group_pass(CS%pass_eta_PF, CS%eta_PF, G%Domain)
-  endif
 
   call create_group_pass(CS%pass_uv, u, v, G%Domain)
   call create_group_pass(CS%pass_h, h, G%Domain)
@@ -426,7 +421,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
-    call start_group_pass(CS%pass_eta_PF_eta, G%Domain)
+    call start_group_pass(CS%pass_eta, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 
@@ -467,7 +462,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       ! visc%calc_bbl is set to .false. now that the message passing is completed.
       visc%calc_bbl = .false.
     endif
-    call complete_group_pass(CS%pass_eta_PF_eta, G%Domain)
+    call complete_group_pass(CS%pass_eta, G%Domain)
     call cpu_clock_end(id_clock_pass)
   endif
 
@@ -499,7 +494,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_visc_rem, G%Domain)
   else
-    call do_group_pass(CS%pass_eta_PF_eta, G%Domain)
+    call do_group_pass(CS%pass_eta, G%Domain)
     call do_group_pass(CS%pass_visc_rem, G%Domain)
   endif
   call cpu_clock_end(id_clock_pass)
@@ -669,9 +664,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                        CS%PressureForce_CSp, CS%ALE_CSp, &
                        p_surf, CS%pbce, CS%eta_PF)
     call cpu_clock_end(id_clock_pres)
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_eta_PF, G%Domain)
-    call cpu_clock_end(id_clock_pass)
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
 

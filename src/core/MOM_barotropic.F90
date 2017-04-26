@@ -449,7 +449,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !                        anomaly) that was used to calculate the input pressure
 !                        gradient accelerations (or its final value if
 !                        eta_PF_start is provided, in m or kg m-2.
-!      Note: eta_in, pbce, and eta_PF_in must have up-to-date halos.
+!      Note: eta_in, pbce, and eta_PF_in must have up-to-date values in the
+!            first point of their halos.
 !  (in)      U_Cor - The (3-D) zonal- and meridional- velocities used to
 !  (in)      V_Cor   calculate the Coriolis terms in bc_accel_u and
 !                    bc_accel_v, in m s-1.
@@ -788,10 +789,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     call create_group_pass(CS%pass_eta_bt_rem, eta_PF_1, CS%BT_Domain)
     call create_group_pass(CS%pass_eta_bt_rem, d_eta_PF, CS%BT_Domain)
   else
-    !   eta_PF_in had correct values in its halos, so only update eta_PF with
-    ! extra-wide halo arrays.  This could have started almost immediately.
-    if ((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) &
-      call create_group_pass(CS%pass_eta_bt_rem, eta_PF, CS%BT_Domain)
+    call create_group_pass(CS%pass_eta_bt_rem, eta_PF, CS%BT_Domain)
   endif
   call create_group_pass(CS%pass_eta_bt_rem, eta_src, CS%BT_Domain)
   ! The following halo update is not needed without wide halos.  RWH
@@ -899,18 +897,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     Datv(i,J) = 0.0 ; bt_rem_v(i,J) = 0.0 ; vhbt0(I,j) = 0.0
   enddo ; enddo
 
-  ! Copy input arrays into their wide-halo counterparts.  eta_in and eta_PF_in
-  ! have the correct values in their halo regions.
+  ! Copy input arrays into their wide-halo counterparts.
   if (interp_eta_PF) then
     !$OMP parallel do default(shared)
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta(i,j) = eta_in(i,j)
       eta_PF_1(i,j) = eta_PF_start(i,j)
       d_eta_PF(i,j) = eta_PF_in(i,j) - eta_PF_start(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta(i,j) = eta_in(i,j)
       eta_PF(i,j) = eta_PF_in(i,j)
     enddo ; enddo
