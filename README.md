@@ -28,7 +28,7 @@ The top level directory structure groups source code and input files as follow:
 # Disclaimer
 
 The United States Department of Commerce (DOC) GitHub project code is provided
-on an ‘as is’ basis and the user assumes responsibility for its use. DOC has
+on an "as is" basis and the user assumes responsibility for its use. DOC has
 relinquished control of the information and no longer has responsibility to
 protect the integrity, confidentiality, or availability of the information. Any
 claims against the Department of Commerce stemming from the use of its GitHub
