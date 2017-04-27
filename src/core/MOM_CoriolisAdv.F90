@@ -440,7 +440,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
-      do J=Jsq,Jeq+1 ; do i=is-1,ie
+      do j=Jsq,Jeq+1 ; do I=is-1,ie
         uhc = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
         uhm = uh(I,j,k)
         ! This sometimes matters with some types of open boundary conditions.
@@ -456,12 +456,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         endif
 
         if (uhc > uhm) then
-          uh_min(i,j) = uhm ; uh_max(i,j) = uhc
+          uh_min(I,j) = uhm ; uh_max(I,j) = uhc
         else
-          uh_max(i,j) = uhm ; uh_min(i,j) = uhc
+          uh_max(I,j) = uhm ; uh_min(I,j) = uhc
         endif
       enddo ; enddo
-      do j=js-1,je ; do I=Isq,Ieq+1
+      do J=js-1,je ; do i=Isq,Ieq+1
         vhc = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
@@ -477,15 +477,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         endif
 
         if (vhc > vhm) then
-          vh_min(i,j) = vhm ; vh_max(i,j) = vhc
+          vh_min(i,J) = vhm ; vh_max(i,J) = vhc
         else
-          vh_max(i,j) = vhm ; vh_min(i,j) = vhc
+          vh_max(i,J) = vhm ; vh_min(i,J) = vhc
         endif
       enddo ; enddo
     endif
 
     ! Calculate KE and the gradient of KE
-    call gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
+    call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
 
     ! Calculate the tendencies of zonal velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
@@ -758,13 +758,11 @@ end subroutine CorAdCalc
 
 
 !> Calculates the acceleration due to the gradient of kinetic energy.
-subroutine gradKE(u, v, h, uh, vh, KE, KEx, KEy, k, OBC, G, CS)
+subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, CS)
   type(ocean_grid_type),                      intent(in)  :: G !< Ocen grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: u !< Zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: v !< Meridional velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness (m or kg/m2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: uh !< Zonal transport u*h*dy (m3/s or kg/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: vh !< Meridional transport v*h*dx (m3/s or kg/s)
   real, dimension(SZI_(G) ,SZJ_(G) ),         intent(out) :: KE !< Kinetic energy (m2/s2)
   real, dimension(SZIB_(G),SZJ_(G) ),         intent(out) :: KEx !< Zonal acceleration due to kinetic
                                                                  !! energy gradient (m/s2)
