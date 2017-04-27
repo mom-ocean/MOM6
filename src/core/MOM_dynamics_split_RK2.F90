@@ -38,6 +38,7 @@ use MOM_barotropic,            only : barotropic_init, btstep, btcalc, bt_mass_s
 use MOM_barotropic,            only : register_barotropic_restarts, set_dtbt, barotropic_CS
 use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
+use MOM_continuity,            only : continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_debugging,             only : check_redundant
@@ -285,6 +286,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   logical :: showCallTree
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: cont_stencil
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
@@ -320,10 +322,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
-      u_old_rad_OBC(I,j,k) = u(I,j,k)
+      u_old_rad_OBC(I,j,k) = u(I,j,k)  !### Should be u_av(I,j,k)?
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
-      v_old_rad_OBC(i,J,k) = v(i,J,k)
+      v_old_rad_OBC(i,J,k) = v(i,J,k)  !### Should be u_av(I,j,k)?
     enddo ; enddo ; enddo
   endif
 
@@ -359,18 +361,20 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       do_pass_kv_bbl_thick = .TRUE.
     endif
   endif
+
+  cont_stencil = continuity_stencil(CS%continuity_CSp)
   call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-  call create_group_pass(CS%pass_uvp, up, vp, G%Domain)
-  call create_group_pass(CS%pass_hp_uv, hp, G%Domain)
-  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain)
-  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain)
+                         To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
+  call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
+  call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=2)
+  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=2)
+  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=2)
 
-  call create_group_pass(CS%pass_uv, u, v, G%Domain)
-  call create_group_pass(CS%pass_h, h, G%Domain)
-  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain)
-  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain)
+  call create_group_pass(CS%pass_uv, u, v, G%Domain, halo=max(2,cont_stencil))
+  call create_group_pass(CS%pass_h, h, G%Domain, halo=max(2,cont_stencil))
+  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=2)
+  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=2)
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
 
@@ -1146,9 +1150,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   endif
 
   call cpu_clock_begin(id_clock_pass_init)
-  call create_group_pass(pass_av_h_uvh, CS%u_av,CS%v_av, G%Domain)
-  call create_group_pass(pass_av_h_uvh, CS%h_av, G%Domain)
-  call create_group_pass(pass_av_h_uvh, uh, vh, G%Domain)
+  call create_group_pass(pass_av_h_uvh, CS%u_av, CS%v_av, G%Domain, halo=2)
+  call create_group_pass(pass_av_h_uvh, CS%h_av, G%Domain, halo=2)
+  call create_group_pass(pass_av_h_uvh, uh, vh, G%Domain, halo=2)
   call do_group_pass(pass_av_h_uvh, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
