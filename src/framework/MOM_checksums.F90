@@ -88,15 +88,16 @@ contains
 
 ! =====================================================================
 
-subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift)
+subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   if (present(haloshift)) then
-    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift)
-    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift)
+    call chksum_h_2d(arrayA, 'x '//mesg, HI, haloshift, omit_corners)
+    call chksum_h_2d(arrayB, 'y '//mesg, HI, haloshift, omit_corners)
   else
     call chksum_h_2d(arrayA, 'x '//mesg, HI)
     call chksum_h_2d(arrayB, 'y '//mesg, HI)
@@ -104,15 +105,16 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift)
 
 end subroutine chksum_pair_h_2d
 
-subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift)
+subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI   !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   if (present(haloshift)) then
-    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift)
-    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift)
+    call chksum_h_3d(arrayA, 'x '//mesg, HI, haloshift, omit_corners)
+    call chksum_h_3d(arrayB, 'y '//mesg, HI, haloshift, omit_corners)
   else
     call chksum_h_3d(arrayA, 'x '//mesg, HI)
     call chksum_h_3d(arrayB, 'y '//mesg, HI)
@@ -121,13 +123,16 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift)
 end subroutine chksum_pair_h_3d
 
 !> chksum_h_2d performs checksums on a 2d array staggered at tracer points.
-subroutine chksum_h_2d(array, mesg, HI, haloshift)
+subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners)
   type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec))) &
@@ -140,9 +145,9 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -152,19 +157,30 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_h_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
   if (hshift==0) then
-      if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
-      return
+    if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
+    return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (do_corners) then
+    bcSW = subchk(array, HI, -hshift, -hshift)
+    bcSE = subchk(array, HI, hshift, -hshift)
+    bcNW = subchk(array, HI, -hshift, hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    bcS = subchk(array, HI, 0, -hshift)
+    bcE = subchk(array, HI, hshift, 0)
+    bcW = subchk(array, HI, -hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("h-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -175,8 +191,8 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift)
     integer :: bitcount, i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
-        bc = bitcount(abs(array(i,j)))
-        subchk = subchk + bc
+      bc = bitcount(abs(array(i,j)))
+      subchk = subchk + bc
     enddo; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
@@ -209,12 +225,13 @@ end subroutine chksum_h_2d
 
 ! =====================================================================
 
-subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, symmetric, haloshift)
+subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
   logical,                optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
   integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   logical :: sym
 
@@ -230,26 +247,28 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, symmetric, haloshift)
 
 end subroutine chksum_pair_B_2d
 
-subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift)
+subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit_corners)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
+  real, dimension(HI%IsdB:,HI%JsdB:, :), intent(in) :: arrayA, arrayB !< The arrays to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   logical :: sym
 
   if (present(haloshift)) then
-    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift)
+    call chksum_B_3d(arrayA, 'x '//mesg, HI, haloshift, symmetric, omit_corners)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI, haloshift, symmetric, omit_corners)
   else
-    call chksum_B_3d(arrayA, 'x '//mesg, HI)
-    call chksum_B_3d(arrayB, 'y '//mesg, HI)
+    call chksum_B_3d(arrayA, 'x '//mesg, HI, symmetric=symmetric)
+    call chksum_B_3d(arrayB, 'y '//mesg, HI, symmetric=symmetric)
   endif
 
 end subroutine chksum_pair_B_3d
 
 !> chksum_B_2d performs checksums on a 2d array staggered at corner points.
-subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
+subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type), intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:), &
                         intent(in) :: array !< The array to be checksummed
@@ -257,9 +276,11 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
   integer,    optional, intent(in) :: haloshift !< The width of halos to check (default 0)
   logical,    optional, intent(in) :: symmetric !< If true, do the checksums on the
                                                 !! full symmetric computational domain.
+  logical,    optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
-  logical :: sym
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB))) &
@@ -268,13 +289,15 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
        HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
@@ -284,28 +307,38 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     call chksum_error(FATAL,'Error in chksum_B_2d '//trim(mesg))
   endif
 
+  bc0 = subchk(array, HI, 0, 0)
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
-
-  bc0=subchk(array, HI, 0, 0)
 
   if ((hshift==0) .and. .not.sym) then
     if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
     return
   endif
 
-  if (sym) then
-    bcSW=subchk(array, HI, -hshift-1, -hshift-1)
-    bcSE=subchk(array, HI, hshift, -hshift-1)
-    bcNW=subchk(array, HI, -hshift-1, hshift)
-  else
-    bcSW=subchk(array, HI, -hshift, -hshift)
-    bcSE=subchk(array, HI, hshift, -hshift)
-    bcNW=subchk(array, HI, -hshift, hshift)
-  endif
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift-1, -hshift-1)
+      bcSE = subchk(array, HI, hshift, -hshift-1)
+      bcNW = subchk(array, HI, -hshift-1, hshift)
+    else
+      bcSW = subchk(array, HI, -hshift, -hshift)
+      bcSE = subchk(array, HI, hshift, -hshift)
+      bcNW = subchk(array, HI, -hshift, hshift)
+    endif
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    bcS = subchk(array, HI, 0, -hshift)
+    bcE = subchk(array, HI, hshift, 0)
+    bcW = subchk(array, HI, -hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("B-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -315,30 +348,34 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%iscB+di,HI%iecB+di
-        bc = bitcount(abs(array(i,j)))
-        subchk = subchk + bc
+    ! This line deliberately uses the h-point computational domain.
+    do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(I,J)))
+      subchk = subchk + bc
     enddo; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, n, IsB, JsB
     real :: aMean, aMin, aMax
-    aMean = 0.
-    aMin = array(HI%iscB,HI%jscB)
-    aMax = array(HI%iscB,HI%jscB)
-    n = 0
-    do j=HI%jscB,HI%jecB ; do i=HI%iscB,HI%iecB
-      aMin = min(aMin, array(i,j))
-      aMax = max(aMax, array(i,j))
-      n = n + 1
+
+    IsB = HI%isc ; if (sym_stats) IsB = HI%isc-1
+    JsB = HI%jsc ; if (sym_stats) JsB = HI%jsc-1
+
+    aMin = array(HI%isc,HI%jsc) ; aMax = aMin
+    do J=JsB,HI%JecB ; do I=IsB,HI%IecB
+      aMin = min(aMin, array(I,J))
+      aMax = max(aMax, array(I,J))
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jscB:HI%jecB))
+    ! This line deliberately uses the h-point computational domain.
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -350,46 +387,56 @@ end subroutine chksum_B_2d
 
 ! =====================================================================
 
-subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift)
-  character(len=*),                 intent(in) :: mesg !< Identifying messages
-  type(hor_index_type),             intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
-  integer,                optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_corners)
+  character(len=*),                  intent(in) :: mesg   !< Identifying messages
+  type(hor_index_type),              intent(in) :: HI     !< A horizontal index type
+  real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: arrayU !< The u-component array to be checksummed
+  real, dimension(HI%isd:,HI%JsdB:), intent(in) :: arrayV !< The v-component array to be checksummed
+  integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   if (present(haloshift)) then
-    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift)
+    call chksum_u_2d(arrayU, 'u '//mesg, HI, haloshift, symmetric, omit_corners)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI, haloshift, symmetric, omit_corners)
   else
-    call chksum_u_2d(arrayU, 'u '//mesg, HI)
-    call chksum_v_2d(arrayV, 'v '//mesg, HI)
+    call chksum_u_2d(arrayU, 'u '//mesg, HI, symmetric=symmetric)
+    call chksum_v_2d(arrayV, 'v '//mesg, HI, symmetric=symmetric)
   endif
 
 end subroutine chksum_uv_2d
 
-subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift)
-  character(len=*),                    intent(in) :: mesg !< Identifying messages
+subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_corners)
+  character(len=*),                    intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),                intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:, :), intent(in) :: arrayU, arrayV !< The arrays to be checksummed
+  real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: arrayU !< The u-component array to be checksummed
+  real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: arrayV !< The v-component array to be checksummed
   integer,                   optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                   optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                   optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
   if (present(haloshift)) then
-    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift)
+    call chksum_u_3d(arrayU, 'u '//mesg, HI, haloshift, symmetric, omit_corners)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI, haloshift, symmetric, omit_corners)
   else
-    call chksum_u_3d(arrayU, 'u '//mesg, HI)
-    call chksum_v_3d(arrayV, 'v '//mesg, HI)
+    call chksum_u_3d(arrayU, 'u '//mesg, HI, symmetric=symmetric)
+    call chksum_v_3d(arrayV, 'v '//mesg, HI, symmetric=symmetric)
   endif
 
 end subroutine chksum_uv_3d
 
 !> chksum_u_2d performs checksums on a 2d array staggered at C-grid u points.
-subroutine chksum_u_2d(array, mesg, HI, haloshift)
+subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec))) &
@@ -398,13 +445,15 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%iedB-HI%iecB
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%iedB-HI%iecB
 
   if ( HI%iscB-hshift<HI%isdB .or. HI%iecB+hshift>HI%iedB .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -414,19 +463,44 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_u_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
-      if (is_root_pe()) call chk_sum_msg("u-point:",bc0,mesg)
-      return
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if ((hshift==0) .and. .not.sym) then
+    if (is_root_pe()) call chk_sum_msg("u-point:",bc0,mesg)
+    return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (hshift==0) then
+    bcW = subchk(array, HI, -hshift-1, 0)
+    if (is_root_pe()) call chk_sum_msg_W("u-point:",bc0,bcW,mesg)
+  elseif (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift-1, -hshift)
+      bcNW = subchk(array, HI, -hshift-1, hshift)
+    else
+      bcSW = subchk(array, HI, -hshift, -hshift)
+      bcNW = subchk(array, HI, -hshift, hshift)
+    endif
+    bcSE = subchk(array, HI, hshift, -hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    bcS = subchk(array, HI, 0, -hshift)
+    bcE = subchk(array, HI, hshift, 0)
+    if (sym) then
+      bcW = subchk(array, HI, -hshift-1, 0)
+    else
+      bcW = subchk(array, HI, -hshift, 0)
+    endif
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("u-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -436,30 +510,33 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jsc+dj,HI%jec+dj; do i=HI%iscB+di,HI%iecB+di
-        bc = bitcount(abs(array(i,j)))
-        subchk = subchk + bc
+    ! This line deliberately uses the h-point computational domain.
+    do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(I,j)))
+      subchk = subchk + bc
     enddo; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, n, IsB
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%iscB,HI%jsc)
-    aMax = array(HI%iscB,HI%jsc)
-    n = 0
-    do j=HI%jsc,HI%jec ; do i=HI%iscB,HI%iecB
-      aMin = min(aMin, array(i,j))
-      aMax = max(aMax, array(i,j))
-      n = n + 1
+    IsB = HI%isc ; if (sym_stats) IsB = HI%isc-1
+
+    aMin = array(HI%isc,HI%jsc) ; aMax = aMin
+    do j=HI%jsc,HI%jec ; do I=IsB,HI%IecB
+      aMin = min(aMin, array(I,j))
+      aMax = max(aMax, array(I,j))
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%iscB:HI%iecB,HI%jsc:HI%jec))
+    ! This line deliberately uses the h-point computational domain.
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -472,13 +549,17 @@ end subroutine chksum_u_2d
 ! =====================================================================
 
 !> chksum_v_2d performs checksums on a 2d array staggered at C-grid v points.
-subroutine chksum_v_2d(array, mesg, HI, haloshift)
+subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type),           intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed
   character(len=*),                intent(in) :: mesg  !< An identifying message
   integer,               optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,               optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,               optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB))) &
@@ -487,13 +568,15 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jscB-hshift<HI%jsdB .or. HI%jecB+hshift>HI%jedB ) then
@@ -503,19 +586,44 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_v_2d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
-      if (is_root_pe()) call chk_sum_msg("v-point:",bc0,mesg)
-      return
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if ((hshift==0) .and. .not.sym) then
+    if (is_root_pe()) call chk_sum_msg("v-point:",bc0,mesg)
+    return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (hshift==0) then
+    bcS = subchk(array, HI, 0, -hshift-1)
+    if (is_root_pe()) call chk_sum_msg_S("v-point:",bc0,bcS,mesg)
+  elseif (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift, -hshift-1)
+      bcSE = subchk(array, HI, hshift, -hshift-1)
+    else
+      bcSW = subchk(array, HI, -hshift, -hshift)
+      bcSE = subchk(array, HI, hshift, -hshift)
+    endif
+    bcNW = subchk(array, HI, -hshift, hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    if (sym) then
+      bcS = subchk(array, HI, 0, -hshift-1)
+    else
+      bcS = subchk(array, HI, 0, -hshift)
+    endif
+    bcE = subchk(array, HI, hshift, 0)
+    bcW = subchk(array, HI, -hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("v-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -525,30 +633,33 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, bc
     subchk = 0
-    do j=HI%jscB+dj,HI%jecB+dj; do i=HI%isc+di,HI%iec+di
-        bc = bitcount(abs(array(i,j)))
-        subchk = subchk + bc
+    ! This line deliberately uses the h-point computational domain.
+    do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(i,J)))
+      subchk = subchk + bc
     enddo; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, n, JsB
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jscB)
-    aMax = array(HI%isc,HI%jscB)
-    n = 0
-    do j=HI%jscB,HI%jecB ; do i=HI%isc,HI%iec
-      aMin = min(aMin, array(i,j))
-      aMax = max(aMax, array(i,j))
-      n = n + 1
+    JsB = HI%jsc ; if (sym_stats) JsB = HI%jsc-1
+
+    aMin = array(HI%isc,HI%jsc) ; aMax = aMin
+    do J=JsB,HI%JecB ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,J))
+      aMax = max(aMax, array(i,J))
     enddo ; enddo
-    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jscB:HI%jecB))
+    ! This line deliberately uses the h-computational domain.
+    aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -561,13 +672,16 @@ end subroutine chksum_v_2d
 ! =====================================================================
 
 !> chksum_h_3d performs checksums on a 3d array staggered at tracer points.
-subroutine chksum_h_3d(array, mesg, HI, haloshift)
+subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:,:),  intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))) &
@@ -580,9 +694,9 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -592,19 +706,30 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_h_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
   if (hshift==0) then
-      if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
-      return
+    if (is_root_pe()) call chk_sum_msg("h-point:",bc0,mesg)
+    return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (do_corners) then
+    bcSW = subchk(array, HI, -hshift, -hshift)
+    bcSE = subchk(array, HI, hshift, -hshift)
+    bcNW = subchk(array, HI, -hshift, hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("h-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    bcS = subchk(array, HI, 0, -hshift)
+    bcE = subchk(array, HI, hshift, 0)
+    bcW = subchk(array, HI, -hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("h-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -650,13 +775,17 @@ end subroutine chksum_h_3d
 ! =====================================================================
 
 !> chksum_B_3d performs checksums on a 3d array staggered at corner points.
-subroutine chksum_B_3d(array, mesg, HI, haloshift)
+subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type),              intent(in) :: HI !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                   intent(in) :: mesg  !< An identifying message
   integer,                  optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                  optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                  optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%JscB:HI%JecB,:))) &
@@ -665,13 +794,15 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -681,19 +812,43 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_B_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if ((hshift==0) .and. .not.sym) then
     if (is_root_pe()) call chk_sum_msg("B-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift-1, -hshift-1)
+      bcSE = subchk(array, HI, hshift, -hshift-1)
+      bcNW = subchk(array, HI, -hshift-1, hshift)
+    else
+      bcSW = subchk(array, HI, -hshift-1, -hshift-1)
+      bcSE = subchk(array, HI, hshift, -hshift-1)
+      bcNW = subchk(array, HI, -hshift-1, hshift)
+    endif
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("B-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    if (sym) then
+      bcS = subchk(array, HI, 0, -hshift-1)
+      bcW = subchk(array, HI, -hshift-1, 0)
+    else
+      bcS = subchk(array, HI, 0, -hshift)
+      bcW = subchk(array, HI, -hshift, 0)
+    endif
+    bcE = subchk(array, HI, hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("B-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -703,30 +858,33 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(array(i,j,k)))
+    ! This line deliberately uses the h-point computational domain.
+    do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(I,J,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, k, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, k, n, IsB, JsB
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc,1)
-    aMax = array(HI%isc,HI%jsc,1)
-    n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMin = min(aMin, array(i,j,k))
-      aMax = max(aMax, array(i,j,k))
-      n = n + 1
+    IsB = HI%isc ; if (sym_stats) IsB = HI%isc-1
+    JsB = HI%jsc ; if (sym_stats) JsB = HI%jsc-1
+
+    aMin = array(HI%isc,HI%jsc,1) ; aMax = aMin
+    do k=LBOUND(array,3),UBOUND(array,3) ; do J=JsB,HI%JecB ; do I=IsB,HI%IecB
+      aMin = min(aMin, array(I,J,k))
+      aMax = max(aMax, array(I,J,k))
     enddo ; enddo ; enddo
     aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc) * size(array,3)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -739,13 +897,17 @@ end subroutine chksum_B_3d
 ! =====================================================================
 
 !> chksum_u_3d performs checksums on a 3d array staggered at C-grid u points.
-subroutine chksum_u_3d(array, mesg, HI, haloshift)
+subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isdB:,HI%Jsd:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%IscB:HI%IecB,HI%jsc:HI%jec,:))) &
@@ -754,13 +916,15 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -770,19 +934,44 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_u_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if ((hshift==0) .and. .not.sym) then
     if (is_root_pe()) call chk_sum_msg("u-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (hshift==0) then
+    bcW = subchk(array, HI, -hshift-1, 0)
+    if (is_root_pe()) call chk_sum_msg_W("u-point:",bc0,bcW,mesg)
+  elseif (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift-1, -hshift)
+      bcNW = subchk(array, HI, -hshift-1, hshift)
+    else
+      bcSW = subchk(array, HI, -hshift, -hshift)
+      bcNW = subchk(array, HI, -hshift, hshift)
+    endif
+    bcSE = subchk(array, HI, hshift, -hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("u-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    bcS = subchk(array, HI, 0, -hshift)
+    bcE = subchk(array, HI, hshift, 0)
+    if (sym) then
+      bcW = subchk(array, HI, -hshift-1, 0)
+    else
+      bcW = subchk(array, HI, -hshift, 0)
+    endif
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("u-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -792,30 +981,33 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(array(i,j,k)))
+    ! This line deliberately uses the h-point computational domain.
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(I,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, k, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, k, n, IsB
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc,1)
-    aMax = array(HI%isc,HI%jsc,1)
-    n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMin = min(aMin, array(i,j,k))
-      aMax = max(aMax, array(i,j,k))
-      n = n + 1
+    IsB = HI%isc ; if (sym_stats) IsB = HI%isc-1
+
+    aMin = array(HI%isc,HI%jsc,1) ; aMax = aMin
+    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do I=IsB,HI%IecB
+      aMin = min(aMin, array(I,j,k))
+      aMax = max(aMax, array(I,j,k))
     enddo ; enddo ; enddo
+    ! This line deliberately uses the h-point computational domain.
     aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc) * size(array,3)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -828,13 +1020,17 @@ end subroutine chksum_u_3d
 ! =====================================================================
 
 !> chksum_v_3d performs checksums on a 3d array staggered at C-grid v points.
-subroutine chksum_v_3d(array, mesg, HI, haloshift)
+subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners)
   type(hor_index_type),             intent(in) :: HI !< A horizontal index type
   real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed
   character(len=*),                  intent(in) :: mesg  !< An identifying message
   integer,                 optional, intent(in) :: haloshift !< The width of halos to check (default 0)
+  logical,                 optional, intent(in) :: symmetric !< If true, do the checksums on the full symmetric computational domain.
+  logical,                 optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
 
-  integer :: bc0,bcSW,bcSE,bcNW,bcNE,hshift
+  integer :: bc0, bcSW, bcSE, bcNW, bcNE, hshift
+  integer :: bcN, bcS, bcE, bcW
+  logical :: do_corners, sym, sym_stats
 
   if (checkForNaNs) then
     if (is_NaN(array(HI%isc:HI%iec,HI%JscB:HI%JecB,:))) &
@@ -843,13 +1039,15 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift)
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  if (calculateStatistics) call subStats(HI, array, mesg)
+  sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
+  if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
+  if (calculateStatistics) call subStats(HI, array, mesg, sym_stats)
 
   if (.not.writeChksums) return
 
-  hshift=default_shift
-  if (present(haloshift)) hshift=haloshift
-  if (hshift<0) hshift=HI%ied-HI%iec
+  hshift = default_shift
+  if (present(haloshift)) hshift = haloshift
+  if (hshift<0) hshift = HI%ied-HI%iec
 
   if ( HI%isc-hshift<HI%isd .or. HI%iec+hshift>HI%ied .or. &
        HI%jsc-hshift<HI%jsd .or. HI%jec+hshift>HI%jed ) then
@@ -859,19 +1057,44 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift)
     call chksum_error(FATAL,'Error in chksum_v_3d '//trim(mesg))
   endif
 
-  bc0=subchk(array, HI, 0, 0)
+  bc0 = subchk(array, HI, 0, 0)
 
-  if (hshift==0) then
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+
+  if ((hshift==0) .and. .not.sym) then
     if (is_root_pe()) call chk_sum_msg("v-point:",bc0,mesg)
     return
   endif
 
-  bcSW=subchk(array, HI, -hshift, -hshift)
-  bcSE=subchk(array, HI, hshift, -hshift)
-  bcNW=subchk(array, HI, -hshift, hshift)
-  bcNE=subchk(array, HI, hshift, hshift)
+  do_corners = .true. ; if (present(omit_corners)) do_corners = .not.omit_corners
 
-  if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  if (hshift==0) then
+    bcS = subchk(array, HI, 0, -hshift-1)
+    if (is_root_pe()) call chk_sum_msg_S("v-point:",bc0,bcS,mesg)
+  elseif (do_corners) then
+    if (sym) then
+      bcSW = subchk(array, HI, -hshift, -hshift-1)
+      bcSE = subchk(array, HI, hshift, -hshift-1)
+    else
+      bcSW = subchk(array, HI, -hshift, -hshift)
+      bcSE = subchk(array, HI, hshift, -hshift)
+    endif
+    bcNW = subchk(array, HI, -hshift, hshift)
+    bcNE = subchk(array, HI, hshift, hshift)
+
+    if (is_root_pe()) call chk_sum_msg("v-point:",bc0,bcSW,bcSE,bcNW,bcNE,mesg)
+  else
+    if (sym) then
+      bcS = subchk(array, HI, 0, -hshift-1)
+    else
+      bcS = subchk(array, HI, 0, -hshift)
+    endif
+    bcE = subchk(array, HI, hshift, 0)
+    bcW = subchk(array, HI, -hshift, 0)
+    bcN = subchk(array, HI, 0, hshift)
+
+    if (is_root_pe()) call chk_sum_msg_NSEW("v-point:",bc0,bcN,bcS,bcE,bcW,mesg)
+  endif
 
   contains
 
@@ -881,30 +1104,33 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift)
     integer, intent(in) :: di, dj
     integer :: bitcount, i, j, k, bc
     subchk = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(array(i,j,k)))
+    ! This line deliberately uses the h-point computational domain.
+    do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
+      bc = bitcount(abs(array(i,J,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
     subchk=mod(subchk,1000000000)
   end function subchk
 
-  subroutine subStats(HI, array, mesg)
+  subroutine subStats(HI, array, mesg, sym_stats)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     character(len=*), intent(in) :: mesg
-    integer :: i, j, k, n
+    logical, intent(in) :: sym_stats
+    integer :: i, j, k, n, JsB
     real :: aMean, aMin, aMax
 
-    aMin = array(HI%isc,HI%jsc,1)
-    aMax = array(HI%isc,HI%jsc,1)
-    n = 0
-    do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-      aMin = min(aMin, array(i,j,k))
-      aMax = max(aMax, array(i,j,k))
-      n = n + 1
+    JsB = HI%jsc ; if (sym_stats) JsB = HI%jsc-1
+
+    aMin = array(HI%isc,HI%jsc,1) ; aMax = aMin
+    do k=LBOUND(array,3),UBOUND(array,3) ; do J=JsB,HI%JecB ; do i=HI%isc,HI%iec
+      aMin = min(aMin, array(i,J,k))
+      aMax = max(aMax, array(i,J,k))
     enddo ; enddo ; enddo
+    ! This line deliberately uses the h-point computational domain.
     aMean = reproducing_sum(array(HI%isc:HI%iec,HI%jsc:HI%jec,:))
+    n = (1 + HI%jec - HI%jsc) * (1 + HI%iec - HI%isc) * size(array,3)
     call sum_across_PEs(n)
     call min_across_PEs(aMin)
     call max_across_PEs(aMax)
@@ -1137,6 +1363,33 @@ subroutine chk_sum_msg5(fmsg,bc0,bcSW,bcSE,bcNW,bcNE,mesg)
   if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
      fmsg," c=",bc0,"sw=",bcSW,"se=",bcSE,"nw=",bcNW,"ne=",bcNE,trim(mesg)
 end subroutine chk_sum_msg5
+
+! =====================================================================
+
+subroutine chk_sum_msg_NSEW(fmsg,bc0,bcN,bcS,bcE,bcW,mesg)
+  character(len=*), intent(in) :: fmsg, mesg
+  integer,          intent(in) :: bc0, bcN, bcS, bcE, bcW
+  if (is_root_pe()) write(0,'(A,5(A,I10,1X),A)') &
+     fmsg," c=",bc0,"N=",bcN,"S=",bcS,"E=",bcE,"W=",bcW,trim(mesg)
+end subroutine chk_sum_msg_NSEW
+
+! =====================================================================
+
+subroutine chk_sum_msg_S(fmsg,bc0,bcS,mesg)
+  character(len=*), intent(in) :: fmsg, mesg
+  integer,          intent(in) :: bc0, bcS
+  if (is_root_pe()) write(0,'(A,2(A,I10,1X),A)') &
+     fmsg," c=",bc0,"S=",bcS,trim(mesg)
+end subroutine chk_sum_msg_S
+
+! =====================================================================
+
+subroutine chk_sum_msg_W(fmsg,bc0,bcW,mesg)
+  character(len=*), intent(in) :: fmsg, mesg
+  integer,          intent(in) :: bc0, bcW
+  if (is_root_pe()) write(0,'(A,2(A,I10,1X),A)') &
+     fmsg," c=",bc0,"W=",bcW,trim(mesg)
+end subroutine chk_sum_msg_W
 
 ! =====================================================================
 
