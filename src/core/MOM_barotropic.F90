@@ -1455,8 +1455,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       call uvchksum("BT Dat[uv]", GV%H_to_m*Datu, GV%H_to_m*Datv, &
                     CS%debug_BT_HI, haloshift=1)
     endif
-    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, haloshift=1)
-    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=0)
+    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, 0, .true., .true.)
+    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
     call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, &
                   G%HI, haloshift=0)
     call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0)
@@ -3130,7 +3130,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   enddo ; endif
 
   if (CS%debug) then
-    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
     call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
   endif
 
