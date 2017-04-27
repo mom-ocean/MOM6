@@ -180,7 +180,7 @@ subroutine grid_metrics_chksum(parent, G)
   call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo)
 
   call uvchksum(trim(parent)//': dxC[uv]', &
-                G%dxCv, G%dyCu, G%HI, haloshift=halo)
+                G%dyCu, G%dxCv, G%HI, haloshift=halo)
 
   call Bchksum_pair(trim(parent)//': dxB[uv]', &
                     G%dxBu, G%dyBu, G%HI, haloshift=halo)
@@ -192,7 +192,7 @@ subroutine grid_metrics_chksum(parent, G)
                 G%IdxCu, G%IdyCv, G%HI, haloshift=halo)
 
   call uvchksum(trim(parent)//': Id[xy]C[uv]', &
-                G%IdxCv, G%IdyCu, G%HI, haloshift=halo)
+                G%IdyCu, G%IdxCv, G%HI, haloshift=halo)
 
   call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', &
                     G%IdxBu, G%IdyBu, G%HI, haloshift=halo)
