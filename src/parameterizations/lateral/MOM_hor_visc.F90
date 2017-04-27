@@ -729,7 +729,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
     enddo ; enddo
 
-    do j=js,je ; do i=isq,ieq
+    do j=js,je ; do I=Isq,Ieq
 !  Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
       diffu(I,j,k) = ((G%IdyCu(I,j)*(CS%DY2h(i,j) *str_xx(i,j) - &
                                     CS%DY2h(i+1,j)*str_xx(i+1,j)) + &
