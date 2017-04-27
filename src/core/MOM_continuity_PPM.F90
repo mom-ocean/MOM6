@@ -17,7 +17,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public continuity_PPM, continuity_PPM_init, continuity_PPM_end
+public continuity_PPM, continuity_PPM_init, continuity_PPM_end, continuity_PPM_stencil
 
 integer :: id_clock_update, id_clock_correct
 
@@ -2138,6 +2138,15 @@ subroutine continuity_PPM_init(Time, G, GV, param_file, diag, CS)
   CS%tol_eta_aux = CS%tol_eta_aux * GV%m_to_H
 
 end subroutine continuity_PPM_init
+
+!> continuity_PPM_stencil returns the continuity solver stencil size
+function continuity_PPM_stencil(CS) result(stencil)
+  type(continuity_PPM_CS), pointer       :: CS  !< Module's control structure.
+  integer ::  stencil !< The continuity solver stencil size with the current settings.
+
+  stencil = 3 ; if (CS%simple_2nd) stencil = 2 ; if (CS%upwind_1st) stencil = 1
+
+end function continuity_PPM_stencil
 
 !> Destructor for continuity_ppm_cs
 subroutine continuity_PPM_end(CS)
