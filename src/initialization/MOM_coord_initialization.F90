@@ -116,7 +116,7 @@ end subroutine MOM_initialize_coord
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_gprime(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
@@ -154,7 +154,7 @@ end subroutine set_coord_from_gprime
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_layer_density(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
@@ -201,7 +201,7 @@ end subroutine set_coord_from_layer_density
 subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, param_file, eqn_of_state, &
                                  P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
@@ -257,7 +257,7 @@ end subroutine set_coord_from_TS_ref
 subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
@@ -310,7 +310,7 @@ end subroutine set_coord_from_TS_profile
 subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
                                      eqn_of_state, P_Ref)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real,                    intent(in)  :: P_Ref
@@ -397,7 +397,7 @@ end subroutine set_coord_from_TS_range
 ! -----------------------------------------------------------------------------
 subroutine set_coord_from_file(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
@@ -448,7 +448,7 @@ end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
   real, dimension(:),      intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
 ! Arguments: Rlay - the layers' target coordinate values (potential density).
 !  (out)     g_prime - the reduced gravity across the interfaces, in m s-2.
@@ -495,7 +495,7 @@ end subroutine set_coord_linear
 
 ! -----------------------------------------------------------------------------
 subroutine write_vertgrid_file(GV, param_file, directory)
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type), intent(in)    :: param_file
   character(len=*),      intent(in)    :: directory
 !   This subroutine writes out a file containing any available data related

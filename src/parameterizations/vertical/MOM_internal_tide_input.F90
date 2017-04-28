@@ -91,8 +91,8 @@ end type int_tide_input_type
 contains
 
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(in)    :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
@@ -165,8 +165,8 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
 end subroutine set_int_tide_input
 
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
-  type(ocean_grid_type),                    intent(in)   :: G
-  type(verticalGrid_type),                  intent(in)   :: GV
+  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
   type(thermo_var_ptrs),                    intent(in)   :: tv
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
@@ -274,8 +274,8 @@ end subroutine find_N2_bottom
 
 subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
-  type(verticalGrid_type),  intent(in)    :: GV
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),    intent(in)    :: param_file
   type(diag_ctrl), target,  intent(inout) :: diag
   type(int_tide_input_CS),   pointer      :: CS

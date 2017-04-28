@@ -67,7 +67,7 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 ! such a way that the temperature of the topmost layer is equal to the SST at the southern edge of the domain. The temperatures are
 ! then converted to densities of the top and bottom layers and linearly interpolated for the intermediate layers.
   real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)  :: param_file
   type(EOS_type),          pointer     :: eqn_of_state
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
@@ -106,7 +106,7 @@ end subroutine BFB_set_coord
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
 ! This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs within 2 degrees lat of the
 ! boundary. The damping linearly decreases northward over the next 2 degrees.
-  type(ocean_grid_type), intent(in)                   :: G
+  type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv
   type(param_file_type), intent(in)                   :: param_file

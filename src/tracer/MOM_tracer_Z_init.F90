@@ -58,7 +58,7 @@ contains
 
 function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   logical :: tracer_Z_init
-  type(ocean_grid_type),                 intent(in)    :: G
+  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   character(len=*),                      intent(in)    :: filename, tr_name

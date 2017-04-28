@@ -82,7 +82,7 @@ contains
 !> Read in runtime options and add boundary impulse tracer to tracer registry
 function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),                       intent(in   ) :: HI
-  type(verticalGrid_type),                    intent(in   ) :: GV
+  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),                      intent(in   ) :: param_file
   type(boundary_impulse_tracer_CS), pointer,  intent(inout)    :: CS
   type(tracer_registry_type),       pointer,  intent(inout) :: tr_Reg
@@ -174,8 +174,8 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
                                   sponge_CSp, diag_to_Z_CSp, tv)
   logical,                                  intent(in   ) :: restart
   type(time_type), target,                  intent(in   ) :: day
-  type(ocean_grid_type),                    intent(in   ) :: G
-  type(verticalGrid_type),                  intent(in   ) :: GV
+  type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in   ) :: h
   type(diag_ctrl), target,                  intent(in   ) :: diag
   type(ocean_OBC_type), pointer,            intent(inout) :: OBC
@@ -280,8 +280,8 @@ end subroutine initialize_boundary_impulse_tracer
 ! Apply source or sink at boundary and do vertical diffusion
 subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, debug, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                      intent(in   ) :: G
-  type(verticalGrid_type),                    intent(in   ) :: GV
+  type(ocean_grid_type),                      intent(in   ) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in   ) :: h_old, h_new, ea, eb
   type(forcing),                              intent(in   ) :: fluxes
   real,                                       intent(in   ) :: dt
@@ -392,8 +392,8 @@ end subroutine boundary_impulse_tracer_column_physics
 
 !> Calculate total inventory of tracer
 function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),                      intent(in   ) :: G
-  type(verticalGrid_type),                    intent(in   ) :: GV
+  type(ocean_grid_type),                      intent(in   ) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in   ) :: h
   real, dimension(:),                         intent(  out) :: stocks
   type(boundary_impulse_tracer_CS), pointer,  intent(in   ) :: CS
@@ -447,7 +447,7 @@ end function boundary_impulse_stock
 
 !> Called if returned if coupler needs to know about tracer, currently unused
 subroutine boundary_impulse_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in   ) :: G
+  type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
   type(surface),                            intent(inout) :: state
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in   ) :: h
   type(boundary_impulse_tracer_CS), pointer,intent(in   ) :: CS

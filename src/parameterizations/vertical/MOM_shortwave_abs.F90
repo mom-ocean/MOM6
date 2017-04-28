@@ -66,8 +66,8 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 ! proportionately, the assumption being that the remaining heating (which is
 ! left in Pen_SW) should go into an (absent for now) ocean bottom sediment layer.
 
-  type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),           intent(in)    :: GV
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h
   real, dimension(:,:,:),            intent(in)    :: opacity_band
   integer,                           intent(in)    :: nsw
@@ -327,8 +327,8 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 ! This subroutine calculates the total shortwave heat flux integrated over
 ! bands as a function of depth.  This routine is only called for computing
 ! buoyancy fluxes for use in KPP. This routine does not update the state.
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
+  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)),      intent(in)    :: h
   real, dimension(:,:,:),                intent(in)    :: opacity_band
   integer,                               intent(in)    :: nsw

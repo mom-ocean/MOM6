@@ -125,7 +125,7 @@ contains
 
 subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),         intent(in) :: HI
-  type(verticalGrid_type),      intent(in) :: GV
+  type(verticalGrid_type),      intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),        intent(in) :: param_file
   type(tracer_flow_control_CS), pointer    :: CS
   type(tracer_registry_type),   pointer    :: tr_Reg
@@ -240,8 +240,8 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
                                 CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
   type(param_file_type),                 intent(in) :: param_file
   type(diag_ctrl), target,               intent(in) :: diag
@@ -314,7 +314,7 @@ end subroutine tracer_flow_control_init
 
 subroutine get_chl_from_model(Chl_array, G, CS)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(out) :: Chl_array
-  type(ocean_grid_type),                 intent(in)  :: G
+  type(ocean_grid_type),                 intent(in)  :: G    !< The ocean's grid structure
   type(tracer_flow_control_CS),          pointer     :: CS
 ! Arguments: Chl_array - The array into which the model's Chlorophyll-A
 !                        concentrations in mg m-3 are to be read.
@@ -345,7 +345,7 @@ subroutine call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS
   type(forcing),                intent(inout) :: fluxes
   type(time_type),              intent(in)    :: day_start
   type(time_type),              intent(in)    :: day_interval
-  type(ocean_grid_type),        intent(in)    :: G
+  type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
   type(tracer_flow_control_CS), pointer       :: CS
 !   This subroutine calls the individual tracer modules' subroutines to
 ! specify or read quantities related to their surface forcing.
@@ -374,8 +374,8 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
   type(forcing),                         intent(in) :: fluxes
   real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml !< Mixed layer depth (m)
   real,                                  intent(in) :: dt
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   type(thermo_var_ptrs),                 intent(in) :: tv
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
@@ -522,8 +522,8 @@ subroutine call_tracer_stocks(h, stock_values, G, GV, CS, stock_names, stock_uni
                               num_stocks, stock_index, got_min_max,global_min,  global_max,xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
   real, dimension(NIMEM_,NJMEM_,NKMEM_),    intent(in)  :: h
   real, dimension(:),                       intent(out) :: stock_values
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)  :: GV
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(tracer_flow_control_CS),             pointer     :: CS
   character(len=*), dimension(:), optional, intent(out) :: stock_names
   character(len=*), dimension(:), optional, intent(out) :: stock_units
@@ -689,7 +689,7 @@ end subroutine store_stocks
 subroutine call_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
-  type(ocean_grid_type),                 intent(in) :: G
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(tracer_flow_control_CS),          pointer    :: CS
 !   This subroutine calls all registered tracer packages to enable them to
 ! add to the surface state returned to the coupler. These routines are optional.
