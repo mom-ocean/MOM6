@@ -807,14 +807,14 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
-                    G%HI,haloshift=1)
+                    G%HI, 0, symmetric=.true.)
     endif
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
       call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
-                    visc%bbl_thick_v, G%HI,haloshift=1)
+                    visc%bbl_thick_v, G%HI, 0, symmetric=.true.)
     endif
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
-      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI)
+      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true.)
     endif
   endif
 
