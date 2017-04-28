@@ -474,7 +474,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
                  "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
                  "   USER - user specified", default="none")
-    if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (lowercase(trim(config)) == "supercritical") then
