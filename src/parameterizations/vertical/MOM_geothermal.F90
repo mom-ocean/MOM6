@@ -86,8 +86,8 @@ end type geothermal_CS
 contains
 
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
@@ -358,7 +358,7 @@ end subroutine geothermal
 
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(geothermal_CS),     pointer       :: CS

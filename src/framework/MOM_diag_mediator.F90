@@ -498,7 +498,7 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
 end subroutine define_axes_group
 
 subroutine set_diag_mediator_grid(G, diag_cs)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(diag_ctrl),  intent(inout) :: diag_cs
 
 ! Arguments:

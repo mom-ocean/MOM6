@@ -404,8 +404,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   visc_rem_u, visc_rem_v, etaav, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  type(ocean_grid_type),                   intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
+  type(ocean_grid_type),                   intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in
@@ -2158,8 +2158,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 end subroutine btstep
 
 subroutine set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   type(barotropic_CS),                   pointer       :: CS
   real, dimension(SZI_(G),SZJ_(G)),         intent(in), optional :: eta
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: pbce
@@ -2280,7 +2280,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                G, MS, halo, dtbt, bebt, use_BT_cont, Datu, Datv, &
                                BTCL_u, BTCL_v, uhbt0, vhbt0)
   type(ocean_OBC_type),                  pointer       :: OBC
-  type(ocean_grid_type),                 intent(inout) :: G
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
   type(memory_size_type),                intent(in)    :: MS
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt, uhbt, ubt_trans
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt, vhbt, vbt_trans
@@ -2578,7 +2578,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt
   type(BT_OBC_type),                     intent(in)    :: BT_OBC
-  type(ocean_grid_type),                 intent(inout) :: G
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
   integer,                               intent(in)    :: halo
   real,                                  intent(in)    :: dtbt
 !   This subroutine applies the open boundary conditions on the free surface
@@ -2692,8 +2692,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   type(memory_size_type),                intent(in)    :: MS
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta
   type(BT_OBC_type),                     intent(inout) :: BT_OBC
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   integer,                               intent(in)    :: halo
   logical,                               intent(in)    :: use_BT_cont
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu
@@ -2863,8 +2863,8 @@ subroutine destroy_BT_OBC(BT_OBC)
 end subroutine destroy_BT_OBC
 
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
+  type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
   type(barotropic_CS),                    pointer       :: CS
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
@@ -3376,7 +3376,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   type(memory_size_type),                                intent(in)    :: MS
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(out) :: BTCL_u
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(out) :: BTCL_v
-  type(ocean_grid_type),                                 intent(in)    :: G
+  type(ocean_grid_type),                                 intent(in)    :: G    !< The ocean's grid structure
   type(MOM_domain_type),                                 intent(inout) :: BT_Domain
   integer,                                     optional, intent(in)    :: halo
 !   This subroutine sets up reordered versions of the BT_cont type in the
@@ -3598,7 +3598,7 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
   type(memory_size_type),                     intent(in)    :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
-  type(ocean_grid_type),                      intent(in)  :: G
+  type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
   integer,                          optional, intent(in)  :: halo
   logical,                          optional, intent(in)  :: maximize
   !   This subroutine uses the BTCL types to find typical or maximum face
@@ -3639,8 +3639,8 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, eta, halo, add_max)
   type(memory_size_type),                   intent(in) :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
-  type(ocean_grid_type),                    intent(in) :: G
-  type(verticalGrid_type),                  intent(in) :: GV
+  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure
   type(barotropic_CS),                      pointer    :: CS
   real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), optional, intent(in) :: eta
   integer,                        optional, intent(in) :: halo
@@ -3738,8 +3738,8 @@ end subroutine find_face_areas
 
 subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
                           G, GV, CS)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta
   type(forcing),                      intent(in) :: fluxes
@@ -3844,8 +3844,8 @@ end subroutine bt_mass_source
 
 subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
-  type(ocean_grid_type),            intent(inout) :: G
-  type(verticalGrid_type),          intent(in)    :: GV
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
   real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
@@ -4463,7 +4463,7 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI
   type(param_file_type),   intent(in) :: param_file
   type(barotropic_CS),     pointer    :: CS
-  type(verticalGrid_type), intent(in) :: GV
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register any fields from MOM_barotropic.F90
 ! that should be written to or read from the restart file.

@@ -101,8 +101,8 @@ contains
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
                                 ALE_sponge_CSp, OBC, Time_in)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h
@@ -513,8 +513,8 @@ end subroutine MOM_initialize_state
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness)
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
   type(param_file_type),                  intent(in)  :: param_file
   logical,                                intent(in)  :: file_has_thickness
@@ -603,8 +603,8 @@ end subroutine initialize_thickness_from_file
 !!   @param[in,out] eta Interface heights
 !!   @param[out]    h   Layer thicknesses
 subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
-  type(ocean_grid_type),                          intent(in)    :: G
-  type(verticalGrid_type),                        intent(in)    :: GV
+  type(ocean_grid_type),                          intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                        intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1),    intent(inout) :: eta
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)),      intent(inout) :: h
   ! Local variables
@@ -668,8 +668,8 @@ end subroutine adjustEtaToFitBathymetry
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_thickness_uniform(h, G, GV, param_file)
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
   type(param_file_type),                  intent(in)  :: param_file
 
@@ -728,8 +728,8 @@ end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
 subroutine convert_thickness(h, G, GV, param_file, tv)
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
+  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
   type(param_file_type),                  intent(in)    :: param_file
   type(thermo_var_ptrs),                  intent(in)    :: tv
@@ -800,8 +800,8 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
 end subroutine convert_thickness
 
 subroutine depress_surface(h, G, GV, param_file, tv)
-  type(ocean_grid_type),                  intent(in)    :: G
-  type(verticalGrid_type),                intent(in)    :: GV
+  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
   type(param_file_type),                  intent(in)    :: param_file
   type(thermo_var_ptrs),                  intent(in)    :: tv
@@ -1032,7 +1032,7 @@ end subroutine cut_off_column_top
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
-  type(ocean_grid_type),                   intent(in)  :: G
+  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                   intent(in)  :: param_file
@@ -1069,7 +1069,7 @@ end subroutine initialize_velocity_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_zero(u, v, G, param_file)
-  type(ocean_grid_type),                   intent(in)  :: G
+  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                   intent(in)  :: param_file
@@ -1099,7 +1099,7 @@ end subroutine initialize_velocity_zero
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_uniform(u, v, G, param_file)
-  type(ocean_grid_type),                   intent(in)  :: G
+  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                   intent(in)  :: param_file
@@ -1134,7 +1134,7 @@ end subroutine initialize_velocity_uniform
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_circular(u, v, G, param_file)
-  type(ocean_grid_type),                   intent(in)  :: G
+  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
   type(param_file_type),                   intent(in)  :: param_file
@@ -1187,7 +1187,7 @@ end subroutine initialize_velocity_circular
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_file(T, S, G, param_file)
-  type(ocean_grid_type),                  intent(in)  :: G
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
@@ -1241,7 +1241,7 @@ end subroutine initialize_temp_salt_from_file
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
-  type(ocean_grid_type),                  intent(in)  :: G
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file
 !  This function puts the initial layer temperatures and salinities  !
@@ -1287,8 +1287,8 @@ end subroutine initialize_temp_salt_from_profile
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref)
-  type(ocean_grid_type),                  intent(in)  :: G
-  type(verticalGrid_type),                intent(in)  :: GV
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file
   type(EOS_type),                         pointer     :: eqn_of_state
@@ -1373,7 +1373,7 @@ end subroutine initialize_temp_salt_fit
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_linear(T, S, G, param_file)
-  type(ocean_grid_type),                  intent(in)  :: G
+  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file
   ! This subroutine initializes linear profiles for T and S according to
@@ -1427,8 +1427,8 @@ end subroutine initialize_temp_salt_linear
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
-  type(ocean_grid_type), intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   logical,               intent(in) :: use_temperature
   type(thermo_var_ptrs), intent(in) :: tv
   type(param_file_type), intent(in) :: param_file
@@ -1563,7 +1563,7 @@ end subroutine initialize_sponges_file
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_max(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! maximum of the adjacent depths.
   integer :: i, j
@@ -1581,7 +1581,7 @@ end subroutine set_velocity_depth_max
 
 ! -----------------------------------------------------------------------------
 subroutine compute_global_grid_integrals(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
@@ -1598,7 +1598,7 @@ end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
 subroutine set_velocity_depth_min(G)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   ! This subroutine sets the 4 bottom depths at velocity points to be the
   ! minimum of the adjacent depths.
   integer :: i, j
@@ -1635,10 +1635,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !                      model parameter values.
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
-  type(ocean_grid_type),                 intent(inout) :: G
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h
   type(thermo_var_ptrs),                 intent(inout) :: tv
-  type(verticalGrid_type),               intent(in)    :: GV
+  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),                 intent(in)    :: PF
   type(directories),                     intent(in)    :: dirs
 
@@ -2058,8 +2058,8 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 !> Run simple unit tests
 subroutine MOM_state_init_tests(G, GV, tv)
-  type(ocean_grid_type),     intent(inout) :: G
-  type(verticalGrid_type),   intent(in)    :: GV
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(thermo_var_ptrs),     intent(in)    :: tv !< Thermodynamics structure
   ! Local variables
   integer, parameter :: nk=5

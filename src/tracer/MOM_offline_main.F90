@@ -683,8 +683,8 @@ end subroutine offline_advection_layer
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
     temp_mean, salt_mean, fluxes, do_ale_in)
 
-  type(ocean_grid_type),                     intent(inout)    :: G
-  type(verticalGrid_type),                   intent(inout)    :: GV
+  type(ocean_grid_type),                     intent(inout)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(inout)    :: GV   !< The ocean's vertical grid structure
   type(offline_transport_CS),                intent(inout)    :: CS
   logical, optional                                           :: do_ale_in
 
@@ -923,8 +923,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   type(param_file_type),               intent(in)     :: param_file
   type(offline_transport_CS), pointer, intent(inout)  :: CS
   type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
-  type(ocean_grid_type),      pointer, intent(in)     :: G
-  type(verticalGrid_type),    pointer, intent(in)     :: GV
+  type(ocean_grid_type),      pointer, intent(in)     :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    pointer, intent(in)     :: GV   !< The ocean's vertical grid structure
 
   character(len=40)                               :: mod = "offline_transport"
 

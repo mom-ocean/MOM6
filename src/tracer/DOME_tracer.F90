@@ -125,7 +125,7 @@ contains
 
 function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI
-  type(verticalGrid_type),    intent(in) :: GV
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file
   type(DOME_tracer_CS),       pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
@@ -208,8 +208,8 @@ end function register_DOME_tracer
 
 subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
@@ -417,14 +417,14 @@ end subroutine initialize_DOME_tracer
 
 subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
   type(DOME_tracer_CS),                  pointer    :: CS
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  real,                        optional,intent(in)  :: evap_CFL_limit
+  real,                        optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! This is a simple example of a set of advected passive tracers.
@@ -504,7 +504,7 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
 end subroutine DOME_tracer_column_physics
 
 subroutine DOME_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in)    :: G
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(surface),                            intent(inout) :: state
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   type(DOME_tracer_CS),                     pointer       :: CS

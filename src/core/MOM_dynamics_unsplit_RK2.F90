@@ -188,8 +188,8 @@ contains
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_in
@@ -490,7 +490,7 @@ end subroutine step_MOM_dyn_unsplit_RK2
 
 subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),         intent(in)    :: HI
-  type(verticalGrid_type),      intent(in)    :: GV
+  type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),        intent(in)    :: param_file
   type(MOM_dyn_unsplit_RK2_CS), pointer       :: CS
   type(MOM_restart_CS),         pointer       :: restart_CS
@@ -537,8 +537,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
                                       restart_CS, Accel_diag, Cont_diag, MIS, &
                                       OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
                                       visc, dirs, ntrunc)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h

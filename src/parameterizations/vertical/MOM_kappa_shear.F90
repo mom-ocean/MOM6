@@ -118,8 +118,8 @@ contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  type(ocean_grid_type),                      intent(in)    :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
+  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
@@ -1644,8 +1644,8 @@ end subroutine find_kappa_tke
 
 logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),    pointer       :: CS

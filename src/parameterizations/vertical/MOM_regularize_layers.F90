@@ -113,8 +113,8 @@ integer :: id_clock_pass, id_clock_EOS
 contains
 
 subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
@@ -161,8 +161,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
 end subroutine regularize_layers
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
@@ -772,8 +772,8 @@ end subroutine regularize_surface
 
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: def_rat_u
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: def_rat_v
@@ -924,7 +924,7 @@ end subroutine find_deficit_ratios
 
 subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(param_file_type),   intent(in)    :: param_file
   type(diag_ctrl), target, intent(inout) :: diag
   type(regularize_layers_CS), pointer    :: CS

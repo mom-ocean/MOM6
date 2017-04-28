@@ -315,8 +315,8 @@ end subroutine advect_tracer
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr
@@ -579,8 +579,8 @@ end subroutine advect_x
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr
