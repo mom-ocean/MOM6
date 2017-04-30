@@ -74,9 +74,12 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
   call get_param(param_file, mod, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
     call get_param(param_file, mod, "KELVIN_COAST_OFFSET", CS%coast_offset, &
-                 default=100.0, do_not_log=.true.)
+                   "The distance along the southern and northern boundaries \n"//&
+                   "at which the coasts angle in.", &
+                   units="km", default=100.0)
     call get_param(param_file, mod, "KELVIN_COAST_ANGLE", CS%coast_angle, &
-                 default=11.3, do_not_log=.true.)
+                   "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
+                   units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
   endif
 
@@ -111,16 +114,12 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
   call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
   call get_param(param_file, mod, "KELVIN_COAST_OFFSET", coast_offset, &
-                 "The distance along the southern and northern boundaries \n"//&
-                 "at which the coasts angle in.", &
-                 units="km", default=100.0)
+                 default=100.0, do_not_log=.true.)
   call get_param(param_file, mod, "KELVIN_COAST_ANGLE", coast_angle, &
-                 "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
-                 units="degrees", default=11.3)
+                 default=11.3, do_not_log=.true.)
 
   coast_angle = coast_angle * (atan(1.0)/45.) ! Convert to radians
   right_angle = 2 * atan(1.0)
