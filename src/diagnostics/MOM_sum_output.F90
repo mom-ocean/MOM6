@@ -161,7 +161,7 @@ contains
 subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                                 Input_start_time, CS)
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),    intent(in)    :: param_file
+  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   character(len=*),         intent(in)    :: directory
   integer, target,          intent(inout) :: ntrnc
   type(time_type),          intent(in)    :: Input_start_time

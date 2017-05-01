@@ -142,7 +142,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
-  type(param_file_type),                  intent(in) :: param_file
+  type(param_file_type),                  intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),                        pointer    :: CS
   real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
   real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean

@@ -90,7 +90,7 @@ contains
 !> MOM_debugging_init initializes the MOM_debugging module, and sets
 !! the parameterts that control which checks are active for MOM6.
 subroutine MOM_debugging_init(param_file)
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_debugging" ! This module's name.

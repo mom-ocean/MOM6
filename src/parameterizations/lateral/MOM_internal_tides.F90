@@ -2143,7 +2143,7 @@ end subroutine PPM_limit_pos
 
 ! subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
 !   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-!   type(param_file_type), intent(in) :: param_file
+!   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 !   type(int_tide_CS),     pointer :: CS
 !   type(MOM_restart_CS),  pointer :: restart_CS
 
@@ -2200,7 +2200,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time
   type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),     intent(in)    :: param_file
+  type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,   intent(in)    :: diag
   type(int_tide_CS),pointer                :: CS
   ! Arguments: Time - The current model time.

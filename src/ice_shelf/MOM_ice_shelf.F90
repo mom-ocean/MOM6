@@ -1188,7 +1188,7 @@ end subroutine add_shelf_flux
 
 !> Initializes shelf model data, parameters and diagnostics
 subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Time_in, solo_ice_sheet_in)
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type), pointer    :: ocn_grid
   type(time_type),    intent(inout)   :: Time
   type(ice_shelf_CS), pointer         :: CS
@@ -1975,7 +1975,7 @@ end subroutine initialize_ice_shelf
 subroutine initialize_shelf_mass(G, param_file, CS, new_sim)
 
   type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(ice_shelf_CS),    pointer    :: CS
   logical, optional            :: new_sim
 

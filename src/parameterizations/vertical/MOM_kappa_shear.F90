@@ -1646,7 +1646,7 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
@@ -1790,7 +1790,7 @@ logical function kappa_shear_is_used(param_file)
 ! Reads the parameter "USE_JACKSON_PARAM" and returns state.
 !   This function allows other modules to know whether this parameterization will
 ! be used without needing to duplicate the log entry.
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log = .true.)
 end function kappa_shear_is_used

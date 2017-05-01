@@ -864,7 +864,7 @@ end subroutine horizontal_viscosity
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(hor_visc_CS), pointer             :: CS
 

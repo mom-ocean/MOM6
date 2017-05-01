@@ -920,7 +920,7 @@ end subroutine register_diags_offline_transport
 ! run time parameters from MOM_input
 subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
-  type(param_file_type),               intent(in)     :: param_file
+  type(param_file_type),               intent(in)     :: param_file !< A structure to parse for run-time parameters
   type(offline_transport_CS), pointer, intent(inout)  :: CS
   type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
   type(ocean_grid_type),      pointer, intent(in)     :: G    !< The ocean's grid structure

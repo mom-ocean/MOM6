@@ -516,7 +516,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,                                intent(in)  :: file_has_thickness
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -671,7 +671,7 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -731,7 +731,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
-  type(param_file_type),                  intent(in)    :: param_file
+  type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -803,7 +803,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
-  type(param_file_type),                  intent(in)    :: param_file
+  type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1035,7 +1035,7 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
-  type(param_file_type),                   intent(in)  :: param_file
+  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1072,7 +1072,7 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
-  type(param_file_type),                   intent(in)  :: param_file
+  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1102,7 +1102,7 @@ subroutine initialize_velocity_uniform(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
-  type(param_file_type),                   intent(in)  :: param_file
+  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1137,7 +1137,7 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
-  type(param_file_type),                   intent(in)  :: param_file
+  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1189,7 +1189,7 @@ end subroutine initialize_velocity_circular
 subroutine initialize_temp_salt_from_file(T, S, G, param_file)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1243,7 +1243,7 @@ end subroutine initialize_temp_salt_from_file
 subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1290,7 +1290,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),                         pointer     :: eqn_of_state
   real,                                   intent(in)  :: P_Ref
 !  This function puts the initial layer temperatures and salinities  !
@@ -1375,7 +1375,7 @@ end subroutine initialize_temp_salt_fit
 subroutine initialize_temp_salt_linear(T, S, G, param_file)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file
+  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! This subroutine initializes linear profiles for T and S according to
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
@@ -1427,12 +1427,12 @@ end subroutine initialize_temp_salt_linear
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  logical,               intent(in) :: use_temperature
-  type(thermo_var_ptrs), intent(in) :: tv
-  type(param_file_type), intent(in) :: param_file
-  type(sponge_CS),       pointer    :: CSp
+  logical,                 intent(in) :: use_temperature
+  type(thermo_var_ptrs),   intent(in) :: tv
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(sponge_CS),         pointer    :: CSp
 !   This subroutine sets the inverse restoration time (Idamp), and   !
 ! the values towards which the interface heights and an arbitrary    !
 ! number of tracers should be restored within each sponge. The       !
