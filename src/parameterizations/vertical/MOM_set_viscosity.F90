@@ -139,7 +139,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in) :: tv
   type(vertvisc_type),                    intent(inout) :: visc
   type(set_visc_CS),                         pointer    :: CS
@@ -946,7 +946,7 @@ end subroutine set_viscous_BBL
 function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer,                                   intent(in) :: i, j, k
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
   real                                                  :: set_v_at_u
@@ -970,7 +970,7 @@ end function set_v_at_u
 function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
@@ -996,7 +996,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   type(verticalGrid_type),             intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),               intent(in)    :: tv
   type(forcing),                       intent(in)    :: fluxes
   type(vertvisc_type),                 intent(inout) :: visc

@@ -212,7 +212,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: diffu
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: diffv
   type(MEKE_type),                           pointer     :: MEKE

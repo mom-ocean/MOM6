@@ -620,7 +620,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
   integer :: i, j, k, nz
   type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
   type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h ! A working copy of layer thickesses
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! temporary state
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v

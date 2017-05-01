@@ -88,7 +88,7 @@ contains
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
   type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb

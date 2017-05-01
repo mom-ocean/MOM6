@@ -275,7 +275,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in)    :: tv
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
@@ -1055,7 +1055,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                      intent(in)    :: dt
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 
@@ -1213,7 +1213,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
   real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: eta

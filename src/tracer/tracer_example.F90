@@ -209,7 +209,8 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
@@ -518,7 +519,8 @@ end subroutine tracer_column_physics
 function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(USER_tracer_example_CS),       pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -571,7 +573,7 @@ end function USER_tracer_stock
 subroutine USER_tracer_surface_state(state, h, G, CS)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(surface),                      intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(USER_tracer_example_CS),       pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
