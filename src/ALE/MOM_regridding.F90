@@ -1405,7 +1405,7 @@ end subroutine build_grid_HyCOM1
 subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                       intent(in)    :: tv
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface
   type(remapping_CS),                          intent(in)    :: remapCS
@@ -1683,7 +1683,7 @@ subroutine inflate_vanished_layers_old( CS, G, GV, h )
   type(regridding_CS),                    intent(in)    :: CS
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
 
   ! Local variables
   integer :: i, j, k
@@ -1721,7 +1721,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   ! Arguments
   type(ocean_grid_type), intent(in)                  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)                :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs), intent(inout)               :: tv
 
   ! Local variables

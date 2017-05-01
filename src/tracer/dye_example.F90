@@ -275,7 +275,7 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   type(time_type), target,            intent(in) :: day
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(dye_tracer_CS),                pointer    :: CS
@@ -467,7 +467,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 end subroutine dye_tracer_column_physics
 
 function dye_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -522,7 +522,7 @@ end function dye_stock
 
 subroutine dye_tracer_surface_state(state, h, G, CS)
   type(surface),                         intent(inout) :: state
-  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h
+  real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
   type(dye_tracer_CS),                   pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.

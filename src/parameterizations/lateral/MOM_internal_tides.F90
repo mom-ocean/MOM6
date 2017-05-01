@@ -202,7 +202,8 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                               G, GV, CS)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),            intent(in)    :: tv
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide, Nb

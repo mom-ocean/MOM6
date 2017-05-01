@@ -122,7 +122,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                      intent(in)    :: tv
   real, dimension(:,:),                       pointer       :: p_surf
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io

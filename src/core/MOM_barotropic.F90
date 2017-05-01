@@ -2865,7 +2865,7 @@ end subroutine destroy_BT_OBC
 subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(barotropic_CS),                    pointer       :: CS
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: h_v
@@ -3740,7 +3740,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
                           G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta
   type(forcing),                      intent(in) :: fluxes
   logical,                            intent(in) :: set_cor
@@ -3848,7 +3848,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
   real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, intent(in), dimension(SZI_(G),SZJ_(G))    :: eta
   type(time_type), target,          intent(in)    :: Time
   type(param_file_type),            intent(in)    :: param_file !< A structure to parse for run-time parameters

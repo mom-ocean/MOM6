@@ -79,7 +79,7 @@ function global_layer_mean(var, h, G, GV)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZK_(GV))                   :: global_layer_mean
 
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: tmpForSumming, weight
@@ -108,7 +108,7 @@ function global_volume_mean(var, h, G, GV)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: var
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real :: global_volume_mean
 
   real :: weight_here

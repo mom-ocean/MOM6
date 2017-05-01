@@ -167,7 +167,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in
   real, dimension(:,:),                      pointer       :: frac_shelf_h
   real,                                      intent(in)    :: dt
@@ -524,7 +524,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                      intent(in)    :: dt
   type(diag_to_Z_CS),                        pointer       :: CS
 
@@ -783,7 +783,7 @@ end subroutine find_limited_slope
 
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
   type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(p3d), dimension(:),                  intent(in) :: in_ptrs
   integer,   dimension(:),                  intent(in) :: ids
   integer,                                  intent(in) :: num_diags
