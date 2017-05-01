@@ -105,7 +105,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(inout) :: tv
   type(time_type),                           intent(inout) :: Time
   type(param_file_type),                     intent(in)    :: PF
@@ -515,7 +515,7 @@ end subroutine MOM_initialize_state
 subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h    !< Layer thicknesses, in m
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,                                intent(in)  :: file_has_thickness
 ! Arguments: h - The thickness that is being initialized.
@@ -606,7 +606,7 @@ subroutine adjustEtaToFitBathymetry(G, GV, eta, h)
   type(ocean_grid_type),                          intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                        intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)+1),    intent(inout) :: eta
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),      intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)),      intent(inout) :: h    !< Layer thicknesses, in m
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, contractions, dilations
   real, parameter :: hTolerance = 0.1 !<  Tolerance to exceed adjustment criteria (m)
@@ -670,7 +670,7 @@ end subroutine adjustEtaToFitBathymetry
 subroutine initialize_thickness_uniform(h, G, GV, param_file)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h    !< Layer thicknesses, in m
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
 
 ! Arguments: h - The thickness that is being initialized.
@@ -730,7 +730,7 @@ end subroutine initialize_thickness_search
 subroutine convert_thickness(h, G, GV, param_file, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, being converted from m to H (m or kg m-2)
   type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
@@ -802,7 +802,7 @@ end subroutine convert_thickness
 subroutine depress_surface(h, G, GV, param_file, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),                  intent(in)    :: tv
 ! Arguments: h - The thickness that is being initialized.
@@ -1636,7 +1636,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !  (in)      dirs    - A structure containing several relevant directory paths.
 
   type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    !< Layer thicknesses, in m
   type(thermo_var_ptrs),                 intent(inout) :: tv
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),                 intent(in)    :: PF
@@ -1723,7 +1723,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
-       (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
+      (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
 
   inputdir = "." ;  call get_param(PF, mod, "INPUTDIR", inputdir)
   inputdir = slasher(inputdir)
@@ -1805,7 +1805,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   !Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10 or NEMO
   call convert_temp_salt_for_TEOS10(temp_z,salt_z, press, G, kd, mask_z, eos)
 
-  do k=1, kd
+  do k=1,kd
     do j=js,je
       call calculate_density(temp_z(:,j,k),salt_z(:,j,k), press, rho_z(:,j,k), is, ie, eos)
     enddo
@@ -1819,28 +1819,28 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   ! This is needed for building an ALE grid under ice shelves
   call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
-     call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
-                    "The file from which the ice bathymetry and area are read.", &
-                    fail_if_missing=.true.)
-     filename = trim(inputdir)//trim(ice_shelf_file)
-     call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
-     call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
-                    "The name of the area variable in ICE_THICKNESS_FILE.", &
-                    fail_if_missing=.true.)
-     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-       "MOM_temp_salt_initialize_from_Z: Unable to open "//trim(filename))
+    call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
+                   "The file from which the ice bathymetry and area are read.", &
+                   fail_if_missing=.true.)
+    filename = trim(inputdir)//trim(ice_shelf_file)
+    call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
+    call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
+                   "The name of the area variable in ICE_THICKNESS_FILE.", &
+                   fail_if_missing=.true.)
+    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+      "MOM_temp_salt_initialize_from_Z: Unable to open "//trim(filename))
 
-     call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+    call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
-     ! initialize frac_shelf_h with zeros (open water everywhere)
-     frac_shelf_h(:,:) = 0.0
-     ! compute fractional ice shelf coverage of h
-     do j=jsd,jed ; do i=isd,ied
-         if (G%areaT(i,j) > 0.0) &
-           frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
-     enddo ; enddo
-     ! pass to the pointer
-     shelf_area => frac_shelf_h
+    ! initialize frac_shelf_h with zeros (open water everywhere)
+    frac_shelf_h(:,:) = 0.0
+    ! compute fractional ice shelf coverage of h
+    do j=jsd,jed ; do i=isd,ied
+      if (G%areaT(i,j) > 0.0) &
+        frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+    enddo ; enddo
+    ! pass to the pointer
+    shelf_area => frac_shelf_h
 
   endif
 

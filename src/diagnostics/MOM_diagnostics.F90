@@ -175,7 +175,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
   type(thermo_var_ptrs),                     intent(in)    :: tv
@@ -684,7 +684,7 @@ end subroutine find_weights
 subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
   type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(forcing),                            intent(in)    :: fluxes
   type(diagnostics_CS),                     intent(inout) :: CS
@@ -807,7 +807,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
   type(accel_diag_ptrs),                     intent(in)    :: ADp

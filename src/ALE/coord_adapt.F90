@@ -95,7 +95,7 @@ subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   type(thermo_var_ptrs),                       intent(in)    :: tv
   integer,                                     intent(in)    :: i, j
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt, tInt, sInt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext ! updated interface positions
 
   ! Local variables

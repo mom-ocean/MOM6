@@ -212,7 +212,7 @@ end subroutine limit_mass_flux_3d
 subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
   type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -285,7 +285,7 @@ end subroutine distribute_residual_uh_barotropic
 subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
   type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
   type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -362,7 +362,7 @@ end subroutine distribute_residual_vh_barotropic
 subroutine distribute_residual_uh_upwards(G, GV, h, uh)
   type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
   type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -451,7 +451,7 @@ end subroutine distribute_residual_uh_upwards
 subroutine distribute_residual_vh_upwards(G, GV, h, vh)
   type(ocean_grid_type),    pointer                          :: G    !< The ocean's grid structure
   type(verticalGrid_type),  pointer                          :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)   :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
