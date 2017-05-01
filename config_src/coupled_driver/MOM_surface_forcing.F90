@@ -222,7 +222,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   type(forcing),              intent(inout)         :: fluxes
   integer, dimension(4),      intent(in)            :: index_bounds
   type(time_type),            intent(in)            :: Time
-  type(ocean_grid_type),      intent(inout)         :: G
+  type(ocean_grid_type),      intent(inout)         :: G    !< The ocean's grid structure
   type(surface_forcing_CS),   pointer               :: CS
   type(surface),              intent(in)            :: state
   logical, optional,          intent(in)            :: restore_salt, restore_temp
@@ -841,7 +841,7 @@ end subroutine apply_flux_adjustments
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
   type(surface_forcing_CS),   pointer       :: CS
-  type(ocean_grid_type),      intent(inout) :: G
+  type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure
   type(time_type),            intent(in)    :: Time
   character(len=*),           intent(in)    :: directory
   logical,          optional, intent(in)    :: time_stamped
@@ -864,8 +864,8 @@ end subroutine forcing_save_restart
 
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
   type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
-  type(param_file_type),    intent(in)    :: param_file
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,  intent(inout) :: diag
   type(surface_forcing_CS), pointer       :: CS
   logical, optional,        intent(in)    :: restore_salt, restore_temp

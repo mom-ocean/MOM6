@@ -2056,7 +2056,7 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(entrain_diffusive_CS), pointer     :: CS
 ! Arguments: Time - The current model time.

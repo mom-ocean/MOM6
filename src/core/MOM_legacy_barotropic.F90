@@ -3447,7 +3447,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
   real, intent(in), dimension(SZI_(G),SZJ_(G))      :: eta
   type(time_type), target,            intent(in)    :: Time
-  type(param_file_type),              intent(in)    :: param_file
+  type(param_file_type),              intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,            intent(inout) :: diag
   type(legacy_barotropic_CS),         pointer       :: CS
   type(MOM_restart_CS),               pointer       :: restart_CS
@@ -4009,7 +4009,7 @@ end subroutine legacy_barotropic_end
 subroutine register_legacy_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in) :: param_file
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(legacy_barotropic_CS), pointer :: CS
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register any fields from MOM_barotropic.F90

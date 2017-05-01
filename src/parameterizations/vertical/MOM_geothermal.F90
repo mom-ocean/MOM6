@@ -359,7 +359,7 @@ end subroutine geothermal
 subroutine geothermal_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(geothermal_CS),     pointer       :: CS
 

@@ -134,7 +134,7 @@ contains
   function register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     type(hor_index_type),       intent(in)   :: HI
     type(verticalGrid_type),    intent(in)   :: GV   !< The ocean's vertical grid structure
-    type(param_file_type),      intent(in)   :: param_file
+    type(param_file_type),      intent(in)   :: param_file !< A structure to parse for run-time parameters
     type(MOM_generic_tracer_CS), pointer      :: CS
     type(tracer_registry_type), pointer     :: tr_Reg
     type(MOM_restart_CS),       pointer     :: restart_CS
@@ -290,9 +290,9 @@ contains
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
-    type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
+    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
-    type(param_file_type),                 intent(in) :: param_file
+    type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS

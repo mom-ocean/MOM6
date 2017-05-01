@@ -223,7 +223,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
-  type(param_file_type) :: param_file
+  type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: offline_tracer_mode
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
@@ -523,7 +523,7 @@ end subroutine update_ocean_model
 !
 
 subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice, latent_heat_fusion, state, time_step, berg_area_threshold)
-  type(ocean_grid_type),              intent(inout)    :: G
+  type(ocean_grid_type),              intent(inout)    :: G    !< The ocean's grid structure
   type(forcing),                      intent(inout) :: fluxes
   type(surface),                      intent(inout) :: state
   logical,                            intent(in) :: use_ice_shelf
@@ -755,7 +755,7 @@ end subroutine initialize_ocean_public_type
 subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm, press_to_z)
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc
-  type(ocean_grid_type),   intent(inout) :: G
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   logical,                 intent(in)    :: use_conT_absS
   real,          optional, intent(in)    :: patm(:,:)
   real,          optional, intent(in)    :: press_to_z
@@ -880,7 +880,7 @@ subroutine ocean_model_flux_init(OS)
   character(len=128) :: default_ice_restart_file, default_ocean_restart_file
   character(len=40)  :: mod = "ocean_model_flux_init"  ! This module's name.
 
-  type(param_file_type) :: param_file
+  type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
   logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
 

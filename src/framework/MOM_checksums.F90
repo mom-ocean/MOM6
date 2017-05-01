@@ -1414,7 +1414,7 @@ end subroutine chk_sum_msg3
 !> MOM_checksums_init initializes the MOM_checksums module. As it happens, the
 !! only thing that it does is to log the version of this module.
 subroutine MOM_checksums_init(param_file)
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_checksums" ! This module's name.

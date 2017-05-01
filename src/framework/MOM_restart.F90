@@ -1245,7 +1245,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 end subroutine restore_state
 
 subroutine restart_init(param_file, CS, restart_root)
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(MOM_restart_CS),  pointer    :: CS
   character(len=*), optional, intent(in) :: restart_root
 ! Arguments: param_file - A structure indicating the open file to parse for

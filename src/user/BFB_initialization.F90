@@ -68,7 +68,7 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 ! then converted to densities of the top and bottom layers and linearly interpolated for the intermediate layers.
   real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)  :: param_file
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
   integer                              :: k, nz
@@ -109,7 +109,7 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
   type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv
-  type(param_file_type), intent(in)                   :: param_file
+  type(param_file_type), intent(in)                   :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),       pointer                      :: CSp
   real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h
   !call MOM_error(FATAL, &

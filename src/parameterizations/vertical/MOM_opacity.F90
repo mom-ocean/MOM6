@@ -479,7 +479,7 @@ end function
 subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(tracer_flow_control_CS), target, intent(in) :: tracer_flow
   type(opacity_CS),        pointer       :: CS

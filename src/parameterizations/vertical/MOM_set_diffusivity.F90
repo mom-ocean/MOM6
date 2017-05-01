@@ -2504,7 +2504,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),    intent(in)    :: param_file
+  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,  intent(inout) :: diag
   type(set_diffusivity_CS), pointer       :: CS
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp

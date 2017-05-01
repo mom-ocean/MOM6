@@ -223,7 +223,7 @@ end subroutine USER_set_OBC_data
 
 subroutine USER_set_rotation(G, param_file)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(param_file_type), intent(in)    :: param_file
+  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_rotation: " // &
    "Unmodified user routine called - you must edit the routine to use it")

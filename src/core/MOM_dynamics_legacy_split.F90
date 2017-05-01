@@ -1107,7 +1107,7 @@ end subroutine adjustments_dyn_legacy_split
 subroutine register_restarts_dyn_legacy_split(HI, GV, param_file, CS, restart_CS, uh, vh)
   type(hor_index_type),          intent(in)    :: HI
   type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),         intent(in)    :: param_file
+  type(param_file_type),         intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(MOM_dyn_legacy_split_CS), pointer       :: CS
   type(MOM_restart_CS),          pointer       :: restart_CS
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), target, intent(inout) :: uh
@@ -1218,7 +1218,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
   real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: eta
   type(time_type),                   target, intent(in)    :: Time
-  type(param_file_type),                     intent(in)    :: param_file
+  type(param_file_type),                     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS

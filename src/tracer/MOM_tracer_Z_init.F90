@@ -62,7 +62,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
   character(len=*),                      intent(in)    :: filename, tr_name
-! type(param_file_type),                 intent(in)    :: param_file
+! type(param_file_type),                 intent(in)    :: param_file !< A structure to parse for run-time parameters
   real,                        optional, intent(in)    :: missing_val
   real,                        optional, intent(in)    :: land_val
 !   This function initializes a tracer by reading a Z-space file, returning

@@ -1069,7 +1069,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(time_type),            intent(in)    :: Time
   type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),      intent(in)    :: param_file
+  type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,    intent(inout) :: diag
   type(diagnostics_CS),       pointer       :: CS
 

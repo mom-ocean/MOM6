@@ -126,7 +126,7 @@ contains
 function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),      intent(in) :: param_file
+  type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(DOME_tracer_CS),       pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
   type(MOM_restart_CS),       pointer    :: restart_CS

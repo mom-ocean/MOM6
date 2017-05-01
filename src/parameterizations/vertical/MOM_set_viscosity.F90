@@ -1707,7 +1707,7 @@ end subroutine set_viscous_ML
 subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(hor_index_type),    intent(in)    :: HI
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(vertvisc_type),     intent(inout) :: visc
   type(MOM_restart_CS),    pointer       :: restart_CS
 !   This subroutine is used to register any fields associated with the
@@ -1776,7 +1776,7 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(vertvisc_type),     intent(inout) :: visc
   type(set_visc_CS),       pointer       :: CS

@@ -734,7 +734,7 @@ end subroutine tridiag_solver
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
   type(ocean_grid_type),       intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),       intent(in)    :: param_file
+  type(param_file_type),       intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,     intent(in)    :: diag
   type(wave_structure_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.

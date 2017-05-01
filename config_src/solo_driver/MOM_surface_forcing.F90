@@ -229,7 +229,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day_start
   type(time_type),       intent(in)    :: day_interval
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 ! This subroutine calls other subroutines in this file to get surface forcing fields.
@@ -362,7 +362,7 @@ end subroutine set_forcing
 
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine allocates arrays for buoyancy forcing.
@@ -412,7 +412,7 @@ subroutine wind_forcing_const(state, fluxes, tau_x0, tau_y0, day, G, CS)
   real,                     intent(in)    :: tau_x0
   real,                     intent(in)    :: tau_y0
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! subroutine sets the surface wind stresses to zero
@@ -463,7 +463,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to double gyre.
@@ -505,7 +505,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to single gyre.
@@ -546,7 +546,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to gyres.
@@ -597,7 +597,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses.
@@ -761,7 +761,7 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 ! This subroutine sets the surface wind stresses
 
@@ -832,7 +832,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1120,7 +1120,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1296,7 +1296,7 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1348,7 +1348,7 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1399,7 +1399,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !    This subroutine specifies the current surface fluxes of buoyancy
@@ -1486,7 +1486,7 @@ end subroutine buoyancy_forcing_linear
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
   type(surface_forcing_CS),   pointer       :: CS
-  type(ocean_grid_type),      intent(inout) :: G
+  type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure
   type(time_type),            intent(in)    :: Time
   character(len=*),           intent(in)    :: directory
   logical,          optional, intent(in)    :: time_stamped
@@ -1511,8 +1511,8 @@ end subroutine forcing_save_restart
 
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),              intent(in)    :: Time
-  type(ocean_grid_type),        intent(in)    :: G
-  type(param_file_type),        intent(in)    :: param_file
+  type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,      intent(inout) :: diag
   type(surface_forcing_CS),     pointer       :: CS
   type(tracer_flow_control_CS), pointer       :: tracer_flow_CSp

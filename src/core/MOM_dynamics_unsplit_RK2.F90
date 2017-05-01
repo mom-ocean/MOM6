@@ -491,7 +491,7 @@ end subroutine step_MOM_dyn_unsplit_RK2
 subroutine register_restarts_dyn_unsplit_RK2(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),         intent(in)    :: HI
   type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),        intent(in)    :: param_file
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(MOM_dyn_unsplit_RK2_CS), pointer       :: CS
   type(MOM_restart_CS),         pointer       :: restart_CS
 !   This subroutine sets up any auxiliary restart variables that are specific
@@ -543,7 +543,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
   type(time_type),                   target, intent(in)    :: Time
-  type(param_file_type),                     intent(in)    :: param_file
+  type(param_file_type),                     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_unsplit_RK2_CS),              pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS

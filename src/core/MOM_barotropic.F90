@@ -3851,7 +3851,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
   real, intent(in), dimension(SZI_(G),SZJ_(G))    :: eta
   type(time_type), target,          intent(in)    :: Time
-  type(param_file_type),            intent(in)    :: param_file
+  type(param_file_type),            intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,          intent(inout) :: diag
   type(barotropic_CS),              pointer       :: CS
   type(MOM_restart_CS),             pointer       :: restart_CS
@@ -4461,7 +4461,7 @@ end subroutine barotropic_end
 
 subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI
-  type(param_file_type),   intent(in) :: param_file
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(barotropic_CS),     pointer    :: CS
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   type(MOM_restart_CS),    pointer    :: restart_CS
