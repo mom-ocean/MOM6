@@ -68,7 +68,7 @@ subroutine absorbRemainingSW(G, GV, h, opacity_band, nsw, j, dt, H_limit_fluxes,
 
   type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:,:,:),            intent(in)    :: opacity_band
   integer,                           intent(in)    :: nsw
   integer,                           intent(in)    :: j
@@ -329,7 +329,7 @@ subroutine sumSWoverBands(G, GV, h, opacity_band, nsw, j, dt, &
 ! buoyancy fluxes for use in KPP. This routine does not update the state.
   type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(G)),      intent(in)    :: h
+  real, dimension(SZI_(G),SZK_(G)),      intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:,:,:),                intent(in)    :: opacity_band
   integer,                               intent(in)    :: nsw
   integer,                               intent(in)    :: j
