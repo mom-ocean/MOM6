@@ -55,8 +55,8 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
   character(len=*),                          intent(in) :: mesg
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vh
@@ -89,8 +89,8 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
   character(len=*),                          intent(in) :: mesg
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer, optional,                         intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
@@ -196,8 +196,8 @@ end subroutine MOM_accel_chksum
 subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDiminishing)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   character(len=*),                          intent(in) :: mesg
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, pointer, dimension(:,:,:),           intent(in) :: Temp, Salt
   logical, optional,                         intent(in) :: allowChange, permitDiminishing

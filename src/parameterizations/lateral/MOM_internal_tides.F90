@@ -1586,8 +1586,10 @@ end subroutine propagate_y
 
 subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G)), intent(in)    :: u
-  real, dimension(SZI_(G)),  intent(in)    :: h, hL, hR
+  real, dimension(SZIB_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G)),  intent(in)    :: hL
+  real, dimension(SZI_(G)),  intent(in)    :: hR
   real, dimension(SZIB_(G)), intent(inout) :: uh
   real,                      intent(in)    :: dt
   integer,                   intent(in)    :: j, ish, ieh
@@ -1631,7 +1633,7 @@ end subroutine zonal_flux_En
 
 subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
   type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G)),         intent(in)    :: v
+  real, dimension(SZI_(G)),         intent(in)    :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h, hL, hR
   real, dimension(SZI_(G)),         intent(inout) :: vh
   real,                             intent(in)    :: dt
