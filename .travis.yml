@@ -3,7 +3,7 @@
 
 # This is a not a c-language project but we use the same environment.
 language: c
-dist: precise
+dist: trusty
 sudo: false
 
 addons:
