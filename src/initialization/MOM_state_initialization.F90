@@ -103,8 +103,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                 ALE_sponge_CSp, OBC, Time_in)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u    !< The zonal velocity that is being initialized, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v    !< The meridional velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(inout) :: tv
   type(time_type),                           intent(inout) :: Time
@@ -1033,8 +1033,8 @@ end subroutine cut_off_column_top
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_from_file(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
   type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
@@ -1070,8 +1070,8 @@ end subroutine initialize_velocity_from_file
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_zero(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
   type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
@@ -1100,8 +1100,8 @@ end subroutine initialize_velocity_zero
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_uniform(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
   type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
@@ -1135,8 +1135,8 @@ end subroutine initialize_velocity_uniform
 ! -----------------------------------------------------------------------------
 subroutine initialize_velocity_circular(u, v, G, param_file)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u
-  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v
+  real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
+  real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
   type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
