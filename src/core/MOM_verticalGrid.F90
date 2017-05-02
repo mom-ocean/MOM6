@@ -166,7 +166,7 @@ end subroutine verticalGridInit
 !> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(GV)
   character(len=48)                 :: get_thickness_units
-  type(verticalGrid_type), intent(in) :: GV
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
 !   This subroutine returns the appropriate units for thicknesses,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.
@@ -184,7 +184,7 @@ end function get_thickness_units
 !> Returns the model's thickness flux units, usually m^3/s or kg/s.
 function get_flux_units(GV)
   character(len=48)                 :: get_flux_units
-  type(verticalGrid_type), intent(in) :: GV
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
 !   This subroutine returns the appropriate units for thickness fluxes,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.
@@ -202,7 +202,7 @@ end function get_flux_units
 !> Returns the model's tracer flux units.
 function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
   character(len=48)                      :: get_tr_flux_units
-  type(verticalGrid_type),    intent(in) :: GV
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   character(len=*), optional, intent(in) :: tr_units
   character(len=*), optional, intent(in) :: tr_vol_conc_units
   character(len=*), optional, intent(in) :: tr_mass_conc_units
@@ -282,7 +282,7 @@ end subroutine setVerticalGridAxes
 !> Deallocates the model's vertical grid structure.
 subroutine verticalGridEnd( GV )
 ! Arguments: G - The ocean's grid structure.
-  type(verticalGrid_type), pointer :: GV
+  type(verticalGrid_type), pointer :: GV   !< The ocean's vertical grid structure
 
   DEALLOC_(GV%g_prime) ; DEALLOC_(GV%Rlay)
   DEALLOC_( GV%sInterface )

@@ -104,8 +104,8 @@ contains
 
 subroutine tidal_forcing_init(Time, G, param_file, CS)
   type(time_type),       intent(in) :: Time
-  type(ocean_grid_type), intent(in) :: G
-  type(param_file_type), intent(in) :: param_file
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   type(tidal_forcing_CS), pointer   :: CS
 
 ! This subroutine allocates space for the static variables used
@@ -390,7 +390,7 @@ end subroutine tidal_forcing_init
 subroutine find_in_files(tidal_input_files,varname,array,G)
   character(len=*),                 intent(in)  :: tidal_input_files(:)
   character(len=*),                 intent(in)  :: varname
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: array
 
   integer :: nf
@@ -417,7 +417,7 @@ subroutine find_in_files(tidal_input_files,varname,array,G)
 end subroutine find_in_files
 
 subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
-  type(ocean_grid_type),  intent(in)  :: G
+  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
   type(tidal_forcing_CS), pointer     :: CS
   real,                   intent(out) :: deta_tidal_deta
 !   This subroutine calculates returns the partial derivative of the local
@@ -439,7 +439,7 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
 end subroutine tidal_forcing_sensitivity
 
 subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   type(time_type),                  intent(in)  :: Time
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal

@@ -53,11 +53,11 @@ contains
 
 subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
   character(len=*),                          intent(in) :: mesg
-  type(ocean_grid_type),                     intent(in) :: G
-  type(verticalGrid_type),                   intent(in) :: GV
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vh
   integer, optional,                         intent(in) :: haloshift
@@ -87,11 +87,11 @@ end subroutine MOM_state_chksum_5arg
 
 subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
   character(len=*),                          intent(in) :: mesg
-  type(ocean_grid_type),                     intent(in) :: G
-  type(verticalGrid_type),                   intent(in) :: GV
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer, optional,                         intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
@@ -118,7 +118,7 @@ end subroutine MOM_state_chksum_3arg
 subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   character(len=*),         intent(in) :: mesg
   type(thermo_var_ptrs),    intent(in) :: tv
-  type(ocean_grid_type),    intent(in) :: G
+  type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure
   integer, optional,        intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's thermodynamic state
 ! variables.
@@ -142,8 +142,8 @@ end subroutine MOM_thermo_chksum
 subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
                             u_accel_bt, v_accel_bt)
   character(len=*),                          intent(in) :: mesg
-  type(ocean_grid_type),                     intent(in) :: G
-  type(verticalGrid_type),                   intent(in) :: GV
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: CAu
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: CAv
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: PFu
@@ -194,11 +194,11 @@ end subroutine MOM_accel_chksum
 ! =============================================================================
 
 subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDiminishing)
-  type(ocean_grid_type),                     intent(in) :: G
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   character(len=*),                          intent(in) :: mesg
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, pointer, dimension(:,:,:),           intent(in) :: Temp, Salt
   logical, optional,                         intent(in) :: allowChange, permitDiminishing
 !   This subroutine monitors statistics for the model's state variables.

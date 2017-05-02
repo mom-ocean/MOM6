@@ -18,9 +18,9 @@ contains
 
 subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                                   slope_x, slope_y, N2_u, N2_v, halo)
-  type(ocean_grid_type),                       intent(in)    :: G
-  type(verticalGrid_type),                     intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h
+  type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e
   type(thermo_var_ptrs),                       intent(in)    :: tv
   real,                                        intent(in)    :: dt_kappa_smooth
@@ -28,8 +28,8 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: N2_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: N2_v
-  optional                                                     :: N2_u, N2_v
-  integer, optional,                             intent(in)    :: halo
+  optional                                                   :: N2_u, N2_v
+  integer, optional,                           intent(in)    :: halo
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -304,9 +304,9 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 end subroutine calc_isoneutral_slopes
 
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
-  type(ocean_grid_type),                    intent(in)    :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: T_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: S_in
   real,                                     intent(in)    :: kappa

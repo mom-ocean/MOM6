@@ -272,7 +272,7 @@ end subroutine initialize_ALE_sponge
 ! GMM: this routine is not being used for now.
 subroutine init_ALE_sponge_diags(Time, G, diag, CS)
   type(time_type),       target, intent(in)    :: Time
-  type(ocean_grid_type),         intent(in)    :: G
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(diag_ctrl),       target, intent(inout) :: diag
   type(ALE_sponge_CS),           pointer       :: CS
 

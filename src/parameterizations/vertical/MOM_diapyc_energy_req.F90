@@ -58,8 +58,8 @@ end type diapyc_energy_req_CS
 contains
 
 subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
-  type(ocean_grid_type),          intent(in)    :: G
-  type(verticalGrid_type),        intent(in)    :: GV
+  type(ocean_grid_type),          intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke), &
                                   intent(in)    :: h_3d
   type(thermo_var_ptrs),          intent(inout) :: tv
@@ -129,8 +129,8 @@ end subroutine diapyc_energy_req_test
 
 subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                                   G, GV, may_print, CS)
-  type(ocean_grid_type),    intent(in)    :: G
-  type(verticalGrid_type),  intent(in)    :: GV
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(GV%ke),   intent(in)    :: h_in, T_in, S_in
   real, dimension(GV%ke+1), intent(in)    :: Kd
   real,                     intent(in)    :: dt

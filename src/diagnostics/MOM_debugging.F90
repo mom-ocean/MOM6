@@ -90,7 +90,7 @@ contains
 !> MOM_debugging_init initializes the MOM_debugging module, and sets
 !! the parameterts that control which checks are active for MOM6.
 subroutine MOM_debugging_init(param_file)
-  type(param_file_type),   intent(in)    :: param_file
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_debugging" ! This module's name.
@@ -112,7 +112,7 @@ end subroutine MOM_debugging_init
 subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
   character(len=*),                    intent(in)    :: mesg
-  type(ocean_grid_type),               intent(inout) :: G
+  type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%IsdB:,G%jsd:,:),   intent(in)    :: u_comp
   real, dimension(G%isd:,G%JsdB:,:),   intent(in)    :: v_comp
   integer,                   optional, intent(in)    :: is, ie, js, je
@@ -141,7 +141,7 @@ end subroutine  check_redundant_vC3d
 subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
   character(len=*),                intent(in)    :: mesg
-  type(ocean_grid_type),           intent(inout) :: G
+  type(ocean_grid_type),           intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp
   real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp
   integer,               optional, intent(in)    :: is, ie, js, je
@@ -215,8 +215,8 @@ end subroutine  check_redundant_vC2d
 
 subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je)
   character(len=*),                     intent(in)    :: mesg
-  type(ocean_grid_type),                intent(inout) :: G
-  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in) :: array
+  type(ocean_grid_type),                intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in)    :: array
   integer,                    optional, intent(in)    :: is, ie, js, je
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -240,8 +240,8 @@ end subroutine  check_redundant_sB3d
 
 subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
   character(len=*),                 intent(in)    :: mesg
-  type(ocean_grid_type),            intent(inout) :: G
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: array
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: array
   integer,                optional, intent(in)    :: is, ie, js, je
 ! Arguments: array - The array being checked.
 !  (in)      mesg - A message indicating what is being checked.
@@ -300,7 +300,7 @@ end subroutine  check_redundant_sB2d
 subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
   character(len=*),                    intent(in)    :: mesg
-  type(ocean_grid_type),               intent(inout) :: G
+  type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: u_comp
   real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: v_comp
   integer,                   optional, intent(in)    :: is, ie, js, je
@@ -329,7 +329,7 @@ end subroutine  check_redundant_vB3d
 subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                 direction)
   character(len=*),                intent(in)    :: mesg
-  type(ocean_grid_type),            intent(inout) :: G
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: u_comp
   real, dimension(G%IsdB:,G%JsdB:), intent(in)   :: v_comp
   integer,               optional, intent(in)    :: is, ie, js, je
@@ -404,7 +404,7 @@ end subroutine  check_redundant_vB2d
 
 subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je)
   character(len=*),                     intent(in)    :: mesg
-  type(ocean_grid_type),                intent(inout) :: G
+  type(ocean_grid_type),                intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%isd:,G%jsd:,:),     intent(in)    :: array
   integer,                    optional, intent(in)    :: is, ie, js, je
 ! Arguments: array - The array being checked.
@@ -429,7 +429,7 @@ end subroutine  check_redundant_sT3d
 
 subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
   character(len=*),                 intent(in)    :: mesg
-  type(ocean_grid_type),            intent(inout) :: G
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   real, dimension(G%isd:,G%jsd:),   intent(in)    :: array
   integer,                optional, intent(in)    :: is, ie, js, je
 ! Arguments: array - The array being checked.
@@ -475,9 +475,9 @@ end subroutine  check_redundant_sT2d
 subroutine check_redundant_vT3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction)
   character(len=*),                    intent(in)    :: mesg
-  type(ocean_grid_type),               intent(inout) :: G
-  real, dimension(G%isd:,G%jsd:,:),    intent(in) :: u_comp
-  real, dimension(G%isd:,G%jsd:,:),    intent(in) :: v_comp
+  type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: u_comp
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: v_comp
   integer,                   optional, intent(in)    :: is, ie, js, je
   integer,                   optional, intent(in)    :: direction
 ! Arguments: u_comp - The u-component of the vector being checked.
@@ -504,9 +504,9 @@ end subroutine  check_redundant_vT3d
 subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
                                direction)
   character(len=*),                intent(in)    :: mesg
-  type(ocean_grid_type),           intent(inout) :: G
-  real, dimension(G%isd:,G%jsd:),  intent(in)   :: u_comp
-  real, dimension(G%isd:,G%jsd:),  intent(in)   :: v_comp
+  type(ocean_grid_type),           intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: u_comp
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: v_comp
   integer,               optional, intent(in)    :: is, ie, js, je
   integer,               optional, intent(in)    :: direction
 ! Arguments: u_comp - The u-component of the vector being checked.

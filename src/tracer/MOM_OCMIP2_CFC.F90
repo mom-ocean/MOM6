@@ -159,8 +159,8 @@ contains
 
 function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),    intent(in) :: HI
-  type(verticalGrid_type), intent(in) :: GV
-  type(param_file_type),   intent(in) :: param_file
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(OCMIP2_CFC_CS),     pointer    :: CS
   type(tracer_registry_type), pointer :: tr_Reg
   type(MOM_restart_CS),    pointer    :: restart_CS
@@ -370,9 +370,9 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                                  sponge_CSp, diag_to_Z_CSp)
   logical,                               intent(in) :: restart
   type(time_type), target,               intent(in) :: day
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,               intent(in) :: diag
   type(ocean_OBC_type),                  pointer    :: OBC
   type(OCMIP2_CFC_CS),                   pointer    :: CS
@@ -485,8 +485,8 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine initialize_OCMIP2_CFC
 
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
-  type(ocean_grid_type),                    intent(in)  :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: tr
   character(len=*),                         intent(in)  :: name
   real,                                     intent(in)  :: land_val, IC_val
@@ -527,8 +527,8 @@ end subroutine init_tracer_CFC
 
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
   real,                               intent(in) :: dt
@@ -634,9 +634,9 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 end subroutine OCMIP2_CFC_column_physics
 
 function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(OCMIP2_CFC_CS),                pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -691,9 +691,9 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function OCMIP2_CFC_stock
 
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in) :: G
+  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
   type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(OCMIP2_CFC_CS),                      pointer    :: CS
 !   This subroutine sets up the fields that the coupler needs to calculate the
 ! CFC fluxes between the ocean and atmosphere.

@@ -67,8 +67,8 @@ subroutine BFB_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
 ! such a way that the temperature of the topmost layer is equal to the SST at the southern edge of the domain. The temperatures are
 ! then converted to densities of the top and bottom layers and linearly interpolated for the intermediate layers.
   real, dimension(NKMEM_), intent(out) :: Rlay, g_prime
-  type(verticalGrid_type), intent(in)  :: GV
-  type(param_file_type),   intent(in)  :: param_file
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),          pointer     :: eqn_of_state
   real                                 :: drho_dt, SST_s, T_bot, rho_top, rho_bot
   integer                              :: k, nz
@@ -106,12 +106,12 @@ end subroutine BFB_set_coord
 subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, CSp, h)
 ! This subroutine sets up the sponges for the southern bouundary of the domain. Maximum damping occurs within 2 degrees lat of the
 ! boundary. The damping linearly decreases northward over the next 2 degrees.
-  type(ocean_grid_type), intent(in)                   :: G
+  type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
   logical,               intent(in)                   :: use_temperature
   type(thermo_var_ptrs), intent(in)                   :: tv
-  type(param_file_type), intent(in)                   :: param_file
+  type(param_file_type), intent(in)                   :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),       pointer                      :: CSp
-  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h
+  real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   !call MOM_error(FATAL, &
   ! "BFB_initialization.F90, BFB_initialize_sponges: " // &
   ! "Unmodified user routine called - you must edit the routine to use it")

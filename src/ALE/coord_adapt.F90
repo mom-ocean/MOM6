@@ -90,12 +90,12 @@ end subroutine set_adapt_params
 
 subroutine build_adapt_column(CS, G, GV, tv, i, j, zInt, tInt, sInt, h, zNext)
   type(adapt_CS),                              intent(in)    :: CS
-  type(ocean_grid_type),                       intent(in)    :: G
-  type(verticalGrid_type),                     intent(in)    :: GV
+  type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(thermo_var_ptrs),                       intent(in)    :: tv
   integer,                                     intent(in)    :: i, j
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: zInt, tInt, sInt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext ! updated interface positions
 
   ! Local variables

@@ -280,7 +280,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type), intent(inout)  :: G
+  type(ocean_grid_type), intent(inout)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: good, fill
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: prev
