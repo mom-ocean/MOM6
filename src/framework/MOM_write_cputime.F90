@@ -78,7 +78,7 @@ subroutine write_cputime_start_clock(CS)
 end subroutine write_cputime_start_clock
 
 subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
-  type(param_file_type),  intent(in) :: param_file
+  type(param_file_type),  intent(in) :: param_file !< A structure to parse for run-time parameters
   character(len=*),       intent(in) :: directory
   type(time_type),        intent(in) :: Input_start_time
   type(write_cputime_CS), pointer    :: CS

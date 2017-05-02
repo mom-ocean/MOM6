@@ -272,7 +272,7 @@ contains
 
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   type(BT_cont_type),    pointer    :: BT_cont
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   logical,     optional, intent(in) :: alloc_faces
 
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -327,7 +327,7 @@ end subroutine dealloc_BT_cont_type
 subroutine MOM_thermovar_chksum(mesg, tv, G)
   character(len=*),                    intent(in) :: mesg
   type(thermo_var_ptrs),               intent(in) :: tv
-  type(ocean_grid_type),               intent(in) :: G
+  type(ocean_grid_type),               intent(in) :: G    !< The ocean's grid structure
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.

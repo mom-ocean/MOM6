@@ -135,11 +135,11 @@ end type set_visc_CS
 contains
 
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
+  type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in) :: tv
   type(vertvisc_type),                    intent(inout) :: visc
   type(set_visc_CS),                         pointer    :: CS
@@ -944,9 +944,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 end subroutine set_viscous_BBL
 
 function set_v_at_u(v, h, G, i, j, k, mask2dCv)
-  type(ocean_grid_type),                     intent(in) :: G
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer,                                   intent(in) :: i, j, k
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
   real                                                  :: set_v_at_u
@@ -968,9 +968,9 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv)
 end function set_v_at_u
 
 function set_u_at_v(u, h, G, i, j, k, mask2dCu)
-  type(ocean_grid_type),                  intent(in) :: G
+  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
   integer,                                intent(in) :: i, j, k
   real                                               :: set_u_at_v
@@ -992,11 +992,11 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu)
 end function set_u_at_v
 
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
-  type(ocean_grid_type),               intent(inout) :: G
-  type(verticalGrid_type),             intent(in)    :: GV
+  type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),             intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),               intent(in)    :: tv
   type(forcing),                       intent(in)    :: fluxes
   type(vertvisc_type),                 intent(inout) :: visc
@@ -1706,8 +1706,8 @@ end subroutine set_viscous_ML
 
 subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   type(hor_index_type),    intent(in)    :: HI
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(vertvisc_type),     intent(inout) :: visc
   type(MOM_restart_CS),    pointer       :: restart_CS
 !   This subroutine is used to register any fields associated with the
@@ -1774,9 +1774,9 @@ end subroutine set_visc_register_restarts
 
 subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(vertvisc_type),     intent(inout) :: visc
   type(set_visc_CS),       pointer       :: CS

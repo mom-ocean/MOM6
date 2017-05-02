@@ -230,8 +230,8 @@ contains
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                          dSV_dT, dSV_dS, TKE_forced, Buoy_Flux, dt_diag, last_call, &
                          dT_expected, dS_expected )
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: TKE_forced
@@ -1883,7 +1883,7 @@ end subroutine energetic_PBL_get_MLD
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
 subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   real, intent(in)  :: USTair
-  type(verticalGrid_type), intent(in) :: GV
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, intent(out) :: U10
   real, parameter :: vonkar = 0.4
   real, parameter :: nu=1e-6
@@ -1943,7 +1943,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
        ustar, &
        ! boundary layer depth (m)
        hbl
-  type(verticalGrid_type), intent(in) :: GV
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, intent(out) :: LA
 ! Local variables
   ! parameters
@@ -2019,9 +2019,9 @@ endsubroutine Get_LA_windsea
 
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(energetic_PBL_CS), pointer        :: CS
 ! Arguments: Time - The current model time.

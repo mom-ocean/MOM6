@@ -437,7 +437,7 @@ logical function isPointInCell(G, i, j, x, y)
 end function isPointInCell
 
 subroutine set_first_direction(G, y_first)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   integer,               intent(in) :: y_first
 
   G%first_direction = y_first

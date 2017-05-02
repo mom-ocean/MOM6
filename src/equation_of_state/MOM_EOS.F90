@@ -2113,7 +2113,7 @@ end subroutine int_spec_vol_dp_generic
 subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   use MOM_grid, only : ocean_grid_type
   !> The horizontal index structure
-  type(ocean_grid_type),                      intent(in)  :: G
+  type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
 
   !> Potential temperature referenced to the surface (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout)  :: T

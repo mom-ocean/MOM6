@@ -194,8 +194,8 @@ contains
 
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                           optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d
   type(thermo_var_ptrs),                     intent(inout) :: tv
@@ -852,8 +852,8 @@ end subroutine bulkmixedlayer
 
 subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                  dKE_CA, cTKE, j, G, GV, CS, nz_conv)
-  type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),           intent(in)    :: GV
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, u, v
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: T, S, R0, Rcv, d_eb
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: eps
@@ -982,8 +982,8 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
                                  dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
-  type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),           intent(in)    :: GV
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, d_eb
   real, dimension(SZI_(G)),          intent(out)   :: htot, Ttot, Stot
   real, dimension(SZI_(G)),          intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
@@ -1306,8 +1306,8 @@ end subroutine mixedlayer_convection
 subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                              TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                              j, ksort, G, GV, CS)
-  type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),           intent(in)    :: GV
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G)),          intent(in)    :: htot, h_CA
   type(forcing),                     intent(in)    :: fluxes
   real, dimension(SZI_(G)),          intent(inout) :: Conv_En
@@ -1492,8 +1492,8 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                   dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
                                   Pen_SW_bnd, opacity_band, TKE, &
                                   Idecay_len_TKE, j, ksort, G, GV, CS)
-  type(ocean_grid_type),             intent(in)    :: G
-  type(verticalGrid_type),           intent(in)    :: GV
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, d_eb
   real, dimension(SZI_(G)),          intent(inout) :: htot, Ttot, Stot
   real, dimension(SZI_(G)),          intent(inout) :: uhtot, vhtot
@@ -1808,8 +1808,8 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 end subroutine mechanical_entrainment
 
 subroutine sort_ML(h, R0, eps, G, GV, CS, ksort)
-  type(ocean_grid_type),                intent(in)  :: G
-  type(verticalGrid_type),              intent(in)  :: GV
+  type(ocean_grid_type),                intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),              intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: h, R0, eps
   type(bulkmixedlayer_CS),              pointer     :: CS
   integer, dimension(SZI_(G),SZK_(GV)), intent(out) :: ksort
@@ -1866,8 +1866,8 @@ end subroutine sort_ML
 
 subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS, &
                      dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
-  type(ocean_grid_type),                intent(in)    :: G
-  type(verticalGrid_type),              intent(in)    :: GV
+  type(ocean_grid_type),                intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),              intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: h, T, S, R0, Rcv
   real, dimension(SZK_(GV)),            intent(in)    :: RcvTgt
   real, dimension(SZI_(G),SZK_(GV)),    intent(inout) :: eps, d_ea, d_eb
@@ -2179,8 +2179,8 @@ end subroutine resort_ML
 
 subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h, T, S, R0, Rcv
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt
   real,                               intent(in)    :: dt, dt_diag
@@ -3068,8 +3068,8 @@ end subroutine mixedlayer_detrain_2
 
 subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
                                 j, G, GV, CS, dRcv_dT, dRcv_dS, max_BL_det)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h, T, S, R0, Rcv
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt
   real,                               intent(in)    :: dt, dt_diag
@@ -3354,9 +3354,9 @@ end subroutine mixedlayer_detrain_1
 
 subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(bulkmixedlayer_CS), pointer       :: CS
 ! Arguments: Time - The current model time.

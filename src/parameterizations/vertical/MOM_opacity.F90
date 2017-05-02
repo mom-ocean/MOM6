@@ -121,8 +121,8 @@ contains
 subroutine set_opacity(optics, fluxes, G, GV, CS)
   type(optics_type),                   intent(inout) :: optics
   type(forcing),                       intent(in)    :: fluxes
-  type(ocean_grid_type),               intent(in)    :: G
-  type(verticalGrid_type),             intent(in)    :: GV
+  type(ocean_grid_type),               intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),             intent(in)    :: GV   !< The ocean's vertical grid structure
   type(opacity_CS),                    pointer       :: CS
 ! Arguments: (inout) opacity - The inverse of the vertical absorption decay
 !                     scale for penetrating shortwave radiation, in m-1.
@@ -246,7 +246,7 @@ end subroutine set_opacity
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(optics_type),              intent(inout)  :: optics
   type(forcing),                  intent(in)     :: fluxes
-  type(ocean_grid_type),          intent(in)     :: G
+  type(ocean_grid_type),          intent(in)     :: G    !< The ocean's grid structure
   type(opacity_CS),               pointer        :: CS
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: chl_in
 ! Arguments: fluxes - A structure containing pointers to any possible
@@ -478,8 +478,8 @@ end function
 
 subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(tracer_flow_control_CS), target, intent(in) :: tracer_flow
   type(opacity_CS),        pointer       :: CS

@@ -271,11 +271,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
                  Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in)    :: tv
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
@@ -1051,11 +1051,11 @@ end subroutine step_MOM_dyn_legacy_split
 ! =============================================================================
 
 subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                      intent(in)    :: dt
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 
@@ -1106,8 +1106,8 @@ end subroutine adjustments_dyn_legacy_split
 
 subroutine register_restarts_dyn_legacy_split(HI, GV, param_file, CS, restart_CS, uh, vh)
   type(hor_index_type),          intent(in)    :: HI
-  type(verticalGrid_type),       intent(in)    :: GV
-  type(param_file_type),         intent(in)    :: param_file
+  type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),         intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(MOM_dyn_legacy_split_CS), pointer       :: CS
   type(MOM_restart_CS),          pointer       :: restart_CS
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), target, intent(inout) :: uh
@@ -1209,16 +1209,16 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, visc, &
                       dirs, ntrunc)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh
   real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: eta
   type(time_type),                   target, intent(in)    :: Time
-  type(param_file_type),                     intent(in)    :: param_file
+  type(param_file_type),                     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS

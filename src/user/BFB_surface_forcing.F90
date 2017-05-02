@@ -90,8 +90,8 @@ subroutine BFB_buoyancy_forcing(state, fluxes, day, dt, G, CS)
   type(forcing),                 intent(inout) :: fluxes
   type(time_type),               intent(in)    :: day
   real,                          intent(in)    :: dt
-  type(ocean_grid_type),         intent(in)    :: G
-  type(BFB_surface_forcing_CS), pointer       :: CS
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  type(BFB_surface_forcing_CS),  pointer       :: CS
 
 !    This subroutine specifies the current surface fluxes of buoyancy or
 !  temperature and fresh water.  It may also be modified to add
@@ -249,8 +249,8 @@ end subroutine alloc_if_needed
 
 subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
   type(time_type),                            intent(in) :: Time
-  type(ocean_grid_type),                      intent(in) :: G
-  type(param_file_type),                      intent(in) :: param_file
+  type(ocean_grid_type),                      intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),                      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,                    intent(in) :: diag
   type(BFB_surface_forcing_CS), pointer    :: CS
 ! Arguments: Time - The current model time.

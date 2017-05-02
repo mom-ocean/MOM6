@@ -51,7 +51,7 @@ contains
 subroutine initialize_ice_thickness (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   character(len=40)  :: mod = "initialize_ice_thickness" ! This subroutine's name.
@@ -76,7 +76,7 @@ end subroutine initialize_ice_thickness
 subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   !  This subroutine reads ice thickness and area from a file and puts it into
@@ -157,7 +157,7 @@ end subroutine initialize_ice_thickness_from_file
 subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   character(len=40)  :: mod = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
@@ -245,7 +245,7 @@ end subroutine initialize_ice_thickness_channel
 !      h_boundary_values, &
 !      hmask, G, PF)
 
-!   type(ocean_grid_type), intent(in)                 :: G
+!   type(ocean_grid_type), intent(in)                 :: G    !< The ocean's grid structure
 !   real, intent(inout), dimension(SZIB_(G),SZJ_(G))  :: u_face_mask_boundary, u_flux_boundary_values
 !   real, intent(inout), dimension(SZI_(G),SZJB_(G))  :: v_face_mask_boundary, v_flux_boundary_values
 !   real, intent(inout), dimension(SZIB_(G),SZJB_(G)) :: u_boundary_values, v_boundary_values
@@ -291,7 +291,7 @@ end subroutine initialize_ice_thickness_channel
 !   hmask, &
 !   G, flux_bdry, PF )
 
-!   type(ocean_grid_type), intent(in)                 :: G
+!   type(ocean_grid_type), intent(in)                 :: G    !< The ocean's grid structure
 !   real, dimension(SZIB_(G),SZJ_(G)),  intent(inout) :: u_face_mask_boundary, u_flux_boundary_values
 !   real, dimension(SZI_(G),SZJB_(G)),  intent(inout) :: v_face_mask_boundary, v_flux_boundary_values
 !   real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: u_boundary_values, v_boundary_values
