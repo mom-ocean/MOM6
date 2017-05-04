@@ -3318,15 +3318,15 @@ end subroutine set_restart_fields
 !! model by setting the appropriate pointers in state.  Unused fields
 !! are set to NULL.
 subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
-  type(ocean_grid_type),                          intent(inout) :: G      !< ocean grid structure
-  type(verticalGrid_type),                        intent(inout) :: GV     !< ocean vertical grid structure
-  type(surface),                                  intent(inout) :: state  !< ocean surface state
-  real, target, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u      !< zonal velocity (m/s)
-  real, target, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v      !< meridional velocity (m/s)
-  real, target, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(SZI_(G),SZJ_(G)),       intent(inout) :: ssh    !< time mean surface height (m)
-  type(MOM_control_struct),                       intent(inout) :: CS     !< control structure
-  real, optional, pointer, dimension(:,:)                       :: p_atm  !< atmospheric pressure (Pascal)
+  type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),                   intent(inout) :: GV     !< ocean vertical grid structure
+  type(surface),                             intent(inout) :: state  !< ocean surface state
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u      !< zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v      !< meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< layer thickness (m or kg/m2)
+  real, target, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh    !< time mean surface height (m)
+  type(MOM_control_struct),                  intent(inout) :: CS     !< control structure
+  real, dimension(:,:),            optional, pointer       :: p_atm  !< atmospheric pressure (Pascal)
 
   ! local
   real :: depth(SZI_(G))              ! distance from the surface (meter)
@@ -3349,13 +3349,43 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
 
+  if (.not.state%arrays_allocated) then
+    if (CS%use_temperature) then
+      allocate(state%SST(isd:ied,jsd:jed)) ; state%SST(:,:) = 0.0
+      allocate(state%SSS(isd:ied,jsd:jed)) ; state%SSS(:,:) = 0.0
+    else
+      allocate(state%sfc_density(isd:ied,jsd:jed)) ; state%sfc_density(:,:) = 0.0
+    endif
+    allocate(state%Hml(isd:ied,jsd:jed)) ; state%Hml(:,:) = 0.0
+    allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
+    allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
+
+  ! Allocate structures for ocean_mass, ocean_heat, and ocean_salt.  This could
+  ! be wrapped in a run-time flag to disable it for economy, since the 3-d
+  ! sums are not negligible.
+    allocate(state%ocean_mass(isd:ied,jsd:jed)) ; state%ocean_mass(:,:) = 0.0
+    if (CS%use_temperature) then
+      allocate(state%ocean_heat(isd:ied,jsd:jed)) ; state%ocean_heat(:,:) = 0.0
+      allocate(state%ocean_salt(isd:ied,jsd:jed)) ; state%ocean_salt(:,:) = 0.0
+    endif
+    allocate(state%salt_deficit(isd:ied,jsd:jed)) ; state%salt_deficit(:,:) = 0.0
+
+    state%arrays_allocated = .true.
+  endif
   state%sea_lev => ssh
+  state%frazil => CS%tv%frazil
+  state%TempxPmE => CS%tv%TempxPmE
+  state%internal_heat => CS%tv%internal_heat
+  if (associated(CS%visc%taux_shelf)) state%taux_shelf => CS%visc%taux_shelf
+  if (associated(CS%visc%tauy_shelf)) state%tauy_shelf => CS%visc%tauy_shelf
 
   if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-
+    ! Correct the output sea surface height for the contribution from the
+    ! atmospheric pressure
     do j=js,je ; do i=is,ie
       if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
-        call calculate_density(CS%tv%T(i,j,1),CS%tv%S(i,j,1) , p_atm(i,j)/2.0 , Rho_conv, CS%tv%eqn_of_state)
+        call calculate_density(CS%tv%T(i,j,1), CS%tv%S(i,j,1), p_atm(i,j)/2.0, &
+                               Rho_conv, CS%tv%eqn_of_state)
       else
         Rho_conv=GV%Rho0
       endif
@@ -3365,39 +3395,25 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   endif ; endif
 
   if (CS%bulkmixedlayer) then
-    state%SST(isd:,jsd:) => CS%tv%T(:,:,1)
-    state%SSS(isd:,jsd:) => CS%tv%S(:,:,1)
-    state%u(IsdB:,jsd:) => u(:,:,1)
-    state%v(isd:,JsdB:) => v(:,:,1)
-    nullify(state%sfc_density)
-    if (associated(CS%Hml)) state%Hml => CS%Hml
-  else
-    if (CS%use_temperature) then
-      if (.not.associated(state%SST)) then
-        allocate(state%SST(isd:ied,jsd:jed)) ; state%SST(:,:) = 0.0
-      endif
-      if (.not.associated(state%SSS)) then
-        allocate(state%SSS(isd:ied,jsd:jed)) ; state%SSS(:,:) = 0.0
-      endif
-      nullify(state%sfc_density)
-    else
-      if (.not.associated(state%sfc_density)) then
-        allocate(state%sfc_density(isd:ied,jsd:jed)) ; state%sfc_density(:,:) = 0.0
-      endif
-      nullify(state%SST) ; nullify(state%SSS)
-    endif
-    if (.not.associated(state%u)) then
-       allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
-    endif
-    if (.not.associated(state%v)) then
-       allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
-    endif
+    if (CS%use_temperature) then ; do j=js,je ; do i=is,ie
+      state%SST(i,j) = CS%tv%T(i,j,1)
+      state%SSS(i,j) = CS%tv%S(i,j,1)
+    enddo ; enddo ; endif
+    do j=js,je ; do I=IscB,IecB
+      state%u(I,j) = u(I,j,1)
+    enddo ; enddo
+    do J=JscB,JecB ; do i=is,ie
+      state%v(i,J) = v(i,J,1)
+    enddo ; enddo
 
-    if (.not.associated(state%Hml)) allocate(state%Hml(isd:ied,jsd:jed))
+    if (associated(CS%Hml)) then ; do j=js,je ; do i=is,ie
+      state%Hml(i,j) = CS%Hml(i,j)
+    enddo ; enddo ; endif
+  else
 
     depth_ml = CS%Hmix
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,state,h,depth_ml,GV) private(depth,dh)
+    !$OMP parallel do default(shared) private(depth,dh)
     do j=js,je
       do i=is,ie
         depth(i) = 0.0
@@ -3441,7 +3457,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
 !   Determine the mean velocities in the uppermost depth_ml fluid.
     if (CS%Hmix_UV>0.) then
       depth_ml = CS%Hmix_UV
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,iscB,iecB,jscB,jecB,CS,state,h,v,depth_ml,GV) private(depth,dh,hv)
+      !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=jscB,jecB
         do i=is,ie
           depth(i) = 0.0
@@ -3467,7 +3483,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         enddo
       enddo ! end of j loop
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,iscB,iecB,jscB,jecB,CS,state,h,u,depth_ml,GV) private(depth,dh,hu)
+      !$OMP parallel do default(shared) private(depth,dh,hu)
       do j=js,je
         do I=iscB,iecB
           depth(I) = 0.0
@@ -3493,32 +3509,17 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         enddo
       enddo ! end of j loop
     else ! Hmix_UV<=0.
-      state%u(IsdB:,jsd:) => u(:,:,1)
-      state%v(isd:,JsdB:) => v(:,:,1)
+      do j=js,je ; do I=IscB,IecB
+        state%u(I,j) = u(I,j,1)
+      enddo ; enddo
+      do J=JscB,JecB ; do i=is,ie
+        state%v(i,J) = v(i,J,1)
+      enddo ; enddo
     endif
   endif                                              ! end BULKMIXEDLAYER
 
-  state%frazil => CS%tv%frazil
-  state%TempxPmE => CS%tv%TempxPmE
-  state%internal_heat => CS%tv%internal_heat
-
-  ! Allocate structures for ocean_mass, ocean_heat, and ocean_salt.  This could
-  ! be wrapped in a run-time flag to disable it for economy, since the 3-d
-  ! sums are not negligible.
-  if (.not.associated(state%ocean_mass)) then
-    allocate(state%ocean_mass(isd:ied,jsd:jed)) ; state%ocean_mass(:,:) = 0.0
-  endif
-  if (CS%use_temperature) then
-    if (.not.associated(state%ocean_heat)) then
-      allocate(state%ocean_heat(isd:ied,jsd:jed)) ; state%ocean_heat(:,:) = 0.0
-    endif
-    if (.not.associated(state%ocean_salt)) then
-      allocate(state%ocean_salt(isd:ied,jsd:jed)) ; state%ocean_salt(:,:) = 0.0
-    endif
-  endif
-
-!$OMP parallel default(none) shared(is,ie,js,je,nz,GV,h,state,CS) private(mass)
-  if (associated(state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
+!$OMP parallel default(shared(is,ie,js,je,nz,GV,h,state,CS) private(mass)
+  if (allocated(state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
 !$OMP do
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
@@ -3526,8 +3527,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     enddo ; enddo
   endif
 
-  if (associated(state%ocean_mass) .and. associated(state%ocean_heat) .and. &
-      associated(state%ocean_salt)) then
+  if (allocated(state%ocean_mass) .and. allocated(state%ocean_heat) .and. &
+      allocated(state%ocean_salt)) then
 !$OMP do
     do j=js,je ; do i=is,ie
       state%ocean_mass(i,j) = 0.0
@@ -3542,7 +3543,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                               mass * (1.0e-3*CS%tv%S(i,j,k))
     enddo ; enddo ; enddo
   else
-    if (associated(state%ocean_mass)) then
+    if (allocated(state%ocean_mass)) then
 !$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_mass(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
@@ -3550,7 +3551,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         state%ocean_mass(i,j) = state%ocean_mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
-    if (associated(state%ocean_heat)) then
+    if (allocated(state%ocean_heat)) then
 !$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_heat(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
@@ -3559,7 +3560,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       enddo ; enddo ; enddo
     endif
-    if (associated(state%ocean_salt)) then
+    if (allocated(state%ocean_salt)) then
 !$OMP do
       do j=js,je ; do i=is,ie ; state%ocean_salt(i,j) = 0.0 ; enddo ; enddo
 !$OMP do
@@ -3571,9 +3572,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     endif
   endif
 !$OMP end parallel
-
-  if (associated(CS%visc%taux_shelf)) state%taux_shelf => CS%visc%taux_shelf
-  if (associated(CS%visc%tauy_shelf)) state%tauy_shelf => CS%visc%tauy_shelf
 
   if (associated(CS%tracer_flow_CSp)) then
     if (.not.associated(state%tr_fields)) allocate(state%tr_fields)
