@@ -3365,10 +3365,10 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   endif ; endif
 
   if (CS%bulkmixedlayer) then
-    state%SST => CS%tv%T(:,:,1)
-    state%SSS => CS%tv%S(:,:,1)
-    state%u => u(:,:,1)
-    state%v => v(:,:,1)
+    state%SST(isd:,jsd:) => CS%tv%T(:,:,1)
+    state%SSS(isd:,jsd:) => CS%tv%S(:,:,1)
+    state%u(IsdB:,jsd:) => u(:,:,1)
+    state%v(isd:,JsdB:) => v(:,:,1)
     nullify(state%sfc_density)
     if (associated(CS%Hml)) state%Hml => CS%Hml
   else
@@ -3493,8 +3493,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
         enddo
       enddo ! end of j loop
     else ! Hmix_UV<=0.
-      state%u => u(:,:,1)
-      state%v => v(:,:,1)
+      state%u(IsdB:,jsd:) => u(:,:,1)
+      state%v(isd:,JsdB:) => v(:,:,1)
     endif
   endif                                              ! end BULKMIXEDLAYER
 
