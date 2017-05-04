@@ -1457,8 +1457,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
-  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS, &
-                               fluxes%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
+  call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS)
 
   call enable_averaging(dt*n_max,Time_local, CS%diag)
 
@@ -1691,8 +1691,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
   endif
 
-  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS, &
-                               fluxes%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
+  call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
 
   call cpu_clock_end(id_clock_tracer)
 
@@ -3313,20 +3313,50 @@ subroutine set_restart_fields(GV, param_file, CS)
 
 end subroutine set_restart_fields
 
+!> This subroutine applies a correction to the sea surface height to compensate
+!! for the atmospheric pressure (the inverse barometer).
+subroutine adjust_ssh_for_p_atm(CS, G, GV, ssh, p_atm)
+  type(MOM_control_struct),          intent(in)    :: CS     !< control structure
+  type(ocean_grid_type),             intent(in)    :: G      !< ocean grid structure
+  type(verticalGrid_type),           intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh    !< time mean surface height (m)
+  real, dimension(:,:),    optional, pointer       :: p_atm  !< atmospheric pressure (Pascal)
+
+  real :: Rho_conv    ! The density used to convert surface pressure to
+                      ! a corrected effective SSH, in kg m-3.
+  real :: IgR0        ! The SSH conversion factor from Pa to m.
+  integer :: i, j, is, ie, js, je
+
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  if (ASSOCIATED(p_atm)) then
+    ! Correct the output sea surface height for the contribution from the
+    ! atmospheric pressure
+    do j=js,je ; do i=is,ie
+      if ((ASSOCIATED(CS%tv%eqn_of_state)) .and. (CS%calc_rho_for_sea_lev)) then
+        call calculate_density(CS%tv%T(i,j,1), CS%tv%S(i,j,1), p_atm(i,j)/2.0, &
+                               Rho_conv, CS%tv%eqn_of_state)
+      else
+        Rho_conv=GV%Rho0
+      endif
+      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
+      ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
+    enddo ; enddo
+  endif
+
+end subroutine adjust_ssh_for_p_atm
 
 !> This subroutine sets the surface (return) properties of the ocean
-!! model by setting the appropriate pointers in state.  Unused fields
-!! are set to NULL.
-subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
+!! model by setting the appropriate fields in state.  Unused fields
+!! are set to NULL or are unallocated.
+subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(inout) :: GV     !< ocean vertical grid structure
   type(surface),                             intent(inout) :: state  !< ocean surface state
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u      !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v      !< meridional velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh    !< time mean surface height (m)
+  real, target, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: ssh    !< time mean surface height (m)
   type(MOM_control_struct),                  intent(inout) :: CS     !< control structure
-  real, dimension(:,:),            optional, pointer       :: p_atm  !< atmospheric pressure (Pascal)
 
   ! local
   real :: depth(SZI_(G))              ! distance from the surface (meter)
@@ -3334,9 +3364,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
-  real :: Rho_conv                    ! density used to convert surface pressure to effectic SSH (Pa)
 
-  real :: IgR0, hu, hv
+  real :: hu, hv
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
   integer :: iscB, iecB, jscB, jecB, isdB, iedB, jsdB, jedB
@@ -3378,21 +3407,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
   state%internal_heat => CS%tv%internal_heat
   if (associated(CS%visc%taux_shelf)) state%taux_shelf => CS%visc%taux_shelf
   if (associated(CS%visc%tauy_shelf)) state%tauy_shelf => CS%visc%tauy_shelf
-
-  if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    ! Correct the output sea surface height for the contribution from the
-    ! atmospheric pressure
-    do j=js,je ; do i=is,ie
-      if ((ASSOCIATED(CS%tv%eqn_of_state))  .and.  (CS%calc_rho_for_sea_lev)) then
-        call calculate_density(CS%tv%T(i,j,1), CS%tv%S(i,j,1), p_atm(i,j)/2.0, &
-                               Rho_conv, CS%tv%eqn_of_state)
-      else
-        Rho_conv=GV%Rho0
-      endif
-      IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
-      ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
-    enddo ; enddo
-  endif ; endif
 
   if (CS%bulkmixedlayer) then
     if (CS%use_temperature) then ; do j=js,je ; do i=is,ie
@@ -3518,9 +3532,8 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     endif
   endif                                              ! end BULKMIXEDLAYER
 
-!$OMP parallel default(shared(is,ie,js,je,nz,GV,h,state,CS) private(mass)
   if (allocated(state%salt_deficit) .and. associated(CS%tv%salt_deficit)) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       ! Convert from gSalt to kgSalt
       state%salt_deficit(i,j) = 1000.0 * CS%tv%salt_deficit(i,j)
@@ -3529,12 +3542,12 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
 
   if (allocated(state%ocean_mass) .and. allocated(state%ocean_heat) .and. &
       allocated(state%ocean_salt)) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       state%ocean_mass(i,j) = 0.0
       state%ocean_heat(i,j) = 0.0 ; state%ocean_salt(i,j) = 0.0
     enddo ; enddo
-!$OMP do
+    !$OMP parallel do default(shared) private(mass)
     do j=js,je ; do k=1,nz; do i=is,ie
       mass = GV%H_to_kg_m2*h(i,j,k)
       state%ocean_mass(i,j) = state%ocean_mass(i,j) + mass
@@ -3544,26 +3557,26 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
     enddo ; enddo ; enddo
   else
     if (allocated(state%ocean_mass)) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie ; state%ocean_mass(i,j) = 0.0 ; enddo ; enddo
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=js,je ; do k=1,nz ; do i=is,ie
         state%ocean_mass(i,j) = state%ocean_mass(i,j) + GV%H_to_kg_m2*h(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (allocated(state%ocean_heat)) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie ; state%ocean_heat(i,j) = 0.0 ; enddo ; enddo
-!$OMP do
+      !$OMP parallel do default(shared) private(mass)
       do j=js,je ; do k=1,nz ; do i=is,ie
         mass = GV%H_to_kg_m2*h(i,j,k)
         state%ocean_heat(i,j) = state%ocean_heat(i,j) + mass*CS%tv%T(i,j,k)
       enddo ; enddo ; enddo
     endif
     if (allocated(state%ocean_salt)) then
-!$OMP do
+      !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie ; state%ocean_salt(i,j) = 0.0 ; enddo ; enddo
-!$OMP do
+      !$OMP parallel do default(shared) private(mass)
       do j=js,je ; do k=1,nz ; do i=is,ie
         mass = GV%H_to_kg_m2*h(i,j,k)
         state%ocean_salt(i,j) = state%ocean_salt(i,j) + &
@@ -3571,7 +3584,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS, p_atm)
       enddo ; enddo ; enddo
     endif
   endif
-!$OMP end parallel
 
   if (associated(CS%tracer_flow_CSp)) then
     if (.not.associated(state%tr_fields)) allocate(state%tr_fields)
