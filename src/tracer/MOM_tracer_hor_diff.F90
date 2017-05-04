@@ -473,9 +473,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
   if (CS%debug) then
     call uvchksum("After tracer diffusion khdt_[xy]", &
-                  khdt_x, khdt_y, G%HI, haloshift=2)
+                  khdt_x, khdt_y, G%HI, haloshift=0, symmetric=.true.)
     call uvchksum("After tracer diffusion Coef_[xy]", &
-                  Coef_x, Coef_y, G%HI, haloshift=2)
+                  Coef_x, Coef_y, G%HI, haloshift=0, symmetric=.true.)
   endif
 
   if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag)
