@@ -3355,7 +3355,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u      !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v      !< meridional velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, target, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: ssh    !< time mean surface height (m)
+  real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh    !< time mean surface height (m)
   type(MOM_control_struct),                  intent(inout) :: CS     !< control structure
 
   ! local
@@ -3385,6 +3385,7 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
     else
       allocate(state%sfc_density(isd:ied,jsd:jed)) ; state%sfc_density(:,:) = 0.0
     endif
+    allocate(state%sea_lev(isd:ied,jsd:jed)) ; state%sea_lev(:,:) = 0.0
     allocate(state%Hml(isd:ied,jsd:jed)) ; state%Hml(:,:) = 0.0
     allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
     allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
@@ -3401,12 +3402,15 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
 
     state%arrays_allocated = .true.
   endif
-  state%sea_lev => ssh
   state%frazil => CS%tv%frazil
   state%TempxPmE => CS%tv%TempxPmE
   state%internal_heat => CS%tv%internal_heat
   if (associated(CS%visc%taux_shelf)) state%taux_shelf => CS%visc%taux_shelf
   if (associated(CS%visc%tauy_shelf)) state%tauy_shelf => CS%visc%tauy_shelf
+
+  do j=js,je ; do i=is,ie
+    state%sea_lev(i,j) = ssh(i,j)
+  enddo ; enddo
 
   if (CS%bulkmixedlayer) then
     if (CS%use_temperature) then ; do j=js,je ; do i=is,ie
