@@ -283,7 +283,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                               ! the barotropic accelerations.
   !---For group halo pass
   logical :: do_pass_Ray_uv, do_pass_kv_bbl_thick
-  logical :: showCallTree
+  logical :: showCallTree, sym
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: cont_stencil
@@ -291,6 +291,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   u_av => CS%u_av ; v_av => CS%v_av ; h_av => CS%h_av ; eta => CS%eta
   Idt = 1.0 / dt
+
+  sym=.false.;if (G%Domain%symmetric) sym=.true.  ! switch to include symmetric domain in checksums
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
@@ -306,7 +308,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp)
 
   if (CS%debug) then
-    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV)
+    call MOM_state_chksum("Start predictor ", u, v, h, uh, vh, G, GV, symmetric=sym)
     call check_redundant("Start predictor u ", u, v, G)
     call check_redundant("Start predictor uh ", uh, vh, G)
   endif
@@ -453,7 +455,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_accel_chksum("pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel)
+                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel, &
+                          symmetric=sym)
     call check_redundant("pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
     call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
@@ -489,12 +492,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0)
+    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   if (showCallTree) call callTree_wayPoint("done with vertvisc_coef (step_MOM_dyn_split_RK2)")
+
 
   call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
@@ -570,14 +574,15 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0)
+    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym)
     call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
     call uvchksum("Predictor 1 [uv]h", &
-                  GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2)
+                  GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2, symmetric=sym)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
-    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, haloshift=2)
+             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
+    call MOM_state_chksum("Predictor 1 init", u_init, v_init, h, uh, vh, G, GV, haloshift=2, &
+                          symmetric=sym)
     call check_redundant("Predictor 1 up", up, vp, G)
     call check_redundant("Predictor 1 uh", uh, vh, G)
   endif
@@ -586,7 +591,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0)
+    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym)
   endif
   call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
                      CS%OBC)
@@ -686,8 +691,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (CS%debug) then
-    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV)
-    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1)
+    call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, symmetric=sym)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
     call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
@@ -725,7 +730,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel)
+                          CS%diffu, CS%diffv, G, GV, CS%pbce, u_bc_accel, v_bc_accel, &
+                          symmetric=sym)
     call check_redundant("corr pre-btstep CS%Ca ", CS%Cau, CS%Cav, G)
     call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G)
     call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G)
@@ -773,13 +779,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0)
+    call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0, symmetric=sym)
     call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
     call uvchksum("Corrector 1 [uv]h", GV%H_to_kg_m2*uh, &
-                  GV%H_to_kg_m2*vh, G%HI,haloshift=2)
+                  GV%H_to_kg_m2*vh, G%HI,haloshift=2, symmetric=sym)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
-             CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt)
+                          CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
+                          symmetric=sym)
   endif
 
   ! u <- u + dt d/dz visc d/dz u
@@ -880,8 +887,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%id_v_BT_accel > 0) call post_data(CS%id_v_BT_accel, CS%v_accel_bt, CS%diag)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV)
-    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1)
+    call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, symmetric=sym)
+    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1, symmetric=sym)
     call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
