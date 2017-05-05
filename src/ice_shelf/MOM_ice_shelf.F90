@@ -5366,7 +5366,7 @@ end subroutine calc_shelf_visc_bilinear
 
 subroutine update_OD_ffrac (CS, ocean_mass, counter, nstep_velocity, time_step, velocity_update_time_step)
   type(ice_shelf_CS),         pointer   :: CS
-  real, pointer, dimension(:,:)        :: ocean_mass
+  real, dimension(CS%grid%isd:,CS%grid%jsd:) :: ocean_mass
   integer,intent(in)            :: counter
   integer,intent(in)            :: nstep_velocity
   real,intent(in)            :: time_step
