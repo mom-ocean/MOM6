@@ -51,7 +51,7 @@ contains
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
+subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmetric)
   character(len=*),                          intent(in) :: mesg
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
@@ -61,6 +61,7 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vh
   integer, optional,                         intent(in) :: haloshift
+  logical, optional,                         intent(in) :: symmetric
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -71,21 +72,23 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift)
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
   integer :: is, ie, js, je, nz, hs
+  logical :: sym
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs=1; if (present(haloshift)) hs=haloshift
-  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs)
+  sym=.false.; if (present(symmetric)) sym=symmetric
+  call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym)
   call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI, haloshift=hs)
   call uvchksum(mesg//" [uv]h", GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, &
-                G%HI, haloshift=hs)
+                G%HI, haloshift=hs, symmetric=sym)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
 
-subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
+subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift, symmetric)
   character(len=*),                          intent(in) :: mesg
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
@@ -93,6 +96,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer, optional,                         intent(in) :: haloshift
+  logical, optional,                         intent(in) :: symmetric
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.
@@ -103,14 +107,16 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift)
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
   integer :: is, ie, js, je, nz, hs
+  logical :: sym
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   hs=1; if (present(haloshift)) hs=haloshift
-  call uvchksum(mesg//" u", u, v, G%HI,haloshift=hs)
-  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI,haloshift=hs)
+  sym=.false.; if (present(symmetric)) sym=symmetric
+  call uvchksum(mesg//" u", u, v, G%HI,haloshift=hs, symmetric=sym)
+  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI, haloshift=hs)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
@@ -140,7 +146,7 @@ end subroutine MOM_thermo_chksum
 ! =============================================================================
 
 subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce, &
-                            u_accel_bt, v_accel_bt)
+                            u_accel_bt, v_accel_bt, symmetric)
   character(len=*),                          intent(in) :: mesg
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in) :: GV   !< The ocean's vertical grid structure
@@ -153,6 +159,8 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(in) :: pbce
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: u_accel_bt
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), optional, intent(in) :: v_accel_bt
+  logical, optional,                         intent(in) :: symmetric
+
 !   This subroutine writes out chksums for the model's accelerations.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      CAu - Zonal acceleration due to Coriolis and momentum
@@ -177,18 +185,21 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
 !  (in)      v_accel_bt - The meridional acceleration from terms in the
 !                         barotropic solver, in m s-2.
   integer :: is, ie, js, je, nz
+  logical :: sym
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  sym=.false.; if (present(symmetric)) sym=symmetric
 
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0)
-  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI,haloshift=0)
-  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0)
+  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym)
+  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym)
   if (present(pbce)) &
     call hchksum(GV%kg_m2_to_H*pbce, mesg//" pbce",G%HI,haloshift=0)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
-    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0)
+    call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
 end subroutine MOM_accel_chksum
 
 ! =============================================================================
