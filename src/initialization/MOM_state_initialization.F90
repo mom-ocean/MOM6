@@ -76,6 +76,8 @@ use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
 use soliton_initialization, only : soliton_initialize_thickness
 use BFB_initialization, only : BFB_initialize_sponges_southonly
+use dense_water_initialization, only : dense_water_initialize_TS
+use dense_water_initialization, only : dense_water_initialize_sponges
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -316,6 +318,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                 tv%S, h, G, GV, PF)
           case ("SCM_CVmix_tests"); call SCM_CVmix_tests_TS_init (tv%T, &
                                 tv%S, h, G, GV, PF)
+          case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, h)
           case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
           case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
                  "Unrecognized Temp & salt configuration "//trim(config))
@@ -453,6 +456,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                PF, sponge_CSp, h)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
+      case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
+           sponge_CSp, ALE_sponge_CSp)
       case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
                                                PF, sponge_CSp)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
