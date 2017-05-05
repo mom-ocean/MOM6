@@ -25,6 +25,7 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
+
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
@@ -36,6 +37,7 @@ use seamount_initialization, only : seamount_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
 use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
+use dense_water_initialization, only : dense_water_initialize_topography
 
 use netcdf
 
@@ -200,6 +202,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t shelfwave - exponential slope for shelfwave test case.\n"//&
                  " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
+                 " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
   max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
@@ -219,6 +222,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
     case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
