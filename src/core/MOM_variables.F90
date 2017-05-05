@@ -54,6 +54,8 @@ type, public :: surface
     Hml, &      !< The mixed layer depth in m.
     u, &        !< The mixed layer zonal velocity in m s-1.
     v, &        !< The mixed layer meridional velocity in m s-1.
+    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+                !! used, that is compensated for in sea_lev.
     ocean_mass, &  !< The total mass of the ocean in kg m-2.
     ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
     ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
@@ -70,11 +72,9 @@ type, public :: surface
                          !!   This should be prescribed in the forcing fields,
                          !! but as it often is not, this is a useful heat budget
                          !! diagnostic.
-    internal_heat => NULL() , & !< Any internal or geothermal heat sources that
+    internal_heat => NULL() !< Any internal or geothermal heat sources that
                          !! are applied to the ocean integrated over the call
                          !! to step_MOM, in deg C kg m-2.
-    sea_lev => NULL()    !< The sea level in m.  If a reduced  surface gravity is
-                         !! used, that is compensated for in sea_lev.
   type(coupler_2d_bc_type), pointer :: &
     tr_fields  => NULL() !< A structure that may contain an  array of named
                          !! fields describing tracer-related quantities.
