@@ -3136,11 +3136,11 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
 end subroutine btcalc
 
+!> The function find_uhbt determines the zonal transport for a given velocity.
 function find_uhbt(u, BTC) result(uhbt)
-  real, intent(in) :: u
+  real, intent(in) :: u    !< The local zonal velocity, in m s-1
   type(local_BT_cont_u_type), intent(in) :: BTC
   real :: uhbt ! The result
-  ! This function evaluates the zonal transport function.
 
   if (u == 0.0) then
     uhbt = 0.0
@@ -3253,8 +3253,9 @@ function uhbt_to_ubt(uhbt, BTC, guess) result(ubt)
 
 end function uhbt_to_ubt
 
+!> The function find_vhbt determines the meridional transport for a given velocity.
 function find_vhbt(v, BTC) result(vhbt)
-  real, intent(in) :: v
+  real, intent(in) :: v    !< The local meridional velocity, in m s-1
   type(local_BT_cont_v_type), intent(in) :: BTC
   real :: vhbt ! The result
   ! This function evaluates the meridional transport function.
@@ -3846,8 +3847,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
   type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
-  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
+  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u    !< The zonal velocity, in m s-1
+  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v    !< The meridional velocity, in m s-1
   real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, intent(in), dimension(SZI_(G),SZJ_(G))    :: eta
   type(time_type), target,          intent(in)    :: Time
