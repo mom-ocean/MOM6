@@ -324,10 +324,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
-      u_old_rad_OBC(I,j,k) = u(I,j,k)  !### Should be u_av(I,j,k)?
+      u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
-      v_old_rad_OBC(i,J,k) = v(i,J,k)  !### Should be u_av(I,j,k)?
+      v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
 
