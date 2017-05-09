@@ -1275,6 +1275,9 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   integer :: i, j, k
   real    :: nominalDepth, totalThickness
   real, dimension(SZK_(GV)+1) :: zOld, zNew
+#ifdef __DO_SAFETY_CHECKS__
+  real    :: dh
+#endif
 
   nz = GV%ke
 
