@@ -246,19 +246,36 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
 
 end subroutine add_tracer_diagnostics
 
-!> This subroutine writes out chksums for thermodynamic state variables.
-subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
+!> This subroutine writes out chksums for tracers. If
+subroutine MOM_tracer_chksum(mesg, Tr, ntr, G, h)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
   type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
   integer,                  intent(in) :: ntr    !< number of registered tracers
   type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in) :: h !< Layer thicknesses, if present
+                                                                               !! inventories will be checksummed
 
-  integer :: is, ie, js, je, nz, m
+  integer :: is, ie, js, je, nz
+  integer :: i, j, k, m
+
+  real, dimension(:,:,:), allocatable :: tr_inv
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  do m=1,ntr
-    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
-  enddo
+  ! Check for presence of h if inventories are requested
+  if (present(h)) then
+    if (.not. ALLOCATED(tr_inv)) allocate(tr_inv(SZI_(G),SZJ_(G),SZK_(G)))
+    do m=1,ntr
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        tr_inv(i,j,k) = Tr(m)%t(i,j,k) * h(i,j,k) * G%areaT(i,j) * G%mask2dT(i,j)
+      enddo ; enddo ; enddo
+      call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
+    enddo
+  else ! Concentrations are checksummed
+    do m=1,ntr
+      call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
+    enddo
+  endif
 
 end subroutine MOM_tracer_chksum
 
