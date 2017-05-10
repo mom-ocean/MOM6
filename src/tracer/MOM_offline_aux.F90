@@ -651,6 +651,16 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
       timelevel=ridx_sum,position=CENTER)
   endif
 
+  do j=js,je ; do i=is,ie
+    if (G%mask2dT(i,j)>0.) then
+      do k=1,nz
+        if (h_start(i,j,k)<GV%Angstrom) exit
+      enddo
+      temp_mean(:,:,k:nz) = temp_mean(i,j,k)
+      salt_mean(:,:,k:nz) = salt_mean(i,j,k)
+    endif
+  enddo ; enddo 
+
   ! Check if reading vertical diffusivities or entrainment fluxes
   call read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), domain=G%Domain%mpp_domain, &
                   timelevel=ridx_sum,position=CENTER)
