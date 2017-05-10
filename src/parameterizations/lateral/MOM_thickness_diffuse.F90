@@ -288,18 +288,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   endif
 
   if (CS%debug) then
-    call uvchksum("Kh_[uv]", Kh_u(:,:,:), Kh_v(:,:,:), G%HI,haloshift=0)
-    call uvchksum("int_slope_[uv]", int_slope_u(:,:,:), &
-                  int_slope_v(:,:,:), G%HI,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse_1 h",G%HI,haloshift=1)
-    call hchksum(e(:,:,:),"thickness_diffuse_1 e",G%HI,haloshift=1)
+    call uvchksum("Kh_[uv]", Kh_u, Kh_v, G%HI,haloshift=0)
+    call uvchksum("int_slope_[uv]", int_slope_u, int_slope_v, G%HI, haloshift=0)
+    call hchksum(h, "thickness_diffuse_1 h", G%HI, haloshift=1, scale=GV%H_to_m)
+    call hchksum(e, "thickness_diffuse_1 e", G%HI, haloshift=1)
     if (use_stored_slopes) then
-      call uvchksum("VarMix%slope_[xy]", VarMix%slope_x(:,:,:), &
-                    VarMix%slope_y(:,:,:), G%HI,haloshift=0)
+      call uvchksum("VarMix%slope_[xy]", VarMix%slope_x, VarMix%slope_y, &
+                    G%HI, haloshift=0)
     endif
     if (associated(tv%eqn_of_state)) then
-      call hchksum(tv%T(:,:,:),"thickness_diffuse T",G%HI,haloshift=1)
-      call hchksum(tv%S(:,:,:),"thickness_diffuse S",G%HI,haloshift=1)
+      call hchksum(tv%T, "thickness_diffuse T", G%HI, haloshift=1)
+      call hchksum(tv%S, "thickness_diffuse S", G%HI, haloshift=1)
     endif
   endif
 
@@ -386,11 +385,11 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   call diag_update_remap_grids(CS%diag)
 
   if (CS%debug) then
-    call uvchksum("thickness_diffuse [uv]hD", uhD(:,:,:)*H_to_m, &
-                  vhD(:,:,:)*H_to_m, G%HI,haloshift=0)
-    call uvchksum("thickness_diffuse [uv]htr", uhtr(:,:,:)*H_to_m, &
-                  vhtr(:,:,:)*H_to_m, G%HI,haloshift=0)
-    call hchksum(h(:,:,:)*H_to_m,"thickness_diffuse h",G%HI,haloshift=0)
+    call uvchksum("thickness_diffuse [uv]hD", uhD, vhD, &
+                  G%HI, haloshift=0, scale=GV%H_to_m)
+    call uvchksum("thickness_diffuse [uv]htr", uhtr, vhtr, &
+                  G%HI, haloshift=0, scale=GV%H_to_m)
+    call hchksum(h, "thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
 
 end subroutine thickness_diffuse

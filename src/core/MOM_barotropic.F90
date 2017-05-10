@@ -1433,27 +1433,25 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
 
   if (CS%debug) then
-    call uvchksum("BT [uv]hbt", uhbt*GV%H_to_m, vhbt*GV%H_to_m, &
-                  CS%debug_BT_HI,haloshift=0)
-    call uvchksum("BT Initial [uv]bt", ubt, vbt, &
-                  CS%debug_BT_HI,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta", CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0, &
+                  scale=GV%H_to_m)
+    call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0)
+    call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
     call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
-                  CS%debug_BT_HI,haloshift=0)
-    if (interp_eta_PF) then
-      call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0)
-    else
-      call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0)
-    endif
-    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, &
                   CS%debug_BT_HI, haloshift=0)
-    call uvchksum("BT [uv]hbt0", uhbt0*GV%H_to_m, vhbt0*GV%H_to_m, &
-                 CS%debug_BT_HI,haloshift=0)
+    if (interp_eta_PF) then
+      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+    else
+      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, scale=GV%H_to_m)
+    endif
+    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, CS%debug_BT_HI, haloshift=0)
+    call uvchksum("BT [uv]hbt0", uhbt0, vhbt0, CS%debug_BT_HI, &
+                  haloshift=0, scale=GV%H_to_m)
     if (.not. use_BT_cont) then
-      call uvchksum("BT Dat[uv]", GV%H_to_m*Datu, GV%H_to_m*Datv, &
-                    CS%debug_BT_HI, haloshift=1)
+      call uvchksum("BT Dat[uv]", Datu, Datv, CS%debug_BT_HI, haloshift=1, &
+                    scale=GV%H_to_m)
     endif
     call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, 0, .true., .true.)
     call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
@@ -1461,7 +1459,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   G%HI, haloshift=0)
     call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, &
-                  G%HI,haloshift=1)
+                  G%HI, haloshift=1)
   endif
 
   if (query_averaging_enabled(CS%diag)) then
@@ -1939,8 +1937,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%debug_bt) then
-      call uvchksum("BT [uv]hbt just after OBC", uhbt*GV%H_to_m, &
-                    vhbt*GV%H_to_m, CS%debug_BT_HI,haloshift=iev-ie)
+      call uvchksum("BT [uv]hbt just after OBC", uhbt, vhbt, &
+                    CS%debug_BT_HI, haloshift=iev-ie, scale=GV%H_to_m)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1968,7 +1966,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       write(mesg,'("BT step ",I4)') n
       call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, &
                     CS%debug_BT_HI, haloshift=iev-ie)
-      call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie)
+      call hchksum(eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie, scale=GV%H_to_m)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -3131,7 +3129,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
   if (CS%debug) then
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
-    call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
+    call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_m)
   endif
 
 end subroutine btcalc

@@ -472,7 +472,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 #ifdef __DO_SAFETY_CHECKS__
   if (CS%debug) then
-    call hchksum(h*GV%H_to_m, "KPP in: h",G%HI,haloshift=0)
+    call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(Temp, "KPP in: T",G%HI,haloshift=0)
     call hchksum(Salt, "KPP in: S",G%HI,haloshift=0)
     call hchksum(u, "KPP in: u",G%HI,haloshift=0)
