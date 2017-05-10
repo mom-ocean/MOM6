@@ -8,6 +8,7 @@ module MOM_ALE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,        only : check_column_integrals
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
@@ -510,6 +511,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
   dzRegrid(:,:,:) = 0.0
+  h_regrid(:,:,:) = 0.0
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
@@ -523,18 +525,33 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
 
   ! Reintegrate mass transports
   do j=jsc,jec ; do i=G%iscB,G%iecB
-    h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i+1,j,:))
-    h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i+1,j,:))
-    call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., uhtr(I,j,:))
+    if (G%mask2dCu(i,j)>0.) then
+      h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i+1,j,:))
+      h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i+1,j,:))
+      if (check_column_integrals(nk, h_src, nk, h_dest)) then
+        call MOM_error(FATAL, "ALE_offline_inputs: uh reintegration columns do not match")
+      endif
+      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., uhtr(I,j,:))
+    endif
   enddo ; enddo
   do j=G%jscB,G%jecB ; do i=isc,iec
-    h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i,j+1,:))
-    h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i,j+1,:))
-    call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., vhtr(I,j,:))
+    if (G%mask2dCv(i,j)>0.) then
+      h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i,j+1,:))
+      h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i,j+1,:))
+      if (check_column_integrals(nk, h_src, nk, h_dest)) then
+        call MOM_error(FATAL, "ALE_offline_inputs: vh reintegration columns do not match")
+      endif
+      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., vhtr(I,j,:))
+    endif
   enddo ; enddo
 
   do j = jsc,jec ; do i=isc,iec
-    call interpolate_column(nk, h_input(i,j,:), Kd(i,j,:), nk, h_regrid(i,j,:), 0., Kd(i,j,:))
+    if (G%mask2dT(i,j)>0.) then
+      if (check_column_integrals(nk, h_src, nk, h_dest)) then
+        call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
+      endif
+      call interpolate_column(nk, h_input(i,j,:), Kd(i,j,:), nk, h_regrid(i,j,:), 0., Kd(i,j,:))
+    endif
   enddo ; enddo;
 
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h_input, tv%T, h_regrid, tv%T)

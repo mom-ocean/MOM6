@@ -1564,7 +1564,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   ! 3D pointers
   real, dimension(:,:,:), pointer   :: &
     uhtr, vhtr, &
-    eatr, ebtr, &    
+    eatr, ebtr, &
     h_end
 
   ! 2D Array for diagnostics
@@ -1707,13 +1707,12 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call tracer_hordiff(h_end, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, &
         CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif
-    
+
     CS%h = h_end
 
     call pass_var(CS%tv%T,G%Domain)
     call pass_var(CS%tv%S,G%Domain)
     call pass_var(CS%h,G%Domain)
-
 
   endif
 

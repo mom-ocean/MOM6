@@ -116,6 +116,14 @@ type, public :: offline_transport_CS ; private
     id_h_redist = -1, &
     id_eta_diff_end = -1
 
+  !> Diagnostic IDs for the regridded/remapped input fields  
+  integer :: &
+    id_uhtr_regrid = -1, &
+    id_vhtr_regrid = -1, &
+    id_temp_regrid = -1, &
+    id_salt_regrid = -1, &
+    id_h_regrid = -1
+
   !> IDs for timings of various offline components
   integer ::  &
     id_clock_read_fields = -1,      &
@@ -272,8 +280,12 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
     call hchksum(h_pre,"h_pre before transport",G%HI)
     call uvchksum("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI)
   endif
-  ! Initialize the previous tot_residual to a negative value; tot_residual will always be positive
-  prev_tot_residual = -1.
+  tot_residual = remaining_transport_sum(CS, uhtr, vhtr)
+  if (CS%print_adv_offline) then
+    if (is_root_pe()) then
+      write(*,'(A,ES24.16)') "Main advection starting transport: ", tot_residual
+    endif
+  endif
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
   ! are used. ALE is done after the horizontal advection.
@@ -305,7 +317,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
       h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
 
-    if (MODULO(iter,1)==0) then
+    if (MODULO(iter,100)==0) then
       ! Do ALE remapping/regridding to allow for more advection to occur in the next iteration
       call pass_var(h_new,G%Domain)
       if (CS%debug) then
@@ -399,7 +411,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged, id_cl
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)) :: vhr  !< Meridional mass transport
 
   integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz, iter
-  real :: tot_residual, stock_values(MAX_FIELDS_)
+  real :: prev_tot_residual, tot_residual, stock_values(MAX_FIELDS_)
   integer :: nstocks
 
   ! Assign grid pointers
@@ -535,9 +547,13 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged, id_cl
         endif
       endif
       ! If the remaining residual is 0, then this return is done
-      if (tot_residual==0.0) then
+      if (tot_residual==0.0 ) then
         exit
       endif
+
+      if ( (tot_residual == prev_tot_residual) .or. (tot_residual<CS%min_residual) ) exit
+      prev_tot_residual = tot_residual
+
     enddo ! Redistribution iteration
   endif ! If one of the redistribution routines is requested
 
@@ -949,6 +965,7 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   logical,              intent(in   ) :: do_ale !< True if using ALE
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: temp_mean
   is = CS%G%isc ; ie = CS%G%iec ; js = CS%G%jsc ; je = CS%G%jec ; nz = CS%GV%ke
 
   call cpu_clock_begin(CS%id_clock_read_fields)
@@ -961,14 +978,26 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   call update_offline_from_arrays(CS%G, CS%GV, CS%nk_input, CS%ridx_sum, CS%mean_file, CS%sum_file, CS%snap_file,   &
                                   CS%uhtr, CS%vhtr, CS%h_start, CS%h_end, CS%uhtr_all, CS%vhtr_all, CS%hstart_all,  &
                                   CS%hend_all, CS%tv%T, CS%tv%s, CS%temp_all, CS%salt_all, CS%read_all_ts_uvh)
-  call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)
-
+  if (CS%debug) then
+    call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)  
+  endif
+  
   ! These halo passes are necessary because u, v fields will need information 1 step into the halo
   call pass_var(CS%h_start, CS%G%Domain)
   call pass_var(CS%tv%T, CS%G%Domain)
   call pass_var(CS%tv%S, CS%G%Domain)
   call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV,  CS%h_start, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd)
-  call uvchksum("[uv]h after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, CS%G%HI)
+
+  if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag, alt_h = CS%h_start)
+  if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag, alt_h =CS%h_start)
+  if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag, alt_h = CS%h_start)
+  if (CS%id_vhtr_regrid>0) call post_data(CS%id_vhtr_regrid, CS%vhtr, CS%diag, alt_h =CS%h_start)
+  if (CS%id_h_regrid>0) call post_data(CS%id_salt_regrid, h, CS%diag, alt_h = CS%h_start)
+
+  if (CS%debug) then
+    call uvchksum("[uv]h after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, CS%G%HI)
+    call hchksum(CS%h_start,"h_start after update offline from files and arrays", CS%G%HI)
+  endif
 
   ! Update halos for some
   call pass_var(CS%h_end, CS%G%Domain) ! ALE remapping/regridding needs this
@@ -1060,6 +1089,19 @@ subroutine register_diags_offline_transport(Time, diag, CS)
     'at the end of the offline timestep','m')
   CS%id_h_redist = register_diag_field('ocean_model','h_redist', diag%axesTL, Time, &
     'Layer thicknesses before redistribution of mass fluxes','m')
+
+  ! Regridded/remapped input fields
+  CS%id_uhtr_regrid = register_diag_field('ocean_model', 'uhtr_regrid', diag%axesCuL, Time, &
+                                          'Zonal mass transport regridded/remapped onto offline grid','kg')
+  CS%id_vhtr_regrid = register_diag_field('ocean_model', 'vhtr_regrid', diag%axesCvL, Time, &
+                                          'Meridional mass transport regridded/remapped onto offline grid','kg')
+  CS%id_temp_regrid = register_diag_field('ocean_model', 'temp_regrid', diag%axesTL, Time, &
+                                          'Temperature regridded/remapped onto offline grid','C')
+  CS%id_salt_regrid = register_diag_field('ocean_model', 'salt_regrid', diag%axesTL, Time, &
+                                          'Salinity regridded/remapped onto offline grid','g kg-1')
+  CS%id_h_regrid = register_diag_field('ocean_model', 'h_regrid', diag%axesTL, Time, &
+                                          'Layer thicknesses regridded/remapped onto offline grid','m')
+
 
 end subroutine register_diags_offline_transport
 
