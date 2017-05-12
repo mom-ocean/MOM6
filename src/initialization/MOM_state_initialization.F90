@@ -420,7 +420,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call pass_var(h, G%Domain)
 
   if (debug) then
-    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G%HI, haloshift=1)
+    call hchksum(h, "MOM_initialize_state: h ", G%HI, haloshift=1, scale=GV%H_to_m)
     if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1)
     if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1)
   endif

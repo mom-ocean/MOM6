@@ -81,9 +81,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, haloshift, symmet
   hs=1; if (present(haloshift)) hs=haloshift
   sym=.false.; if (present(symmetric)) sym=symmetric
   call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym)
-  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI, haloshift=hs)
-  call uvchksum(mesg//" [uv]h", GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, &
-                G%HI, haloshift=hs, symmetric=sym)
+  call hchksum(h, mesg//" h", G%HI, haloshift=hs, scale=GV%H_to_m)
+  call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, &
+                symmetric=sym, scale=GV%H_to_m)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
@@ -116,7 +116,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, haloshift, symmetric)
   hs=1; if (present(haloshift)) hs=haloshift
   sym=.false.; if (present(symmetric)) sym=symmetric
   call uvchksum(mesg//" u", u, v, G%HI,haloshift=hs, symmetric=sym)
-  call hchksum(GV%H_to_kg_m2*h, mesg//" h",G%HI, haloshift=hs)
+  call hchksum(h, mesg//" h",G%HI, haloshift=hs, scale=GV%H_to_m)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
@@ -197,7 +197,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
   call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym)
   if (present(pbce)) &
-    call hchksum(GV%kg_m2_to_H*pbce, mesg//" pbce",G%HI,haloshift=0)
+    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%H_to_m)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
     call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
 end subroutine MOM_accel_chksum
