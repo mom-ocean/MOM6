@@ -413,7 +413,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
@@ -470,8 +470,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
-                             debug=CS%show_call_tree, dt=dt )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree, dt=dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -518,7 +517,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, -dzRegrid, Reg, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, Reg, &
                              debug=CS%show_call_tree )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
@@ -669,7 +668,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
   tv%T(:,:,:) = T(:,:,:)
 
   ! remap velocities
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h_new, dzIntTotal, null(), u, v)
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h_new, null(), dzIntTotal, u, v)
 end subroutine ALE_regrid_accelerated
 
 !> This routine takes care of remapping all variable between the old and the
@@ -678,15 +677,15 @@ end subroutine ALE_regrid_accelerated
 !! This routine is called during initialization of the model at time=0, to
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, dxInterface, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
   type(verticalGrid_type),                          intent(in)    :: GV            !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),      intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),optional, intent(in)    :: dxInterface  !< Change in interface position (Hm or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
   logical,                                    optional, intent(in)    :: debug      !< If true, show the call tree
@@ -706,6 +705,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
+
+  ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dxInterface. Otherwise,
+  ! u and v can be remapped without dxInterface
+  if ( .not. present(dxInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
+    call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm and u/v are to"// &
+                          "be remapped")
+  endif
 
   nz      = GV%ke
   ppt2mks = 0.001
