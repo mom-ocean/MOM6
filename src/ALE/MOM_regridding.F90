@@ -690,6 +690,7 @@ subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
   ! Local variables
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, vid
+  integer :: i
 
   ierr = .false.
   status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid);
@@ -712,6 +713,12 @@ subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
     msg = 'Attribute not found: units'
     return
   endif
+  ! NF90_GET_ATT can return attributes with null characters, which TRIM will not truncate.
+  ! This loop replaces any null characters with a space so that the following check between
+  ! the read units and the expected units will pass
+  do i=1,LEN_TRIM(units)
+    if (units(i:i) == CHAR(0)) units(i:i) = " "
+  enddo
 
   if (trim(units) /= trim(expected_units)) then
     if (trim(expected_units) == "meters") then
