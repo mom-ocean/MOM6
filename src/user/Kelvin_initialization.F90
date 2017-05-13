@@ -43,6 +43,13 @@ type, public :: Kelvin_OBC_CS ; private
   integer :: mode = 0         !< Vertical mode
   real    :: coast_angle = 0  !< Angle of coastline
   real    :: coast_offset = 0 !< Longshore distance to coastal angle
+  real    :: N0 = 0           !< Brunt-Vaisala frequency
+  real    :: plx = 0          !< Longshore wave parameter
+  real    :: pmz = 0          !< Vertical wave parameter
+  real    :: lambda = 0       !< Vertical wave parameter
+  real    :: omega            !< Frequency
+  real    :: rho_range        !< Density range
+  real    :: rho_0            !< Mean density
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -81,6 +88,12 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
                    "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
                    units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
+  endif
+  if (CS%mode /= 0) then
+    call get_param(param_file, mod, "DENSITY_RANGE", CS%rho_range, &
+                   default=2.0, do_not_log=.true.)
+    call get_param(param_file, mod, "RHO_0", CS%rho_0, &
+                   default=2.0, do_not_log=.true.)
   endif
 
   ! Register the Kelvin open boundary.
@@ -165,7 +178,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: fac, omega, x, y, x1, y1
-  real    :: val1, val2, sina, cosa
+  real    :: val1, val2, sina, cosa, N0
   type(OBC_segment_type), pointer :: segment
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -210,6 +223,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
+          N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
         endif
       enddo ; enddo
     else
@@ -227,6 +241,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
           segment%normal_vel_bt(I,j) = val1 * cff * sina /       &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
+          N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
         endif
       enddo ; enddo
     endif
