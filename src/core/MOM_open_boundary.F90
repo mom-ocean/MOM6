@@ -40,6 +40,7 @@ public update_obc_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
+public open_boundary_zero_normal_bt_flow
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
 
@@ -1439,6 +1440,38 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
   enddo
 
 end subroutine open_boundary_zero_normal_flow
+
+!> Applies zero values to 2d u,v fields on OBC segments
+subroutine open_boundary_zero_normal_bt_flow(OBC, G, ubt, vbt)
+  ! Arguments
+  type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
+  type(ocean_grid_type),             intent(inout) :: G   !< Ocean grid structure
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: ubt !< u field to update on open boundaries
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: vbt !< v field to update on open boundaries
+  ! Local variables
+  integer :: i, j, n
+  type(OBC_segment_type), pointer :: segment
+
+  if (.not.associated(OBC)) return ! Bail out if OBC is not available
+
+  do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) then
+      cycle
+    elseif (segment%is_E_or_W) then
+      I=segment%HI%IscB
+      do j=segment%HI%jsc,segment%HI%jec
+        ubt(I,j) = 0.
+      enddo
+    elseif (segment%is_N_or_S) then
+      J=segment%HI%JscB
+      do i=segment%HI%isc,segment%HI%iec
+        vbt(i,J) = 0.
+      enddo
+    endif
+  enddo
+
+end subroutine open_boundary_zero_normal_bt_flow
 
 !> Calculate the tangential gradient of the normal flow at the boundary q-points.
 subroutine gradient_at_q_points(G,segment,uvel,vvel)

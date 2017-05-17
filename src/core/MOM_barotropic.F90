@@ -108,6 +108,7 @@ use MOM_io, only : vardesc, var_desc
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
+use MOM_open_boundary, only : open_boundary_zero_normal_bt_flow
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
@@ -2040,6 +2041,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
 !$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
 !$OMP                                  gtot_S,gtot_N)
+  if (apply_OBCs) then
+    call open_boundary_zero_normal_bt_flow(OBC, G, u_accel_bt, v_accel_bt)
+  endif
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
