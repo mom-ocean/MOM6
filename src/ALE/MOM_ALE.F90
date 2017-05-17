@@ -508,6 +508,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZK_(GV)) :: h_src
   real, dimension(SZK_(GV)) :: h_dest, uh_dest
+  real, dimension(SZK_(GV)) :: temp_vec
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
   dzRegrid(:,:,:) = 0.0
@@ -515,7 +516,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_input, tv, h_regrid, dzRegrid )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_input, tv, h_regrid, dzRegrid, conv_adjust = .false. )
   call check_grid( G, GV, h_regrid, 0. )
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
@@ -528,20 +529,16 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
     if (G%mask2dCu(i,j)>0.) then
       h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i+1,j,:))
       h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i+1,j,:))
-      if (check_column_integrals(nk, h_src, nk, h_dest)) then
-        call MOM_error(FATAL, "ALE_offline_inputs: uh reintegration columns do not match")
-      endif
-      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., uhtr(I,j,:))
+      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      uhtr(I,j,:) = temp_vec
     endif
   enddo ; enddo
   do j=G%jscB,G%jecB ; do i=isc,iec
     if (G%mask2dCv(i,j)>0.) then
       h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i,j+1,:))
       h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i,j+1,:))
-      if (check_column_integrals(nk, h_src, nk, h_dest)) then
-        call MOM_error(FATAL, "ALE_offline_inputs: vh reintegration columns do not match")
-      endif
-      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., vhtr(I,j,:))
+      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      vhtr(I,j,:) = temp_vec
     endif
   enddo ; enddo
 

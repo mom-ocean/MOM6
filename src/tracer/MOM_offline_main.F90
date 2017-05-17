@@ -116,7 +116,7 @@ type, public :: offline_transport_CS ; private
     id_h_redist = -1, &
     id_eta_diff_end = -1
 
-  !> Diagnostic IDs for the regridded/remapped input fields  
+  !> Diagnostic IDs for the regridded/remapped input fields
   integer :: &
     id_uhtr_regrid = -1, &
     id_vhtr_regrid = -1, &
@@ -145,7 +145,7 @@ type, public :: offline_transport_CS ; private
   real, allocatable, dimension(:,:,:) :: Kd
 
   ! Arrays for temperature and salinity
-  real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_) :: &      
+  real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
       h_end, h_start
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
       netMassIn, netMassOut
@@ -979,9 +979,13 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
                                   CS%uhtr, CS%vhtr, CS%h_start, CS%h_end, CS%uhtr_all, CS%vhtr_all, CS%hstart_all,  &
                                   CS%hend_all, CS%tv%T, CS%tv%s, CS%temp_all, CS%salt_all, CS%read_all_ts_uvh)
   if (CS%debug) then
-    call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)  
+    call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)
   endif
-  
+
+  do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
+    CS%h_start(i,j,k) = MAX(CS%GV%H_subroundoff,CS%h_start(i,j,k))
+  enddo ; enddo ; enddo
+
   ! These halo passes are necessary because u, v fields will need information 1 step into the halo
   call pass_var(CS%h_start, CS%G%Domain)
   call pass_var(CS%tv%T, CS%G%Domain)
