@@ -44,6 +44,8 @@ type, public :: Kelvin_OBC_CS ; private
   real    :: coast_angle = 0  !< Angle of coastline
   real    :: coast_offset = 0 !< Longshore distance to coastal angle
   real    :: N0 = 0           !< Brunt-Vaisala frequency
+  real    :: H0 = 0           !< Bottom depth
+  real    :: F_0              !< Coriolis parameter
   real    :: plx = 0          !< Longshore wave parameter
   real    :: pmz = 0          !< Vertical wave parameter
   real    :: lambda = 0       !< Vertical wave parameter
@@ -78,6 +80,8 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
   call get_param(param_file, mod, "KELVIN_WAVE_MODE", CS%mode, &
                  "Vertical Kelvin wave mode imposed at upstream open boundary.", &
                  default=0)
+  call get_param(param_file, mod, "F_0", CS%F_0, &
+                 default=0.0, do_not_log=.true.)
   call get_param(param_file, mod, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
     call get_param(param_file, mod, "KELVIN_COAST_OFFSET", CS%coast_offset, &
@@ -93,7 +97,9 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
     call get_param(param_file, mod, "DENSITY_RANGE", CS%rho_range, &
                    default=2.0, do_not_log=.true.)
     call get_param(param_file, mod, "RHO_0", CS%rho_0, &
-                   default=2.0, do_not_log=.true.)
+                   default=1035.0, do_not_log=.true.)
+    call get_param(param_file, mod, "MAXIMUM_DEPTH", CS%H0, &
+                   default=1000.0, do_not_log=.true.)
   endif
 
   ! Register the Kelvin open boundary.
@@ -177,8 +183,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
   real :: PI
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
-  real    :: fac, omega, x, y, x1, y1
-  real    :: val1, val2, sina, cosa, N0
+  real    :: fac, x, y, x1, y1
+  real    :: val1, val2, sina, cosa
   type(OBC_segment_type), pointer :: segment
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -190,13 +196,18 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
 
   time_sec = time_type_to_real(Time)
   PI = 4.0*atan(1.0)
+  fac = 1.0
 
   if (CS%mode == 0) then
-    fac = 1.0
-    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
-    val1 = sin(omega * time_sec)
+    CS%omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
+    val1 = sin(CS%omega * time_sec)
   else
-    omega = 2.0 * PI / (12.42 * 3600.0)      ! M2 Tide period
+    CS%N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * CS%H0)
+    ! Two wavelengths in domain
+    CS%plx = 4.0 * PI / G%len_lon
+    CS%pmz = PI * CS%mode / CS%H0
+    CS%lambda = CS%pmz * CS%F_0 / CS%N0
+    CS%omega = CS%F_0 * CS%plx / CS%lambda
   endif
 
   sina = sin(CS%coast_angle)
@@ -218,12 +229,18 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         y = - (x1 - CS%coast_offset) * sina + y1 * cosa
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
-          val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) * y / cff)
-          segment%eta(I,j) = val2 * cos(omega * time_sec)
+          val2 = fac * exp(- CS%F_0 * y / cff)
+          segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * cosa /         &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
-          N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
+          segment%eta(I,j) = 0.0
+          segment%normal_vel_bt(I,j) = 0.0
+          do k=1,nz
+            segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+                   cos(CS%omega * time_sec)
+          enddo
         endif
       enddo ; enddo
     else
@@ -237,11 +254,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
-          segment%eta(I,j) = val2 * cos(omega * time_sec)
+          segment%eta(I,j) = val2 * cos(CS%omega * time_sec)
           segment%normal_vel_bt(I,j) = val1 * cff * sina /       &
                  (0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j))) * val2
         else
-          N0 = sqrt(CS%rho_range / CS%rho_0 * G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
+          segment%eta(i,J) = 0.0
+          segment%normal_vel_bt(i,J) = 0.0
+          do k=1,nz
+            segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
+          enddo
         endif
       enddo ; enddo
     endif
