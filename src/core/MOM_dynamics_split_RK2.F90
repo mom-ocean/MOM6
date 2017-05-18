@@ -729,6 +729,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
