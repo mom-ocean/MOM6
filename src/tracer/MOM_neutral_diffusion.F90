@@ -71,6 +71,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
+  integer :: factor ! How many connections between two columns
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -98,19 +99,23 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
 ! call closeParameterBlock(param_file)
-
+  if (CS%continuous_reconstruction) then
+    factor = 2
+  else
+    factor = 4
+  endif
   ! U-points
-  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
+  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
   ! V-points
-  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,2*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,2*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
+  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
 
 end function neutral_diffusion_init
 
@@ -317,10 +322,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
           call calculate_density_derivs(T_l(:,j,k), S_l(:,j,k), Pint(:,j,k), &
                                         dRdT_l(:,j,k), dRdS_l(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
           call calculate_density_derivs(T_r(:,j,k), S_r(:,j,k), Pint(:,j,k+1), &
-                                        dRdT_r(:,j,k), dRdS_(rw:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+                                        dRdT_r(:,j,k), dRdS_r(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
         endif
-      endif
-
       endif
     enddo
   enddo
@@ -333,10 +336,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
               Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT_i(i+1,j,:), dRdS_i(i+1,j,:),  &
               CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
     else
-      call find_neutral_surface_positions_discontinuous(G%ke, Pint(i,j,:),                              &
-              T_l(i,j,:),   T_r(i,j,:),   S_l(i,j,:),   S_r(i,j,:),   dRdT_l(i,j,:),   dRdS_r(i,j,:),   &
-              T_l(i+1,j,:), T_r(i+1,j,:), S_l(i+1,j,:), S_r(i+1,j,:), dRdT_l(i+1,j,:), dRdS_r(i+1,j,:), &
-              CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      call find_neutral_surface_positions_discontinuous(G%ke,                       &
+            Pint(i,j,:), T_l(i,j,:), T_r(i,j,:), S_l(i,j,:), S_r(i,j,:),            &
+            dRdT_l(i,j,:), dRdT_r(i,j,:), dRdS_l(i,j,:), dRdS_r(i,j,:),             &
+            Pint(i+1,j,:), T_l(i+1,j,:), T_r(i+1,j,:), S_l(i+1,j,:), S_r(i+1,j,:),  &
+            dRdT_l(i+1,j,:), dRdS_r(i+1,j,:), dRdS_l(i+1,j,:), dRdS_l(i+1,j,:),     &
+            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
     endif
   enddo ; enddo
 
@@ -348,10 +353,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
               Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT_i(i,j+1,:), dRdS_i(i,j+1,:), &
               CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
     else
-      call find_neutral_surface_positions_discontinuous(G%ke, Pint(i,j,:),                              &
-              T_l(i,j,:),   T_r(i,j,:),   S_l(i,j,:),   S_r(i,j,:),   dRdT_l(i,j,:),   dRdS_r(i,j,:),   &
-              T_l(i,j+1,:), T_r(i,j+1,:), S_l(i,j+1,:), S_r(i,j+1,:), dRdT_l(i,j+1,:), dRdS_r(i,j+1,:), &
-              CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      call find_neutral_surface_positions_discontinuous(G%ke,                     &
+          Pint(i,j,:), T_l(i,j,:), T_r(i,j,:), S_l(i,j,:), S_r(i,j,:),            &
+          dRdT_l(i,j,:), dRdT_r(i,j,:), dRdS_l(i,j,:), dRdS_r(i,j,:),             &
+          Pint(i,j+1,:), T_l(i,j+1,:), T_r(i,j+1,:), S_l(i,j+1,:), S_r(i,j+1,:),  &
+          dRdT_l(i,j+1,:), dRdS_r(i,j+1,:), dRdS_l(i,j+1,:), dRdS_l(i,j+1,:),     &
+          CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
     endif
   enddo ; enddo
 
@@ -939,18 +946,29 @@ end subroutine find_neutral_surface_positions_continuous
 
 !> Higher order version of find_neutral_surface_positions. Returns positions within left/right columns
 !! of combined interfaces using intracell reconstructions of T/S
-subroutine find_neutral_surface_positions_discontinuous(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
+subroutine find_neutral_surface_positions_discontinuous(nk, &
+                                Pl, Tint_lt, Tint_lb, Sint_lt, Sint_lb, dRdT_lt, dRdT_lb, dRdS_lt, dRdS_lb, &
+                                Pr, Tint_rt, Tint_rb, Sint_rt, Sint_rb, dRdT_rt, dRdT_rb, dRdS_rt, dRdS_rb, &
+                                PoL, PoR, KoL, KoR, hEff)
   integer,                    intent(in)    :: nk     !< Number of levels
   real, dimension(nk+1),      intent(in)    :: Pl     !< Left-column interface pressure (Pa)
-  real, dimension(nk+1),      intent(in)    :: Tint_l !< Left-column interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Sint_l !< Left-column interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdT_l !< Left-column dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdS_l !< Left-column dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: Tint_lt !< Left-column top interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Tint_lb !< Left-column bottom interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Sint_lt !< Left-column top interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: Sint_lb !< Left-column bottom interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdT_lt !< Left-column, top interface dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdT_lb !< Left-column, bottom interface dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdS_lt !< Left-column, top interface dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdS_lb !< Left-column, bottom interface  dRho/dS (kg/m3/ppt)
   real, dimension(nk+1),      intent(in)    :: Pr     !< Right-column interface pressure (Pa)
-  real, dimension(nk+1),      intent(in)    :: Tint_r !< Right-column interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Sint_r !< Right-column interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdT_r !< Left-column dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdS_r !< Left-column dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: Tint_rt !< Right-column top interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Tint_rb !< Right-column bottom interface potential temperature (degC)
+  real, dimension(nk+1),      intent(in)    :: Sint_rt !< Right-column top interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: Sint_rb !< Right-column bottom interface salinity (ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdT_rt !< Right-column, top interface dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdT_rb !< Right-column, bottom interface dRho/dT (kg/m3/degC)
+  real, dimension(nk+1),      intent(in)    :: dRdS_rt !< Right-column, top interface dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: dRdS_rb !< Right-column, bottom interface  dRho/dS (kg/m3/ppt)
   real, dimension(4*nk+2),    intent(inout) :: PoL    !< Fractional position of neutral surface within layer KoL of left column
   real, dimension(4*nk+2),    intent(inout) :: PoR    !< Fractional position of neutral surface within layer KoR of right column
   integer, dimension(4*nk+2), intent(inout) :: KoL    !< Index of first left interface above neutral surface
@@ -1353,7 +1371,7 @@ logical function neutral_diffusion_unit_tests(verbose)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1384,7 +1402,7 @@ logical function neutral_diffusion_unit_tests(verbose)
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
   ! Right column slightly cooler than left
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/20.,16.,12.,8./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1405,7 +1423,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
   ! Right column slightly warmer than left
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/24.,20.,16.,12./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1420,7 +1438,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Right column slightly warmer')
 
   ! Right column somewhat cooler than left
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/16.,12.,8.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1435,7 +1453,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Right column somewhat cooler')
 
   ! Right column much colder than left with no overlap
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/9.,7.,5.,3./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1450,7 +1468,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Right column much cooler')
 
   ! Right column with mixed layer
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1465,7 +1483,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Right column with mixed layer')
 
   ! Identical columns with mixed layer
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1480,7 +1498,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Indentical columns with mixed layer')
 
   ! Right column with unstable mixed layer
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1495,7 +1513,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Right column with unstable mixed layer')
 
   ! Left column with unstable mixed layer
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
@@ -1510,7 +1528,7 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    'Left column with unstable mixed layer')
 
   ! Two unstable mixed layers
-  call find_neutral_surface_positions(3, &
+  call find_neutral_surface_positions_continuous(3, &
              (/0.,10.,20.,30./), (/8.,12.,10.,2./), (/0.,0.,0.,0./), & ! Left positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Left dRdT and dRdS
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
