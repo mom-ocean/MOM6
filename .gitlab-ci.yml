@@ -1,0 +1,41 @@
+# Clones MOM6-examples, if necessary, and pulls latest of everything
+before_script:
+  - git submodule init && git submodule update
+  - test -d MOM6-examples || (git clone --recursive https://github.com/NOAA-GFDL/MOM6-examples.git)
+  - (cd MOM6-examples && git checkout . && git checkout dev/master && git pull && git submodule init && git submodule update)
+  - bash MOM6-examples/tools/tests/GFDL-Gitlab-MOM6/before_script.sh
+
+# Cleans up model output and restores experiment directories
+after_script:
+  - (cd MOM6-examples && rm -rf ocean_only ice_ocean_SIS ice_ocean_SIS2 land_ice_ocean_LM3_SIS2 coupled_AM2_LM3_SIS coupled_AM2_LM3_SIS2 && git checkout -q .)
+
+cache:
+  paths:
+    - MOM6-examples
+    - build
+
+# Compiles
+c3:build:
+  stage: build
+  tags:
+    - ncrc3
+  script:
+    - (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
+    - make -f MOM6-examples/tools/tests/GFDL-Gitlab-MOM6/Makefile.build build_gnu build_intel build_pgi MOM6_SRC=. -s -j
+    - make -f MOM6-examples/tools/tests/GFDL-Gitlab-MOM6/Makefile.build static_gnu static_intel debug_gnu coverage_gnu debug_intel MOM6_SRC=. -s -j
+
+# Runs
+c3:regression:
+  stage: test
+  tags:
+    - ncrc3
+  script:
+    - md5sum `find MOM6-examples -name ocean.stats.gnu -o -name ocean.stats.intel -o -name ocean.stats.pgi` > all.md5
+    - md5sum `find MOM6-examples/ocean_only -type d -exec bash -c '[ -f "$0"/MOM_memory.h ] && [ -f "$0"/ocean.stats.gnu ]' '{}' \; -printf '%p/ocean.stats.gnu\n%p/ocean.stats.intel\n%p/ocean.stats.pgi\n'` > static.md5
+    - bash MOM6-examples/tools/tests/GFDL-Gitlab-MOM6/run_stage.sh
+    - echo "Regression results for non-symmetric executables"
+    - tar xf non_symmetric.tar && md5sum -c all.md5
+    - echo "Regression results for symmetric executables"
+    - tar xf symmetric.tar && md5sum -c all.md5
+    - echo "Regression results for static executables"
+    - tar xf static.tar && md5sum -c all.md5
