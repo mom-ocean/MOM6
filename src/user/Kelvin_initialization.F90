@@ -92,6 +92,7 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
                    "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
                    units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
+    CS%coast_offset = CS%coast_offset * 1.e3          ! Convert to m
   endif
   if (CS%mode /= 0) then
     call get_param(param_file, mod, "DENSITY_RANGE", CS%rho_range, &
