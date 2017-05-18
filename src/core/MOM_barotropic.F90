@@ -108,7 +108,6 @@ use MOM_io, only : vardesc, var_desc
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
-use MOM_open_boundary, only : open_boundary_zero_normal_bt_flow
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
