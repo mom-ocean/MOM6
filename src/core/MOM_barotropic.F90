@@ -2040,6 +2040,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
 !$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
 !$OMP                                  gtot_S,gtot_N)
+  if (apply_OBCs) then
+!   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
+    if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
+      if (OBC%segnum_u(I,j) /= OBC_NONE) then
+        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_Cor(I,j)) / dt
+      endif
+    enddo ; enddo ; endif
+    if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
+      if (OBC%segnum_v(i,J) /= OBC_NONE) then
+        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_Cor(i,J)) / dt
+      endif
+    enddo ; enddo ; endif
+  endif
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
