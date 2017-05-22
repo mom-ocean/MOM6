@@ -2037,9 +2037,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
 ! Now calculate each layer's accelerations.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
-!$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
-!$OMP                                  gtot_S,gtot_N)
   if (apply_OBCs) then
 !   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
@@ -2053,6 +2050,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       endif
     enddo ; enddo ; endif
   endif
+!$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
+!$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
+!$OMP                                  gtot_S,gtot_N)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
