@@ -50,6 +50,8 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
+use MOM_open_boundary,         only : open_boundary_test_extern_h
+use MOM_open_boundary,         only : open_boundary_accelerate
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -237,6 +239,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bc_accel
     ! u_bc_accel and v_bc_accel are the summed baroclinic accelerations of each
     ! layer calculated by the non-barotropic part of the model, both in m s-2.
+
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u_bt2_accel
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v_bt2_accel
+    ! u_bt2_accel and v_bt2_accel are the barotropic accelerations from the
+    ! predictor step, saved for OBCs.
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target :: uh_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target :: vh_in
@@ -576,6 +583,15 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo
   call cpu_clock_end(id_clock_mom_update)
 
+  if (associated(CS%OBC)) then
+    do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
+      u_bt2_accel(I,j,k) = CS%u_accel_bt(I,j,k)
+    enddo ; enddo ; enddo
+    do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
+      v_bt2_accel(i,J,k) = CS%v_accel_bt(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+
   if (CS%debug) then
     call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym)
     call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -635,6 +651,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call cpu_clock_end(id_clock_pass)
 
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, dt_pred)
+!   call open_boundary_test_extern_h(G, CS%OBC, hp)
   endif
 
   call cpu_clock_begin(id_clock_pass)
@@ -782,6 +799,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                       (v_bc_accel(i,J,k) + CS%v_accel_bt(i,J,k)))
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_accelerate(G, u, v, CS%OBC, u_bt2_accel, v_bt2_accel, dt)
+  endif
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
@@ -851,6 +871,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, v_old_rad_OBC, G, dt)
+!   call open_boundary_test_extern_h(G, CS%OBC, h)
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
