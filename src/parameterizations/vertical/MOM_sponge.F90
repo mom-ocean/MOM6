@@ -139,10 +139,10 @@ contains
 
 subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
                              Iresttime_i_mean, int_height_i_mean)
-  type(ocean_grid_type),                  intent(in) :: G
+  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)),       intent(in) :: Iresttime
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: int_height
-  type(param_file_type),                  intent(in) :: param_file
+  type(param_file_type),                  intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),                        pointer    :: CS
   real, dimension(SZJ_(G)),     optional, intent(in) :: Iresttime_i_mean
   real, dimension(SZJ_(G),SZK_(G)+1), optional, intent(in) :: int_height_i_mean
@@ -245,7 +245,7 @@ end subroutine initialize_sponge
 
 subroutine init_sponge_diags(Time, G, diag, CS)
   type(time_type),       target, intent(in)    :: Time
-  type(ocean_grid_type),         intent(in)    :: G
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(diag_ctrl),       target, intent(inout) :: diag
   type(sponge_CS),               pointer       :: CS
 
@@ -268,7 +268,7 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 end subroutine init_sponge_diags
 
 subroutine set_up_sponge_field(sp_val, f_ptr, G, nlay, CS, sp_val_i_mean)
-  type(ocean_grid_type),                            intent(in) :: G
+  type(ocean_grid_type),                            intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),         intent(in) :: sp_val
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: f_ptr
   integer,                                          intent(in) :: nlay
@@ -336,7 +336,7 @@ end subroutine set_up_sponge_field
 
 
 subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
-  type(ocean_grid_type),              intent(in) :: G
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: sp_val
   type(sponge_CS),                    pointer    :: CS
   real, dimension(SZJ_(G)), optional, intent(in) :: sp_val_i_mean
@@ -377,9 +377,9 @@ subroutine set_up_sponge_ML_density(sp_val, G, CS, sp_val_i_mean)
 end subroutine set_up_sponge_ML_density
 
 subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                     intent(in)    :: dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: ea
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: eb

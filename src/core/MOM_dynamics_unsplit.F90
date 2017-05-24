@@ -93,6 +93,7 @@ use MOM_time_manager, only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
+use MOM_boundary_update, only : update_OBC_data, update_OBC_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS
 use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_debugging, only : check_redundant
@@ -104,7 +105,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : radiation_open_bdry_conds
-use MOM_boundary_update, only : update_OBC_data
+use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -160,6 +161,7 @@ type, public :: MOM_dyn_unsplit_CS ; private
      ! condition type that specifies whether, where, and  what open boundary
      ! conditions are used.  If no open BCs are used, this pointer stays
      ! nullified.  Flather OBCs use open boundary_CS as well.
+  type(update_OBC_CS),    pointer :: update_OBC_CSp => NULL()
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL()
 
 ! This is a copy of the pointer in the top-level control structure.
@@ -181,11 +183,11 @@ contains
 subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in)    :: tv
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
@@ -327,8 +329,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
 
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
@@ -374,7 +380,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, &
+                     CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -414,8 +421,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
 
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
@@ -437,7 +448,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, &
+                     CS%vertvisc_CSp, CS%OBC)
   call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -492,10 +504,14 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
-    call update_OBC_data(CS%OBC, G, GV, tv, h, Time_local)
+    call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
 
 ! u = u + dt * ( PFu + CAu )
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
             (CS%PFu(I,j,k) + CS%CAu(I,j,k)))
@@ -507,7 +523,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
+  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
@@ -545,8 +561,8 @@ end subroutine step_MOM_dyn_unsplit
 
 subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),         intent(in)    :: HI
-  type(verticalGrid_type),      intent(in)    :: GV
-  type(param_file_type),        intent(in)    :: param_file
+  type(verticalGrid_type),      intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(MOM_dyn_unsplit_CS),     pointer       :: CS
   type(MOM_restart_CS),         pointer       :: restart_CS
 !   This subroutine sets up any auxiliary restart variables that are specific
@@ -591,14 +607,15 @@ end subroutine register_restarts_dyn_unsplit
 
 subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
                                   restart_CS, Accel_diag, Cont_diag, MIS, &
-                                  OBC, ALE_CSp, setVisc_CSp, visc, dirs, ntrunc)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h
+                                  OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
+                                  visc, dirs, ntrunc)
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(time_type),                   target, intent(in)    :: Time
-  type(param_file_type),                     intent(in)    :: param_file
+  type(param_file_type),                     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_unsplit_CS),                  pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS
@@ -606,6 +623,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
   type(ocean_internal_state),                intent(inout) :: MIS
   type(ocean_OBC_type),                      pointer       :: OBC
+  type(update_OBC_CS),                       pointer       :: update_OBC_CSp
   type(ALE_CS),                              pointer       :: ALE_CSp
   type(set_visc_CS),                         pointer       :: setVisc_CSp
   type(vertvisc_type),                       intent(inout) :: visc
@@ -633,6 +651,8 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 !                  pointers to various arrays for diagnostic purposes.
 !  (in)      OBC - If open boundary conditions are used, this points to the
 !                  ocean_OBC_type that was set up in MOM_initialization.
+!  (in)      update_OBC_CSp - If open boundary condition updates are used,
+!                  this points to the appropriate control structure.
 !  (in)      ALE_CS - This points to the ALE control structure.
 !  (in)      setVisc_CSp - This points to the set_visc control structure.
 !  (inout)   visc - A structure containing vertical viscosities, bottom drag
@@ -692,6 +712,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC
+  if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
   flux_units = get_flux_units(GV)
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &

@@ -591,7 +591,7 @@ subroutine controlled_forcing_end(CS)
 
 end subroutine controlled_forcing_end
 
-!> \class MOM_controlled_forcing
+!> \namespace mom_controlled_forcing
 !!                                                                     *
 !!  By Robert Hallberg, July 2011                                      *
 !!                                                                     *

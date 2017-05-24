@@ -650,7 +650,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
 end subroutine ISOMIP_initialize_sponges
 
-!> \class ISOMIP_initialization
+!> \namespace isomip_initialization
 !!
 !!  The module configures the ISOMIP test case.
 end module ISOMIP_initialization

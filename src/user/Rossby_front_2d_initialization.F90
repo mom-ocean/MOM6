@@ -226,7 +226,7 @@ real function dTdy( G, dT, lat )
 end function dTdy
 
 
-!> \namespace Rossby_front_2d_initialization
+!> \namespace rossby_front_2d_initialization
 !!
 !! \section section_Rossby_front_2d Description of the 2d Rossby front initial conditions
 !!

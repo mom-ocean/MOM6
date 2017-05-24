@@ -272,7 +272,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
 end subroutine seamount_initialize_temperature_salinity
 
-!> \class seamount_initialization
+!> \namespace seamount_initialization
 !!
 !! The module configures the model for the idealized seamount
 !! test case.

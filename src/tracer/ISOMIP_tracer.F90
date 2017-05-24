@@ -305,14 +305,14 @@ end subroutine initialize_ISOMIP_tracer
 ! This is a simple example of a set of advected passive tracers.
 subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
   real,                                  intent(in) :: dt
-  type(ISOMIP_tracer_CS),                  pointer    :: CS
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  type(ISOMIP_tracer_CS),                pointer    :: CS
+  real,                        optional,intent(in)  :: evap_CFL_limit
+  real,                        optional,intent(in)  :: minimum_forcing_depth
 
 ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.

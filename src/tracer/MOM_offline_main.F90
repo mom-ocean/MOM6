@@ -3,10 +3,10 @@ module MOM_offline_main
 use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_tracer_final
-use MOM_debugging,            only : hchksum, uchksum, vchksum
+use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_diabatic_aux,         only : diabatic_aux_CS
-use MOM_diabatic_driver,      only : diabatic_CS
+use MOM_diabatic_driver,      only : diabatic_CS, extract_diabatic_member
 use MOM_diabatic_aux,         only : tridiagTS
 use MOM_diag_mediator,        only : diag_ctrl, post_data, register_diag_field
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
@@ -20,8 +20,9 @@ use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical
 use MOM_offline_aux,          only : distribute_residual_uh_barotropic, distribute_residual_vh_barotropic
 use MOM_offline_aux,          only : distribute_residual_uh_upwards, distribute_residual_vh_upwards
 use MOM_offline_aux,          only : offline_add_diurnal_sw
-use MOM_opacity,              only : set_opacity
+use MOM_opacity,              only : set_opacity, opacity_CS
 use MOM_open_boundary,        only : ocean_OBC_type
+use MOM_shortwave_abs,        only : optics_type
 use MOM_time_manager,         only : time_type
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
@@ -48,6 +49,8 @@ type, public :: offline_transport_CS
   type(thermo_var_ptrs),         pointer :: tv                     => NULL()
   type(ocean_grid_type),         pointer :: G                      => NULL()
   type(verticalGrid_type),       pointer :: GV                     => NULL()
+  type(optics_type),             pointer :: optics                 => NULL()
+  type(opacity_CS),              pointer :: opacity_CSp            => NULL()
 
   !> Variables related to reading in fields from online run
   integer :: start_index  ! Timelevel to start
@@ -69,6 +72,7 @@ type, public :: offline_transport_CS
   logical :: print_adv_offline ! Prints out some updates each advection sub interation
   logical :: skip_diffusion    ! Skips horizontal diffusion of tracers
   logical :: read_sw           ! Read in averaged values for shortwave radiation
+  logical :: read_mld          ! Check to see whether mixed layer depths should be read in
   logical :: diurnal_sw        ! Adds a synthetic diurnal cycle on shortwave radiation
   logical :: debug
   !> Variables controlling some of the numerical considerations of offline transport
@@ -107,7 +111,8 @@ type, public :: offline_transport_CS
       h_end
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
       netMassIn, netMassOut
-
+  real, allocatable, dimension(:,:) :: &
+      mld          ! Mixed layer depths at thickness points, in H.
 
 end type offline_transport_CS
 
@@ -217,8 +222,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   if(CS%debug) then
     call hchksum(h_pre,"h_pre before transport",G%HI)
-    call uchksum(uhtr_sub,"uhtr_sub before transport",G%HI)
-    call vchksum(vhtr_sub,"vhtr_sub before transport",G%HI)
+    call uvchksum("[uv]htr_sub before transport", uhtr_sub, vhtr_sub, G%HI)
   endif
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
@@ -293,8 +297,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock
 
   if(CS%debug) then
     call hchksum(h_pre,"h after offline_advection_ale",G%HI)
-    call uchksum(uhtr,"uhtr after offline_advection_ale",G%HI)
-    call vchksum(vhtr,"vhtr after offline_advection_ale",G%HI)
+    call uvchksum("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI)
   endif
 
 end subroutine offline_advection_ale
@@ -348,8 +351,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   if (CS%debug) then
     call hchksum(h_pre,"h_pre before upwards redistribute",G%HI, haloshift = 1)
     call hchksum(h_vol,"h_vol before upwards redistribute",G%HI)
-    call uchksum(uhtr,"uhtr before upwards redistribute",G%HI)
-    call vchksum(vhtr,"vhtr before upwards redistribute",G%HI)
+    call uvchksum("[uv]htr before upwards redistribute", uhtr, vhtr, G%HI)
   endif
 
   ! These are used to find out how much will be redistributed in this routine
@@ -373,8 +375,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   if (CS%debug) then
     call hchksum(h_vol,"h_vol after upwards redistribute",G%HI,haloshift = 1)
-    call uchksum(uhtr,"uh after upwards redistribute",G%HI)
-    call vchksum(vhtr,"vh after upwards redistribute",G%HI)
+    call uvchksum("[uv]h after upwards redistribute", uhtr, vhtr, G%HI)
   endif
   call advect_tracer(h_pre, uhtr, vhtr, CS%OBC, CS%dt_offline, G, GV, &
         CS%tracer_adv_CSp, CS%tracer_Reg, h_vol, max_iter_in=2, &
@@ -392,8 +393,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   if (CS%debug) then
     call hchksum(h_vol,"h_vol before barotropic redistribute",G%HI)
     call hchksum(h_new,"h_new before barotropic redistribute",G%HI)
-    call uchksum(uhr,"uhr before barotropic redistribute",G%HI)
-    call vchksum(vhr,"vhr before barotropic redistribute",G%HI)
+    call uvchksum("[uv]hr before barotropic redistribute", uhr, vhr, G%HI)
   endif
 
   ! Then check if there's any transport left and if so, distribute it equally
@@ -412,8 +412,7 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
   call pass_vector(uhr,vhr,G%Domain)
   if (CS%debug) then
     call hchksum(h_vol,"h_vol after barotropic redistribute",G%HI)
-    call uchksum(uhr,"uhr after barotropic redistribute",G%HI)
-    call vchksum(vhr,"vhr after barotropic redistribute",G%HI)
+    call uvchksum("[uv]hr after barotropic redistribute", uhr, vhr, G%HI)
   endif
 
   call advect_tracer(h_new, uhr, vhr, CS%OBC, CS%dt_offline, G, GV, &
@@ -422,8 +421,8 @@ subroutine offline_redistribute_residual(CS, h_pre, h_end, uhtr, vhtr, converged
 
   if (CS%debug) then
     call hchksum(h_pre,"h_pre after advection barotropic redistribute",G%HI)
-    call uchksum(uhtr,"uhtr after advection barotropic redistribute",G%HI)
-    call vchksum(vhtr,"vhtr after advection barotropic redistribute",G%HI)
+    call uvchksum("[uv]htr after advection barotropic redistribute", &
+                       uhtr, vhtr, G%HI)
 
     do k=1,nz ; do j=js,je ; do i=is-1,ie
       if( abs(uhtr(i,j,k))>0.0 ) print *, "Remaining uhtr i, j, k: ", uhr(i,j,k), i, j, k
@@ -487,23 +486,18 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, dt, CS, h_pre, eat
     call offline_add_diurnal_SW(fluxes, CS%G, Time_start, Time_end)
   endif
 
-  if (associated(CS%diabatic_CSp%optics)) &
-    call set_opacity(CS%diabatic_CSp%optics, fluxes, CS%G, CS%GV, CS%diabatic_CSp%opacity_CSp)
+  if (associated(CS%optics)) &
+    call set_opacity(CS%optics, fluxes, CS%G, CS%GV, CS%opacity_CSp)
 
-  ! Note that first two arguments are identical, because in ALE mode, there is no change in layer thickness
-  ! because of eatr and ebtr
-
+  ! Do the tracer sources and sinks and also the vertical mixing
   call call_tracer_column_fns(h_pre, h_pre, eatr, ebtr, &
-      fluxes, dt, CS%G, CS%GV, CS%tv, &
-      CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug, &
+      fluxes, CS%mld, dt, CS%G, CS%GV, CS%tv, &
+      CS%optics, CS%tracer_flow_CSp, CS%debug, &
       evap_CFL_limit=CS%evap_CFL_limit, &
       minimum_forcing_depth=CS%minimum_forcing_depth)
   ! This next line is called to calculate new layer thicknesses based on the freshwater fluxes
   call applyTracerBoundaryFluxesInOut(CS%G, CS%GV, zero_3dh, dt, fluxes, h_pre, &
       CS%evap_CFL_limit, CS%minimum_forcing_depth)
-
-  ! The mixing of T/S is probably not appropriate because time averages are being used
-  ! call triDiagTS(CS%G, CS%GV, CS%G%isc, CS%G%iec, CS%G%jsc, CS%G%jec, h_pre, eatr, ebtr, CS%tv%T, CS%tv%S)
 
   if(CS%diurnal_SW .and. CS%read_sw) then
     fluxes%sw(:,:) = sw
@@ -592,7 +586,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! First do vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do j=js-1,je+1 ; do i=is-1,ie+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -632,7 +626,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
       ! Second vertical advection
       call update_h_vertical_flux(G, GV, eatr_sub, ebtr_sub, h_pre, h_new)
       call call_tracer_column_fns(h_pre, h_new, eatr_sub, ebtr_sub, &
-          fluxes, dt_iter, G, GV, CS%tv, CS%diabatic_CSp%optics, CS%tracer_flow_CSp, CS%debug)
+          fluxes, CS%mld, dt_iter, G, GV, CS%tv, CS%optics, CS%tracer_flow_CSp, CS%debug)
       ! We are now done with the vertical mass transports, so now h_new is h_sub
       do k = 1, nz ; do i=is-1,ie+1 ; do j=js-1,je+1
         h_pre(i,j,k) = h_new(i,j,k)
@@ -689,8 +683,8 @@ end subroutine offline_advection_layer
 subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
     temp_mean, salt_mean, fluxes, do_ale_in)
 
-  type(ocean_grid_type),                     intent(inout)    :: G
-  type(verticalGrid_type),                   intent(inout)    :: GV
+  type(ocean_grid_type),                     intent(inout)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(inout)    :: GV   !< The ocean's vertical grid structure
   type(offline_transport_CS),                intent(inout)    :: CS
   logical, optional                                           :: do_ale_in
 
@@ -753,10 +747,12 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
   if (do_ale) then
     if (.not. ASSOCIATED(fluxes%netMassOut)) then
-      ALLOC_(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassOut(:,:) = 0.0
     endif
     if (.not. ASSOCIATED(fluxes%netMassIn)) then
-      ALLOC_(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassIn(:,:) = 0.0
     endif
 
     CS%netMassOut(:,:) = 0.0
@@ -775,7 +771,11 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
 
   endif
 
-  if(CS%read_sw) then
+  if (CS%read_mld) then
+    call read_data(CS%mean_file,'MLD', CS%mld, domain=G%Domain%mpp_domain, timelevel=CS%ridx_sum)
+  endif
+
+  if (CS%read_sw) then
 
     ! Shortwave radiation is only needed for offline mode with biogeochemistry.
     ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
@@ -855,8 +855,7 @@ subroutine transport_by_files(G, GV, CS, h_end, eatr, ebtr, uhtr, vhtr, &
     call hchksum(h_end,"h_end after transport_by_file",G%HI)
     call hchksum(eatr,"eatr after transport_by_file",G%HI)
     call hchksum(ebtr,"ebtr after transport_by_file",G%HI)
-    call uchksum(uhtr,"uhtr after transport_by_file",G%HI)
-    call vchksum(vhtr,"vhtr after transport_by_file",G%HI)
+    call uvchksum("[uv]htr after transport_by_file", uhtr, vhtr, G%HI)
   endif
 
   call callTree_leave("transport_by_file")
@@ -919,13 +918,13 @@ end subroutine register_diags_offline_transport
 
 !> Initializes the control structure for offline transport and reads in some of the
 ! run time parameters from MOM_input
-subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
+subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
-  type(param_file_type),               intent(in)     :: param_file
+  type(param_file_type),               intent(in)     :: param_file !< A structure to parse for run-time parameters
   type(offline_transport_CS), pointer, intent(inout)  :: CS
-  type(diabatic_aux_CS),      pointer, intent(in)     :: diabatic_aux_CSp
-  type(ocean_grid_type),      pointer, intent(in)     :: G
-  type(verticalGrid_type),    pointer, intent(in)     :: GV
+  type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
+  type(ocean_grid_type),      pointer, intent(in)     :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    pointer, intent(in)     :: GV   !< The ocean's vertical grid structure
 
   character(len=40)                               :: mod = "offline_transport"
 
@@ -983,6 +982,9 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   call get_param(param_file, mod, "READ_SW", CS%read_sw, &
     "Read in shortwave radiation field instead of using values from the coupler"//&
     "when in offline tracer mode",default=.false.)
+  call get_param(param_file, mod, "READ_MLD", CS%read_mld, &
+    "Read in mixed layer depths for tracers which exchange with the atmosphere"//&
+    "when in offline tracer mode",default=.false.)
   call get_param(param_file, mod, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
     "Adds a synthetic diurnal cycle in the same way that the ice model would have"//&
     "when time-averaged fields of shortwave radiation are read in", default=.true.)
@@ -999,11 +1001,10 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   if(CS%fields_are_offset) CS%ridx_snap = next_modulo_time(CS%start_index,CS%numtime)
   if(.not. CS%fields_are_offset) CS%ridx_snap = CS%start_index
 
-  ! Copy over parameters from other control structures
-  if(associated(diabatic_aux_CSp)) then
-    CS%evap_CFL_limit = diabatic_aux_CSp%evap_CFL_limit
-    CS%minimum_forcing_depth = diabatic_aux_CSp%minimum_forcing_depth
-  endif
+  ! Copy members from other modules
+  call extract_diabatic_member(diabatic_CSp, opacity_CSp=CS%opacity_CSp, optics_CSp=CS%optics,&
+                               evap_CFL_limit=CS%evap_CFL_limit, &
+                               minimum_forcing_depth=CS%minimum_forcing_depth)
 
   ! Grid pointer assignments
   CS%G  => G
@@ -1019,9 +1020,11 @@ subroutine offline_transport_init(param_file, CS, diabatic_aux_CSp, G, GV)
   ALLOC_(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
+  if (CS%read_mld) then
+    allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed)) ; CS%mld(:,:) = 0.0
+  endif
 
   call callTree_leave("offline_transport_init")
-
 
 end subroutine offline_transport_init
 

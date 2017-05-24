@@ -171,11 +171,11 @@ contains
 
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
                                        dt, G, GV, CS, eta_bt)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
   type(thermo_var_ptrs),                     intent(in)    :: tv
@@ -682,9 +682,9 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 end subroutine find_weights
 
 subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(in)    :: tv
   type(forcing),                            intent(in)    :: fluxes
   type(diagnostics_CS),                     intent(inout) :: CS
@@ -804,10 +804,10 @@ end subroutine calculate_vertical_integrals
 
 
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
-  type(ocean_grid_type),                     intent(inout) :: G
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
   type(accel_diag_ptrs),                     intent(in)    :: ADp
@@ -1038,7 +1038,7 @@ end subroutine register_time_deriv
 
 subroutine calculate_derivs(dt, G, CS)
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(diagnostics_CS),  intent(inout) :: CS
 
 ! This subroutine calculates all registered time derivatives.
@@ -1067,9 +1067,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(accel_diag_ptrs),      intent(inout) :: ADp
   type(cont_diag_ptrs),       intent(inout) :: CDp
   type(time_type),            intent(in)    :: Time
-  type(ocean_grid_type),      intent(in)    :: G
-  type(verticalGrid_type),    intent(in)    :: GV
-  type(param_file_type),      intent(in)    :: param_file
+  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,    intent(inout) :: diag
   type(diagnostics_CS),       pointer       :: CS
 
@@ -1334,7 +1334,7 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   type(ocean_internal_state), intent(in)    :: MIS
   type(accel_diag_ptrs),      intent(inout) :: ADp
   type(cont_diag_ptrs),       intent(inout) :: CDp
-  type(ocean_grid_type),      intent(in)    :: G
+  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
   type(diagnostics_CS),       pointer       :: CS
 
 ! This subroutine sets up diagnostics upon which other diagnostics depend.

@@ -102,11 +102,11 @@ contains
 
 subroutine entrainment_diffusive(u, v, h, tv, fluxes, dt, G, GV, CS, ea, eb, &
                                  kb_out, Kd_Lay, Kd_int)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in)  :: tv
   type(forcing),                             intent(in)  :: fluxes
   real,                                      intent(in)  :: dt
@@ -947,10 +947,10 @@ end subroutine entrainment_diffusive
 
 
 subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, do_i_in)
-  type(ocean_grid_type),                    intent(in)    :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: F
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer, dimension(SZI_(G)),              intent(in)    :: kb
   integer,                                  intent(in)    :: kmb, j
   type(entrain_diffusive_CS),               intent(in)    :: CS
@@ -1055,9 +1055,9 @@ subroutine F_to_ent(F, h, kb, kmb, j, G, GV, CS, dsp1_ds, eakb, Ent_bl, ea, eb, 
 end subroutine F_to_ent
 
 subroutine set_Ent_bl(h, dtKd_int, tv, kb, kmb, do_i, G, GV, CS, j, Ent_bl, Sref, h_bl)
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZK_(G)+1),       intent(in)  :: dtKd_int
   type(thermo_var_ptrs),                    intent(in)  :: tv
   integer, dimension(SZI_(G)),              intent(inout) :: kb
@@ -1219,8 +1219,8 @@ end subroutine set_Ent_bl
 
 subroutine determine_dSkb(h_bl, Sref, Ent_bl, E_kb, is, ie, kmb, G, GV, limit, &
                           dSkb, ddSkb_dE, dSlay, ddSlay_dE, dS_anom_lim, do_i_in)
-  type(ocean_grid_type),            intent(in)    :: G
-  type(verticalGrid_type),          intent(in)    :: GV
+  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)), intent(in)    :: h_bl, Sref, Ent_bl
   real, dimension(SZI_(G)),         intent(in)    :: E_kb
   integer,                          intent(in)    :: is, ie, kmb
@@ -1449,8 +1449,8 @@ end subroutine determine_dSkb
 
 subroutine F_kb_to_ea_kb(h_bl, Sref, Ent_bl, I_dSkbp1, F_kb, kmb, i, &
                          G, GV, CS, ea_kb, tol_in)
-  type(ocean_grid_type),         intent(in)    :: G
-  type(verticalGrid_type),       intent(in)    :: GV
+  type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),       intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(SZI_(G)),      intent(in)    :: I_dSkbp1, F_kb
   integer,                       intent(in)    :: kmb, i
@@ -1566,8 +1566,8 @@ end subroutine F_kb_to_ea_kb
 subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            min_eakb, max_eakb, kmb, is, ie, do_i, G, GV, CS, Ent, &
                            error, err_min_eakb0, err_max_eakb0, F_kb, dFdfm_kb)
-  type(ocean_grid_type),            intent(in)  :: G
-  type(verticalGrid_type),          intent(in)  :: GV
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)), intent(in)  :: h_bl, Sref, Ent_bl
   real, dimension(SZI_(G)),         intent(in)  :: I_dSkbp1, dtKd_kb, ea_kbp1
   real, dimension(SZI_(G)),         intent(in)  :: min_eakb, max_eakb
@@ -1766,8 +1766,8 @@ end subroutine determine_Ea_kb
 subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
                         kmb, is, ie, G, GV, CS, maxF, ent_maxF, do_i_in, &
                         F_lim_maxent, F_thresh)
-  type(ocean_grid_type),        intent(in)  :: G
-  type(verticalGrid_type),      intent(in)  :: GV
+  type(ocean_grid_type),        intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),      intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZK_(G)), intent(in) :: h_bl, Sref, Ent_bl
   real, dimension(SZI_(G)),     intent(in)  :: I_dSkbp1, min_ent_in, max_ent_in
   integer,                      intent(in)  :: kmb, is, ie
@@ -2054,9 +2054,9 @@ end subroutine find_maxF_kb
 
 subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type),               intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(entrain_diffusive_CS), pointer     :: CS
 ! Arguments: Time - The current model time.

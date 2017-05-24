@@ -43,45 +43,46 @@ type, public :: p2d
   real, dimension(:,:), pointer :: p => NULL()
 end type p2d
 
-!   The following structure contains pointers to various fields
-! which may be used describe the surface state of MOM, and which
-! will be returned to a the calling program
+!>   The following structure contains pointers to various fields
+!! which may be used describe the surface state of MOM, and which
+!! will be returned to a the calling program
 type, public :: surface
+  real, allocatable, dimension(:,:) :: &
+    SST, &      !< The sea surface temperature in C.
+    SSS, &      !< The sea surface salinity in psu.
+    sfc_density, & !< The mixed layer density in kg m-3.
+    Hml, &      !< The mixed layer depth in m.
+    u, &        !< The mixed layer zonal velocity in m s-1.
+    v, &        !< The mixed layer meridional velocity in m s-1.
+    sea_lev, &  !< The sea level in m.  If a reduced surface gravity is
+                !! used, that is compensated for in sea_lev.
+    ocean_mass, &  !< The total mass of the ocean in kg m-2.
+    ocean_heat, &  !< The total heat content of the ocean in C kg m-2.
+    ocean_salt, &  !< The total salt content of the ocean in kgSalt m-2.
+    salt_deficit   !< The salt needed to maintain the ocean column at a minimum
+                   !! salinity of 0.01 PSU over the call to step_MOM, in kgSalt m-2.
   real, pointer, dimension(:,:) :: &
-    SST => NULL(), &     ! The sea surface temperature in C.
-    SSS => NULL(), &     ! The sea surface salinity in psu.
-    sfc_density => NULL(), &  ! The mixed layer density in kg m-3.
-    u => NULL(), &       ! The mixed layer zonal velocity in m s-1.
-    v => NULL(), &       ! The mixed layer meridional velocity in m s-1.
-    Hml => NULL(), &     ! The mixed layer depth in m.
-    ocean_mass => NULL(), &  ! The total mass of the ocean in kg m-2.
-    ocean_heat => NULL(), &  ! The total heat content of the ocean in C kg m-2.
-    ocean_salt => NULL(), &  ! The total salt content of the ocean in kgSalt m-2.
-    taux_shelf => NULL(), &  ! The zonal and meridional stresses on the ocean
-    tauy_shelf => NULL(), &  ! under shelves, in Pa.
-    frazil => NULL(), &  ! The energy needed to heat the ocean column to the
-                         ! freezing point over the call to step_MOM, in J m-2.
-    salt_deficit => NULL(), & ! The salt needed to maintain the ocean column
-                         ! at a minimum salinity of 0.01 PSU over the call to
-                         ! step_MOM, in kgSalt m-2.
-    TempxPmE => NULL(), &  ! The net inflow of water into the ocean times
-                         ! the temperature at which this inflow occurs during
-                         ! the call to step_MOM, in deg C kg m-2.
-                         !   This should be prescribed in the forcing fields,
-                         ! but as it often is not, this is a useful heat budget
-                         ! diagnostic.
-    internal_heat => NULL() , & ! Any internal or geothermal heat sources that
-                         ! are applied to the ocean integrated over the call
-                         ! to step_MOM, in deg C kg m-2.
-    sea_lev => NULL()    ! The sea level in m.  If a reduced  surface gravity is
-                         ! used, that is compensated for in sea_lev.
-  type(coupler_2d_bc_type), pointer :: tr_fields  => NULL()
-                                          ! A structure that may contain an
-                                          ! array of named fields describing
-                                          ! tracer-related quantities.
+    taux_shelf => NULL(), &  !< The zonal and meridional stresses on the ocean
+    tauy_shelf => NULL(), &  !< under shelves, in Pa.
+    frazil => NULL(), &  !< The energy needed to heat the ocean column to the
+                         !! freezing point over the call to step_MOM, in J m-2.
+    TempxPmE => NULL(), &  !< The net inflow of water into the ocean times
+                         !! the temperature at which this inflow occurs during
+                         !! the call to step_MOM, in deg C kg m-2.
+                         !!   This should be prescribed in the forcing fields,
+                         !! but as it often is not, this is a useful heat budget
+                         !! diagnostic.
+    internal_heat => NULL() !< Any internal or geothermal heat sources that
+                         !! are applied to the ocean integrated over the call
+                         !! to step_MOM, in deg C kg m-2.
+  type(coupler_2d_bc_type), pointer :: &
+    tr_fields  => NULL() !< A structure that may contain an  array of named
+                         !! fields describing tracer-related quantities.
        !!! NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING
        !!!       CONVENTION AND HAVE NO HALOS!  THIS IS DONE TO CONFORM TO
        !!!       THE TREATMENT IN MOM4, BUT I DON'T LIKE IT!
+  logical :: arrays_allocated = .false.  !< A flag that indicates whether
+                         !! the surface type has had its memory allocated.
 end type surface
 
 !   The following structure contains pointers to an assortment of
@@ -104,8 +105,6 @@ type, public :: thermo_var_ptrs
                          ! When conservative temperature is used, this is
                          ! constant and exactly 3991.86795711963 J K kg-1.
   real, pointer, dimension(:,:) :: &
-    Hml => NULL(), &     !   The surface mixed layer depth in m.
-
 !  These arrays are accumulated fluxes for communication with other components.
     frazil => NULL(), &  !   The energy needed to heat the ocean column to the
                          ! freezing point since calculate_surface_state was
@@ -274,7 +273,7 @@ contains
 
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   type(BT_cont_type),    pointer    :: BT_cont
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   logical,     optional, intent(in) :: alloc_faces
 
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -329,7 +328,7 @@ end subroutine dealloc_BT_cont_type
 subroutine MOM_thermovar_chksum(mesg, tv, G)
   character(len=*),                    intent(in) :: mesg
   type(thermo_var_ptrs),               intent(in) :: tv
-  type(ocean_grid_type),               intent(in) :: G
+  type(ocean_grid_type),               intent(in) :: G    !< The ocean's grid structure
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in)      u - Zonal velocity, in m s-1.

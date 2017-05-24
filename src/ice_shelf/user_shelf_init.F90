@@ -113,10 +113,10 @@ contains
 
 subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, param_file, new_sim)
 
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: mass_shelf, area_shelf_h, hmask, h_shelf
   type(user_ice_shelf_CS),          pointer     :: CS
-  type(param_file_type),            intent(in)  :: param_file
+  type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical                                       :: new_sim
 
 ! Arguments: mass_shelf - The mass per unit area averaged over the full ocean
@@ -170,9 +170,9 @@ subroutine USER_initialize_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, 
 end subroutine USER_initialize_shelf_mass
 
 subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: area_shelf_h, hmask, h_shelf
-  type(param_file_type),            intent(in)  :: param_file
+  type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
 
   ! This subroutine initializes the ice shelf thickness.  Currently it does so
   ! calling USER_initialize_shelf_mass, but this can be revised as needed.
@@ -184,7 +184,7 @@ subroutine USER_init_ice_thickness(h_shelf, area_shelf_h, hmask, G, param_file)
 end subroutine USER_init_ice_thickness
 
 subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, CS, Time, new_sim)
-  type(ocean_grid_type),            intent(in)    :: G
+  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: mass_shelf, area_shelf_h, hmask, h_shelf
   type(user_ice_shelf_CS),          pointer       :: CS
   type(time_type),                  intent(in)    :: Time
@@ -258,7 +258,7 @@ subroutine USER_update_shelf_mass(mass_shelf, area_shelf_h, h_shelf, hmask, G, C
 end subroutine USER_update_shelf_mass
 
 subroutine write_user_log(param_file)
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 
   character(len=128) :: version = '$Id: user_shelf_init.F90,v 1.1.2.7 2012/06/19 22:15:52 Robert.Hallberg Exp $'
   character(len=128) :: tagname = '$Name: MOM_ogrp $'

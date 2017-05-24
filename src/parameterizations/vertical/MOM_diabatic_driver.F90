@@ -21,7 +21,7 @@ use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_en
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
-use MOM_domains,             only : pass_var, To_West, To_South
+use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
@@ -70,11 +70,12 @@ implicit none ; private
 public diabatic
 public diabatic_driver_init
 public diabatic_driver_end
+public extract_diabatic_member
 public adiabatic
 public adiabatic_driver_init
 
 !> Control structure for this module
-type, public :: diabatic_CS ;
+type, public:: diabatic_CS ; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer is used with
                                      !! nkml sublayers (and additional buffer layers).
   logical :: use_energetic_PBL       !< If true, use the implicit energetics planetary
@@ -135,6 +136,10 @@ type, public :: diabatic_CS ;
   real    :: Kd_min_tr               !< A minimal diffusivity that should always be
                                      !! applied to tracers, especially in massless layers
                                      !! near the bottom, in m2 s-1.
+  real    :: minimum_forcing_depth = 0.001 !< The smallest depth over which heat and freshwater
+                                           !! fluxes is applied, in m.
+  real    :: evap_CFL_limit = 0.8    !< The largest fraction of a layer that can be
+                                     !! evaporated in one time-step (non-dim).
 
   logical :: useKPP                  !< use CVmix/KPP diffusivities and non-local transport
   logical :: salt_reject_below_ML    !< If true, add salt below mixed layer (layer mode only)
@@ -226,13 +231,14 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
+subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u      !< zonal velocity (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v      !< meridional velocity (m/s)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< thickness (m for Bouss / kg/m2 for non-Bouss)
   type(thermo_var_ptrs),                     intent(inout) :: tv     !< points to thermodynamic fields; unused have NULL ptrs
+  real, dimension(:,:),                      pointer       :: Hml    !< active mixed layer depth
   type(forcing),                             intent(inout) :: fluxes !< points to forcing fields; unused fields have NULL ptrs
   type(vertvisc_type),                       intent(inout) :: visc   !< vertical viscosities, BBL properies, and related
   type(accel_diag_ptrs),                     intent(inout) :: ADp    !< points to accelerations in momentum equations,
@@ -447,7 +453,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt*CS%ML_mix_first, &
                             eaml,ebml, G, GV, CS%bulkmixedlayer_CSp, CS%optics, &
-                            CS%aggregate_FW_forcing, dt, last_call=.false.)
+                            Hml, CS%aggregate_FW_forcing, dt, last_call=.false.)
         if (CS%salt_reject_below_ML) &
           call insert_brine(h, tv, G, GV, fluxes, nkmb, CS%diabatic_aux_CSp, &
                             dt*CS%ML_mix_first, CS%id_brine_lay)
@@ -455,7 +461,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         ! Changes: h, tv%T, tv%S, eaml and ebml  (G is also inout???)
         call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt, eaml, ebml, &
                         G, GV, CS%bulkmixedlayer_CSp, CS%optics, &
-                        CS%aggregate_FW_forcing, dt, last_call=.true.)
+                        Hml, CS%aggregate_FW_forcing, dt, last_call=.true.)
       endif
 
       !  Keep salinity from falling below a small but positive threshold.
@@ -483,8 +489,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
-        call hchksum(eaml, "after find_uv_at_h eaml",G%HI)
-        call hchksum(ebml, "after find_uv_at_h ebml",G%HI)
+        call hchksum(eaml, "after find_uv_at_h eaml",G%HI, scale=GV%H_to_m)
+        call hchksum(ebml, "after find_uv_at_h ebml",G%HI, scale=GV%H_to_m)
       endif
     else
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
@@ -631,8 +637,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     call cpu_clock_begin(id_clock_kpp)
     if (CS%debug) then
-      call hchksum(CS%KPP_temp_flux*GV%H_to_m, "before KPP_applyNLT netHeat",G%HI,haloshift=0)
-      call hchksum(CS%KPP_salt_flux*GV%H_to_m, "before KPP_applyNLT netSalt",G%HI,haloshift=0)
+      call hchksum(CS%KPP_temp_flux, "before KPP_applyNLT netHeat",G%HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(CS%KPP_salt_flux, "before KPP_applyNLT netSalt",G%HI,haloshift=0, scale=GV%H_to_m)
       call hchksum(CS%KPP_NLTheat, "before KPP_applyNLT NLTheat",G%HI,haloshift=0)
       call hchksum(CS%KPP_NLTscalar, "before KPP_applyNLT NLTscalar",G%HI,haloshift=0)
     endif
@@ -717,8 +723,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     call MOM_forcing_chksum("after calc_entrain ", fluxes, G, haloshift=0)
     call MOM_thermovar_chksum("after calc_entrain ", tv, G)
     call MOM_state_chksum("after calc_entrain ", u, v, h, G, GV, haloshift=0)
-    call hchksum(GV%H_to_m*ea, "after calc_entrain ea",G%HI,haloshift=0)
-    call hchksum(GV%H_to_m*eb, "after calc_entrain eb",G%HI,haloshift=0)
+    call hchksum(ea, "after calc_entrain ea", G%HI, haloshift=0, scale=GV%H_to_m)
+    call hchksum(eb, "after calc_entrain eb", G%HI, haloshift=0, scale=GV%H_to_m)
   endif
 
   ! Apply forcing when using the ALE algorithm
@@ -741,13 +747,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     enddo ; enddo ; enddo
     if (CS%use_energetic_PBL) then
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          h, tv, CS%aggregate_FW_forcing, cTKE, dSV_dT, dSV_dS)
+                          h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
+                          CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS)
+
       call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
            CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
 
       if (CS%debug) then
-        call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0)
-        call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0)
+        call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0, scale=GV%H_to_m)
+        call hchksum(eb, "after applyBoundaryFluxes eb",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(cTKE, "after applyBoundaryFluxes cTKE",G%HI,haloshift=0)
         call hchksum(dSV_dT, "after applyBoundaryFluxes dSV_dT",G%HI,haloshift=0)
         call hchksum(dSV_dS, "after applyBoundaryFluxes dSV_dS",G%HI,haloshift=0)
@@ -760,7 +768,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
         call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, visc%MLD, G)
-        call pass_var(visc%MLD, G%domain)
+        call pass_var(visc%MLD, G%domain, halo=1)
+        Hml(:,:) = visc%MLD(:,:)
       endif
 
       ! Augment the diffusivities due to those diagnosed in energetic_PBL.
@@ -786,14 +795,15 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo ; enddo
 
       if (CS%debug) then
-        call hchksum(ea, "after ePBL ea",G%HI,haloshift=0)
-        call hchksum(eb, "after ePBL eb",G%HI,haloshift=0)
+        call hchksum(ea, "after ePBL ea",G%HI,haloshift=0, scale=GV%H_to_m)
+        call hchksum(eb, "after ePBL eb",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
       endif
 
     else
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                                    h, tv, CS%aggregate_FW_forcing)
+                                    h, tv, CS%aggregate_FW_forcing, &
+                                    CS%evap_CFL_limit, CS%minimum_forcing_depth)
 
     endif   ! endif for CS%use_energetic_PBL
 
@@ -956,8 +966,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         eb(i,j,k) = eb(i,j,k) + ebml(i,j,k)
       enddo ; enddo ; enddo
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "after ea = ea + eaml",G%HI,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "after eb = eb + ebml",G%HI,haloshift=0)
+        call hchksum(ea, "after ea = ea + eaml",G%HI,haloshift=0, scale=GV%H_to_m)
+        call hchksum(eb, "after eb = eb + ebml",G%HI,haloshift=0, scale=GV%H_to_m)
       endif
     endif
 
@@ -978,7 +988,7 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! Changes: h, tv%T, tv%S, ea and eb  (G is also inout???)
       call bulkmixedlayer(h, u_h, v_h, tv, fluxes, dt_mix, ea, eb, &
                       G, GV, CS%bulkmixedlayer_CSp, CS%optics, &
-                      CS%aggregate_FW_forcing, dt, last_call=.true.)
+                      Hml, CS%aggregate_FW_forcing, dt, last_call=.true.)
 
       if (CS%salt_reject_below_ML) &
         call insert_brine(h, tv, G, GV, fluxes, nkmb, CS%diabatic_aux_CSp, dt_mix, &
@@ -1005,8 +1015,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (ASSOCIATED(tv%T)) then
 
       if (CS%debug) then
-        call hchksum(GV%H_to_m*ea, "before triDiagTS ea ",G%HI,haloshift=0)
-        call hchksum(GV%H_to_m*eb, "before triDiagTS eb ",G%HI,haloshift=0)
+        call hchksum(ea, "before triDiagTS ea ",G%HI,haloshift=0, scale=GV%H_to_m)
+        call hchksum(eb, "before triDiagTS eb ",G%HI,haloshift=0, scale=GV%H_to_m)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
@@ -1043,8 +1053,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (CS%debug) then
     call MOM_state_chksum("after mixed layer ", u, v, h, G, GV, haloshift=0)
     call MOM_thermovar_chksum("after mixed layer ", tv, G)
-    call hchksum(ea, "after mixed layer ea", G%HI)
-    call hchksum(eb, "after mixed layer eb", G%HI)
+    call hchksum(ea, "after mixed layer ea", G%HI, scale=GV%H_to_m)
+    call hchksum(eb, "after mixed layer eb", G%HI, scale=GV%H_to_m)
   endif
 
   if (.not. CS%useALEalgorithm) then
@@ -1144,12 +1154,12 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
     ! so hold should be h_orig
-      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, ea, eb, fluxes, Hml, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                evap_CFL_limit = CS%evap_CFL_limit, &
+                                minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
@@ -1175,24 +1185,24 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug,&
-                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                  evap_CFL_limit = CS%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
   else
     if (CS%useALEalgorithm) then
     ! For passive tracers, the changes in thickness due to boundary fluxes has yet to be applied
-      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(h_prebound, h, eatr, ebtr, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                  evap_CFL_limit = CS%diabatic_aux_CSp%evap_CFL_limit, &
-                                  minimum_forcing_depth = CS%diabatic_aux_CSp%minimum_forcing_depth)
+                                  evap_CFL_limit = CS%evap_CFL_limit, &
+                                  minimum_forcing_depth = CS%minimum_forcing_depth)
     else
-      call call_tracer_column_fns(hold, h, ea, eb, fluxes, dt, G, GV, tv, &
+      call call_tracer_column_fns(hold, h, ea, eb, fluxes, Hml, dt, G, GV, tv, &
                                   CS%optics, CS%tracer_flow_CSp, CS%debug)
     endif
 
@@ -1251,8 +1261,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 ! mixed layer turbulence is applied elsewhere.
   if (CS%bulkmixedlayer) then
     if (CS%debug) then
-      call hchksum(ea, "before net flux rearrangement ea",G%HI)
-      call hchksum(eb, "before net flux rearrangement eb",G%HI)
+      call hchksum(ea, "before net flux rearrangement ea",G%HI, scale=GV%H_to_m)
+      call hchksum(eb, "before net flux rearrangement eb",G%HI, scale=GV%H_to_m)
     endif
 !$OMP do
     do j=js,je
@@ -1263,8 +1273,8 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       enddo ; enddo
     enddo
     if (CS%debug) then
-      call hchksum(ea, "after net flux rearrangement ea",G%HI)
-      call hchksum(eb, "after net flux rearrangement eb",G%HI)
+      call hchksum(ea, "after net flux rearrangement ea",G%HI, scale=GV%H_to_m)
+      call hchksum(eb, "after net flux rearrangement eb",G%HI, scale=GV%H_to_m)
     endif
   endif
 
@@ -1285,13 +1295,13 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
   call cpu_clock_begin(id_clock_pass)
   if (G%symmetric) then
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_All+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_All+Omit_Corners,halo=1)
   else
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South)
+    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South+Omit_Corners,halo=1)
   endif
   call do_group_pass(CS%pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
@@ -1302,9 +1312,9 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     !  or enters the ocean with the surface velocity.
     if (CS%debug) then
       call MOM_state_chksum("before u/v tridiag ", u, v, h, G, GV, haloshift=0)
-      call hchksum(ea, "before u/v tridiag ea",G%HI)
-      call hchksum(eb, "before u/v tridiag eb",G%HI)
-      call hchksum(hold, "before u/v tridiag hold",G%HI)
+      call hchksum(ea, "before u/v tridiag ea",G%HI, scale=GV%H_to_m)
+      call hchksum(eb, "before u/v tridiag eb",G%HI, scale=GV%H_to_m)
+      call hchksum(hold, "before u/v tridiag hold",G%HI, scale=GV%H_to_m)
     endif
     call cpu_clock_begin(id_clock_tridiag)
 !$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
@@ -1468,6 +1478,26 @@ subroutine diabatic(u, v, h, tv, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
 end subroutine diabatic
 
+!> Returns pointers or values of members within the diabatic_CS type. For extensibility,
+!! each returned argument is an optional argument
+subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
+                                   evap_CFL_limit, minimum_forcing_depth)
+  type(diabatic_CS),  intent(in   ) :: CS
+  ! All output arguments are optional
+  type(opacity_CS),   pointer, optional, intent(  out) :: opacity_CSp
+  type(optics_type),  pointer, optional, intent(  out) :: optics_CSp
+  real,                        optional, intent(  out) :: evap_CFL_limit
+  real,                        optional, intent(  out) :: minimum_forcing_depth
+
+  ! Pointers to control structures
+  if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
+  if (present(optics_CSp))  optics_CSp  => CS%optics
+
+  ! Constants within diabatic_CS
+  if (present(evap_CFL_limit))        evap_CFL_limit = CS%evap_CFL_limit
+  if (present(minimum_forcing_depth)) minimum_forcing_depth = CS%minimum_forcing_depth
+
+end subroutine
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
@@ -1483,7 +1513,7 @@ subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
 
   zeros(:,:,:) = 0.0
 
-  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, dt, G, GV, tv, &
+  call call_tracer_column_fns(h, h, zeros, zeros, fluxes, zeros(:,:,1), dt, G, GV, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug)
 
 end subroutine adiabatic
@@ -1922,6 +1952,18 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   call get_param(param_file, mod, "TRACER_TRIDIAG", CS%tracer_tridiag, &
                  "If true, use the passive tracer tridiagonal solver for T and S\n", &
                  default=.false.)
+
+  call get_param(param_file, mod, "MINIMUM_FORCING_DEPTH", CS%minimum_forcing_depth, &
+                 "The smallest depth over which forcing can be applied. This\n"//&
+                 "only takes effect when near-surface layers become thin\n"//&
+                 "relative to this scale, in which case the forcing tendencies\n"//&
+                 "scaled down by distributing the forcing over this depth scale.", &
+                 units="m", default=0.001)
+  call get_param(param_file, mod, "EVAP_CFL_LIMIT", CS%evap_CFL_limit, &
+                 "The largest fraction of a layer than can be lost to forcing\n"//&
+                 "(e.g. evaporation, sea-ice formation) in one time-step. The unused\n"//&
+                 "mass loss is passed down through the column.", &
+                 units="nondim", default=0.8)
 
 
   ! Register all available diagnostics for this module.

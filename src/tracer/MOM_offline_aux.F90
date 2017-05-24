@@ -35,8 +35,8 @@ contains
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
@@ -69,8 +69,8 @@ end subroutine update_h_horizontal_flux
 !> Updates layer thicknesses due to vertical mass transports
 !! NOTE: Only used in non-ALE configuration
 subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: ea
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: eb
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
@@ -115,8 +115,8 @@ end subroutine update_h_vertical_flux
 !> This routine limits the mass fluxes so that the a layer cannot be completely depleted.
 !! NOTE: Only used in non-ALE mode
 subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
@@ -210,9 +210,9 @@ end subroutine limit_mass_flux_3d
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into remainder of the water column as a barotropic equivalent
 subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -283,9 +283,9 @@ end subroutine distribute_residual_uh_barotropic
 
 !> Redistribute the v-flux as a barotropic equivalent
 subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -360,9 +360,9 @@ end subroutine distribute_residual_vh_barotropic
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
 subroutine distribute_residual_uh_upwards(G, GV, h, uh)
-  type(ocean_grid_type),    pointer                           :: G
-  type(verticalGrid_type),  pointer                           :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h
+  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -449,9 +449,9 @@ end subroutine distribute_residual_uh_upwards
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
 subroutine distribute_residual_vh_upwards(G, GV, h, vh)
-  type(ocean_grid_type),    pointer                          :: G
-  type(verticalGrid_type),  pointer                          :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h
+  type(ocean_grid_type),    pointer                          :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  pointer                          :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)   :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d

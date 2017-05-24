@@ -1,0 +1,138 @@
+stages:
+  - merge
+  - setup
+  - builds
+  - run
+  - tests
+
+# Creates and moves to re-used workspace
+before_script:
+  - export MOM6_SRC=`pwd | sed 's:/[1-9]/:/0/:'`
+  - echo $MOM6_SRC
+  - export WORKSPACE=`pwd | sed 's:/[0-9]/:/:'`
+  - echo $WORKSPACE
+  - test -d $WORKSPACE/tests && cd $WORKSPACE/tests
+  - pwd
+
+# Merge
+merge:
+  stage: merge
+  tags:
+    - ncrc3
+  script:
+    - cd $MOM6_SRC && git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/master
+
+# Clones regression repo, if necessary, pulls latest of everything, and sets up working space
+setup:
+  stage: setup
+  tags:
+    - ncrc3
+  script:
+    - mkdir -p $WORKSPACE && cd $WORKSPACE
+    - ln -sf $MOM6_SRC/{config_src,src,pkg} .
+    - test -d tests || (git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests)
+    - cd tests
+    - git checkout master
+    - git checkout . && git pull
+    - git status
+    - bash Gitlab/before_script.sh
+    - (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
+
+# Compiles
+gnu:repro:
+  stage: builds
+  tags:
+    - ncrc3
+  script:
+    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_gnu -s -j
+    - make -f Gitlab/Makefile.build MOM6_SRC=../ static_gnu -s -j #coverage_gnu
+
+intel:repro:
+  stage: builds
+  tags:
+    - ncrc3
+  script:
+    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_intel -s -j
+
+pgi:repro:
+  stage: builds
+  tags:
+    - ncrc3
+  script:
+    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_pgi -s -j
+
+gnu:debug:
+  stage: builds
+  tags:
+    - ncrc3
+  script:
+    - make -f Gitlab/Makefile.build MOM6_SRC=../ debug_gnu -s -j
+
+# Runs
+run:
+  stage: run
+  tags:
+    - ncrc3
+  script:
+    - bash Gitlab/run_stage.sh
+
+# Tests
+gnu:regressions:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - cd regressions && git checkout .
+    - md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
+    - echo "Regression results for non-symmetric gnu executables"
+    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum -c all_gnu.md5
+
+intel:regressions:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - cd regressions && git checkout .
+    - md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
+    - echo "Regression results for non-symmetric intel executables"
+    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum -c all_intel.md5
+
+pgi:regressions:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - cd regressions && git checkout .
+    - md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
+    - echo "Regression results for non-symmetric pgi executables"
+    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum -c all_pgi.md5
+
+gnu:symmetric:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - mkdir -p _gnu && cd _gnu
+    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
+    - echo "Regression results for symmetric executables"
+    - tar xf ../MOM6-examples/symmetric_gnu.tar && md5sum -c all_gnu.md5
+
+intel:symmetric:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - mkdir -p _intel && cd _intel
+    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
+    - echo "Regression results for symmetric executables"
+    - tar xf ../MOM6-examples/symmetric_intel.tar && md5sum -c all_intel.md5
+
+pgi:symmetric:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - mkdir -p _pgi && cd _pgi
+    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
+    - echo "Regression results for symmetric executables"
+    - tar xf ../MOM6-examples/symmetric_pgi.tar && md5sum -c all_pgi.md5

@@ -107,7 +107,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
 
 end subroutine circle_obcs_initialize_thickness
 
-!> \class circle_obcs_initialization
+!> \namespace circle_obcs_initialization
 !!
 !! The module configures the model for the "circle_obcs" experiment.
 !! circle_obcs = Test of Open Boundary Conditions for an SSH anomaly.
