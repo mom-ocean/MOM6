@@ -333,16 +333,18 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, local_open_BC, is_simple
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
+  local_open_BC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
                         OBC%Flather_v_BCs_exist_globally
+    local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -385,10 +387,22 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       call zonal_flux_layer(u(:,j,k), h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), &
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, j, ish, ieh, do_I, CS%vol_CFL)
-      if (local_specified_BC) then ; do I=ish-1,ieh
-        if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-          uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
-      enddo ; endif
+      if (local_specified_BC) then
+        do I=ish-1,ieh
+          if (OBC%segment(OBC%segnum_u(I,j))%specified) &
+            uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+        enddo
+      endif
+      if (local_open_BC) then
+        do I=ish-1,ieh
+          if (OBC%segment(OBC%segnum_u(I,j))%open) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
+                 uh(I,j,k) = u(I,j,k) * h_in(i,j,k)
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
+                 uh(I,j,k) = u(I,j,k) * h_in(i+1,j,k)
+          endif
+        enddo
+      endif
     enddo
 
     if ((.not.use_visc_rem).or.(.not.CS%use_visc_rem_max)) then ; do I=ish-1,ieh
@@ -549,6 +563,16 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
     else
       call zonal_face_thickness(u, h_in, h_L, h_R, BT_cont%h_u, dt, G, LB, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_u)
+    endif
+    if (local_open_BC) then
+      do I=ish-1,ieh
+        if (OBC%segment(OBC%segnum_u(I,j))%open) then
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
+               BT_cont%h_u(I,j,k) = h_in(i,j,k)
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
+               BT_cont%h_u(I,j,k) = h_in(i+1,j,k)
+        endif
+      enddo
     endif
   endif ; endif
 
@@ -1080,16 +1104,18 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, is_simple, local_open_BC
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
+  local_open_BC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
                         OBC%Flather_v_BCs_exist_globally
+    local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -1134,10 +1160,22 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), &
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, J, ish, ieh, do_I, CS%vol_CFL)
-      if (local_specified_BC) then ; do i=ish,ieh
-        if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-          vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
-      enddo ; endif
+      if (local_specified_BC) then
+        do i=ish,ieh
+          if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+            vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+        enddo
+      endif
+      if (local_open_BC) then
+        do i=ish,ieh
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
+                 vh(i,J,k) = v(i,J,k) * h_in(i,j,k)
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_S) &
+                 vh(i,J,k) = v(i,J,k) * h_in(i,j+1,k)
+          endif
+        enddo
+      endif
     enddo ! k-loop
     if ((.not.use_visc_rem) .or. (.not.CS%use_visc_rem_max)) then ; do i=ish,ieh
       visc_rem_max(i) = 1.0
@@ -1293,6 +1331,16 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     else
       call merid_face_thickness(v, h_in, h_L, h_R, BT_cont%h_v, dt, G, LB, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_v)
+    endif
+    if (local_open_BC) then
+      do i=ish,ieh
+        if (OBC%segment(OBC%segnum_v(i,J))%open) then
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
+               BT_cont%h_v(i,J,k) = h_in(i,j,k)
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_S) &
+               BT_cont%h_v(i,J,k) = h_in(i,j+1,k)
+        endif
+      enddo
     endif
   endif ; endif
 
