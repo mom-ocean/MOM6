@@ -9,7 +9,6 @@ use MOM_diag_mediator,  only : diag_ctrl, time_type
 use MOM_diag_mediator,  only : post_data, register_diag_field
 use MOM_EOS,            only : EOS_type, calculate_compress, calculate_density_derivs
 use MOM_error_handler,  only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_error_handler,  only : MOM_get_verbosity
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type
@@ -1046,7 +1045,9 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
 end subroutine neutral_surface_flux
 
 !> Returns true if unit tests of neutral_diffusion functions fail. Otherwise returns false.
-logical function neutral_diffusion_unit_tests()
+logical function neutral_diffusion_unit_tests(verbose)
+  logical, intent(in) :: verbose !< It true, write results to stdout
+  ! Local variables
   integer, parameter         :: nk = 4
   real, dimension(nk+1)      :: TiL, TiR1, TiR2, TiR4, Tio ! Test interface temperatures
   real, dimension(nk)        :: TL                         ! Test layer temperatures
@@ -1056,49 +1057,49 @@ logical function neutral_diffusion_unit_tests()
   integer, dimension(2*nk+2) :: KoL, KoR                   ! Test indexes
   real, dimension(2*nk+1)    :: hEff                       ! Test positions
   real, dimension(2*nk+1)    :: Flx                        ! Test flux
+  integer :: k
+  logical :: v
 
-  integer :: k, verbosity
-
-  verbosity = MOM_get_verbosity()
+  v = verbose
 
   neutral_diffusion_unit_tests = .false. ! Normally return false
-  write(*,'(a)') '===== MOM_neutral_diffusion: neutral_diffusion_unit_tests ==============='
+  write(*,*) '==== MOM_neutral_diffusion: neutral_diffusion_unit_tests ='
 
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fv_diff(v,0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
 
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_fvlsq_slope(v,0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
 
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1)
   !neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v,5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
   call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v,5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp( 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v, 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v, 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v, 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v, 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_ifndp(v,-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
   call find_neutral_surface_positions(3, &
@@ -1107,28 +1108,28 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/22.,18.,14.,10./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! KoL
                                    (/1,1,2,2,3,3,3,3/), & ! KoR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pR
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Identical columns')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... left positions')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(7, Flx, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
   ! Right column slightly cooler than left
@@ -1138,17 +1139,17 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/20.,16.,12.,8./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,1,2,2,3,3,3/), & ! kR
                                    (/0.,0.5,0.,0.5,0.,0.5,1.,1./), & ! pL
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pR
                                    (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
                                    'Right column slightly cooler')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,5.,10.,15.,20.,25.,30.,30./), '... left positions')
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(8, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
@@ -1159,7 +1160,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/24.,20.,16.,12./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,2,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,0.,0.5,1./), & ! pL
@@ -1174,7 +1175,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/16.,12.,8.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,2,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,2,3,3/), & ! kR
                                    (/0.,0.,0.5,0.,0.5,1.,1.,1./), & ! pL
@@ -1189,7 +1190,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/9.,7.,5.,3./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,1,2,3,3/), & ! kR
                                    (/0.,0.,0.,1.,1.,1.,1.,1./), & ! pL
@@ -1204,7 +1205,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,1,2,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,1.,1.,1./), & ! pL
@@ -1219,7 +1220,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,2,2,3,3,3,3/), & ! kL
                                    (/1,1,2,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,1.,1./), & ! pL
@@ -1234,7 +1235,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,2,3,3,3,3,3,3/), & ! kL
                                    (/1,1,1,2,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,.75,1./), & ! pL
@@ -1249,7 +1250,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/14.,14.,10.,2./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,2,3,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.25,1.,1./), & ! pL
@@ -1264,7 +1265,7 @@ logical function neutral_diffusion_unit_tests()
              (/0.,10.,20.,30./), (/10.,14.,12.,4./), (/0.,0.,0.,0./), & ! Right positions, T and S
              (/-1.,-1.,-1.,-1./), (/1.,1.,1.,1./), &! Right dRdT and dRdS
              PiLRo, PiRLo, KoL, KoR, hEff)
-  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(3, KoL, KoR, PiLRo, PiRLo, hEff, &
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or.  test_nsp(v, 3, KoL, KoR, PiLRo, PiRLo, hEff, &
                                    (/1,1,1,1,2,3,3,3/), & ! kL
                                    (/1,2,3,3,3,3,3,3/), & ! kR
                                    (/0.,0.,0.,0.,0.,0.,0.75,1./), & ! pL
@@ -1272,236 +1273,240 @@ logical function neutral_diffusion_unit_tests()
                                    (/0.,0.,0.,0.,0.,6.,0./), & ! hEff
                                    'Two unstable mixed layers')
 
-  write(*,'(a)') '=========================================================='
-
-  contains
-
-  !> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
-  logical function test_fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1  !< Left cell width
-    real,             intent(in) :: hk    !< Center cell width
-    real,             intent(in) :: hkp1  !< Right cell width
-    real,             intent(in) :: Skm1  !< Left cell average value
-    real,             intent(in) :: Sk    !< Center cell average value
-    real,             intent(in) :: Skp1  !< Right cell average value
-    real,             intent(in) :: Ptrue !< True answer (Pa)
-    character(len=*), intent(in) :: title !< Title for messages
-
-    ! Local variables
-    integer :: stdunit
-    real :: Pret
-
-    Pret = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-    test_fv_diff = (Pret /= Ptrue)
-
-    if (test_fv_diff .or. verbosity>5) then
-      stdunit = 6
-      if (test_fv_diff) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      if (test_fv_diff) then
-        write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
-      else
-        write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
-      endif
-    endif
-
-  end function test_fv_diff
-
-  !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
-  logical function test_fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
-    real,             intent(in) :: hkm1  !< Left cell width
-    real,             intent(in) :: hk    !< Center cell width
-    real,             intent(in) :: hkp1  !< Right cell width
-    real,             intent(in) :: Skm1  !< Left cell average value
-    real,             intent(in) :: Sk    !< Center cell average value
-    real,             intent(in) :: Skp1  !< Right cell average value
-    real,             intent(in) :: Ptrue !< True answer (Pa)
-    character(len=*), intent(in) :: title !< Title for messages
-
-    ! Local variables
-    integer :: stdunit
-    real :: Pret
-
-    Pret = fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-    test_fvlsq_slope = (Pret /= Ptrue)
-
-    if (test_fvlsq_slope .or. verbosity>5) then
-      stdunit = 6
-      if (test_fvlsq_slope) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      if (test_fvlsq_slope) then
-        write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
-      else
-        write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
-      endif
-    endif
-
-  end function test_fvlsq_slope
-
-  !> Returns true if a test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
-  logical function test_ifndp(rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
-    real,             intent(in) :: rhoNeg !< Lighter density (kg/m3)
-    real,             intent(in) :: Pneg   !< Interface position of lighter density (Pa)
-    real,             intent(in) :: rhoPos !< Heavier density (kg/m3)
-    real,             intent(in) :: Ppos   !< Interface position of heavier density (Pa)
-    real,             intent(in) :: Ptrue  !< True answer (Pa)
-    character(len=*), intent(in) :: title  !< Title for messages
-
-    ! Local variables
-    integer :: stdunit
-    real :: Pret
-
-    Pret = interpolate_for_nondim_position(rhoNeg, Pneg, rhoPos, Ppos)
-    test_ifndp = (Pret /= Ptrue)
-
-    if (test_ifndp .or. verbosity>5) then
-      stdunit = 6
-      if (test_ifndp) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      if (test_ifndp) then
-        write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
-      else
-        write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15))') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue
-      endif
-    endif
-
-  end function test_ifndp
-
-  !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
-  logical function test_data1d(nk, Po, Ptrue, title)
-    integer,             intent(in) :: nk    !< Number of layers
-    real, dimension(nk), intent(in) :: Po    !< Calculated answer
-    real, dimension(nk), intent(in) :: Ptrue !< True answer
-    character(len=*),    intent(in) :: title !< Title for messages
-
-    ! Local variables
-    integer :: k, stdunit
-
-    test_data1d = .false.
-    do k = 1,nk
-      if (Po(k) /= Ptrue(k)) test_data1d = .true.
-    enddo
-
-    if (test_data1d .or. verbosity>5) then
-      stdunit = 6
-      if (test_data1d) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      do k = 1,nk
-        if (Po(k) /= Ptrue(k)) then
-          test_data1d = .true.
-          write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
-        else
-          if (verbosity>5) &
-            write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
-        endif
-      enddo
-    endif
-
-  end function test_data1d
-
-  !> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
-  logical function test_data1di(nk, Po, Ptrue, title)
-    integer,                intent(in) :: nk    !< Number of layers
-    integer, dimension(nk), intent(in) :: Po    !< Calculated answer
-    integer, dimension(nk), intent(in) :: Ptrue !< True answer
-    character(len=*),       intent(in) :: title !< Title for messages
-
-    ! Local variables
-    integer :: k, stdunit
-
-    test_data1di = .false.
-    do k = 1,nk
-      if (Po(k) /= Ptrue(k)) test_data1di = .true.
-    enddo
-
-    if (test_data1di .or. verbosity>5) then
-      stdunit = 6
-      if (test_data1di) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      do k = 1,nk
-        if (Po(k) /= Ptrue(k)) then
-          test_data1di = .true.
-          write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
-        else
-          if (verbosity>5) &
-            write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
-        endif
-      enddo
-    endif
-
-  end function test_data1di
-
-  !> Returns true if output of find_neutral_surface_positions() does not match correct values, and conditionally writes results to stream
-  logical function test_nsp(nk, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, pR0, hEff0, title)
-    integer,                    intent(in) :: nk    !< Number of layers
-    integer, dimension(2*nk+2), intent(in) :: KoL   !< Index of first left interface above neutral surface
-    integer, dimension(2*nk+2), intent(in) :: KoR   !< Index of first right interface above neutral surface
-    real, dimension(2*nk+2),    intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
-    real, dimension(2*nk+2),    intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
-    real, dimension(2*nk+1),    intent(in) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
-    integer, dimension(2*nk+2), intent(in) :: KoL0  !< Correct value for KoL
-    integer, dimension(2*nk+2), intent(in) :: KoR0  !< Correct value for KoR
-    real, dimension(2*nk+2),    intent(in) :: pL0   !< Correct value for pL
-    real, dimension(2*nk+2),    intent(in) :: pR0   !< Correct value for pR
-    real, dimension(2*nk+1),    intent(in) :: hEff0 !< Correct value for hEff
-    character(len=*),           intent(in) :: title !< Title for messages
-
-    ! Local variables
-    integer :: k, stdunit
-    logical :: this_row_failed
-
-    test_nsp = .false.
-    do k = 1,2*nk+2
-      test_nsp = test_nsp .or. compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
-      if (k < 2*nk+2) then
-        if (hEff(k) /= hEff0(k)) test_nsp = .true.
-      endif
-    enddo
-
-    if (test_nsp .or. verbosity>5) then
-      stdunit = 6
-      if (test_nsp) stdunit = 0 ! In case of wrong results, write to error stream
-      write(stdunit,'(a)') title
-      do k = 1,2*nk+2
-        this_row_failed = compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
-        if (this_row_failed) then
-          write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k),' <-- WRONG!'
-          write(stdunit,10) k,KoL0(k),pL0(k),KoR0(k),pR0(k),' <-- should be this'
-        else
-          write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k)
-        endif
-        if (k < 2*nk+2) then
-          if (hEff(k) /= hEff0(k)) then
-            write(stdunit,'(i3,8x,"layer hEff =",2(f20.16,a))') k,hEff(k)," .neq. ",hEff0(k),' <-- WRONG!'
-          else
-            write(stdunit,'(i3,8x,"layer hEff =",f20.16)') k,hEff(k)
-          endif
-        endif
-      enddo
-    endif
-
-10  format("ks=",i3," kL=",i3," pL=",f20.16," kR=",i3," pR=",f20.16,a)
-  end function test_nsp
-
-  !> Compares a single row, k, of output from find_neutral_surface_positions()
-  logical function compare_nsp_row(KoL, KoR, pL, pR, KoL0, KoR0, pL0, pR0)
-    integer,  intent(in) :: KoL   !< Index of first left interface above neutral surface
-    integer,  intent(in) :: KoR   !< Index of first right interface above neutral surface
-    real,     intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
-    real,     intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
-    integer,  intent(in) :: KoL0  !< Correct value for KoL
-    integer,  intent(in) :: KoR0  !< Correct value for KoR
-    real,     intent(in) :: pL0   !< Correct value for pL
-    real,     intent(in) :: pR0   !< Correct value for pR
-
-    compare_nsp_row = .false.
-    if (KoL /= KoL0) compare_nsp_row = .true.
-    if (KoR /= KoR0) compare_nsp_row = .true.
-    if (pL /= pL0) compare_nsp_row = .true.
-    if (pR /= pR0) compare_nsp_row = .true.
-  end function compare_nsp_row
+  if (.not. neutral_diffusion_unit_tests) write(*,*) 'Pass'
 
 end function neutral_diffusion_unit_tests
+
+!> Returns true if a test of fv_diff() fails, and conditionally writes results to stream
+logical function test_fv_diff(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
+  logical,          intent(in) :: verbose !< If true, write results to stdout
+  real,             intent(in) :: hkm1  !< Left cell width
+  real,             intent(in) :: hk    !< Center cell width
+  real,             intent(in) :: hkp1  !< Right cell width
+  real,             intent(in) :: Skm1  !< Left cell average value
+  real,             intent(in) :: Sk    !< Center cell average value
+  real,             intent(in) :: Skp1  !< Right cell average value
+  real,             intent(in) :: Ptrue !< True answer (Pa)
+  character(len=*), intent(in) :: title !< Title for messages
+
+  ! Local variables
+  integer :: stdunit
+  real :: Pret
+
+  Pret = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+  test_fv_diff = (Pret /= Ptrue)
+
+  if (test_fv_diff .or. verbose) then
+    stdunit = 6
+    if (test_fv_diff) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    if (test_fv_diff) then
+      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+    else
+      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+    endif
+  endif
+
+end function test_fv_diff
+
+!> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
+logical function test_fvlsq_slope(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
+  logical,          intent(in) :: verbose !< If true, write results to stdout
+  real,             intent(in) :: hkm1  !< Left cell width
+  real,             intent(in) :: hk    !< Center cell width
+  real,             intent(in) :: hkp1  !< Right cell width
+  real,             intent(in) :: Skm1  !< Left cell average value
+  real,             intent(in) :: Sk    !< Center cell average value
+  real,             intent(in) :: Skp1  !< Right cell average value
+  real,             intent(in) :: Ptrue !< True answer (Pa)
+  character(len=*), intent(in) :: title !< Title for messages
+
+  ! Local variables
+  integer :: stdunit
+  real :: Pret
+
+  Pret = fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
+  test_fvlsq_slope = (Pret /= Ptrue)
+
+  if (test_fvlsq_slope .or. verbose) then
+    stdunit = 6
+    if (test_fvlsq_slope) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    if (test_fvlsq_slope) then
+      write(stdunit,'(2(x,a,f20.16),x,a)') 'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+    else
+      write(stdunit,'(2(x,a,f20.16))') 'pRet=',Pret,'pTrue=',Ptrue
+    endif
+  endif
+
+end function test_fvlsq_slope
+
+!> Returns true if a test of interpolate_for_nondim_position() fails, and conditionally writes results to stream
+logical function test_ifndp(verbose, rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
+  logical,          intent(in) :: verbose !< If true, write results to stdout
+  real,             intent(in) :: rhoNeg !< Lighter density (kg/m3)
+  real,             intent(in) :: Pneg   !< Interface position of lighter density (Pa)
+  real,             intent(in) :: rhoPos !< Heavier density (kg/m3)
+  real,             intent(in) :: Ppos   !< Interface position of heavier density (Pa)
+  real,             intent(in) :: Ptrue  !< True answer (Pa)
+  character(len=*), intent(in) :: title  !< Title for messages
+
+  ! Local variables
+  integer :: stdunit
+  real :: Pret
+
+  Pret = interpolate_for_nondim_position(rhoNeg, Pneg, rhoPos, Ppos)
+  test_ifndp = (Pret /= Ptrue)
+
+  if (test_ifndp .or. verbose) then
+    stdunit = 6
+    if (test_ifndp) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    if (test_ifndp) then
+      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15),x,a)') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue,'WRONG!'
+    else
+      write(stdunit,'(4(x,a,f20.16),2(x,a,1pe22.15))') 'r1=',rhoNeg,'p1=',Pneg,'r2=',rhoPos,'p2=',Ppos,'pRet=',Pret,'pTrue=',Ptrue
+    endif
+  endif
+
+end function test_ifndp
+
+!> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
+logical function test_data1d(verbose, nk, Po, Ptrue, title)
+  logical,             intent(in) :: verbose !< If true, write results to stdout
+  integer,             intent(in) :: nk    !< Number of layers
+  real, dimension(nk), intent(in) :: Po    !< Calculated answer
+  real, dimension(nk), intent(in) :: Ptrue !< True answer
+  character(len=*),    intent(in) :: title !< Title for messages
+
+  ! Local variables
+  integer :: k, stdunit
+
+  test_data1d = .false.
+  do k = 1,nk
+    if (Po(k) /= Ptrue(k)) test_data1d = .true.
+  enddo
+
+  if (test_data1d .or. verbose) then
+    stdunit = 6
+    if (test_data1d) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    do k = 1,nk
+      if (Po(k) /= Ptrue(k)) then
+        test_data1d = .true.
+        write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15,x,a)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k),'WRONG!'
+      else
+        if (verbose) &
+          write(stdunit,'(a,i2,2(x,a,f20.16),x,a,1pe22.15)') 'k=',k,'Po=',Po(k),'Ptrue=',Ptrue(k),'err=',Po(k)-Ptrue(k)
+      endif
+    enddo
+  endif
+
+end function test_data1d
+
+!> Returns true if comparison of Po and Ptrue fails, and conditionally writes results to stream
+logical function test_data1di(verbose, nk, Po, Ptrue, title)
+  logical,                intent(in) :: verbose !< If true, write results to stdout
+  integer,                intent(in) :: nk    !< Number of layers
+  integer, dimension(nk), intent(in) :: Po    !< Calculated answer
+  integer, dimension(nk), intent(in) :: Ptrue !< True answer
+  character(len=*),       intent(in) :: title !< Title for messages
+
+  ! Local variables
+  integer :: k, stdunit
+
+  test_data1di = .false.
+  do k = 1,nk
+    if (Po(k) /= Ptrue(k)) test_data1di = .true.
+  enddo
+
+  if (test_data1di .or. verbose) then
+    stdunit = 6
+    if (test_data1di) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    do k = 1,nk
+      if (Po(k) /= Ptrue(k)) then
+        test_data1di = .true.
+        write(stdunit,'(a,i2,2(x,a,i5),x,a)') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k),'WRONG!'
+      else
+        if (verbose) &
+          write(stdunit,'(a,i2,2(x,a,i5))') 'k=',k,'Io=',Po(k),'Itrue=',Ptrue(k)
+      endif
+    enddo
+  endif
+
+end function test_data1di
+
+!> Returns true if output of find_neutral_surface_positions() does not match correct values, and conditionally writes results to stream
+logical function test_nsp(verbose, nk, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, pR0, hEff0, title)
+  logical,                    intent(in) :: verbose !< If true, write results to stdout
+  integer,                    intent(in) :: nk    !< Number of layers
+  integer, dimension(2*nk+2), intent(in) :: KoL   !< Index of first left interface above neutral surface
+  integer, dimension(2*nk+2), intent(in) :: KoR   !< Index of first right interface above neutral surface
+  real, dimension(2*nk+2),    intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(2*nk+2),    intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+  real, dimension(2*nk+1),    intent(in) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+  integer, dimension(2*nk+2), intent(in) :: KoL0  !< Correct value for KoL
+  integer, dimension(2*nk+2), intent(in) :: KoR0  !< Correct value for KoR
+  real, dimension(2*nk+2),    intent(in) :: pL0   !< Correct value for pL
+  real, dimension(2*nk+2),    intent(in) :: pR0   !< Correct value for pR
+  real, dimension(2*nk+1),    intent(in) :: hEff0 !< Correct value for hEff
+  character(len=*),           intent(in) :: title !< Title for messages
+
+  ! Local variables
+  integer :: k, stdunit
+  logical :: this_row_failed
+
+  test_nsp = .false.
+  do k = 1,2*nk+2
+    test_nsp = test_nsp .or. compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
+    if (k < 2*nk+2) then
+      if (hEff(k) /= hEff0(k)) test_nsp = .true.
+    endif
+  enddo
+
+  if (test_nsp .or. verbose) then
+    stdunit = 6
+    if (test_nsp) stdunit = 0 ! In case of wrong results, write to error stream
+    write(stdunit,'(a)') title
+    do k = 1,2*nk+2
+      this_row_failed = compare_nsp_row(KoL(k), KoR(k), pL(k), pR(k), KoL0(k), KoR0(k), pL0(k), pR0(k))
+      if (this_row_failed) then
+        write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k),' <-- WRONG!'
+        write(stdunit,10) k,KoL0(k),pL0(k),KoR0(k),pR0(k),' <-- should be this'
+      else
+        write(stdunit,10) k,KoL(k),pL(k),KoR(k),pR(k)
+      endif
+      if (k < 2*nk+2) then
+        if (hEff(k) /= hEff0(k)) then
+          write(stdunit,'(i3,8x,"layer hEff =",2(f20.16,a))') k,hEff(k)," .neq. ",hEff0(k),' <-- WRONG!'
+        else
+          write(stdunit,'(i3,8x,"layer hEff =",f20.16)') k,hEff(k)
+        endif
+      endif
+    enddo
+  endif
+
+10 format("ks=",i3," kL=",i3," pL=",f20.16," kR=",i3," pR=",f20.16,a)
+end function test_nsp
+
+!> Compares a single row, k, of output from find_neutral_surface_positions()
+logical function compare_nsp_row(KoL, KoR, pL, pR, KoL0, KoR0, pL0, pR0)
+  integer,  intent(in) :: KoL   !< Index of first left interface above neutral surface
+  integer,  intent(in) :: KoR   !< Index of first right interface above neutral surface
+  real,     intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
+  real,     intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+  integer,  intent(in) :: KoL0  !< Correct value for KoL
+  integer,  intent(in) :: KoR0  !< Correct value for KoR
+  real,     intent(in) :: pL0   !< Correct value for pL
+  real,     intent(in) :: pR0   !< Correct value for pR
+
+  compare_nsp_row = .false.
+  if (KoL /= KoL0) compare_nsp_row = .true.
+  if (KoR /= KoR0) compare_nsp_row = .true.
+  if (pL /= pL0) compare_nsp_row = .true.
+  if (pR /= pR0) compare_nsp_row = .true.
+end function compare_nsp_row
 
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)

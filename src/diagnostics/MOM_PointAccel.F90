@@ -95,8 +95,8 @@ contains
 subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
   integer,                                intent(in) :: I, j
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in) :: GV
+  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: um
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
@@ -433,8 +433,8 @@ end subroutine write_u_accel
 subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
   integer,                                intent(in) :: i, J
-  type(ocean_grid_type),                  intent(in) :: G
-  type(verticalGrid_type),                intent(in) :: GV
+  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vm
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
@@ -770,8 +770,8 @@ end subroutine write_v_accel
 subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   type(ocean_internal_state), target, intent(in) :: MIS
   type(time_type), target, intent(in) :: Time
-  type(ocean_grid_type),   intent(in) :: G
-  type(param_file_type),   intent(in) :: param_file
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(directories),       intent(in) :: dirs
   type(PointAccel_CS),     pointer    :: CS

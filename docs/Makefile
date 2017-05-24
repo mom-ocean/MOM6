@@ -183,3 +183,8 @@ doxygen/bin/doxygen: doxygen
 	(cd $(<); make)
 nortd: doxygen/bin/doxygen
 	$< Doxyfile_nortd
+Clean: clean
+	rm -rf _build APIs xml doxygen.log
+CLEAN: Clean
+	rm -rf doxygen src
+	rm -rf _build APIs src xml doxygen doxygen.log

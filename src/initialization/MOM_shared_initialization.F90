@@ -4,7 +4,7 @@ module MOM_shared_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : max_across_PEs
+use MOM_coms, only : max_across_PEs, reproducing_sum
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_dyn_horgrid, only : dyn_horgrid_type
@@ -446,9 +446,9 @@ end subroutine limit_topography
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_planetary(f, G, param_file)
-  type(dyn_horgrid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -475,9 +475,9 @@ end subroutine set_rotation_planetary
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_beta_plane(f, G, param_file)
-  type(dyn_horgrid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -521,7 +521,7 @@ end subroutine set_rotation_beta_plane
 !> initialize_grid_rotation_angle initializes the arrays with the sine and
 !!   cosine of the angle between logical north on the grid and true north.
 subroutine initialize_grid_rotation_angle(G, PF)
-  type(dyn_horgrid_type), intent(inout) :: G   !< The model's horizontal grid structure.
+  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid
   type(param_file_type),  intent(in)    :: PF  !< A structure indicating the open file
                                                !! to parse for model parameter values.
 
@@ -547,9 +547,9 @@ end subroutine initialize_grid_rotation_angle
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_named(G, param_file, name)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
-  character(len=*),      intent(in)    :: name
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
+  character(len=*),       intent(in)    :: name
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -672,8 +672,8 @@ end subroutine reset_face_lengths_named
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_file(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type), intent(in)     :: param_file !< A structure to parse for run-time parameters
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -740,8 +740,8 @@ end subroutine reset_face_lengths_file
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_list(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type),  intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -1044,13 +1044,15 @@ subroutine compute_global_grid_integrals(G)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
+  tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  call sum_across_PEs( G%areaT_global )
+  G%areaT_global = reproducing_sum(tmpForSumming)
 
   if (G%areaT_global == 0.0) &
     call MOM_error(FATAL, "compute_global_grid_integrals: "//&

@@ -229,7 +229,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day_start
   type(time_type),       intent(in)    :: day_interval
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 ! This subroutine calls other subroutines in this file to get surface forcing fields.
@@ -362,7 +362,7 @@ end subroutine set_forcing
 
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine allocates arrays for buoyancy forcing.
@@ -412,7 +412,7 @@ subroutine wind_forcing_const(state, fluxes, tau_x0, tau_y0, day, G, CS)
   real,                     intent(in)    :: tau_x0
   real,                     intent(in)    :: tau_y0
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! subroutine sets the surface wind stresses to zero
@@ -437,11 +437,11 @@ subroutine wind_forcing_const(state, fluxes, tau_x0, tau_y0, day, G, CS)
   !set steady surface wind stresses, in units of Pa.
   mag_tau = sqrt( tau_x0**2 + tau_y0**2)
 
-  do j=js,je ; do I=Isq,Ieq
+  do j=js,je ; do I=is-1,Ieq
     fluxes%taux(I,j) = tau_x0
   enddo ; enddo
 
-  do J=Jsq,Jeq ; do i=is,ie
+  do J=js-1,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = tau_y0
   enddo ; enddo
 
@@ -463,7 +463,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to double gyre.
@@ -488,12 +488,12 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   !set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
 
-  do j=js,je ; do I=Isq,Ieq
+  do j=js,je ; do I=is-1,Ieq
     fluxes%taux(I,j) = 0.1*(1.0 - cos(2.0*PI*(G%geoLatCu(I,j)-CS%South_lat) / &
                                       CS%len_lat))
   enddo ; enddo
 
-  do J=Jsq,Jeq ; do i=is,ie
+  do J=js-1,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
@@ -505,7 +505,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to single gyre.
@@ -530,11 +530,11 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   ! set the steady surface wind stresses, in units of Pa.
   PI = 4.0*atan(1.0)
 
-  do j=js,je ; do I=Isq,Ieq
+  do j=js,je ; do I=is-1,Ieq
     fluxes%taux(I,j) =-0.2*cos(PI*(G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat)
   enddo ; enddo
 
-  do J=Jsq,Jeq ; do i=is,ie
+  do J=js-1,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
@@ -546,7 +546,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to gyres.
@@ -571,14 +571,14 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   ! steady surface wind stresses (Pa)
   PI = 4.0*atan(1.0)
 
-  do j=jsd,jed ; do I=IsdB,IedB
+  do j=jsd,jed ; do I=is-1,IedB
     y = (G%geoLatCu(I,j)-CS%South_lat)/CS%len_lat
     fluxes%taux(I,j) = CS%gyres_taux_const +                            &
              (   CS%gyres_taux_sin_amp*sin(CS%gyres_taux_n_pis*PI*y)    &
                + CS%gyres_taux_cos_amp*cos(CS%gyres_taux_n_pis*PI*y) )
   enddo ; enddo
 
-  do J=JsdB,JedB ; do i=isd,ied
+  do J=js-1,JedB ; do i=isd,ied
     fluxes%tauy(i,J) = 0.0
   enddo ; enddo
 
@@ -597,7 +597,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses.
@@ -667,10 +667,10 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
                      domain=G%Domain%mpp_domain,timelevel=time_lev)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
-      do j=js,je ; do I=Isq,Ieq
+      do j=js,je ; do I=is-1,Ieq
         fluxes%taux(I,j) = 0.5 * CS%wind_scale * (temp_x(i,j) + temp_x(i+1,j))
       enddo ; enddo
-      do J=Jsq,Jeq ; do i=is,ie
+      do J=js-1,Jeq ; do i=is,ie
         fluxes%tauy(i,J) = 0.5 * CS%wind_scale * (temp_y(i,j) + temp_y(i,j+1))
       enddo ; enddo
 
@@ -761,7 +761,7 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 ! This subroutine sets the surface wind stresses
 
@@ -795,10 +795,10 @@ subroutine wind_forcing_by_data_override(state, fluxes, day, G, CS)
   call data_override('OCN', 'tauy', temp_y, day, is_in=is_in, ie_in=ie_in, js_in=js_in, je_in=je_in)
   call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
   ! Ignore CS%wind_scale when using data_override ?????
-  do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+  do j=G%jsc,G%jec ; do I=G%isc-1,G%IecB
     fluxes%taux(I,j) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
   enddo ; enddo
-  do J=G%JscB,G%JecB ; do i=G%isc,G%iec
+  do J=G%jsc-1,G%JecB ; do i=G%isc,G%iec
     fluxes%tauy(i,J) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
   enddo ; enddo
 
@@ -832,7 +832,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1120,7 +1120,7 @@ subroutine buoyancy_forcing_from_data_override(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1296,7 +1296,7 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1348,7 +1348,7 @@ subroutine buoyancy_forcing_const(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -1399,7 +1399,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !    This subroutine specifies the current surface fluxes of buoyancy
@@ -1486,7 +1486,7 @@ end subroutine buoyancy_forcing_linear
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
   type(surface_forcing_CS),   pointer       :: CS
-  type(ocean_grid_type),      intent(inout) :: G
+  type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure
   type(time_type),            intent(in)    :: Time
   character(len=*),           intent(in)    :: directory
   logical,          optional, intent(in)    :: time_stamped
@@ -1511,8 +1511,8 @@ end subroutine forcing_save_restart
 
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),              intent(in)    :: Time
-  type(ocean_grid_type),        intent(in)    :: G
-  type(param_file_type),        intent(in)    :: param_file
+  type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,      intent(inout) :: diag
   type(surface_forcing_CS),     pointer       :: CS
   type(tracer_flow_control_CS), pointer       :: tracer_flow_CSp

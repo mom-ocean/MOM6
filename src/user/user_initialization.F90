@@ -222,8 +222,8 @@ subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
 end subroutine USER_set_OBC_data
 
 subroutine USER_set_rotation(G, param_file)
-  type(ocean_grid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_set_rotation: " // &
    "Unmodified user routine called - you must edit the routine to use it")
@@ -247,7 +247,7 @@ subroutine write_user_log(param_file)
 
 end subroutine write_user_log
 
-!> \class user_initialization
+!> \namespace user_initialization
 !!
 !!  By Robert Hallberg, April 1994 - June 2002                         *
 !!                                                                     *

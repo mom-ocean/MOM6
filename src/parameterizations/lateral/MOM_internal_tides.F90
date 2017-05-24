@@ -200,9 +200,10 @@ contains
 
 subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                               G, GV, CS)
-  type(ocean_grid_type),            intent(inout) :: G
-  type(verticalGrid_type),          intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),            intent(in)    :: tv
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide, Nb
@@ -645,7 +646,7 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 end subroutine propagate_int_tide
 
 subroutine sum_En(G, CS, En, label)
-  type(ocean_grid_type),  intent(in)    :: G
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   type(int_tide_CS), pointer            :: CS
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), intent(in) :: En
   character(len=*), intent(in) :: label
@@ -685,7 +686,7 @@ subroutine sum_En(G, CS, En, label)
 end subroutine sum_En
 
 subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
-  type(ocean_grid_type),  intent(in)    :: G
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   type(int_tide_CS), pointer            :: CS
   real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), intent(inout) :: Ub
@@ -776,7 +777,7 @@ end subroutine itidal_lowmode_loss
 
 subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
   integer, intent(in)                :: i,j
-  type(ocean_grid_type),  intent(in) :: G
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
   type(int_tide_CS), pointer         :: CS
   character(len=*), intent(in)       :: mechanism
   real, intent(out)                  :: TKE_loss_sum
@@ -796,7 +797,7 @@ end subroutine get_lowmode_loss
 
 
 subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
-  type(ocean_grid_type),  intent(in)    :: G
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
@@ -1016,7 +1017,7 @@ end subroutine PPM_angular_advect
 
 
 subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
-  type(ocean_grid_type),  intent(inout) :: G
+  type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
   real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
@@ -1142,7 +1143,7 @@ end subroutine propagate
 
 
 subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
   real, dimension(G%isd:G%ied,G%jsd:G%jed),   intent(inout) :: En
   real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed), intent(in)    :: speed
   integer,                intent(in)    :: energized_wedge
@@ -1411,7 +1412,7 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
 end subroutine propagate_corner_spread
 
 subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
   integer,                intent(in) :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   intent(inout) :: En
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed), intent(in)    :: speed_x
@@ -1493,7 +1494,7 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
 end subroutine propagate_x
 
 subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G
+  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
   integer,                intent(in) :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   intent(inout) :: En
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB), intent(in)    :: speed_y
@@ -1584,9 +1585,11 @@ end subroutine propagate_y
 
 
 subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
-  type(ocean_grid_type),     intent(in)    :: G
-  real, dimension(SZIB_(G)), intent(in)    :: u
-  real, dimension(SZI_(G)),  intent(in)    :: h, hL, hR
+  type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZIB_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G)),  intent(in)    :: hL
+  real, dimension(SZI_(G)),  intent(in)    :: hR
   real, dimension(SZIB_(G)), intent(inout) :: uh
   real,                      intent(in)    :: dt
   integer,                   intent(in)    :: j, ish, ieh
@@ -1629,8 +1632,8 @@ end subroutine zonal_flux_En
 
 
 subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
-  type(ocean_grid_type),            intent(in)    :: G
-  real, dimension(SZI_(G)),         intent(in)    :: v
+  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G)),         intent(in)    :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h, hL, hR
   real, dimension(SZI_(G)),         intent(inout) :: vh
   real,                             intent(in)    :: dt
@@ -1673,7 +1676,7 @@ end subroutine merid_flux_En
 
 
 subroutine reflect(En, NAngle, CS, G, LB)
-  type(ocean_grid_type),  intent(in)    :: G
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
   type(int_tide_CS),      pointer       :: CS
@@ -1788,7 +1791,7 @@ subroutine reflect(En, NAngle, CS, G, LB)
 end subroutine reflect
 
 subroutine teleport(En, NAngle, CS, G, LB)
-  type(ocean_grid_type),  intent(in)    :: G
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   integer,                intent(in)    :: NAngle
   real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
   type(int_tide_CS),      pointer       :: CS
@@ -1886,7 +1889,7 @@ subroutine teleport(En, NAngle, CS, G, LB)
 end subroutine teleport
 
 subroutine correct_halo_rotation(En, test, G, NAngle)
-  type(ocean_grid_type),              intent(in)    :: G
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   real, dimension(:,:,:,:,:),         intent(inout) :: En
   real, dimension(SZI_(G),SZJ_(G),2), intent(in)    :: test
   integer,                            intent(in)    :: NAngle
@@ -1938,7 +1941,7 @@ subroutine correct_halo_rotation(En, test, G, NAngle)
 end subroutine correct_halo_rotation
 
 subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
   type(loop_bounds_type),           intent(in)  :: LB
@@ -2019,7 +2022,7 @@ end subroutine PPM_reconstruction_x
 
 
 subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
-  type(ocean_grid_type),            intent(in)  :: G
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
   type(loop_bounds_type),           intent(in)  :: LB
@@ -2098,7 +2101,7 @@ end subroutine PPM_reconstruction_y
 
 
 subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
-  type(ocean_grid_type),            intent(in)     :: G
+  type(ocean_grid_type),            intent(in)     :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(in)     :: h_in
   real, dimension(SZI_(G),SZJ_(G)), intent(inout)  :: h_L, h_R
   real,                             intent(in)     :: h_min
@@ -2142,8 +2145,8 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
 end subroutine PPM_limit_pos
 
 ! subroutine register_int_tide_restarts(G, param_file, CS, restart_CS)
-!   type(ocean_grid_type), intent(inout) :: G
-!   type(param_file_type), intent(in) :: param_file
+!   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+!   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
 !   type(int_tide_CS),     pointer :: CS
 !   type(MOM_restart_CS),  pointer :: restart_CS
 
@@ -2198,9 +2201,9 @@ end subroutine PPM_limit_pos
 
 subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target,   intent(in)    :: Time
-  type(ocean_grid_type),     intent(inout) :: G
-  type(verticalGrid_type),   intent(in)    :: GV
-  type(param_file_type),     intent(in)    :: param_file
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,   intent(in)    :: diag
   type(int_tide_CS),pointer                :: CS
   ! Arguments: Time - The current model time.

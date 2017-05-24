@@ -21,16 +21,19 @@ integer, parameter :: REGRIDDING_HYCOM1    = 6      !< Simple HyCOM coordinates 
 integer, parameter :: REGRIDDING_SLIGHT    = 7      !< Stretched coordinates in the
 integer, parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR = 8   !< z* coordinates at the bottom, sigma-near the top
                                                     !! lightest water, isopycnal below
-character(len=6), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
-character(len=6), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
-character(len=6), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
-character(len=6), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
-character(len=6), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
-character(len=6), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
-character(len=6), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
-character(len=6), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
-character(len=17), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
-character(len=6), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
+integer, parameter :: REGRIDDING_ADAPTIVE = 9
+
+character(len=*), parameter :: REGRIDDING_LAYER_STRING = "LAYER"   !< Layer string
+character(len=*), parameter :: REGRIDDING_ZSTAR_STRING_OLD = "Z*"  !< z* string (legacy name)
+character(len=*), parameter :: REGRIDDING_ZSTAR_STRING = "ZSTAR"   !< z* string
+character(len=*), parameter :: REGRIDDING_RHO_STRING   = "RHO"     !< Rho string
+character(len=*), parameter :: REGRIDDING_SIGMA_STRING = "SIGMA"   !< Sigma string
+character(len=*), parameter :: REGRIDDING_ARBITRARY_STRING = "ARB" !< Arbitrary coordinates
+character(len=*), parameter :: REGRIDDING_HYCOM1_STRING = "HYCOM1" !< Hycom string
+character(len=*), parameter :: REGRIDDING_SLIGHT_STRING = "SLIGHT" !< Hybrid S-rho string
+character(len=*), parameter :: REGRIDDING_SIGMA_SHELF_ZSTAR_STRING = "SIGMA_SHELF_ZSTAR" !< Hybrid z*/sigma
+character(len=*), parameter :: REGRIDDING_ADAPTIVE_STRING = "ADAPTIVE"
+character(len=*), parameter :: DEFAULT_COORDINATE_MODE = REGRIDDING_LAYER_STRING !< Default coordinate mode
 
 integer, dimension(REGRIDDING_NUM_TYPES), parameter :: vertical_coords = &
   (/ REGRIDDING_LAYER, REGRIDDING_ZSTAR /)
@@ -71,6 +74,7 @@ function coordinateMode(string)
     case (trim(REGRIDDING_SLIGHT_STRING)); coordinateMode = REGRIDDING_SLIGHT
     case (trim(REGRIDDING_ARBITRARY_STRING)); coordinateMode = REGRIDDING_ARBITRARY
     case (trim(REGRIDDING_SIGMA_SHELF_ZSTAR_STRING)); coordinateMode = REGRIDDING_SIGMA_SHELF_ZSTAR
+    case (trim(REGRIDDING_ADAPTIVE_STRING)); coordinateMode = REGRIDDING_ADAPTIVE
     case default ; call MOM_error(FATAL, "coordinateMode: "//&
        "Unrecognized choice of coordinate ("//trim(string)//").")
   end select
@@ -89,6 +93,7 @@ function coordinateUnitsI(coordMode)
     case (REGRIDDING_SIGMA); coordinateUnitsI = "Non-dimensional"
     case (REGRIDDING_HYCOM1); coordinateUnitsI = "m"
     case (REGRIDDING_SLIGHT); coordinateUnitsI = "m"
+    case (REGRIDDING_ADAPTIVE); coordinateUnitsI = "m"
     case default ; call MOM_error(FATAL, "coordinateUnts: "//&
        "Unrecognized coordinate mode.")
   end select
@@ -123,6 +128,7 @@ logical function state_dependent_int(mode)
     case (REGRIDDING_SIGMA); state_dependent_int = .false.
     case (REGRIDDING_HYCOM1); state_dependent_int = .true.
     case (REGRIDDING_SLIGHT); state_dependent_int = .true.
+    case (REGRIDDING_ADAPTIVE); state_dependent_int = .true.
     case default ; call MOM_error(FATAL, "state_dependent: "//&
        "Unrecognized choice of coordinate.")
   end select

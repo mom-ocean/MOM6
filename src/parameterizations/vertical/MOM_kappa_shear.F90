@@ -62,7 +62,7 @@ implicit none ; private
 
 public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
-type, public :: Kappa_shear_CS ! ; private
+type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
                              ! shear-entrainment. The theoretical value is 0.25.
                              ! The values found by Jackson et al. are 0.25-0.35.
@@ -118,11 +118,11 @@ contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  type(ocean_grid_type),                      intent(in)    :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
+  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                      intent(in)    :: tv
   real, dimension(:,:),                       pointer       :: p_surf
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io
@@ -1644,9 +1644,9 @@ end subroutine find_kappa_tke
 
 logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
@@ -1790,7 +1790,7 @@ logical function kappa_shear_is_used(param_file)
 ! Reads the parameter "USE_JACKSON_PARAM" and returns state.
 !   This function allows other modules to know whether this parameterization will
 ! be used without needing to duplicate the log entry.
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log = .true.)
 end function kappa_shear_is_used

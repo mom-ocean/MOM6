@@ -200,7 +200,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
       hSrc(i,j,:) = h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.true. )
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false. )
 
     deallocate( hSrc )
     deallocate( h1 )
@@ -280,7 +280,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type), intent(inout)  :: G
+  type(ocean_grid_type), intent(inout)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: good, fill
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: prev

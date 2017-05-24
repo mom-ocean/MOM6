@@ -90,9 +90,9 @@ end type wave_structure_CS
 contains
 
 subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G
-  type(verticalGrid_type),                  intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(in)  :: tv
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn
   integer,                                  intent(in)  :: ModeNum
@@ -733,8 +733,8 @@ end subroutine tridiag_solver
 
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
   type(time_type),             intent(in)    :: Time
-  type(ocean_grid_type),       intent(in)    :: G
-  type(param_file_type),       intent(in)    :: param_file
+  type(ocean_grid_type),       intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),       intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,     intent(in)    :: diag
   type(wave_structure_CS),     pointer       :: CS
 ! Arguments: Time - The current model time.

@@ -60,6 +60,12 @@ subroutine find_obsolete_params(param_file)
        hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
   call obsolete_char(param_file, "OBC_CONFIG", &
        hint="Instead use OBC_USER_CONFIG and use the new segments protocol.")
+  call obsolete_char(param_file, "READ_OBC_ETA", &
+       hint="Instead use OBC_SEGMENT_XXX_DATA.")
+  call obsolete_char(param_file, "READ_OBC_UV", &
+       hint="Instead use OBC_SEGMENT_XXX_DATA.")
+  call obsolete_char(param_file, "READ_OBC_TS", &
+       hint="Instead use OBC_SEGMENT_XXX_DATA.")
 
   test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
   test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)
@@ -180,6 +186,8 @@ subroutine find_obsolete_params(param_file)
   endif
 
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
+
+  call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mod, version)

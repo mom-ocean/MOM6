@@ -365,23 +365,10 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
           if (h2d(i,k) > 0.) then
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             Tr2d(i,k)    = (hOld*Tr2d(i,k) + dTracer)*Ithickness
-          elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): netTr,netH=',in_flux_1d(i)-out_flux_1d(i),netMassInOut(i)
-            write(0,*) 'applyTracerBoundaryFluxesInOut(): h(n),h(n+1),k=',hOld,h2d(i,k),k
-            call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
-                           "Complete mass loss in column!")
           endif
 
         enddo ! k
 
-      ! Check if trying to apply fluxes over land points
-      elseif((abs(in_flux_1d(i))+abs(out_flux_1d(i))+abs(netMassIn(i))+abs(netMassOut(i)))>0.) then
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
-        write(0,*) 'applyTracerBoundaryFluxesInOut(): in_flux, out_flux, netMassIn,netMassOut=',&
-                   in_flux_1d(i), out_flux_1d(i),netMassIn(i),netMassOut(i)
-        call MOM_error(FATAL, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
-                              "Mass loss over land?")
       endif
 
       ! If anything remains after the k-loop, then we have grounded out, which is a problem.

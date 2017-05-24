@@ -116,7 +116,7 @@ integer, parameter :: NO_ZSPACE = -1
 contains
 
 function global_z_mean(var,G,CS,tracer)
-  type(ocean_grid_type),                           intent(in)  :: G
+  type(ocean_grid_type),                           intent(in)  :: G    !< The ocean's grid structure
   type(diag_to_Z_CS),                              intent(in)  :: CS
   real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace), intent(in)  :: var
   real, dimension(SZI_(G), SZJ_(G), CS%nk_zspace)  :: tmpForSumming, weight
@@ -163,11 +163,11 @@ function global_z_mean(var,G,CS,tracer)
 end function global_z_mean
 
 subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in
   real, dimension(:,:),                      pointer       :: frac_shelf_h
   real,                                      intent(in)    :: dt
@@ -520,11 +520,11 @@ end subroutine calculate_Z_diag_fields
 
 
 subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                      intent(in)    :: dt
   type(diag_to_Z_CS),                        pointer       :: CS
 
@@ -782,12 +782,12 @@ subroutine find_limited_slope(val, e, slope, k)
 end subroutine find_limited_slope
 
 subroutine calc_Zint_diags(h, in_ptrs, ids, num_diags, G, GV, CS)
-  type(ocean_grid_type),                    intent(in) :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(p3d), dimension(:),                  intent(in) :: in_ptrs
   integer,   dimension(:),                  intent(in) :: ids
   integer,                                  intent(in) :: num_diags
-  type(verticalGrid_type),                  intent(in) :: GV
+  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure
   type(diag_to_Z_CS),                       pointer    :: CS
 
   real, dimension(SZI_(G),SZJ_(G),max(CS%nk_zspace+1,1),max(num_diags,1)) :: &
@@ -878,7 +878,7 @@ end subroutine calc_Zint_diags
 
 subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standard_name,   &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name)
-  type(ocean_grid_type),                         intent(in) :: G
+  type(ocean_grid_type),                         intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
@@ -945,7 +945,7 @@ subroutine register_Z_tracer(tr_ptr, name, long_name, units, Time, G, CS, standa
 end subroutine register_Z_tracer
 
 subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, Time, G, CS)
-  type(ocean_grid_type),                         intent(in) :: G
+  type(ocean_grid_type),                         intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   character(len=*),                              intent(in) :: name
   character(len=*),                              intent(in) :: long_name
@@ -1009,9 +1009,9 @@ end subroutine register_Z_tracer_low
 
 subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(diag_to_Z_CS),      pointer       :: CS
 
@@ -1244,7 +1244,7 @@ subroutine MOM_diag_to_Z_end(CS)
 end subroutine MOM_diag_to_Z_end
 
 function ocean_register_diag_with_z(tr_ptr, vardesc_tr, G, Time, CS)
-  type(ocean_grid_type),                         intent(in) :: G
+  type(ocean_grid_type),                         intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), target, intent(in) :: tr_ptr
   type(vardesc),                                 intent(in) :: vardesc_tr
   type(time_type),                               intent(in) :: Time

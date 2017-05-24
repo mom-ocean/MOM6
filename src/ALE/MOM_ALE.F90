@@ -9,6 +9,7 @@ module MOM_ALE
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_EOS,              only : calculate_density
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery
@@ -95,7 +96,7 @@ type, public :: ALE_CS
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency     !< diagnostic id
   integer, dimension(:), allocatable :: id_Htracer_remap_tendency_2d  !< diagnostic id
   logical, dimension(:), allocatable :: do_tendency_diag              !< flag for doing diagnostics
-  integer                            :: id_dzRegrid
+  integer                            :: id_dzRegrid = -1              !< diagnostic id
 
 end type
 
@@ -106,6 +107,7 @@ public ALE_main
 public ALE_main_offline
 public ALE_offline_tracer_final
 public ALE_build_grid
+public ALE_regrid_accelerated
 public ALE_remap_scalar
 public pressure_gradient_plm
 public pressure_gradient_ppm
@@ -296,7 +298,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
         'Tendency from vertical remapping for heat',                        &
-         'W/m2')
+         'W/m2',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
@@ -313,7 +315,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
         'Tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
-        'kg m-2 s-1')
+        'kg m-2 s-1',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',                      &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,                         &
@@ -411,7 +413,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
@@ -468,8 +470,7 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, -dzRegrid, Reg, &
-                             debug=CS%show_call_tree, dt=dt )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree, dt=dt )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
@@ -516,7 +517,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, -dzRegrid, Reg, &
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, Reg, &
                              debug=CS%show_call_tree )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
@@ -601,21 +602,90 @@ subroutine ALE_build_grid( G, GV, regridCS, remapCS, h, tv, debug, frac_shelf_h 
   if (show_call_tree) call callTree_leave("ALE_build_grid()")
 end subroutine ALE_build_grid
 
+!> For a state-based coordinate, accelerate the process of regridding by
+!! repeatedly applying the grid calculation algorithm
+subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
+  type(ALE_CS),                               intent(in)    :: CS     !< ALE control structure
+  type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid
+  type(verticalGrid_type),                    intent(in)    :: GV     !< Vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_orig !< Original thicknesses
+  type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermo vars (T/S/EOS)
+  integer,                                    intent(in)    :: n      !< Number of times to regrid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(out)   :: h_new  !< Thicknesses after regridding
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u      !< Zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v      !< Meridional velocity
+
+  ! Local variables
+  integer :: i, j, k, nz
+  type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
+  type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h ! A working copy of layer thickesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! temporary state
+  ! we have to keep track of the total dzInterface if for some reason
+  ! we're using the old remapping algorithm for u/v
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
+
+  nz = GV%ke
+
+  ! initial total interface displacement due to successive regridding
+  dzIntTotal(:,:,:) = 0.
+
+  call create_group_pass(pass_T_S_h, T, G%domain)
+  call create_group_pass(pass_T_S_h, S, G%domain)
+  call create_group_pass(pass_T_S_h, h, G%domain)
+
+  ! copy original temp/salt and set our local tv_pointers to them
+  tv_local = tv
+  T(:,:,:) = tv%T(:,:,:)
+  S(:,:,:) = tv%S(:,:,:)
+  tv_local%T => T
+  tv_local%S => S
+
+  ! get local copy of thickness
+  h(:,:,:) = h_orig(:,:,:)
+
+  do k = 1, n
+    call do_group_pass(pass_T_S_h, G%domain)
+
+    ! generate new grid
+    call regridding_main(CS%remapCS, CS%regridCS, G, GV, h, tv_local, h_new, dzInterface)
+    dzIntTotal(:,:,:) = dzIntTotal(:,:,:) + dzInterface(:,:,:)
+
+    ! remap from original grid onto new grid
+    ! we need to use remapping_core because there isn't a tracer registry set up in
+    ! the state initialization routine
+    do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), tv_local%S(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), tv_local%T(i,j,:))
+    enddo ; enddo
+
+
+    h(:,:,:) = h_new(:,:,:)
+  enddo
+
+  ! save the final temp/salt
+  tv%S(:,:,:) = S(:,:,:)
+  tv%T(:,:,:) = T(:,:,:)
+
+  ! remap velocities
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h_new, null(), dzIntTotal, u, v)
+end subroutine ALE_regrid_accelerated
+
 !> This routine takes care of remapping all variable between the old and the
 !! new grids. When velocity components need to be remapped, thicknesses at
 !! velocity points are taken to be arithmetic averages of tracer thicknesses.
 !! This routine is called during initialization of the model at time=0, to
 !! remap initiali conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInterface, Reg, u, v, debug, dt)
+subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, dxInterface, u, v, debug, dt)
   type(remapping_CS),                               intent(in)    :: CS_remapping  !< Remapping control structure
   type(ALE_CS),                                     intent(in)    :: CS_ALE        !< ALE control structure
   type(ocean_grid_type),                            intent(in)    :: G             !< Ocean grid structure
   type(verticalGrid_type),                          intent(in)    :: GV            !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_old         !< Thickness of source grid (m or Pa)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: h_new         !< Thickness of destination grid (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),      intent(in)    :: dxInterface   !< Change in interface position (Hm or Pa)
   type(tracer_registry_type),                       pointer       :: Reg           !< Tracer registry structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),optional, intent(in)    :: dxInterface  !< Change in interface position (Hm or Pa)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: u          !< Zonal velocity component (m/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), optional, intent(inout) :: v          !< Meridional velocity component (m/s)
   logical,                                    optional, intent(in)    :: debug      !< If true, show the call tree
@@ -635,6 +705,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("remap_all_state_vars(), MOM_ALE.F90")
+
+  ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dxInterface. Otherwise,
+  ! u and v can be remapped without dxInterface
+  if ( .not. present(dxInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
+    call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm and u/v are to"// &
+                          "be remapped")
+  endif
 
   nz      = GV%ke
   ppt2mks = 0.001
@@ -669,7 +746,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
             ! Build the start and final grids
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
-            call remapping_core_h( nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column, CS_remapping )
+            call remapping_core_h(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column)
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not
@@ -764,7 +841,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
           endif
-          call remapping_core_h( nz, h1, u(I,j,:), nz, h2, u_column, CS_remapping )
+          call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, u_column)
           u(I,j,:) = u_column(:)
         endif
       enddo
@@ -789,7 +866,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, dxInt
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
           endif
-          call remapping_core_h( nz, h1, v(i,J,:), nz, h2, u_column, CS_remapping )
+          call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, u_column)
           v(i,J,:) = u_column(:)
         endif
       enddo
@@ -849,7 +926,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
           call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
           call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, dx, s_dst(i,j,:))
         else
-          call remapping_core_h(n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:), CS)
+          call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:))
         endif
       else
         s_dst(i,j,:) = 0.
