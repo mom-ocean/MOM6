@@ -547,7 +547,7 @@ subroutine EOS_init(param_file, EOS)
 
   if (EOS%form_of_EOS == EOS_TEOS10 .OR. EOS%form_of_EOS == EOS_NEMO .AND. EOS%form_of_TFreeze /= TFREEZE_TEOS10) then
       call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_NEMO \n" //&
-                            " should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")     
+      "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")     
   endif
 
 
