@@ -382,6 +382,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   ! Local variables
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
+  logical :: is_zstar
   integer :: nz_src, nz_dest
   integer :: i, j, k
 
@@ -393,6 +394,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_dest = remap_cs%nz
   reintegrated_field(:,:,:) = missing_value
 
+  is_zstar = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
@@ -400,8 +403,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i+1,j,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j,:), h_src, h_dest)
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(I,j,:))
       enddo
@@ -413,8 +416,8 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i,j+1,:), h_src, h_dest)
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, reintegrated_field(i,J,:))
       enddo
@@ -455,6 +458,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   real, dimension(size(h,3)) :: h_src
   integer :: nz_src, nz_dest
   integer :: i, j, k
+  logical :: is_zstar
 
   call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3)+1, &
@@ -465,6 +469,9 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
+  is_zstar = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+
+
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
     do j=G%jsc, G%jec
@@ -472,8 +479,8 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i+1,j,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i+1,j,:), h_src, h_dest)
         call interpolate_column(nz_src, h_src, field(I,j,:), &
                                 nz_dest, h_dest, missing_value, interpolated_field(I,j,:))
       enddo
@@ -485,8 +492,8 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         if (associated(mask)) then
           if (mask(i,j,1) == 0.) cycle
         endif
-        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
-        h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
+        call set_hsrc_hdest(is_zstar, h(i,j,:), h(i,j+1,:), &
+                            remap_cs%h(i,j,:), remap_cs%h(i,j+1,:), h_src, h_dest)
         call interpolate_column(nz_src, h_src, field(i,J,:), &
                                 nz_dest, h_dest, missing_value, interpolated_field(i,J,:))
       enddo
@@ -652,5 +659,34 @@ subroutine horizontally_average_diag_field(G, h, staggered_in_x, staggered_in_y,
   enddo
 
 end subroutine horizontally_average_diag_field
+
+! Sets the source and target column thicknesses for reintegrate and remapping
+subroutine set_hsrc_hdest(is_zstar, hl_src, hr_src, hl_dest, hr_dest, h_src, h_dest)
+  logical,            intent(in   ) :: is_zstar !< Zstar is a special case
+  real, dimension(:), intent(in   ) :: hl_src   !< Left source column thicknesses
+  real, dimension(:), intent(in   ) :: hr_src   !< Right source column thicknesses
+  real, dimension(:), intent(in   ) :: hl_dest  !< Left source column thicknesses
+  real, dimension(:), intent(in   ) :: hr_dest  !< Right source column thicknesses
+  real, dimension(:), intent(  out) :: h_src    !< Source column for remapping/interpolation
+  real, dimension(:), intent(  out) :: h_dest   !< Targe column for remapping/interpolation
+
+  ! In the case of z-star coordinate, the u/v points should be associated with the
+  ! thinner T-point column
+  if (is_zstar) then
+    if ( SUM(hl_src)<SUM(hr_src) ) then
+      h_src(:) = hl_src(:)
+      h_dest(:) = hl_dest(:)
+    else
+      h_src(:) = hr_src(:)
+      h_dest(:) = hr_dest(:)
+    endif
+  ! In all other coordinates the thickness of the water column at the u/v points should
+  ! be estimated
+  else
+    h_src(:) = 0.5 * (hl_src(:) + hr_src(:))
+    h_dest(:) = 0.5 * ( hl_dest(:) + hr_dest(:) )
+  endif
+
+end subroutine
 
 end module MOM_diag_remap
