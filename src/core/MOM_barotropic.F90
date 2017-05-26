@@ -343,7 +343,7 @@ type, public :: barotropic_CS ; private
   type(group_pass_type) :: pass_tmp_uv, pass_eta_bt_rem
   type(group_pass_type) :: pass_force_hbt0_Cor_ref, pass_Dat_uv
   type(group_pass_type) :: pass_eta_ubt, pass_etaav, pass_ubt_Cor
-  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom, pass_ubt_first
+  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom
 
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
@@ -474,9 +474,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
   real :: vbt_Cor(SZI_(G),SZJB_(G)) ! used to calculate the input Coriolis
                                     ! terms, in m s-1.
-  real :: ubt_first(SZIB_(G),SZJ_(G)) ! The barotropic velocities that are
-  real :: vbt_first(SZI_(G),SZJB_(G)) ! consistent with the input velocity,
-                                      ! for use in the OBCs.
   real :: wt_u(SZIB_(G),SZJ_(G),SZK_(G)) ! wt_u and wt_v are the
   real :: wt_v(SZI_(G),SZJB_(G),SZK_(G)) ! normalized weights to
                 ! be used in calculating barotropic velocities, possibly with
@@ -509,6 +506,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   ! fluxes and the barotropic thickness flux using the same
                   ! velocity, in H m2 s-1.
     ubt_old, &    ! The starting value of ubt in a barotropic step, in m s-1.
+    ubt_first, &  ! The starting value of ubt in a series of barotropic steps, in m s-1.
     ubt_sum, &    ! The sum of ubt over the time steps, in m s-1.
     uhbt_sum, &   ! The sum of uhbt over the time steps, in H m2 s-1.
     ubt_wtd, &    ! A weighted sum used to find the filtered final ubt, in m s-1.
@@ -540,6 +538,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                   ! thickness fluxes and the barotropic thickness flux using
                   ! the same velocities, in H m2 s-1.
     vbt_old, &    ! The starting value of vbt in a barotropic step, in m s-1.
+    vbt_first, &  ! The starting value of ubt in a series of barotropic steps, in m s-1.
     vbt_sum, &    ! The sum of vbt over the time steps, in m s-1.
     vhbt_sum, &   ! The sum of vhbt over the time steps, in H m2 s-1.
     vbt_wtd, &    ! A weighted sum used to find the filtered final vbt, in m s-1.
@@ -788,7 +787,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   call create_group_pass(CS%pass_eta_ubt, ubt, vbt, CS%BT_Domain)
 
   call create_group_pass(CS%pass_ubt_Cor, ubt_Cor, vbt_Cor, G%Domain)
-  call create_group_pass(CS%pass_ubt_first, ubt_first, vbt_first, G%Domain)
   ! These passes occur at the end of the routine, as data is being readied to
   ! share with the main part of the MOM6 code.
   if (find_etaav) then
@@ -930,20 +928,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   !$OMP parallel do default(shared)
   do J=js-1,je ; do k=1,nz ; do i=is,ie
     vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
-  enddo ; enddo ; enddo
-
-  ! Save the barotropic flow that matches the incoming 3-D velocities.
-  !$OMP parallel do default(shared)
-  do j=js-1,je+1 ; do I=is-1,ie ; ubt_first(I,j) = 0.0 ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je ; do i=is-1,ie+1 ; vbt_first(i,J) = 0.0 ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do j=js,je ; do k=1,nz ; do I=is-1,ie
-    ubt_first(I,j) = ubt_first(I,j) + wt_u(I,j,k) * U_in(I,j,k)
-  enddo ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je ; do k=1,nz ; do i=is,ie
-    vbt_first(i,J) = vbt_first(i,J) + wt_v(i,J,k) * V_in(i,J,k)
   enddo ; enddo ; enddo
 
   ! The gtot arrays are the effective layer-weighted reduced gravities for
@@ -1126,6 +1110,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
   enddo ; enddo ;  enddo
 
+  if (apply_OBCs) then
+    ubt_first(:,:) = ubt(:,:) ; vbt_first(:,:) = vbt(:,:)
+  endif
+
   if (CS%gradual_BT_ICs) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie
@@ -1163,7 +1151,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     call start_group_pass(CS%pass_gtot, CS%BT_Domain)
     call start_group_pass(CS%pass_ubt_Cor, G%Domain)
-    call start_group_pass(CS%pass_ubt_first, G%Domain)
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1218,11 +1205,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
     call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
     call complete_group_pass(CS%pass_ubt_Cor, G%Domain)
-    call complete_group_pass(CS%pass_ubt_first, G%Domain)
   else
     call do_group_pass(CS%pass_gtot, CS%BT_Domain)
     call do_group_pass(CS%pass_ubt_Cor, G%Domain)
-    call do_group_pass(CS%pass_ubt_first, G%Domain)
   endif
   ! The various elements of gtot are positive definite but directional, so use
   ! the polarity arrays to sort out when the directions have shifted.
