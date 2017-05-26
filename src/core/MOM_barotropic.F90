@@ -343,7 +343,7 @@ type, public :: barotropic_CS ; private
   type(group_pass_type) :: pass_tmp_uv, pass_eta_bt_rem
   type(group_pass_type) :: pass_force_hbt0_Cor_ref, pass_Dat_uv
   type(group_pass_type) :: pass_eta_ubt, pass_etaav, pass_ubt_Cor
-  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom
+  type(group_pass_type) :: pass_ubta_uhbta, pass_e_anom, pass_ubt_first
 
   integer :: id_PFu_bt = -1, id_PFv_bt = -1, id_Coru_bt = -1, id_Corv_bt = -1
   integer :: id_ubtforce = -1, id_vbtforce = -1, id_uaccel = -1, id_vaccel = -1
@@ -474,6 +474,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real :: ubt_Cor(SZIB_(G),SZJ_(G)) ! The barotropic velocities that had been
   real :: vbt_Cor(SZI_(G),SZJB_(G)) ! used to calculate the input Coriolis
                                     ! terms, in m s-1.
+  real :: ubt_first(SZIB_(G),SZJ_(G)) ! The barotropic velocities that are
+  real :: vbt_first(SZI_(G),SZJB_(G)) ! consistent with the input velocity,
+                                      ! for use in the OBCs.
   real :: wt_u(SZIB_(G),SZJ_(G),SZK_(G)) ! wt_u and wt_v are the
   real :: wt_v(SZI_(G),SZJB_(G),SZK_(G)) ! normalized weights to
                 ! be used in calculating barotropic velocities, possibly with
@@ -785,6 +788,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   call create_group_pass(CS%pass_eta_ubt, ubt, vbt, CS%BT_Domain)
 
   call create_group_pass(CS%pass_ubt_Cor, ubt_Cor, vbt_Cor, G%Domain)
+  call create_group_pass(CS%pass_ubt_first, ubt_first, vbt_first, G%Domain)
   ! These passes occur at the end of the routine, as data is being readied to
   ! share with the main part of the MOM6 code.
   if (find_etaav) then
@@ -928,6 +932,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
   enddo ; enddo ; enddo
 
+  ! Save the barotropic flow that matches the incoming 3-D velocities.
+  !$OMP parallel do default(shared)
+  do j=js-1,je+1 ; do I=is-1,ie ; ubt_first(I,j) = 0.0 ; enddo ; enddo
+  !$OMP parallel do default(shared)
+  do J=js-1,je ; do i=is-1,ie+1 ; vbt_first(i,J) = 0.0 ; enddo ; enddo
+  !$OMP parallel do default(shared)
+  do j=js,je ; do k=1,nz ; do I=is-1,ie
+    ubt_first(I,j) = ubt_first(I,j) + wt_u(I,j,k) * U_in(I,j,k)
+  enddo ; enddo ; enddo
+  !$OMP parallel do default(shared)
+  do J=js-1,je ; do k=1,nz ; do i=is,ie
+    vbt_first(i,J) = vbt_first(i,J) + wt_v(i,J,k) * V_in(i,J,k)
+  enddo ; enddo ; enddo
 
   ! The gtot arrays are the effective layer-weighted reduced gravities for
   ! accelerations across the various faces, with names for the relative
@@ -1146,6 +1163,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     call start_group_pass(CS%pass_gtot, CS%BT_Domain)
     call start_group_pass(CS%pass_ubt_Cor, G%Domain)
+    call start_group_pass(CS%pass_ubt_first, G%Domain)
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1200,9 +1218,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
     call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
     call complete_group_pass(CS%pass_ubt_Cor, G%Domain)
+    call complete_group_pass(CS%pass_ubt_first, G%Domain)
   else
     call do_group_pass(CS%pass_gtot, CS%BT_Domain)
     call do_group_pass(CS%pass_ubt_Cor, G%Domain)
+    call do_group_pass(CS%pass_ubt_first, G%Domain)
   endif
   ! The various elements of gtot are positive definite but directional, so use
   ! the polarity arrays to sort out when the directions have shifted.
@@ -2019,12 +2039,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
-        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_Cor(I,j)) / dt
+        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
       endif
     enddo ; enddo ; endif
     if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
       if (OBC%segnum_v(i,J) /= OBC_NONE) then
-        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_Cor(i,J)) / dt
+        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt
       endif
     enddo ; enddo ; endif
   endif
