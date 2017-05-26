@@ -563,7 +563,6 @@ contains
     real :: sosga
 
     real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
-    real, dimension(G%isd:G%ied,G%jsd:G%jed)      :: hblt_depth
     real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
@@ -621,17 +620,6 @@ contains
       dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
-
-    ! Boussinesq model
-    hblt_depth(:,:) = GV%H_to_m * GV%Angstrom
-    do j=jsc,jec ; do i=isc,iec ;
-      hblt_depth(i,j) = GV%H_to_m * h_old(i,j,1)
-    enddo; enddo
-    do k=2,GV%nkml ; do j=jsc,jec ; do i=isc,iec
-      hblt_depth(i,j) = hblt_depth(i,j) + GV%H_to_m * h_old(i,j,k)
-    enddo; enddo ; enddo
-
-
     do j=jsc,jec ; do i=isc,iec
        surface_field(i,j) = tv%S(i,j,1)
     enddo ; enddo
@@ -641,7 +629,7 @@ contains
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,Hml,dt,&
+    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
 
