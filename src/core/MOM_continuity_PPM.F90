@@ -1171,7 +1171,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
           if (OBC%segment(OBC%segnum_v(i,J))%open) then
             if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
                  vh(i,J,k) = v(i,J,k) * h_in(i,j,k)
-            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_S) &
+            if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
                  vh(i,J,k) = v(i,J,k) * h_in(i,j+1,k)
           endif
         enddo

@@ -40,7 +40,6 @@ public update_obc_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
-public open_boundary_accelerate
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
 
@@ -1450,41 +1449,6 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
   enddo
 
 end subroutine open_boundary_zero_normal_flow
-
-!> Applies accelerations to 3d u,v fields on OBC segments
-subroutine open_boundary_accelerate(G, u, v, OBC, u_accel, v_accel, dt)
-  ! Arguments
-  type(ocean_grid_type),                     intent(inout) :: G   !< Ocean grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u   !< u field to update on open boundaries
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v   !< v field to update on open boundaries
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_accel !< u acceleration
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_accel !< v acceleration
-  real,                                      intent(in)    :: dt  !< model timestep
-  ! Local variables
-  integer :: i, j, k, n
-  type(OBC_segment_type), pointer :: segment
-
-  if (.not.associated(OBC)) return ! Bail out if OBC is not available
-
-  do n=1,OBC%number_of_segments
-    segment => OBC%segment(n)
-    if (.not. segment%on_pe) then
-      cycle
-    elseif (segment%is_E_or_W) then
-      I=segment%HI%IscB
-      do k=1,G%ke ;  do j=segment%HI%jsc,segment%HI%jec
-        u(I,j,k) = u(I,j,k) + G%mask2dCu(I,j) * u_accel(I,j,k) * dt
-      enddo; enddo
-    elseif (segment%is_N_or_S) then
-      J=segment%HI%JscB
-      do k=1,G%ke ;  do i=segment%HI%isc,segment%HI%iec
-        v(i,J,k) = v(i,J,k) + G%mask2dCv(i,J) * v_accel(i,J,k) * dt
-      enddo; enddo
-    endif
-  enddo
-
-end subroutine open_boundary_accelerate
 
 !> Calculate the tangential gradient of the normal flow at the boundary q-points.
 subroutine gradient_at_q_points(G,segment,uvel,vvel)
