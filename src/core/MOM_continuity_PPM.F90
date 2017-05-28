@@ -565,14 +565,14 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_u)
     endif
     if (local_open_BC) then
-      do I=ish-1,ieh
+      do k=1,nz ; do I=ish-1,ieh
         if (OBC%segment(OBC%segnum_u(I,j))%open) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
                BT_cont%h_u(I,j,k) = h_in(i,j,k)
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
                BT_cont%h_u(I,j,k) = h_in(i+1,j,k)
         endif
-      enddo
+      enddo ; enddo
     endif
   endif ; endif
 
@@ -1333,14 +1333,14 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
                                 CS%vol_CFL, CS%marginal_faces, visc_rem_v)
     endif
     if (local_open_BC) then
-      do i=ish,ieh
+      do k=1,nz ; do i=ish,ieh
         if (OBC%segment(OBC%segnum_v(i,J))%open) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
                BT_cont%h_v(i,J,k) = h_in(i,j,k)
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_S) &
                BT_cont%h_v(i,J,k) = h_in(i,j+1,k)
         endif
-      enddo
+      enddo ; enddo
     endif
   endif ; endif
 
