@@ -1679,6 +1679,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         enddo ; enddo
       endif
+
+      if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
+!GOMP do
+        do J=jsv-1,jev ; do i=isv-1,iev+1 ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+          PFv(i,J) = 0.0
+        endif ; enddo ; enddo
+      endif
 !GOMP do
       do J=jsv-1,jev ; do i=isv-1,iev+1
         v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
@@ -1721,6 +1728,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         do j=jsv,jev ; do I=isv-1,iev
           PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         enddo ; enddo
+      endif
+
+      if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
+!GOMP do
+        do j=jsv,jev ; do I=isv-1,iev ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+          PFu(I,j) = 0.0
+        endif ; enddo ; enddo
       endif
 !GOMP do
       do j=jsv,jev ; do I=isv-1,iev
@@ -1766,6 +1780,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
         enddo ; enddo
       endif
+
+      if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
+!GOMP do
+        do j=jsv,jev ; do I=isv-1,iev ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+          PFu(I,j) = 0.0
+        endif ; enddo ; enddo
+      endif
+
 !GOMP do
       do j=jsv-1,jev+1 ; do I=isv-1,iev
         u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * (Cor_u(I,j) + PFu(I,j))
@@ -1809,6 +1831,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
           PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
         enddo ; enddo
       endif
+
+      if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
+!GOMP do
+        do J=jsv-1,jev ; do i=isv-1,iev+1 ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+          PFv(i,J) = 0.0
+        endif ; enddo ; enddo
+      endif
+
 !GOMP do
       do J=jsv-1,jev ; do i=isv,iev
         v_accel_bt(I,j) = v_accel_bt(I,j) + wt_accel(n) * (Cor_v(i,J) + PFv(i,J))
