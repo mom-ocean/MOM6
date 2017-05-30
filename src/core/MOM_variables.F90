@@ -85,50 +85,47 @@ type, public :: surface
                          !! the surface type has had its memory allocated.
 end type surface
 
-!   The following structure contains pointers to an assortment of
-! thermodynamic fields that may be available, including potential
-! temperature, salinity and mixed layer density.
+!>   The thermo_var_ptrs structure contains pointers to an assortment of
+!! thermodynamic fields that may be available, including potential temperature,
+!! salinity, heat capacity, and the equation of state control structure.
 type, public :: thermo_var_ptrs
 !   If allocated, the following variables have nz layers.
-  real, pointer :: T(:,:,:) => NULL()   ! Potential temperature in C.
-  real, pointer :: S(:,:,:) => NULL()   ! Salnity in psu.
-  type(EOS_type), pointer :: eqn_of_state => NULL() ! Type that indicates the
-                                        ! equation of state to use.
-!  integer :: nk_Rml = 0  !   The number of variable density near-surface layers
-!                         ! with a bulk mixed layer (nkml+nkbl).
-!  integer :: nkml = 0    !   The number of layers within a surface bulk mixed
-!                         ! layer.
-  real :: P_Ref          !   The coordinate-density reference pressure in Pa.
-                         ! This is the pressure used to calculate Rml from
-                         ! T and S when eqn_of_state is associated.
-  real :: C_p            !   The heat capacity of seawater, in J K-1 kg-1.
-                         ! When conservative temperature is used, this is
-                         ! constant and exactly 3991.86795711963 J K kg-1.
+  real, pointer :: T(:,:,:) => NULL()   !< Potential temperature in C.
+  real, pointer :: S(:,:,:) => NULL()   !< Salnity in psu or ppt.
+  type(EOS_type), pointer :: eqn_of_state => NULL() !< Type that indicates the
+                                        !! equation of state to use.
+  real :: P_Ref          !<   The coordinate-density reference pressure in Pa.
+                         !! This is the pressure used to calculate Rml from
+                         !! T and S when eqn_of_state is associated.
+  real :: C_p            !<   The heat capacity of seawater, in J K-1 kg-1.
+                         !! When conservative temperature is used, this is
+                         !! constant and exactly 3991.86795711963 J K kg-1.
   real, pointer, dimension(:,:) :: &
 !  These arrays are accumulated fluxes for communication with other components.
-    frazil => NULL(), &  !   The energy needed to heat the ocean column to the
-                         ! freezing point since calculate_surface_state was
-                         ! last called, in units of J m-2.
-    salt_deficit => NULL(), & !   The salt needed to maintain the ocean column
-                         ! at a minumum salinity of 0.01 PSU since the last time
-                         ! that calculate_surface_state was called, in units
-                         ! of gSalt m-2.
-    TempxPmE => NULL(), &!   The net inflow of water into the ocean times the
-                         ! temperature at which this inflow occurs since the
-                         ! last call to calculate_surface_state, in units of
-                         ! deg C kg m-2. This should be prescribed in the
-                         ! forcing fields, but as it often is not, this is a
-                         ! useful heat budget diagnostic.
-    internal_heat => NULL() ! Any internal or geothermal heat sources that
-                         ! have been applied to the ocean since the last call to
-                         ! calculate_surface_state, in units of deg C kg m-2.
+    frazil => NULL(), &  !<   The energy needed to heat the ocean column to the
+                         !! freezing point since calculate_surface_state was
+                         !! last called, in units of J m-2.
+    salt_deficit => NULL(), & !<   The salt needed to maintain the ocean column
+                         !! at a minumum salinity of 0.01 PSU since the last time
+                         !! that calculate_surface_state was called, in units
+                         !! of gSalt m-2.
+    TempxPmE => NULL(), & !<   The net inflow of water into the ocean times the
+                         !! temperature at which this inflow occurs since the
+                         !! last call to calculate_surface_state, in units of
+                         !! deg C kg m-2. This should be prescribed in the
+                         !! forcing fields, but as it often is not, this is a
+                         !! useful heat budget diagnostic.
+    internal_heat => NULL() !< Any internal or geothermal heat sources that
+                         !! have been applied to the ocean since the last call to
+                         !! calculate_surface_state, in units of deg C kg m-2.
 end type thermo_var_ptrs
 
+!> The ocean_internal_state structure contains pointers to all of the prognostic
+!! variables allocated in MOM_variables.F90 and MOM.F90.  It is useful for
+!! sending these variables for diagnostics, and in preparation for ensembles
+!! later on.  All variables have the same names as the local (public) variables
+!! they refer to in MOM.F90.
 type, public :: ocean_internal_state
-! This structure contains pointers to all of the prognostic variables allocated
-! here and in MOM.F90.  It is useful for sending them for diagnostics, and for
-! preparation for ensembles later on.  All variables have the same names as the
-! local (public) variables they refer to in MOM.F90.
   real, pointer, dimension(:,:,:) :: &
     u => NULL(), v => NULL(), h => NULL()
   real, pointer, dimension(:,:,:) :: &
@@ -140,9 +137,9 @@ type, public :: ocean_internal_state
     u_av => NULL(), v_av => NULL(), u_prev => NULL(), v_prev => NULL()
 end type ocean_internal_state
 
+!> The accel_diag_ptrs structure contains pointers to arrays with accelerations,
+!! which can later be used for derived diagnostics, like energy balances.
 type, public :: accel_diag_ptrs
-! This structure contains pointers to arrays with accelerations, which can
-! later be used for derived diagnostics, like energy balances.
 
 ! Each of the following fields has nz layers.
   real, pointer :: diffu(:,:,:) => NULL()    ! Accelerations due to along iso-
@@ -167,9 +164,9 @@ type, public :: accel_diag_ptrs
 
 end type accel_diag_ptrs
 
+!> The cont_diag_ptrs structure contains pointers to arrays with transports,
+!! which can later be used for derived diagnostics, like energy balances.
 type, public :: cont_diag_ptrs
-! This structure contains pointers to arrays with accelerations, which can
-! later be used for derived diagnostics, like energy balances.
 
 ! Each of the following fields has nz layers.
   real, pointer :: uh(:,:,:) => NULL()    ! Resolved layer thickness fluxes,
@@ -182,58 +179,72 @@ type, public :: cont_diag_ptrs
 
 end type cont_diag_ptrs
 
+!>   The vertvisc_type structure contains vertical viscosities, drag
+!! coefficients, and related fields.
 type, public :: vertvisc_type
-!   This structure contains vertical viscosities, drag coefficients, and
-! related fields.
-  logical :: calc_bbl            ! If true, the BBL viscosity and thickness
-                                 ! need to be recalculated.
-  real :: bbl_calc_time_interval ! The amount of time over which the impending
-                                 ! calculation of the BBL properties will apply,
-                                 ! for use in diagnostics of the BBL properties.
-  real :: Prandtl_turb       ! The Prandtl number for the turbulent diffusion
-                             ! that is captured in Kd_turb.
+  logical :: calc_bbl            !< If true, the BBL viscosity and thickness
+                                 !! need to be recalculated.
+  real :: bbl_calc_time_interval !< The amount of time over which the impending
+                                 !! calculation of the BBL properties will apply,
+                                 !! for use in diagnostics of the BBL properties.
+  real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
+                             !! that is captured in Kd_turb.
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & ! The bottom boundary layer thickness at the zonal
     bbl_thick_v => NULL(), & ! and meridional velocity points, in m.
     kv_bbl_u => NULL(), &    ! The bottom boundary layer viscosity at the zonal
     kv_bbl_v => NULL(), &    ! and meridional velocity points, in m2 s-1.
-    ustar_BBL => NULL(), &   ! The turbulence velocity in the bottom boundary
-                             ! layer at h points, in m s-1.
-    TKE_BBL => NULL(), &     ! A term related to the bottom boundary layer
-                             ! source of turbulent kinetic energy, currently
-                             ! in units of m3 s-3, but will later be changed
-                             ! to W m-2.
-    taux_shelf => NULL(), &  ! The zonal and meridional stresses on the ocean
-    tauy_shelf => NULL(), &  ! under shelves, in Pa.
-    tbl_thick_shelf_u => NULL(), & ! Thickness of the viscous top boundary
-    tbl_thick_shelf_v => NULL(), & ! layer under ice shelves, in m.
-    kv_tbl_shelf_u => NULL(), &  ! Viscosity in the viscous top boundary
-    kv_tbl_shelf_v => NULL(), &  ! layer under ice shelves, in m2 s-1.
-    nkml_visc_u => NULL(), & ! The number of layers in the viscous surface
-    nkml_visc_v => NULL(), & ! mixed layer.  These are not integers because
-                             ! there may be fractional layers.  This is done
-                             ! in terms of layers, not depth, to facilitate
-                             ! the movement of the viscous boundary layer with
-                             ! the flow.
+    ustar_BBL => NULL(), &   !< The turbulence velocity in the bottom boundary
+                             !! layer at h points, in m s-1.
+    TKE_BBL => NULL(), &     !< A term related to the bottom boundary layer
+                             !! source of turbulent kinetic energy, currently
+                             !! in units of m3 s-3, but will later be changed
+                             !! to W m-2.
+    taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves, in Pa.
+    tauy_shelf => NULL(), &  !< The meridional stresses on the ocean under shelves, in Pa. 
+    tbl_thick_shelf_u => NULL(), & !< Thickness of the viscous top boundary
+                             !< layer under ice shelves at u-points, in m.
+    tbl_thick_shelf_v => NULL(), & !< Thickness of the viscous top boundary
+                             !< layer under ice shelves at v-points, in m.
+    kv_tbl_shelf_u => NULL(), &  !< Viscosity in the viscous top boundary layer
+                             !! under ice shelves at u-points, in m2 s-1.
+    kv_tbl_shelf_v => NULL(), &  !< Viscosity in the viscous top boundary layer
+                             !! under ice shelves at u-points, in m2 s-1.
+    nkml_visc_u => NULL(), & !< The number of layers in the viscous surface
+                             !! mixed layer at u-points (nondimensional).  This
+                             !! is not an integer because there may be
+                             !! fractional layers, and it is stored
+                             !! in terms of layers, not depth, to facilitate
+                             !! the movement of the viscous boundary layer with
+                             !! the flow.
+    nkml_visc_v => NULL(), & !< The number of layers in the viscous surface
+                             !! mixed layer at v-points (nondimensional).
     MLD => NULL()            !< Instantaneous active mixing layer depth (H units).
   real, pointer, dimension(:,:,:) :: &
-    Ray_u => NULL(), &  ! The Rayleigh drag velocity to be applied to each layer
-    Ray_v => NULL(), &  ! at u- and v-points, in m s-1.
-    Kd_extra_T => NULL(), & ! The extra diffusivities of temperature and
-    Kd_extra_S => NULL(), & ! salinity due to double diffusion at the interfaces
-                        ! relative to the diffusivity of density, in m2 s-1.
-                        ! One of these is always 0.  Kd_extra_S is positive for
-                        ! salt fingering; Kd_extra_T is positive for double
-                        ! diffusive convection.  These are only allocated if
-                        ! DOUBLE_DIFFUSION is true.
-    Kd_turb => NULL(), &! The turbulent diapycnal diffusivity at the interfaces
-                        ! between each layer, in m2 s-1.
-    Kv_turb => NULL(), &! The turbulent vertical viscosity at the interfaces
-                        ! between each layer, in m2 s-1.
-    TKE_turb => NULL()  ! The turbulent kinetic energy per unit mass defined
-                        ! at the interfaces between each layer, in m2 s-2.
+    Ray_u => NULL(), &  !< The Rayleigh drag velocity to be applied to each layer
+                        !! at u-points, in m s-1.
+    Ray_v => NULL(), &  !< The Rayleigh drag velocity to be applied to each layer
+                        !! at v-points, in m s-1.
+    Kd_extra_T => NULL(), & !< The extra diffusivity of temperature due to
+                        !! double diffusion relative to the diffusivity of
+                        !! density, in m2 s-1.
+    Kd_extra_S => NULL(), & !< The extra diffusivity of salinity due to
+                        !! double diffusion relative to the diffusivity of
+                        !! density, in m2 s-1.
+                        !   One of Kd_extra_T and Kd_extra_S is always 0.
+                        ! Kd_extra_S is positive for salt fingering; Kd_extra_T
+                        ! is positive for double diffusive convection.  These
+                        ! are only allocated if DOUBLE_DIFFUSION is true.
+    Kd_turb => NULL(), &!< The turbulent diapycnal diffusivity at the interfaces
+                        !! between each layer, in m2 s-1.
+    Kv_turb => NULL(), &!< The turbulent vertical viscosity at the interfaces
+                        !! between each layer, in m2 s-1.
+    TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
+                        !! at the interfaces between each layer, in m2 s-2.
 end type vertvisc_type
 
+!> The BT_cont_type structure contains information about the summed layer
+!! transports and how they will vary as the barotropic velocity is changed.
 type, public :: BT_cont_type
   real, pointer, dimension(:,:) :: &
     FA_u_EE => NULL(), &  ! The FA_u_XX variables are the effective open face
@@ -270,7 +281,8 @@ end type BT_cont_type
 
 contains
 
-
+!> alloc_BT_cont_type allocates the arrays contained within a BT_cont_type and
+!! initializes them to 0.
 subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
   type(BT_cont_type),    pointer    :: BT_cont
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
@@ -305,6 +317,7 @@ subroutine alloc_BT_cont_type(BT_cont, G, alloc_faces)
 
 end subroutine alloc_BT_cont_type
 
+!> dealloc_BT_cont_type deallocates the arrays contained within a BT_cont_type.
 subroutine dealloc_BT_cont_type(BT_cont)
   type(BT_cont_type), pointer :: BT_cont
 
@@ -325,9 +338,11 @@ subroutine dealloc_BT_cont_type(BT_cont)
 
 end subroutine dealloc_BT_cont_type
 
+!> MOM_thermovar_chksum does diagnostic checksums on various elements of a
+!! thermo_var_ptrs type for debugging.
 subroutine MOM_thermovar_chksum(mesg, tv, G)
   character(len=*),                    intent(in) :: mesg
-  type(thermo_var_ptrs),               intent(in) :: tv
+  type(thermo_var_ptrs),               intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(ocean_grid_type),               intent(in) :: G    !< The ocean's grid structure
 !   This subroutine writes out chksums for the model's basic state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
