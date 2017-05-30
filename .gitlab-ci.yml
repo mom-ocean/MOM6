@@ -32,7 +32,7 @@ setup:
     - ln -sf $MOM6_SRC/{config_src,src,pkg} .
     - test -d tests || (git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests)
     - cd tests
-    - git checkout master
+    - git checkout dev/gfdl
     - git checkout . && git pull
     - git status
     - bash Gitlab/before_script.sh
