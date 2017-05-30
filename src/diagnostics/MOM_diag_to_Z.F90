@@ -170,7 +170,7 @@ subroutine calculate_Z_diag_fields(u, v, h, ssh_in, frac_shelf_h, dt, G, GV, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh_in
   real, dimension(:,:),                      pointer       :: frac_shelf_h
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The time difference in s since the last call to this subroutine
   type(diag_to_Z_CS),                        pointer       :: CS
 
 ! This subroutine maps tracers and velocities into depth space for diagnostics.
@@ -525,7 +525,7 @@ subroutine calculate_Z_transport(uh_int, vh_int, h, dt, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh_int
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh_int
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The time difference in s since the last call to this subroutine
   type(diag_to_Z_CS),                        pointer       :: CS
 
 !   This subroutine maps horizontal transport into depth space for diagnostic output.

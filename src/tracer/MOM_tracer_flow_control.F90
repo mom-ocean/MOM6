@@ -250,7 +250,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   type(sponge_CS),                       pointer    :: sponge_CSp
   type(ALE_sponge_CS),                   pointer    :: ALE_sponge_CSp
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
-  type(thermo_var_ptrs),                 intent(in) :: tv
+  type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 !   This subroutine calls all registered tracer initialization
 ! subroutines.
 
@@ -372,11 +372,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                   debug, evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
-  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml !< Mixed layer depth (m)
-  real,                                  intent(in) :: dt
+  real, dimension(NIMEM_,NJMEM_),        intent(in) :: Hml  !< Mixed layer depth (m)
+  real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  type(thermo_var_ptrs),                 intent(in) :: tv
+  type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(optics_type),                     pointer    :: optics
   type(tracer_flow_control_CS),          pointer    :: CS
   logical,                               intent(in) :: debug
