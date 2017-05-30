@@ -190,10 +190,14 @@ type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_turb.
   real, pointer, dimension(:,:) :: &
-    bbl_thick_u => NULL(), & ! The bottom boundary layer thickness at the zonal
-    bbl_thick_v => NULL(), & ! and meridional velocity points, in m.
-    kv_bbl_u => NULL(), &    ! The bottom boundary layer viscosity at the zonal
-    kv_bbl_v => NULL(), &    ! and meridional velocity points, in m2 s-1.
+    bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the
+                             !! u-points, in m.
+    bbl_thick_v => NULL(), & !< The bottom boundary layer thickness at the
+                             !! v-points, in m.
+    kv_bbl_u => NULL(), &    !< The bottom boundary layer viscosity at the
+                             !! u-points, in m2 s-1.
+    kv_bbl_v => NULL(), &    !< The bottom boundary layer viscosity at the
+                             !! v-points, in m2 s-1.
     ustar_BBL => NULL(), &   !< The turbulence velocity in the bottom boundary
                              !! layer at h points, in m s-1.
     TKE_BBL => NULL(), &     !< A term related to the bottom boundary layer
@@ -201,7 +205,7 @@ type, public :: vertvisc_type
                              !! in units of m3 s-3, but will later be changed
                              !! to W m-2.
     taux_shelf => NULL(), &  !< The zonal stresses on the ocean under shelves, in Pa.
-    tauy_shelf => NULL(), &  !< The meridional stresses on the ocean under shelves, in Pa. 
+    tauy_shelf => NULL(), &  !< The meridional stresses on the ocean under shelves, in Pa.
     tbl_thick_shelf_u => NULL(), & !< Thickness of the viscous top boundary
                              !< layer under ice shelves at u-points, in m.
     tbl_thick_shelf_v => NULL(), & !< Thickness of the viscous top boundary
