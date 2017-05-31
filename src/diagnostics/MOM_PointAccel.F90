@@ -101,7 +101,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
   type(cont_diag_ptrs),                   intent(in) :: CDp
-  real,                                   intent(in) :: dt
+  real,                                   intent(in) :: dt   !< The ocean dynamics time step, in s.
   type(PointAccel_CS),                    pointer    :: CS
   real,                                   intent(in) :: maxvel, minvel
   real, optional,                         intent(in) :: str
@@ -439,7 +439,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
   type(accel_diag_ptrs),                  intent(in) :: ADp
   type(cont_diag_ptrs),                   intent(in) :: CDp
-  real,                                   intent(in) :: dt
+  real,                                   intent(in) :: dt   !< The ocean dynamics time step, in s.
   type(PointAccel_CS),                    pointer    :: CS
   real,                                   intent(in) :: maxvel, minvel
   real, optional,                         intent(in) :: str

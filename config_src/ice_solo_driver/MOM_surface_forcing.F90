@@ -715,7 +715,8 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
@@ -918,7 +919,8 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
@@ -975,7 +977,8 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
