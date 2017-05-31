@@ -373,7 +373,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
               evap_CFL_limit, minimum_forcing_depth)
   real, dimension(NIMEM_,NJMEM_,NKMEM_), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
+  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   type(dye_tracer_CS),                pointer    :: CS

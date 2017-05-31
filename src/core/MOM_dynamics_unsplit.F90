@@ -188,10 +188,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The dynamics time step, in s.
   type(forcing),                             intent(in)    :: fluxes
   real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh

@@ -409,7 +409,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_in
-  real,                                      intent(in)  :: dt
+  real,                                      intent(in)  :: dt   !< The time increment over which to integrate, in s.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v
   type(forcing),                             intent(in)  :: fluxes

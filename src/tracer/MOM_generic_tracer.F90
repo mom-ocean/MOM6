@@ -519,10 +519,10 @@ contains
     type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
-    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml !< Mixed layer depth
-    real,                                  intent(in) :: dt
+    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth
+    real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
     type(MOM_generic_tracer_CS),           pointer    :: CS
-    type(thermo_var_ptrs),                 intent(in) :: tv
+    type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),                     intent(in) :: optics
     real,                        optional,intent(in)  :: evap_CFL_limit
     real,                        optional,intent(in)  :: minimum_forcing_depth
