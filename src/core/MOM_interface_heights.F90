@@ -70,7 +70,7 @@ subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
   type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                    intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                      intent(in)  :: tv
+  type(thermo_var_ptrs),                      intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real,                                       intent(in)  :: G_Earth
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
@@ -189,7 +189,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
   type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                    intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                      intent(in)  :: tv
+  type(thermo_var_ptrs),                      intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real,                                       intent(in)  :: G_Earth
   real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
