@@ -178,11 +178,11 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(accel_diag_ptrs),                     intent(in)    :: ADp
   type(cont_diag_ptrs),                      intent(in)    :: CDp
   type(forcing),                             intent(in)    :: fluxes
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The time difference in s since the last call to this subroutine
   type(diagnostics_CS),                      intent(inout) :: CS
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: eta_bt
 
@@ -685,7 +685,7 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
   type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)    :: tv
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(forcing),                            intent(in)    :: fluxes
   type(diagnostics_CS),                     intent(inout) :: CS
 
@@ -1037,7 +1037,7 @@ end subroutine register_time_deriv
 
 
 subroutine calculate_derivs(dt, G, CS)
-  real,                  intent(in)    :: dt
+  real,                  intent(in)    :: dt   !< The time interval over which differences occur, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(diagnostics_CS),  intent(inout) :: CS
 
