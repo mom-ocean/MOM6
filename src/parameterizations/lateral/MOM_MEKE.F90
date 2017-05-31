@@ -316,7 +316,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     enddo ; enddo
 !$OMP end parallel
 
-    if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_K4 >= 0.0) then
+    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_K4 >= 0.0) then
       ! Update halos for lateral or bi-harmonic diffusion
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_MEKE, G%Domain)
