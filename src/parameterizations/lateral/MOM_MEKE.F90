@@ -115,7 +115,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     baroHu, &       ! Depth integrated zonal mass flux (m3).
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
                     ! u-points, in m s-1.
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     MEKE_vflux, &   ! The meridional diffusive flux of MEKE, in kg m2 s-3.
     Kh_v, &         ! The meridional diffusivity that is actually used, in m2 s-1.
     baroHv, &       ! Depth integrated meridional mass flux (m3).
