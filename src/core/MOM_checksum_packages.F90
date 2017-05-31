@@ -123,7 +123,7 @@ end subroutine MOM_state_chksum_3arg
 
 subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   character(len=*),         intent(in) :: mesg
-  type(thermo_var_ptrs),    intent(in) :: tv
+  type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(ocean_grid_type),    intent(in) :: G    !< The ocean's grid structure
   integer, optional,        intent(in) :: haloshift
 !   This subroutine writes out chksums for the model's thermodynamic state
