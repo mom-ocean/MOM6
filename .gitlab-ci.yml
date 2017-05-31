@@ -20,7 +20,7 @@ merge:
   tags:
     - ncrc3
   script:
-    - cd $MOM6_SRC && git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/master
+    - cd $MOM6_SRC && git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
 
 # Clones regression repo, if necessary, pulls latest of everything, and sets up working space
 setup:
