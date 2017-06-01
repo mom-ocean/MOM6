@@ -492,21 +492,20 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
 end subroutine ALE_main_offline
 
-subroutine ALE_offline_inputs(CS, G, GV, h_start, h_input, h_regrid, tv, Reg, uhtr, vhtr, Kd, debug)
-  type(ALE_CS),                                 pointer       :: CS       !< Regridding parameters and options
-  type(ocean_grid_type),                        intent(in   ) :: G        !< Ocean grid informations
-  type(verticalGrid_type),                      intent(in   ) :: GV       !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h_start  !< Thicknesses at start of timestep
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h_input  !< Thicknesses of input fields
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(  out) :: h_regrid !< Thicknesses after regridding
-  type(thermo_var_ptrs),                        intent(inout) :: tv       !< Thermodynamic variable structure
-  type(tracer_registry_type),                   pointer       :: Reg      !< Tracer registry structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr     !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr     !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd       !< Input diffusivites
-  logical,                                      intent(in   ) :: debug    !< If true, then turn checksums
+subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
+  type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
+  type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
+  type(verticalGrid_type),                      intent(in   ) :: GV    !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses
+  type(thermo_var_ptrs),                        intent(inout) :: tv    !< Thermodynamic variable structure
+  type(tracer_registry_type),                   pointer       :: Reg   !< Tracer registry structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
+  logical,                                      intent(in   ) :: debug !< If true, then turn checksums
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
   real, dimension(SZK_(GV)) :: h_src
   real, dimension(SZK_(GV)) :: h_dest, uh_dest
@@ -514,33 +513,33 @@ subroutine ALE_offline_inputs(CS, G, GV, h_start, h_input, h_regrid, tv, Reg, uh
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
   dzRegrid(:,:,:) = 0.0
-  h_regrid(:,:,:) = 0.0
+  h_new(:,:,:) = 0.0
 
-  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h_input, Reg%Tr, Reg%ntr)
+  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h, Reg%Tr, Reg%ntr)
 
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
-  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_input, tv, h_regrid, dzRegrid, conv_adjust = .false. )
-  call check_grid( G, GV, h_regrid, 0. )
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust = .false. )
+  call check_grid( G, GV, h_new, 0. )
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h_start, h_regrid, Reg, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Reintegrate mass transports
   do j=jsc,jec ; do i=G%iscB,G%iecB
     if (G%mask2dCu(i,j)>0.) then
-      h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i+1,j,:))
-      h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i+1,j,:))
+      h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+      h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i+1,j,:))
       call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., temp_vec)
       uhtr(I,j,:) = temp_vec
     endif
   enddo ; enddo
   do j=G%jscB,G%jecB ; do i=isc,iec
     if (G%mask2dCv(i,j)>0.) then
-      h_src(:) = 0.5 * (h_input(i,j,:) + h_input(i,j+1,:))
-      h_dest(:) = 0.5 * (h_regrid(i,j,:) + h_regrid(i,j+1,:))
+      h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+      h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i,j+1,:))
       call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., temp_vec)
       vhtr(I,j,:) = temp_vec
     endif
@@ -551,14 +550,19 @@ subroutine ALE_offline_inputs(CS, G, GV, h_start, h_input, h_regrid, tv, Reg, uh
       if (check_column_integrals(nk, h_src, nk, h_dest)) then
         call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
       endif
-      call interpolate_column(nk, h_input(i,j,:), Kd(i,j,:), nk, h_regrid(i,j,:), 0., Kd(i,j,:))
+      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), 0., Kd(i,j,:))
     endif
   enddo ; enddo;
 
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h_input, tv%T, h_regrid, tv%T)
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h_input, tv%S, h_regrid, tv%S)
-  
-  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_regrid, Reg%Tr, Reg%ntr)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S)
+
+  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_new, Reg%Tr, Reg%ntr)
+
+  ! Copy over the new layer thicknesses
+  do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h(i,j,k) = h_new(i,j,k)
+  enddo ; enddo ; enddo
 
   if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
 end subroutine ALE_offline_inputs
@@ -583,17 +587,16 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
   if (CS%show_call_tree) call callTree_enter("ALE_offline_tracer_final(), MOM_ALE.F90")
-
   ! Need to make sure that h_target is consistent with the current offline ALE confiuration
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_target, tv, h_new, dzRegrid )
-  call check_grid( G, GV, h, 0. )
   call check_grid( G, GV, h_target, 0. )
+
 
   if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer)")
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, Reg, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
 
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
 
@@ -605,9 +608,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
       h(i,j,k) = h_new(i,j,k)
     enddo ; enddo
   enddo
-
   if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer()")
-
 end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses
