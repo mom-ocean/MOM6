@@ -10,7 +10,7 @@ module coupler_types_mod
 ! This module contains simplified type declarations for the coupler
 ! of an ocean-only model. With mom4/5, this is used with ocean_solo_mod
 ! as the driver, and with MOM6 it is used with MOM_driver.
-!
+!!
 
 implicit none ; private
 
