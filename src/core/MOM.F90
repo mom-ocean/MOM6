@@ -1621,10 +1621,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
       ! Apply any fluxes into the ocean
       call offline_fw_fluxes_into_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
-      ! Ensure that layer thicknesses are reasonable
-      do k=1,GV%ke ; do j=js,je ; do i=is,ie
-        CS%h(i,j,k) = MAX(CS%h(i,j,k),GV%Angstrom)
-      enddo ; enddo ; enddo
 
       if (.not.CS%diabatic_first) then
         call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
@@ -1647,8 +1643,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     endif
 
     if (do_vertical) then
-      call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, &
-                                CS%h, eatr, ebtr)
+      call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, CS%h, eatr, ebtr)
     endif
 
     ! Last thing that needs to be done is the final ALE remapping

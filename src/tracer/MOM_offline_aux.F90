@@ -609,7 +609,7 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_end     !< End of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp_mean !< Averaged temperature
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt_mean !< Averaged salinity
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: mld       !< Averaged mixed layer depth
+  real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: mld       !< Averaged mixed layer depth
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),intent(inout) :: Kd       !< Averaged mixed layer depth
   type(forcing),                             intent(inout) :: fluxes    !< Fields with surface fluxes
   integer,                                   intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
