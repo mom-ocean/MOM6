@@ -39,7 +39,7 @@ use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
-use MOM_tracer_registry,  only : tracer_registry_type
+use MOM_tracer_registry,  only : tracer_registry_type, MOM_tracer_chkinv
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
 
@@ -492,17 +492,19 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
 end subroutine ALE_main_offline
 
-subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr, Kd)
-  type(ocean_grid_type),                        intent(in   ) :: G   !< Ocean grid informations
-  type(verticalGrid_type),                      intent(in   ) :: GV  !< Ocean vertical grid structure
+subroutine ALE_offline_inputs(CS, G, GV, h_start, h_input, h_regrid, tv, Reg, uhtr, vhtr, Kd, debug)
+  type(ALE_CS),                                 pointer       :: CS       !< Regridding parameters and options
+  type(ocean_grid_type),                        intent(in   ) :: G        !< Ocean grid informations
+  type(verticalGrid_type),                      intent(in   ) :: GV       !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h_start  !< Thicknesses at start of timestep
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h_input  !< Thicknesses of input fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(  out) :: h_regrid !< Thicknesses after regridding
-  type(thermo_var_ptrs),                        intent(inout) :: tv     !< Thermodynamic variable structure
-  type(tracer_registry_type),                   pointer       :: Reg    !< Tracer registry structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
-  type(ALE_CS),                                 pointer       :: CS     !< Regridding parameters and options
+  type(thermo_var_ptrs),                        intent(inout) :: tv       !< Thermodynamic variable structure
+  type(tracer_registry_type),                   pointer       :: Reg      !< Tracer registry structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr     !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr     !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd       !< Input diffusivites
+  logical,                                      intent(in   ) :: debug    !< If true, then turn checksums
   ! Local variables
   integer :: nk, i, j, k, isc, iec, jsc, jec
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
@@ -514,6 +516,8 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
   dzRegrid(:,:,:) = 0.0
   h_regrid(:,:,:) = 0.0
 
+  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h_input, Reg%Tr, Reg%ntr)
+
   ! Build new grid. The new grid is stored in h_new. The old grid is h.
   ! Both are needed for the subsequent remapping of variables.
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_input, tv, h_regrid, dzRegrid, conv_adjust = .false. )
@@ -521,7 +525,7 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h_input, h_regrid, Reg, debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h_start, h_regrid, Reg, debug=CS%show_call_tree )
   if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
 
   ! Reintegrate mass transports
@@ -553,6 +557,8 @@ subroutine ALE_offline_inputs(CS, G, GV, h_input, h_regrid, tv, Reg, uhtr, vhtr,
 
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h_input, tv%T, h_regrid, tv%T)
   call ALE_remap_scalar(CS%remapCS, G, GV, nk, h_input, tv%S, h_regrid, tv%S)
+  
+  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_regrid, Reg%Tr, Reg%ntr)
 
   if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
 end subroutine ALE_offline_inputs
@@ -565,7 +571,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout)    :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   ! Local variables

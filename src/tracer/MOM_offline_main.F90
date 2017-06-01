@@ -29,7 +29,7 @@ use MOM_time_manager,         only : time_type
 use MOM_tracer_advect,        only : tracer_advect_CS, advect_tracer
 use MOM_tracer_diabatic,      only : applyTracerBoundaryFluxesInOut
 use MOM_tracer_flow_control,  only : tracer_flow_control_CS, call_tracer_column_fns, call_tracer_stocks
-use MOM_tracer_registry,      only : tracer_registry_type, MOM_tracer_chksum
+use MOM_tracer_registry,      only : tracer_registry_type, MOM_tracer_chksum, MOM_tracer_chkinv
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
 
@@ -289,8 +289,6 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
 
   ! This loop does essentially a flux-limited, nonlinear advection scheme until all mass fluxes
   ! are used. ALE is done after the horizontal advection.
-
-
   do iter=1,CS%num_off_iter
 
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -302,7 +300,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
       call hchksum(h_vol,"h_vol before advect",G%HI)
       call uvchksum("[uv]htr_sub before advect", uhtr_sub, vhtr_sub, G%HI)
       write(debug_msg, '(A,I4.4)') 'Before advect ', iter
-      call MOM_tracer_chksum(debug_msg, CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h_pre)
+      call MOM_tracer_chkinv(debug_msg, G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
     endif
 
     call advect_tracer(h_pre, uhtr_sub, vhtr_sub, CS%OBC, CS%dt_offline, G, GV, &
@@ -317,13 +315,13 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
       h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
 
-    if (MODULO(iter,100)==0) then
+    if (MODULO(iter,1)==0) then
       ! Do ALE remapping/regridding to allow for more advection to occur in the next iteration
       call pass_var(h_new,G%Domain)
       if (CS%debug) then
         call hchksum(h_new,"h_new before ALE",G%HI)
         write(debug_msg, '(A,I4.4)') 'Before ALE ', iter
-        call MOM_tracer_chksum(debug_msg, CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h_new)
+        call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
       call cpu_clock_begin(id_clock_ALE)
       call ALE_main_offline(G, GV, h_new, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_offline)
@@ -332,19 +330,14 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
       if (CS%debug) then
         call hchksum(h_new,"h_new after ALE",G%HI)
         write(debug_msg, '(A,I4.4)') 'After ALE ', iter
-        call MOM_tracer_chksum(debug_msg, CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h_new)
+        call MOM_tracer_chkinv(debug_msg, G, h_new, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
       endif
-    else
-      do k=1,nz; do j=js,je ; do i=is,ie
-        uhtr_sub(I,j,k) = uhtr(I,j,k)
-        vhtr_sub(i,J,k) = vhtr(i,J,k)
-      enddo ; enddo ; enddo
     endif
 
-      do k=1,nz; do j=js,je ; do i=is,ie
-        uhtr_sub(I,j,k) = uhtr(I,j,k)
-        vhtr_sub(i,J,k) = vhtr(i,J,k)
-      enddo ; enddo ; enddo
+    do k=1,nz; do j=js,je ; do i=is,ie
+      uhtr_sub(I,j,k) = uhtr(I,j,k)
+      vhtr_sub(i,J,k) = vhtr(i,J,k)
+    enddo ; enddo ; enddo
     call pass_var(h_new, G%Domain)
     call pass_vector(uhtr_sub,vhtr_sub,G%Domain)
 
@@ -379,7 +372,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
   if (CS%debug) then
     call hchksum(h_pre,"h after offline_advection_ale",G%HI)
     call uvchksum("[uv]htr after offline_advection_ale", uhtr, vhtr, G%HI)
-    call MOM_tracer_chksum("After offline_advection_ale", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h_pre)
+    call MOM_tracer_chkinv("After offline_advection_ale", G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_offline_adv)
@@ -441,7 +434,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged, id_cl
   if (converged) return
 
   if (CS%debug) then
-    call MOM_tracer_chksum("Before redistribute ", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h_pre)
+    call MOM_tracer_chkinv("Before redistribute ", G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_begin(CS%id_clock_redistribute)
@@ -573,8 +566,7 @@ subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged, id_cl
   if (CS%debug) then
     call hchksum(h_pre,"h_pre after redistribute",G%HI)
     call uvchksum("uhtr after redistribute", uhtr, vhtr, G%HI)
-    call MOM_tracer_chksum("after redistribute ", CS%tracer_Reg%Tr, &
-                           CS%tracer_Reg%ntr, G)
+    call MOM_tracer_chkinv("after redistribute ", G, h_new, CS%tracer_Reg%Tr, CS%tracer_Reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_redistribute)
@@ -643,7 +635,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
     call hchksum(h_pre,"h_pre before offline_diabatic_ale",CS%G%HI)
     call hchksum(eatr,"eatr before offline_diabatic_ale",CS%G%HI)
     call hchksum(ebtr,"ebtr before offline_diabatic_ale",CS%G%HI)
-    call MOM_tracer_chksum("Before offline_diabatic_ale", CS%tracer_reg%Tr, CS%tracer_reg%ntr, CS%G, h_pre)
+    call MOM_tracer_chkinv("Before offline_diabatic_ale", CS%G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   eatr(:,:,:) = 0.
@@ -706,6 +698,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, e
     call hchksum(h_pre,"h_pre after offline_diabatic_ale",CS%G%HI)
     call hchksum(eatr,"eatr after offline_diabatic_ale",CS%G%HI)
     call hchksum(ebtr,"ebtr after offline_diabatic_ale",CS%G%HI)
+    call MOM_tracer_chkinv("After offline_diabatic_ale", CS%G, h_pre, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   call cpu_clock_end(CS%id_clock_offline_diabatic)
@@ -743,7 +736,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
 
   if (CS%debug) then
     call hchksum(h,"h before fluxes into ocean",G%HI)
-    call MOM_tracer_chksum("Before fluxes into ocean", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h)
+    call MOM_tracer_chkinv("Before fluxes into ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
   do m = 1,CS%tracer_reg%ntr
     ! Layer thicknesses should only be updated after the last tracer is finished
@@ -753,7 +746,7 @@ subroutine offline_fw_fluxes_into_ocean(G, GV, CS, fluxes, h, in_flux_optional)
   enddo
   if (CS%debug) then
     call hchksum(h,"h after fluxes into ocean",G%HI)
-    call MOM_tracer_chksum("After fluxes into ocean", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h)
+    call MOM_tracer_chkinv("After fluxes into ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
   ! Now that fluxes into the ocean are done, save the negative fluxes for later
@@ -779,7 +772,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
 
   if (CS%debug) then
     call hchksum(h,"h before fluxes out of ocean",G%HI)
-    call MOM_tracer_chksum("Before fluxes out of ocean", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h)
+    call MOM_tracer_chkinv("Before fluxes out of ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
   do m = 1, CS%tracer_reg%ntr
     ! Layer thicknesses should only be updated after the last tracer is finished
@@ -789,7 +782,7 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
   enddo
   if (CS%debug) then
     call hchksum(h,"h after fluxes out of ocean",G%HI)
-    call MOM_tracer_chksum("Before fluxes out of ocean", CS%tracer_reg%Tr, CS%tracer_reg%ntr, G, h)
+    call MOM_tracer_chkinv("Before fluxes out of ocean", G, h, CS%tracer_reg%Tr, CS%tracer_reg%ntr)
   endif
 
 end subroutine offline_fw_fluxes_out_ocean
@@ -990,7 +983,8 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   call pass_var(CS%h_start, CS%G%Domain)
   call pass_var(CS%tv%T, CS%G%Domain)
   call pass_var(CS%tv%S, CS%G%Domain)
-  call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV,  CS%h_start, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd)
+  call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%h_start, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr,&
+                          CS%Kd, CS%debug)
 
   if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag, alt_h = CS%h_start)
   if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag, alt_h =CS%h_start)
@@ -1394,10 +1388,10 @@ subroutine read_all_input(CS)
     if (allocated(CS%temp_all)) call MOM_error(FATAL, "temp_all is already allocated")
     if (allocated(CS%salt_all)) call MOM_error(FATAL, "salt_all is already allocated")
 
-    allocate(CS%uhtr_all(IsdB:IedB,jsd:jed,nz,ntime))   ; CS%uhtr_all(:,:,:,:) = 0.0
-    allocate(CS%vhtr_all(isd:ied,JsdB:JedB,nz,ntime))   ; CS%vhtr_all(:,:,:,:) = 0.0
+    allocate(CS%uhtr_all(IsdB:IedB,jsd:jed,nz,ntime))     ; CS%uhtr_all(:,:,:,:) = 0.0
+    allocate(CS%vhtr_all(isd:ied,JsdB:JedB,nz,ntime))     ; CS%vhtr_all(:,:,:,:) = 0.0
     allocate(CS%hstart_all(isd:ied,jsd:jed,nz,ntime))     ; CS%hend_all(:,:,:,:) = 0.0
-    allocate(CS%hend_all(isd:ied,jsd:jed,nz,ntime))     ; CS%hend_all(:,:,:,:) = 0.0
+    allocate(CS%hend_all(isd:ied,jsd:jed,nz,ntime))       ; CS%hend_all(:,:,:,:) = 0.0
     allocate(CS%temp_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%temp_all(:,:,:,:) = 0.0
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
 
