@@ -146,7 +146,7 @@ type, public :: offline_transport_CS ; private
 
   ! Arrays for temperature and salinity
   real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-      h_end, h_start
+      h_end
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
       netMassIn, netMassOut
   real, allocatable, dimension(:,:) :: &
@@ -154,8 +154,7 @@ type, public :: offline_transport_CS ; private
 
   !> Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: &
-    uhtr_all, vhtr_all, hend_all, hstart_all, &
-    temp_all, salt_all
+    uhtr_all, vhtr_all, hend_all, temp_all, salt_all
 
 end type offline_transport_CS
 
@@ -958,49 +957,47 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   logical,              intent(in   ) :: do_ale !< True if using ALE
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: temp_mean
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_start
   is = CS%G%isc ; ie = CS%G%iec ; js = CS%G%jsc ; je = CS%G%jec ; nz = CS%GV%ke
 
   call cpu_clock_begin(CS%id_clock_read_fields)
   call callTree_enter("update_offline_fields, MOM_offline_main.F90")
 
+  ! Store a copy of the layer thicknesses before ALE regrid/remap
+  h_start(:,:,:) = h(:,:,:)
+
   ! Get the timelevel for all fields used during this offline interval
   call update_offline_from_files( CS%G, CS%GV, CS%nk_input, CS%mean_file, CS%sum_file, CS%snap_file, CS%surf_file,  &
-                                  CS%h_start, CS%h_end, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S, CS%mld, CS%Kd, fluxes,  &
+                                  CS%h_end, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S, CS%mld, CS%Kd, fluxes,  &
                                   CS%ridx_sum, CS%ridx_snap, CS%read_mld, CS%read_sw, .not. CS%read_all_ts_uvh, do_ale)
   call update_offline_from_arrays(CS%G, CS%GV, CS%nk_input, CS%ridx_sum, CS%mean_file, CS%sum_file, CS%snap_file,   &
-                                  CS%uhtr, CS%vhtr, CS%h_start, CS%h_end, CS%uhtr_all, CS%vhtr_all, CS%hstart_all,  &
+                                  CS%uhtr, CS%vhtr, CS%h_end, CS%uhtr_all, CS%vhtr_all, &
                                   CS%hend_all, CS%tv%T, CS%tv%s, CS%temp_all, CS%salt_all, CS%read_all_ts_uvh)
   if (CS%debug) then
     call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)
   endif
 
-  do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%h_start(i,j,k) = MAX(CS%GV%H_subroundoff,CS%h_start(i,j,k))
-  enddo ; enddo ; enddo
-
   ! These halo passes are necessary because u, v fields will need information 1 step into the halo
-  call pass_var(CS%h_start, CS%G%Domain)
+  call pass_var(h, CS%G%Domain)
   call pass_var(CS%tv%T, CS%G%Domain)
   call pass_var(CS%tv%S, CS%G%Domain)
-  call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%h_start, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr,&
-                          CS%Kd, CS%debug)
+  call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, CS%debug)
 
-  if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag, alt_h = CS%h_start)
-  if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag, alt_h =CS%h_start)
-  if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag, alt_h = CS%h_start)
-  if (CS%id_vhtr_regrid>0) call post_data(CS%id_vhtr_regrid, CS%vhtr, CS%diag, alt_h =CS%h_start)
-  if (CS%id_h_regrid>0) call post_data(CS%id_salt_regrid, h, CS%diag, alt_h = CS%h_start)
+  if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag)
+  if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag)
+  if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag)
+  if (CS%id_vhtr_regrid>0) call post_data(CS%id_vhtr_regrid, CS%vhtr, CS%diag)
+  if (CS%id_h_regrid>0) call post_data(CS%id_h_regrid, h, CS%diag)
 
   if (CS%debug) then
     call uvchksum("[uv]h after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, CS%G%HI)
-    call hchksum(CS%h_start,"h_start after update offline from files and arrays", CS%G%HI)
+    call hchksum(h_start,"h_start after update offline from files and arrays", CS%G%HI)
   endif
 
   ! Update halos for some
-  call pass_var(CS%h_end, CS%G%Domain) ! ALE remapping/regridding needs this
-  call pass_var(CS%tv%T, CS%G%Domain)  ! Horizontal diffusion need this
-  call pass_var(CS%tv%S, CS%G%Domain)  ! Horizontal diffusion needs this
+  call pass_var(CS%h_end, CS%G%Domain)
+  call pass_var(CS%tv%T, CS%G%Domain)
+  call pass_var(CS%tv%S, CS%G%Domain)
 
   ! Update the read indices
   CS%ridx_snap = next_modulo_time(CS%ridx_snap,CS%numtime)
@@ -1347,7 +1344,6 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   ALLOC_(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
   ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
   allocate(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
-  allocate(CS%h_start(isd:ied,jsd:jed,nz))       ; CS%h_start(:,:,:) = 0.0
   ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
   ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
   allocate(CS%Kd(isd:ied,jsd:jed,nz+1)) ; CS%Kd = 0.
@@ -1384,13 +1380,11 @@ subroutine read_all_input(CS)
     if (allocated(CS%uhtr_all)) call MOM_error(FATAL, "uhtr_all is already allocated")
     if (allocated(CS%vhtr_all)) call MOM_error(FATAL, "vhtr_all is already allocated")
     if (allocated(CS%hend_all)) call MOM_error(FATAL, "hend_all is already allocated")
-    if (allocated(CS%hstart_all)) call MOM_error(FATAL, "hstart_all is already allocated")
     if (allocated(CS%temp_all)) call MOM_error(FATAL, "temp_all is already allocated")
     if (allocated(CS%salt_all)) call MOM_error(FATAL, "salt_all is already allocated")
 
     allocate(CS%uhtr_all(IsdB:IedB,jsd:jed,nz,ntime))     ; CS%uhtr_all(:,:,:,:) = 0.0
     allocate(CS%vhtr_all(isd:ied,JsdB:JedB,nz,ntime))     ; CS%vhtr_all(:,:,:,:) = 0.0
-    allocate(CS%hstart_all(isd:ied,jsd:jed,nz,ntime))     ; CS%hend_all(:,:,:,:) = 0.0
     allocate(CS%hend_all(isd:ied,jsd:jed,nz,ntime))       ; CS%hend_all(:,:,:,:) = 0.0
     allocate(CS%temp_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%temp_all(:,:,:,:) = 0.0
     allocate(CS%salt_all(isd:ied,jsd:jed,nz,1:ntime))     ; CS%salt_all(:,:,:,:) = 0.0
@@ -1401,8 +1395,6 @@ subroutine read_all_input(CS)
         timelevel=t, position=EAST)
       call read_data(CS%sum_file, 'vhtr_sum', CS%vhtr_all(:,:,1:CS%nk_input,t), domain=CS%G%Domain%mpp_domain, &
         timelevel=t, position=NORTH)
-      call read_data(CS%snap_file,'h_start', CS%hstart_all(:,:,1:CS%nk_input,t), domain=CS%G%Domain%mpp_domain, &
-          timelevel=t, position=CENTER)
       call read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), domain=CS%G%Domain%mpp_domain, &
         timelevel=t, position=CENTER)
       call read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), domain=CS%G%Domain%mpp_domain, &

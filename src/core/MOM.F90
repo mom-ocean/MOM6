@@ -1606,8 +1606,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     last_iter = .false.
   endif
 
-  if(CS%debug) call hchksum(CS%h,"h at the start of new offline interval",G%HI)
-
   if(CS%use_ALE_algorithm) then
     ! If this is the first iteration in the offline timestep, then we need to read in fields and
     ! perform the main advection.
@@ -1648,7 +1646,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
     ! Last thing that needs to be done is the final ALE remapping
     if(last_iter) then
-
       if (CS%diabatic_first) then
         call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
             CS%h, uhtr, vhtr, converged=adv_converged)
@@ -1666,7 +1663,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
           call tracer_hordiff(CS%h, REAL(dt_offline), CS%MEKE, CS%VarMix, G, GV, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
-
       endif
 
       if(is_root_pe()) print *, "Last iteration of offline interval"
@@ -1682,9 +1678,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_ALE)
       call pass_var(CS%h,G%Domain)
     endif
-
   else ! NON-ALE MODE...NOT WELL TESTED
-
     call MOM_error(WARNING, &
         "Offline tracer mode in non-ALE configuration has not been thoroughly tested")
     ! Note that for the layer mode case, the calls to tracer sources and sinks is embedded in

@@ -592,7 +592,7 @@ end subroutine offline_add_diurnal_sw
 
 !> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
 !! in a previous integration of the online model
-subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_file, surf_file, h_start, h_end, &
+subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_file, surf_file, h_end, &
     uhtr, vhtr, temp_mean, salt_mean, mld, Kd, fluxes, ridx_sum, ridx_snap, read_mld, read_sw, &
     read_ts_uvh, do_ale_in)
 
@@ -605,7 +605,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
   character(len=*),                          intent(in   ) :: surf_file !< Name of file with surface fields
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_start   !< Start of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_end     !< End of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp_mean !< Averaged temperature
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt_mean !< Averaged salinity
@@ -630,7 +629,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 
   ! Check if reading in UH, VH, and h_end
   if (read_ts_uvh) then
-    h_start(:,:,:) = 0.0
     h_end(:,:,:) = 0.0
     temp_mean(:,:,:) = 0.0
     salt_mean(:,:,:) = 0.0
@@ -643,8 +641,6 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
       timelevel=ridx_sum, position=NORTH)
     call read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
       timelevel=ridx_snap,position=CENTER)
-    call read_data(snap_file, 'h_start', h_start(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
-        timelevel=ridx_snap,position=CENTER)
     call read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
       timelevel=ridx_sum,position=CENTER)
     call read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
@@ -653,13 +649,10 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 
   do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j)>0.) then
-      do k=1,nz
-        if (h_start(i,j,k)<GV%Angstrom) exit
-      enddo
-      temp_mean(:,:,k:nz) = temp_mean(i,j,k)
-      salt_mean(:,:,k:nz) = salt_mean(i,j,k)
+      temp_mean(:,:,nk_input:nz) = temp_mean(i,j,nk_input)
+      salt_mean(:,:,nk_input:nz) = salt_mean(i,j,nk_input)
     endif
-  enddo ; enddo 
+  enddo ; enddo
 
   ! Check if reading vertical diffusivities or entrainment fluxes
   call read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), domain=G%Domain%mpp_domain, &
@@ -730,8 +723,8 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
 end subroutine update_offline_from_files
 
 !> Fields for offline transport are copied from the stored arrays read during initialization
-subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_file, snap_file, uhtr, vhtr, hstart, &
-                                      hend, uhtr_all, vhtr_all, hstart_all, hend_all, temp, salt, temp_all, salt_all,&
+subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_file, snap_file, uhtr, vhtr, &
+                                      hend, uhtr_all, vhtr_all, hend_all, temp, salt, temp_all, salt_all,&
                                       copy_ts_uvh)
   type(ocean_grid_type),                     intent(inout) :: G         !< Horizontal grid type
   type(verticalGrid_type),                   intent(in   ) :: GV        !< Vertical grid type
@@ -742,11 +735,9 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   character(len=200),                        intent(in   ) :: snap_file !< Name of file with snapshot fields
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hstart    !< Start of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hend      !< End of timestep layer thickness
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: uhtr_all  !< Zonal mass fluxes
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes
-  real, dimension(:,:,:,:), allocatable,     intent(inout) :: hstart_all!< Start of timestep layer thickness
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp      !< Temperature array
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt      !< Salinity array
@@ -762,8 +753,6 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
         call MOM_error(FATAL, "uhtr_all not allocated before call to update_transport_from_arrays")
     if (.not. allocated(vhtr_all)) &
         call MOM_error(FATAL, "vhtr_all not allocated before call to update_transport_from_arrays")
-    if (.not. allocated(hstart_all)) &
-        call MOM_error(FATAL, "hstart_all not allocated before call to update_transport_from_arrays")
     if (.not. allocated(hend_all)) &
         call MOM_error(FATAL, "hend_all not allocated before call to update_transport_from_arrays")
     if (.not. allocated(temp_all)) &
@@ -781,7 +770,6 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
       uhtr(I,j,k) = uhtr_all(I,j,k,ridx_sum)
       vhtr(i,J,k) = vhtr_all(i,J,k,ridx_sum)
       hend(i,j,k) = hend_all(i,j,k,ridx_sum)
-      hstart(i,j,k) = hstart_all(i,j,k,ridx_sum)
       temp(i,j,k) = temp_all(i,j,k,ridx_sum)
       salt(i,j,k) = salt_all(i,j,k,ridx_sum)
     enddo ; enddo ; enddo
