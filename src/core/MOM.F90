@@ -40,7 +40,8 @@ use MOM_diag_mediator,        only : register_scalar_field
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
-use MOM_domains,              only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
+use MOM_domains,              only : To_North, To_East, To_South, To_West
+use MOM_domains,              only : To_All, Omit_corners, CGRID_NE, SCALAR_PAIR
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : start_group_pass, complete_group_pass, Omit_Corners
 use MOM_error_handler,        only : MOM_error, FATAL, WARNING, is_root_pe
@@ -399,7 +400,7 @@ type, public :: MOM_control_struct
   type(sponge_CS),               pointer :: sponge_CSp             => NULL()
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
-  type(offline_transport_CS),    pointer :: offline_CSp             => NULL()
+  type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
 
   ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -516,7 +517,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: zos_area_mean, volo, ssh_ga
   type(time_type) :: Time_local
   logical :: showCallTree
-  logical :: do_pass_kd_kv_turb ! This is used for a group halo pass.
+  ! These are used for group halo passes.
+  logical :: do_pass_kd_kv_turb, do_pass_ray, do_pass_kv_bbl_thick
   logical :: use_ice_shelf ! Needed for ALE
   G => CS%G ; GV => CS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
@@ -574,18 +576,29 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
-  if ((CS%thickness_diffuse  .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0) )  .OR. CS%mixedlayer_restrat) &
+  if ((CS%thickness_diffuse .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0) )  .OR. CS%mixedlayer_restrat) &
     call create_group_pass(CS%pass_h, h, G%Domain)
 
   if (CS%diabatic_first) then
-    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+    do_pass_ray = .FALSE.
+    if ((.not.G%Domain%symmetric) .and. &
+        associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) then
       call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
-                             To_All+SCALAR_PAIR, CGRID_NE)
-    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_ray = .TRUE.
+    endif
+    do_pass_kv_bbl_thick = .FALSE.
+    if (associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) then
       call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
-                             CS%visc%bbl_thick_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+                             CS%visc%bbl_thick_v, G%Domain, &
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_kv_bbl_thick = .TRUE.
+    endif
+    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
       call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
-                             CS%visc%kv_bbl_v, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
+                             CS%visc%kv_bbl_v, G%Domain, &
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_kv_bbl_thick = .TRUE.
     endif
   endif
 
@@ -711,10 +724,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       !call cpu_clock_end(id_clock_vertvisc)
 
       call cpu_clock_begin(id_clock_pass)
-      if(associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
-        call do_group_pass(CS%pass_ray, G%Domain )
-      if(associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))  &
-        call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain )
+      if (do_pass_ray) call do_group_pass(CS%pass_ray, G%Domain )
+      if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
       call cpu_clock_end(id_clock_pass)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
 
