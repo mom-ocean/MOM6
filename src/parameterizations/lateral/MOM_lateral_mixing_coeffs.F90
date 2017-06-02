@@ -3,6 +3,7 @@ module MOM_lateral_mixing_coeffs
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,     only : hchksum, uvchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
@@ -106,7 +107,7 @@ type, public :: VarMix_CS ;
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL() !< Wave speed control structure
   type(group_pass_type) :: pass_cg1 !< For group halo pass
-
+  logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
@@ -437,11 +438,11 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
 !$OMP                       private(E_x,E_y,S2,H_u,H_v,Hdn,Hup,H_geom,N2, &
 !$OMP                       wNE, wSE, wSW, wNW)
 !$OMP do
+
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%SN_u(i,j) = 0.0
     CS%SN_v(i,j) = 0.0
   enddo ; enddo
-
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
@@ -469,10 +470,10 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
-      wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
-      wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
-      wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
+      wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1) * G%mask2dCv(i+1,J-1)
+      wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1) * G%mask2dCv(i,J)
+      wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1) * G%mask2dCv(i+1,J)
+      wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1) * G%mask2dCv(i,J-1)
       S2 =  slope_x(I,j,K)**2  + ( &
            (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
           +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
@@ -485,8 +486,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do I=is-1,ie
       if (H_u(I)>0.) then
-        CS%SN_u(I,j) = CS%SN_u(I,j) / H_u(I)
-        S2_u(I,j) = S2_u(I,j) / H_u(I)
+        CS%SN_u(I,j) = CS%SN_u(I,j) / H_u(I) * G%mask2dCu(I,j)
+        S2_u(I,j) = S2_u(I,j) / H_u(I) * G%mask2dCu(I,j)
       else
         CS%SN_u(I,j) = 0.
       endif
@@ -504,10 +505,10 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
-      wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
-      wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
-      wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
+      wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1) * G%mask2dCu(I,j)
+      wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1) * G%mask2dCu(I-1,j+1)
+      wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1) * G%mask2dCu(I,j+1)
+      wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1) * G%mask2dCu(I-1,j)
       S2 =  slope_y(i,J,K)**2  + ( &
            (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
           +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
@@ -520,8 +521,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do i=is,ie
       if (H_v(i)>0.) then
-        CS%SN_v(i,J) = CS%SN_v(i,J) / H_v(i)
-        S2_v(i,J) = S2_v(i,J) / H_v(i)
+        CS%SN_v(i,J) = CS%SN_v(i,J) / H_v(i) * G%mask2dCv(i,J)
+        S2_v(i,J) = S2_v(i,J) / H_v(i) * G%mask2dCv(i,J)
       else
         CS%SN_v(i,J) = 0.
       endif
@@ -534,6 +535,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
     if (CS%id_S2_v > 0) call post_data(CS%id_S2_v, S2_v, CS%diag)
+  endif
+
+  if (CS%debug) then
+      call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+      call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI)
+      call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -663,7 +670,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+        CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) ) * G%mask2dCu(I,j)
       else
         CS%SN_u(I,j) = 0.0
       endif
@@ -678,7 +685,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+        CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) ) * G%mask2dCv(i,J)
       else
         CS%SN_v(I,j) = 0.0
       endif
@@ -762,6 +769,8 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "stored for re-use. This uses more memory but avoids calling\n"//&
                  "the equation of state more times than should be necessary.", &
                  default=.false.)
+
+
   if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) use_variable_mixing = .true.
 
   if (use_variable_mixing .or. Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. &
@@ -775,6 +784,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%khth_use_ebt_struct = khth_use_ebt_struct
     CS%use_variable_mixing = use_variable_mixing
     CS%use_stored_slopes = use_stored_slopes
+    call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   else
     return
   endif
