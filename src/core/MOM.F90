@@ -68,7 +68,7 @@ use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjus
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
-use MOM_continuity,            only : continuity, continuity_init, continuity_CS
+use MOM_continuity,            only : continuity, continuity_init, continuity_CS, continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
@@ -577,7 +577,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
   if ((CS%thickness_diffuse .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0) )  .OR. CS%mixedlayer_restrat) &
-    call create_group_pass(CS%pass_h, h, G%Domain)
+    call create_group_pass(CS%pass_h, h, G%Domain) !###, halo=max(2,cont_stensil))
 
   if (CS%diabatic_first) then
     do_pass_ray = .FALSE.
@@ -611,8 +611,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   endif
 
   if ((CS%adiabatic .OR. CS%diabatic_first) .AND. CS%use_temperature) then
-    call create_group_pass(CS%pass_T_S, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain)
+    call create_group_pass(CS%pass_T_S, CS%tv%T, G%Domain, halo=1) ! Could also omit corners?
+    call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain, halo=1)
   endif
 
   if (associated(CS%visc%Kv_turb)) &
@@ -767,10 +767,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
 
           ! update squared quantities
-          if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-          if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+          if (associated(CS%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+            CS%S_squared(i,j,k) = CS%tv%S(i,j,k)**2
+          enddo ; enddo ; enddo ; endif
+          if (associated(CS%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+            CS%T_squared(i,j,k) = CS%tv%T(i,j,k)**2
+          enddo ; enddo ; enddo ; endif
 
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1166,10 +1168,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 !         call pass_vector(u, v, G%Domain)
           call do_group_pass(CS%pass_T_S_h, G%Domain)
           ! update squared quantities
-          if (associated(CS%S_squared)) &
-            CS%S_squared(:,:,:) = CS%tv%S(:,:,:) ** 2
-          if (associated(CS%T_squared)) &
-            CS%T_squared(:,:,:) = CS%tv%T(:,:,:) ** 2
+          if (associated(CS%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+            CS%S_squared(i,j,k) = CS%tv%S(i,j,k)**2
+          enddo ; enddo ; enddo ; endif
+          if (associated(CS%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+            CS%T_squared(i,j,k) = CS%tv%T(i,j,k)**2
+          enddo ; enddo ; enddo ; endif
 
           if (CS%debug) then
             call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1700,7 +1704,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     call pass_var(CS%tv%S,G%Domain)
     call pass_var(CS%h,G%Domain)
 
-
   endif
 
   call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
@@ -1752,6 +1755,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   real, dimension(:,:), allocatable, target  :: frac_shelf_h ! fraction of total area occupied by ice shelf
   real, dimension(:,:), pointer :: shelf_area
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
+  type(group_pass_type) :: tmp_pass_uv_T_S_h
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
@@ -1772,6 +1776,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                                ! calculation.  This can be altered during the course
                                ! of the run via calls to set_first_direction.
   integer :: nkml, nkbl, verbosity, write_geom
+  integer :: dynamics_stencil  ! The computational stencil for the calculations
+                               ! in the dynamic core.
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -2320,17 +2326,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   ! remainder of this subroutine is controlled by the parameters that have
   ! have already been set.
 
-
-  call cpu_clock_begin(id_clock_pass_init)
-  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
-  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain)
-  if (CS%use_temperature) then
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain)
-    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain)
-  endif
-  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain)
-  call cpu_clock_end(id_clock_pass_init)
-
   if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
     ! \todo This block exists for legacy reasons and we should phase it out of
@@ -2366,7 +2361,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
         call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     endif
     call cpu_clock_begin(id_clock_pass_init)
-    call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+    call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
+    if (CS%use_temperature) then
+      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%T, G%Domain, halo=1)
+      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%S, G%Domain, halo=1)
+    endif
+    call create_group_pass(tmp_pass_uv_T_S_h, CS%h, G%Domain, halo=1)
+    call do_group_pass(tmp_pass_uv_T_S_h, G%Domain)
     call cpu_clock_end(id_clock_pass_init)
 
     if (CS%debug) then
@@ -2539,6 +2540,16 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
              CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
 
   call cpu_clock_begin(id_clock_pass_init)
+  !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
+
+  dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
+  call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain, halo=dynamics_stencil)
+  if (CS%use_temperature) then
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%T, G%Domain, halo=dynamics_stencil)
+    call create_group_pass(CS%pass_uv_T_S_h, CS%tv%S, G%Domain, halo=dynamics_stencil)
+  endif
+  call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain, halo=dynamics_stencil)
+
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
   call cpu_clock_end(id_clock_pass_init)
 
@@ -3141,16 +3152,22 @@ subroutine post_diags_TS_vardec(G, CS, dt)
 
   real :: work(SZI_(G),SZJ_(G),SZK_(G))
   real :: Idt
+  integer :: i, j, k, is, ie, js, je, nz
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
   if (CS%id_T_vardec > 0) then
-    work(:,:,:) = (CS%T_squared(:,:,:) - CS%tv%T(:,:,:) ** 2) * Idt
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      work(i,j,k) = (CS%T_squared(i,j,k) - CS%tv%T(i,j,k)**2) * Idt
+    enddo ; enddo ; enddo
     call post_data(CS%id_T_vardec, work, CS%diag)
   endif
 
   if (CS%id_S_vardec > 0) then
-    work(:,:,:) = (CS%S_squared(:,:,:) - CS%tv%S(:,:,:) ** 2) * Idt
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      work(i,j,k) = (CS%S_squared(i,j,k) - CS%tv%S(i,j,k)**2) * Idt
+    enddo ; enddo ; enddo
     call post_data(CS%id_S_vardec, work, CS%diag)
   endif
 end subroutine post_diags_TS_vardec
