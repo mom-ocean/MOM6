@@ -238,7 +238,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     do j=js-1,je+1
       do i=is-1,ie+1 ; mass(i,j) = 0.0 ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        mass(i,j) = mass(i,j) + GV%H_to_kg_m2 * h(i,j,k) * G%mask2dT(i,j)
+        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_kg_m2 * h(i,j,k))
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
