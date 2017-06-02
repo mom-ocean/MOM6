@@ -93,6 +93,7 @@ type, public :: offline_transport_CS ; private
   !! Variables controlling some of the numerical considerations of offline transport
   integer :: num_off_iter   !< Number of advection iterations per offline step
   integer :: num_vert_iter  !< Number of vertical iterations per offline step
+  integer :: off_ale_mod    !< Sets how frequently the ALE step is done during the advection
   real :: dt_offline ! Timestep used for offline tracers
   real :: dt_offline_vertical ! Timestep used for calls to tracer vertical physics
   real :: evap_CFL_limit, minimum_forcing_depth !< Copied from diabatic_CS controlling how tracers
@@ -314,7 +315,7 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
       h_new(i,j,k) = h_new(i,j,k)/G%areaT(i,j)
     enddo ; enddo ; enddo
 
-    if (MODULO(iter,1)==0) then
+    if (MODULO(iter,CS%off_ale_mod)==0) then
       ! Do ALE remapping/regridding to allow for more advection to occur in the next iteration
       call pass_var(h_new,G%Domain)
       if (CS%debug) then
@@ -1266,6 +1267,10 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion", &
     default = 60)
+  call get_param(param_file, mod, "OFF_ALE_MOD", CS%off_ale_mod, &
+    "Sets how many horizontal advection steps are taken before an ALE\n" //&
+    "remapping step is done. 1 would be x->y->ALE, 2 would be"           //&
+    "x->y->x->y->ALE", default = 1)
   call get_param(param_file, mod, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
     "Print diagnostic output every advection subiteration",default=.false.)
   call get_param(param_file, mod, "SKIP_DIFFUSION_OFFLINE", CS%skip_diffusion, &

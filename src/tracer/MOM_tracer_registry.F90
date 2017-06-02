@@ -248,7 +248,7 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
 
 end subroutine add_tracer_diagnostics
 
-!> This subroutine writes out chksums for tracers.  
+!> This subroutine writes out chksums for tracers.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
   type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
@@ -265,7 +265,7 @@ subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
 
 end subroutine MOM_tracer_chksum
 
-!> Calculates and prints the global inventory of all tracers in the registry. 
+!> Calculates and prints the global inventory of all tracers in the registry.
 subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
   character(len=*),                         intent(in) :: mesg   !< message that appears on the chksum lines
   type(ocean_grid_type),                    intent(in) :: G      !< ocean grid structure
