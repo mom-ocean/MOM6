@@ -727,7 +727,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (do_pass_ray) call do_group_pass(CS%pass_ray, G%Domain )
       if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
       call cpu_clock_end(id_clock_pass)
-      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_dyn_split_RK2)")
+      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (diabatic_first)")
 
       call cpu_clock_begin(id_clock_thermo)
 
@@ -782,11 +782,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
           call cpu_clock_begin(id_clock_ALE)
           if (use_ice_shelf) then
-
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
                           fluxes%frac_shelf_h)
           else
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           endif
 
           call cpu_clock_end(id_clock_ALE)
@@ -1160,8 +1159,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
         if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
         if (CS%id_e_preale > 0) then
-            call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
-            call post_data(CS%id_e_preale, eta_preale, CS%diag)
+          call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
+          call post_data(CS%id_e_preale, eta_preale, CS%diag)
         endif
 
         if ( CS%use_ALE_algorithm ) then
@@ -1183,11 +1182,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
           call cpu_clock_begin(id_clock_ALE)
           if (use_ice_shelf) then
-
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans, &
-                           fluxes%frac_shelf_h)
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans, &
+                          fluxes%frac_shelf_h)
           else
-             call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
           endif
           call cpu_clock_end(id_clock_ALE)
         endif
@@ -1470,8 +1468,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call post_data(CS%id_intern_heat, intern_heat_ave, CS%diag, mask=G%mask2dT)
     deallocate(intern_heat_ave)
   endif
-
   call disable_averaging(CS%diag)
+
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS)
@@ -2339,26 +2337,26 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     call adjustGridForIntegrity(CS%ALE_CSp, G, GV, CS%h )
     call callTree_waypoint("Calling ALE_main() to remap initial conditions (initialize_MOM)")
     if (use_ice_shelf) then
-        filename = trim(inputdir)//trim(ice_shelf_file)
-        if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-          "MOM: Unable to open "//trim(filename))
+      filename = trim(inputdir)//trim(ice_shelf_file)
+      if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+        "MOM: Unable to open "//trim(filename))
 
-        allocate(area_shelf_h(isd:ied,jsd:jed))
-        allocate(frac_shelf_h(isd:ied,jsd:jed))
-        call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
-        ! initialize frac_shelf_h with zeros (open water everywhere)
-        frac_shelf_h(:,:) = 0.0
-        ! compute fractional ice shelf coverage of h
-        do j=jsd,jed ; do i=isd,ied
-            if (G%areaT(i,j) > 0.0) &
-              frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
-        enddo ; enddo
-        ! pass to the pointer
-        shelf_area => frac_shelf_h
-        call ALE_main(G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
-                      frac_shelf_h = shelf_area)
+      allocate(area_shelf_h(isd:ied,jsd:jed))
+      allocate(frac_shelf_h(isd:ied,jsd:jed))
+      call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+      ! initialize frac_shelf_h with zeros (open water everywhere)
+      frac_shelf_h(:,:) = 0.0
+      ! compute fractional ice shelf coverage of h
+      do j=jsd,jed ; do i=isd,ied
+        if (G%areaT(i,j) > 0.0) &
+          frac_shelf_h(i,j) = area_shelf_h(i,j) / G%areaT(i,j)
+      enddo ; enddo
+      ! pass to the pointer
+      shelf_area => frac_shelf_h
+      call ALE_main(G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, &
+                    frac_shelf_h = shelf_area)
     else
-        call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
+      call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     endif
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
