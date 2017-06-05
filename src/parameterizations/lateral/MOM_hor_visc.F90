@@ -299,7 +299,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
   real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: Vort_mag   ! magnitude of the vorticity (1/s) 
+  real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -551,7 +551,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
           0.5*((vort_xy_dx(I,J-1)*vort_xy_dx(I,J-1) + vort_xy_dx(I,J)*vort_xy_dx(I,J)) + &
-                (vort_xy_dy(I-1,J)*vort_xy_dy(I-1,J) + vort_xy_dy(I,J)*vort_xy_dy(I,J))))      
+                (vort_xy_dy(I-1,J)*vort_xy_dy(I-1,J) + vort_xy_dy(I,J)*vort_xy_dy(I,J))))
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
                             (h(i,j,k) + h_neglect) )
@@ -564,7 +564,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         Kh_scale = 1.0 ; if (rescale_Kh) Kh_scale = VarMix%Res_fn_h(i,j)
         KhSm = 0.0; KhLth = 0.0
         if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
-          if (CS%Smagorinsky_Kh) & 
+          if (CS%Smagorinsky_Kh) &
             KhSm = CS%LAPLAC_CONST_xx(i,j) * Shear_mag
           if (CS%Leith_Kh) &
             KhLth = CS%LAPLAC3_CONST_xx(i,j) * Vort_mag
@@ -1125,7 +1125,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "The nondimensional biharmonic Leith constant, \n"//&
                  "typically ??", units="nondim", default=0.0, &
                  fail_if_missing = CS%Leith_Ah)
-    endif    
+    endif
 
   endif
 
