@@ -501,7 +501,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
 
   ! Store the layer thicknesses before any changes by the dynamics. This is necessary for remapped
@@ -726,118 +725,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_thermo)
 
-      if (.not.CS%adiabatic) then
+      ! These adjustments are a part of an archaic time stepping algorithm.
+      if (CS%split .and. CS%legacy_split .and. .not.CS%adiabatic) then
+        call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
+      endif
 
-        if (CS%debug) then
-          call MOM_state_chksum("Pre-dia first ", u, v, h, CS%uhtr, CS%vhtr, G, GV)
-          call MOM_thermo_chksum("Pre-dia first ", CS%tv, G, haloshift=0)
-          call check_redundant("Pre-dia first ", u, v, G)
-        endif
-
-        if (CS%split .and. CS%legacy_split) then
-          call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
-        endif
-
-        call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u, v, h, CS%tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtdia, G, GV, CS%diabatic_CSp)
-        fluxes%fluxes_used = .true.
-        call cpu_clock_end(id_clock_diabatic)
-
-        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
-        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
-        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
-        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
-        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
-        if (CS%id_e_preale > 0) then
-            call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_preale)
-            call post_data(CS%id_e_preale, eta_preale, CS%diag)
-        endif
-
-        ! Regridding/remapping is done here, at end of thermodynamics time step
-        ! (that may comprise several dynamical time steps)
-        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if ( CS%use_ALE_algorithm ) then
-!         call pass_vector(u, v, G%Domain)
-          call do_group_pass(CS%pass_T_S_h, G%Domain)
-
-          ! update squared quantities
-          if (associated(CS%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-            CS%S_squared(i,j,k) = CS%tv%S(i,j,k)**2
-          enddo ; enddo ; enddo ; endif
-          if (associated(CS%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-            CS%T_squared(i,j,k) = CS%tv%T(i,j,k)**2
-          enddo ; enddo ; enddo ; endif
-
-          if (CS%debug) then
-            call MOM_state_chksum("Pre-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE 1 T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE 1 S", G%HI, haloshift=1)
-            call check_redundant("Pre-ALE 1 ", u, v, G)
-          endif
-          call cpu_clock_begin(id_clock_ALE)
-          if (use_ice_shelf) then
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
-                          fluxes%frac_shelf_h)
-          else
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
-          endif
-
-          call cpu_clock_end(id_clock_ALE)
-        endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
-
-        call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-        call cpu_clock_end(id_clock_pass)
-
-        if (CS%debug .and. CS%use_ALE_algorithm) then
-          call MOM_state_chksum("Post-ALE 1 ", u, v, h, CS%uh, CS%vh, G, GV)
-          call hchksum(CS%tv%T,"Post-ALE 1 T", G%HI, haloshift=1)
-          call hchksum(CS%tv%S,"Post-ALE 1 S", G%HI, haloshift=1)
-          call check_redundant("Post-ALE 1 ", u, v, G)
-        endif
-
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated.
-        call diag_update_remap_grids(CS%diag)
-
-        call post_diags_TS_vardec(G, CS, dtdia)
-
-        if (CS%debug) then
-          call uvchksum("Post-dia first [uv]", u, v, G%HI, haloshift=2)
-          call hchksum(h,"Post-dia first h", G%HI, haloshift=1, scale=GV%H_to_m)
-          call uvchksum("Post-dia first [uv]h", &
-                        CS%uhtr, CS%vhtr, G%HI, haloshift=0)
-        ! call MOM_state_chksum("Post-dia first ", u, v, &
-        !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G%HI, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G%HI, haloshift=1)
-          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                                  "Post-dia first frazil", G%HI, haloshift=0)
-          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                                  "Post-dia first salt deficit", G%HI, haloshift=0)
-        ! call MOM_thermo_chksum("Post-dia first ", CS%tv, G)
-          call check_redundant("Post-dia first ", u, v, G)
-        endif
-
-      else   ! else for block "if (.not.CS%adiabatic)"
-
-        call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, dtdia, G, GV, CS%diabatic_CSp)
-        fluxes%fluxes_used = .true.
-        call cpu_clock_end(id_clock_diabatic)
-
-        if (CS%use_temperature) then
-          call cpu_clock_begin(id_clock_pass)
-          call do_group_pass(CS%pass_T_S, G%Domain)
-          call cpu_clock_end(id_clock_pass)
-          if (CS%debug) then
-            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-dia first T", G%HI, haloshift=1)
-            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-dia first S", G%HI, haloshift=1)
-          endif
-        endif
-
-      endif   ! endif for the block "if (.not.CS%adiabatic)"
+      ! Apply diabatic forcing, do mixing, and regrid.
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
 
       call disable_averaging(CS%diag)
       call cpu_clock_end(id_clock_thermo)
@@ -1066,139 +960,21 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! from before the dynamics calls
       call diag_update_remap_grids(CS%diag)
 
-      if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
-      if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
-      if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h, CS%diag)
-      if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
-      if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
-      if (CS%id_e_predia > 0) then
-        call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_predia)
-        call post_data(CS%id_e_predia, eta_predia, CS%diag)
-      endif
-
       if (thermo_does_span_coupling .and. (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
         call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                        "before call to diabatic.")
       endif
 
-      if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
-
-        if (CS%debug) then
-          call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
-          call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
-          call uvchksum("Pre-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
-                        haloshift=0, scale=GV%H_to_m)
-        ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G, GV)
-          call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
-          call check_redundant("Pre-diabatic ", u, v, G)
-          call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
-        endif
-
-        if (CS%split .and. CS%legacy_split) then  ! The dt here is correct. -RWH
+      if (.not.CS%diabatic_first) then
+        ! These adjustments are a part of an archaic time stepping algorithm.
+        if (CS%split .and. CS%legacy_split .and. .not.CS%adiabatic) then
           call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
         endif
-        call cpu_clock_begin(id_clock_diabatic)
-        call diabatic(u, v, h, CS%tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      dtdia, G, GV, CS%diabatic_CSp)
-        fluxes%fluxes_used = .true.
-        call cpu_clock_end(id_clock_diabatic)
 
-        ! Regridding/remapping is done here, at the end of the thermodynamics time step
-        ! (that may comprise several dynamical time steps)
-        ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
-        if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,       CS%diag)
-        if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,       CS%diag)
-        if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,       CS%diag)
-        if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, CS%tv%T, CS%diag)
-        if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, CS%tv%S, CS%diag)
-        if (CS%id_e_preale > 0) then
-          call find_eta(h, CS%tv, G%g_Earth, G, GV, eta_preale)
-          call post_data(CS%id_e_preale, eta_preale, CS%diag)
-        endif
+        ! Apply diabatic forcing, do mixing, and regrid.
+        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
 
-        if ( CS%use_ALE_algorithm ) then
-!         call pass_vector(u, v, G%Domain)
-          call do_group_pass(CS%pass_T_S_h, G%Domain)
-          ! update squared quantities
-          if (associated(CS%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-            CS%S_squared(i,j,k) = CS%tv%S(i,j,k)**2
-          enddo ; enddo ; enddo ; endif
-          if (associated(CS%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-            CS%T_squared(i,j,k) = CS%tv%T(i,j,k)**2
-          enddo ; enddo ; enddo ; endif
-
-          if (CS%debug) then
-            call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-            call hchksum(CS%tv%T,"Pre-ALE T", G%HI, haloshift=1)
-            call hchksum(CS%tv%S,"Pre-ALE S", G%HI, haloshift=1)
-            call check_redundant("Pre-ALE ", u, v, G)
-          endif
-          call cpu_clock_begin(id_clock_ALE)
-          if (use_ice_shelf) then
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
-                          fluxes%frac_shelf_h)
-          else
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
-          endif
-          call cpu_clock_end(id_clock_ALE)
-        endif
-
-        call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-        call cpu_clock_end(id_clock_pass)
-
-        if (CS%debug .and.  CS%use_ALE_algorithm) then
-          call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
-          call hchksum(CS%tv%T, "Post-ALE 1 T", G%HI, haloshift=1)
-          call hchksum(CS%tv%S, "Post-ALE 1 S", G%HI, haloshift=1)
-          call check_redundant("Post-ALE ", u, v, G)
-        endif
-
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated. This needs to
-        ! happen after the H update and before the next post_data.
-        call diag_update_remap_grids(CS%diag)
-
-        call post_diags_TS_vardec(G, CS, dtdia)
-
-        if (CS%debug) then
-          call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
-          call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
-          call uvchksum("Post-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
-                        haloshift=0, scale=GV%H_to_m)
-        ! call MOM_state_chksum("Post-diabatic ", u, v, &
-        !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G%HI, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G%HI, haloshift=1)
-          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                                   "Post-diabatic frazil", G%HI, haloshift=0)
-          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                                   "Post-diabatic salt deficit", G%HI, haloshift=0)
-        ! call MOM_thermo_chksum("Post-diabatic ", CS%tv, G)
-          call check_redundant("Post-diabatic ", u, v, G)
-        endif
-        if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM)")
-
-      else   ! complement of "if (.not.CS%adiabatic)"
-
-        call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, dtdia, G, GV, CS%diabatic_CSp)
-        fluxes%fluxes_used = .true.
-        call cpu_clock_end(id_clock_diabatic)
-
-        if (CS%use_temperature) then
-          call cpu_clock_begin(id_clock_pass)
-          call do_group_pass(CS%pass_T_S, G%Domain)
-          call cpu_clock_end(id_clock_pass)
-          if (CS%debug) then
-            if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Post-diabatic T", G%HI, haloshift=1)
-            if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Post-diabatic S", G%HI, haloshift=1)
-          endif
-        endif
-
-        if (showCallTree) call callTree_waypoint("finished adiabatic (step_MOM)")
-
-      endif ; else  !  "else branch for if (.not.CS%diabatic_first) then"
+      else  !  "else branch for if (.not.CS%diabatic_first) then"
         ! Tracers have been advected and diffused, and need halo updates.
         if (CS%use_temperature) then
           call cpu_clock_begin(id_clock_pass)
@@ -1429,6 +1205,167 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_end(id_clock_ocean)
 
 end subroutine step_MOM
+
+!> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
+!! remapping, via calls to diabatic (or adiabatic) and ALE_main.
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
+  type(MOM_control_struct), intent(inout) :: CS     !< control structure
+  type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                            intent(inout) :: u      !< zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                            intent(inout) :: v      !< meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                            intent(inout) :: h      !< layer thickness (m or kg/m2)
+  type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables  type(forcing),                             intent(inout) :: fluxes !< pointers to forcing fields
+  type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
+  real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+ 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
+  integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
+  logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
+  logical :: showCallTree
+
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  showCallTree = callTree_showQuery()
+  if (showCallTree) call callTree_enter("step_MOM_thermo(), MOM.F90")
+
+  use_ice_shelf = .false.
+  if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
+
+  if (.not.CS%adiabatic) then
+
+    if (CS%debug) then
+      call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
+      call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
+      call uvchksum("Pre-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
+                    haloshift=0, scale=GV%H_to_m)
+    ! call MOM_state_chksum("Pre-diabatic ",u, v, h, CS%uhtr, CS%vhtr, G, GV)
+      call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
+      call check_redundant("Pre-diabatic ", u, v, G)
+      call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
+    endif
+
+    if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
+    if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
+    if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h, CS%diag)
+    if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
+    if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
+    if (CS%id_e_predia > 0) then
+      call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_predia)
+      call post_data(CS%id_e_predia, eta_predia, CS%diag)
+    endif
+
+    call cpu_clock_begin(id_clock_diabatic)
+    call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
+                  dtdia, G, GV, CS%diabatic_CSp)
+    fluxes%fluxes_used = .true.
+    call cpu_clock_end(id_clock_diabatic)
+
+    if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,    CS%diag)
+    if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,    CS%diag)
+    if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,    CS%diag)
+    if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
+    if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
+    if (CS%id_e_preale > 0) then
+      call find_eta(h, tv, GV%g_Earth, G, GV, eta_preale)
+      call post_data(CS%id_e_preale, eta_preale, CS%diag)
+    endif
+
+    if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
+
+    ! Regridding/remapping is done here, at end of thermodynamics time step
+    ! (that may comprise several dynamical time steps)
+    ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
+    if ( CS%use_ALE_algorithm ) then
+!         call pass_vector(u, v, G%Domain)
+      call do_group_pass(CS%pass_T_S_h, G%Domain)
+
+      ! update squared quantities
+      if (associated(CS%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+        CS%S_squared(i,j,k) = tv%S(i,j,k)**2
+      enddo ; enddo ; enddo ; endif
+      if (associated(CS%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
+        CS%T_squared(i,j,k) = tv%T(i,j,k)**2
+      enddo ; enddo ; enddo ; endif
+
+      if (CS%debug) then
+        call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
+        call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1)
+        call hchksum(tv%S,"Pre-ALE S", G%HI, haloshift=1)
+        call check_redundant("Pre-ALE ", u, v, G)
+      endif
+      call cpu_clock_begin(id_clock_ALE)
+      if (use_ice_shelf) then
+        call ALE_main(G, GV, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
+                      fluxes%frac_shelf_h)
+      else
+        call ALE_main(G, GV, h, u, v, tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
+      endif
+
+      if (showCallTree) call callTree_waypoint("finished ALE_main (step_MOM_thermo)")
+      call cpu_clock_end(id_clock_ALE)
+    endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
+
+    call cpu_clock_begin(id_clock_pass)
+    call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+    call cpu_clock_end(id_clock_pass)
+
+    if (CS%debug .and. CS%use_ALE_algorithm) then
+      call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
+      call hchksum(tv%T, "Post-ALE T", G%HI, haloshift=1)
+      call hchksum(tv%S, "Post-ALE S", G%HI, haloshift=1)
+      call check_redundant("Post-ALE ", u, v, G)
+    endif
+
+    ! Whenever thickness changes let the diag manager know, target grids
+    ! for vertical remapping may need to be regenerated. This needs to
+    ! happen after the H update and before the next post_data.
+    call diag_update_remap_grids(CS%diag)
+
+    call post_diags_TS_vardec(G, CS, dtdia)
+
+    if (CS%debug) then
+      call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
+      call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
+      call uvchksum("Post-diabatic [uv]h", CS%uhtr, CS%vhtr, G%HI, &
+                    haloshift=0, scale=GV%H_to_m)
+    ! call MOM_state_chksum("Post-diabatic ", u, v, &
+    !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
+      if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
+      if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
+      if (associated(tv%frazil)) call hchksum(tv%frazil, &
+                               "Post-diabatic frazil", G%HI, haloshift=0)
+      if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, &
+                               "Post-diabatic salt deficit", G%HI, haloshift=0)
+    ! call MOM_thermo_chksum("Post-diabatic ", tv, G)
+      call check_redundant("Post-diabatic ", u, v, G)
+    endif
+
+  else   ! complement of "if (.not.CS%adiabatic)"
+
+    call cpu_clock_begin(id_clock_diabatic)
+    call adiabatic(h, tv, fluxes, dtdia, G, GV, CS%diabatic_CSp)
+    fluxes%fluxes_used = .true.
+    call cpu_clock_end(id_clock_diabatic)
+
+    if (CS%use_temperature) then
+      call cpu_clock_begin(id_clock_pass)
+      call do_group_pass(CS%pass_T_S, G%Domain)
+      call cpu_clock_end(id_clock_pass)
+      if (CS%debug) then
+        if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
+        if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
+      endif
+    endif
+
+  endif   ! endif for the block "if (.not.CS%adiabatic)"
+
+  if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
+
+end subroutine step_MOM_thermo
+
 
 !> step_tracers is the main driver for running tracers offline in MOM6. This has been primarily
 !! developed with ALE configurations in mind. Some work has been done in isopycnal configuration, but
