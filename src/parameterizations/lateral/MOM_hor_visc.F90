@@ -544,9 +544,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
-!        Vort_mag = sqrt( &
-!          0.5*((vort_xy_dx(I,J-1)*vort_xy_dx(I,J-1) + vort_xy_dx(I,J)*vort_xy_dx(I,J)) + &
-!                (vort_xy_dy(I-1,J)*vort_xy_dy(I-1,J) + vort_xy_dy(I,J)*vort_xy_dy(I,J))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
@@ -674,9 +671,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         Shear_mag = sqrt(sh_xy(I,J)*sh_xy(I,J) + &
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
-!        Vort_mag = sqrt( &
-!          0.5*((vort_xy_dx(I,J)*vort_xy_dx(I,J) + vort_xy_dx(I+1,J)*vort_xy_dx(I+1,J)) + &
-!                (vort_xy_dy(I,J)*vort_xy_dy(I,J) + vort_xy_dy(I,J+1)*vort_xy_dy(I,J+1))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
@@ -1123,7 +1117,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     if (CS%Leith_Ah .or. get_all) then
       call get_param(param_file, mod, "LEITH_BI_CONST",Leith_bi_const, &
                  "The nondimensional biharmonic Leith constant, \n"//&
-                 "typically ??", units="nondim", default=0.0, &
+                 "typical values are thus far undetermined", units="nondim", default=0.0, &
                  fail_if_missing = CS%Leith_Ah)
     endif
 
