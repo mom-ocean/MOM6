@@ -276,12 +276,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     dvdx, dudy, & ! components in the shearing strain (s-1)
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
-    bhstr_xy      ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
+    bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
+    vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
+ 
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    vort_xy_dx    ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
 
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    vort_xy, &       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
-    vort_xy_dx, &    ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
-    vort_xy_dy       ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    vort_xy_dy    ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
@@ -509,8 +511,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
 ! Vorticity gradient
    do J=js-1,Jeq+1 ; do I=is-1,Ieq+1
-      vort_xy_dx(I,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,J) - vort_xy(I-1,J)*G%IdyCu(I-1,J))
-      vort_xy_dy(I,J) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(I,J) - vort_xy(I,J-1)*G%IdxCv(I,J-1))
+      vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+      vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
    enddo ; enddo
 
 !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
@@ -547,8 +549,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
-          0.5*((vort_xy_dx(I,J-1)*vort_xy_dx(I,J-1) + vort_xy_dx(I,J)*vort_xy_dx(I,J)) + &
-                (vort_xy_dy(I-1,J)*vort_xy_dy(I-1,J) + vort_xy_dy(I,J)*vort_xy_dy(I,J))))
+          0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
+                (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))))
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
                             (h(i,j,k) + h_neglect) )
@@ -674,8 +676,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
-          0.5*((vort_xy_dx(I,J)*vort_xy_dx(I,J) + vort_xy_dx(I+1,J)*vort_xy_dx(I+1,J)) + &
-                (vort_xy_dy(I,J)*vort_xy_dy(I,J) + vort_xy_dy(I,J+1)*vort_xy_dy(I,J+1))))
+          0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
+                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))))
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
@@ -1288,7 +1290,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
-      if (CS%Leith_Kh) CS%LAPLAC3_CONST_xy(i,j) = Leith_Lap_const * grid_sp_q3
+      if (CS%Leith_Kh) CS%LAPLAC3_CONST_xy(I,J) = Leith_Lap_const * grid_sp_q3
 
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
@@ -1320,7 +1322,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j)+CS%DY2h(i,j))
-      grid_sp_h3 = grid_sp_h2**1.5
+      grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
 
       if (CS%Smagorinsky_Ah) then
         CS%BIHARM_CONST_xx(i,j) = Smag_bi_const * (grid_sp_h2 * grid_sp_h2)
@@ -1343,7 +1345,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     enddo ; enddo
     do J=js-1,Jeq ; do I=is-1,Ieq
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J)+CS%DY2q(I,J))
-      grid_sp_q3 = grid_sp_q2**1.5
+      grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
 
       if (CS%Smagorinsky_Ah) then
         CS%BIHARM_CONST_xy(I,J) = Smag_bi_const * (grid_sp_q2 * grid_sp_q2)
