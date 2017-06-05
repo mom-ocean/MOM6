@@ -471,7 +471,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   real :: dt_therm        ! a limited and quantized version of CS%dt_therm (sec)
   real :: dtbt_reset_time ! value of CS%rel_time when DTBT was last calculated (sec)
 
-  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
   real :: wt_end, wt_beg
 
   logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
@@ -503,11 +502,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)+1) :: eta_predia, eta_preale
-  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
-  real, dimension(SZIB_(CS%G), SZJ_(CS%G)) :: umo2d ! Diagnostics
-  real, dimension(SZI_(CS%G), SZJB_(CS%G)) :: vmo2d ! Diagnostics
-  real, dimension(SZIB_(CS%G), SZJ_(CS%G), SZK_(CS%G)) :: umo ! Diagnostics
-  real, dimension(SZI_(CS%G), SZJB_(CS%G), SZK_(CS%G)) :: vmo ! Diagnostics
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: potTemp, pracSal !TEOS10 Diagnostics
 
   ! Store the layer thicknesses before any changes by the dynamics. This is necessary for remapped
   ! mass transport diagnostics
@@ -1028,9 +1023,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ! do advection and (perhaps) thermodynamics
     if (do_advection) then
 
-      call cpu_clock_begin(id_clock_other)
-
       if (CS%debug) then
+        call cpu_clock_begin(id_clock_other)
         call uvchksum("Pre-advection [uv]", u, v, G%HI, haloshift=2)
         call hchksum(h,"Pre-advection h", G%HI, haloshift=1, scale=GV%H_to_m)
         call uvchksum("Pre-advection uhtr", CS%uhtr, CS%vhtr, G%HI, &
@@ -1045,15 +1039,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                          "Pre-advection salt deficit", G%HI, haloshift=0)
       ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
         call check_redundant("Pre-advection ", u, v, G)
+        call cpu_clock_end(id_clock_other)
       endif
-
-      call cpu_clock_end(id_clock_other)
 
       call cpu_clock_begin(id_clock_thermo)
       call enable_averaging(CS%dt_trans, Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
-
       call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, GV, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
       call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, GV, &
@@ -1061,47 +1053,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_tracer)
       if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
 
-      call cpu_clock_begin(id_clock_Z_diag)
-      call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
-                                 CS%diag_to_Z_CSp)
-      call cpu_clock_end(id_clock_Z_diag)
+      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%dt_trans, h, h_pre_dyn)
 
-      ! Post mass transports, including SGS
-      ! Build the remap grids using the layer thicknesses from before the dynamics
-      call diag_update_remap_grids(CS%diag, alt_h = h_pre_dyn)
-
-      H_to_kg_m2_dt = GV%H_to_kg_m2 / CS%dt_trans
-      if (CS%id_umo_2d > 0) then
-        umo2d(:,:) = 0.0
-        do k=1,nz ; do j=js,je ; do I=is-1,ie
-          umo2d(I,j) = umo2d(I,j) + CS%uhtr(I,j,k) * H_to_kg_m2_dt
-        enddo ; enddo ; enddo
-        call post_data(CS%id_umo_2d, umo2d, CS%diag)
-      endif
-      if (CS%id_umo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        do k=1,nz ; do j=js,je ; do I=is-1,ie
-          umo(I,j,k) =  CS%uhtr(I,j,k) * H_to_kg_m2_dt
-        enddo ; enddo ; enddo
-        call post_data(CS%id_umo, umo, CS%diag, alt_h = h_pre_dyn)
-      endif
-      if (CS%id_vmo_2d > 0) then
-        vmo2d(:,:) = 0.0
-        do k=1,nz ; do J=js-1,je ; do i=is,ie
-          vmo2d(i,J) = vmo2d(i,J) + CS%vhtr(i,J,k) * H_to_kg_m2_dt
-        enddo ; enddo ; enddo
-        call post_data(CS%id_vmo_2d, vmo2d, CS%diag)
-      endif
-      if (CS%id_vmo > 0) then
-        ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-        do k=1,nz ; do J=js-1,je ; do i=is,ie
-          vmo(i,J,k) = CS%vhtr(i,J,k) * H_to_kg_m2_dt
-        enddo ; enddo ; enddo
-        call post_data(CS%id_vmo, vmo, CS%diag, alt_h = h_pre_dyn)
-      endif
-
-      if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, CS%diag, alt_h = h_pre_dyn)
-      if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, CS%diag, alt_h = h_pre_dyn)
+      ! Store the time to be used for the diabatic forcing.
+      dtdia = CS%dt_trans
+      ! Reset the accumulated transports to 0.
+      CS%uhtr(:,:,:) = 0.0
+      CS%vhtr(:,:,:) = 0.0
+      CS%dt_trans = 0.0
 
       ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
       ! from before the dynamics calls
@@ -1117,18 +1076,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         call post_data(CS%id_e_predia, eta_predia, CS%diag)
       endif
 
-      if (thermo_does_span_coupling .and. (abs(dt_therm - CS%dt_trans) > 1e-6*dt_therm)) then
-        call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and CS%dt_trans "//&
+      if (thermo_does_span_coupling .and. (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
+        call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                        "before call to diabatic.")
       endif
 
       if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic) then
-
-        if (thermo_does_span_coupling) then
-          dtdia = dt_therm
-        else
-          dtdia = dt*min(ntstep,n_max-(n-1))
-        endif
 
         if (CS%debug) then
           call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
@@ -1146,7 +1099,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
         call cpu_clock_begin(id_clock_diabatic)
         call diabatic(u, v, h, CS%tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                      CS%dt_trans, G, GV, CS%diabatic_CSp)
+                      dtdia, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1182,10 +1135,10 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
           endif
           call cpu_clock_begin(id_clock_ALE)
           if (use_ice_shelf) then
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans, &
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia, &
                           fluxes%frac_shelf_h)
           else
-            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, CS%dt_trans)
+            call ALE_main(G, GV, h, u, v, CS%tv, CS%tracer_Reg, CS%ALE_CSp, dtdia)
           endif
           call cpu_clock_end(id_clock_ALE)
         endif
@@ -1206,7 +1159,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         ! happen after the H update and before the next post_data.
         call diag_update_remap_grids(CS%diag)
 
-        call post_diags_TS_vardec(G, CS, CS%dt_trans)
+        call post_diags_TS_vardec(G, CS, dtdia)
 
         if (CS%debug) then
           call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
@@ -1229,7 +1182,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       else   ! complement of "if (.not.CS%adiabatic)"
 
         call cpu_clock_begin(id_clock_diabatic)
-        call adiabatic(h, CS%tv, fluxes, CS%dt_trans, G, GV, CS%diabatic_CSp)
+        call adiabatic(h, CS%tv, fluxes, dtdia, G, GV, CS%diabatic_CSp)
         fluxes%fluxes_used = .true.
         call cpu_clock_end(id_clock_diabatic)
 
@@ -1256,73 +1209,14 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
       call cpu_clock_end(id_clock_thermo)
 
-
-      call cpu_clock_begin(id_clock_other)
-
-      call cpu_clock_begin(id_clock_diagnostics)
+      call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, &
-                          CS%ADp, CS%CDp, fluxes, CS%dt_trans, G, GV, CS%diagnostics_CSp)
+                          CS%ADp, CS%CDp, fluxes, dtdia, G, GV, CS%diagnostics_CSp)
+      call post_TS_diagnostics(G, GV, CS, dtdia)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
-      call cpu_clock_end(id_clock_diagnostics)
-
-
-      ! post some diagnostics
-      if(.NOT. CS%use_conT_absS) then
-         !Internal T&S variables are assumed to be potential&practical
-         if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
-         if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
-
-         if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
-         if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
-      else
-         !Internal T&S variables are assumed to be conservative&absolute
-         if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
-         if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
-         !Using TEOS-10 function calls convert T&S diagnostics
-         !from conservative temp to potential temp and
-         !from absolute salinity to practical salinity
-         do k=1,nz ; do j=js,je ; do i=is,ie
-            pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
-            potTemp(i,j,k) = gsw_pt_from_ct(CS%tv%S(i,j,k),CS%tv%T(i,j,k))
-         enddo; enddo ; enddo
-         if (CS%id_T > 0) call post_data(CS%id_T, potTemp, CS%diag)
-         if (CS%id_S > 0) call post_data(CS%id_S, pracSal, CS%diag)
-         if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), CS%diag, mask=G%mask2dT)
-         if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), CS%diag, mask=G%mask2dT)
-      endif
-
-      if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   CS%diag)
-      if (CS%id_Tady   > 0) call post_data(CS%id_Tady,   CS%T_ady,   CS%diag)
-      if (CS%id_Tdiffx > 0) call post_data(CS%id_Tdiffx, CS%T_diffx, CS%diag)
-      if (CS%id_Tdiffy > 0) call post_data(CS%id_Tdiffy, CS%T_diffy, CS%diag)
-
-      if (CS%id_Sadx   > 0) call post_data(CS%id_Sadx,   CS%S_adx,   CS%diag)
-      if (CS%id_Sady   > 0) call post_data(CS%id_Sady,   CS%S_ady,   CS%diag)
-      if (CS%id_Sdiffx > 0) call post_data(CS%id_Sdiffx, CS%S_diffx, CS%diag)
-      if (CS%id_Sdiffy > 0) call post_data(CS%id_Sdiffy, CS%S_diffy, CS%diag)
-
-      if (CS%id_Tadx_2d   > 0) call post_data(CS%id_Tadx_2d,   CS%T_adx_2d,   CS%diag)
-      if (CS%id_Tady_2d   > 0) call post_data(CS%id_Tady_2d,   CS%T_ady_2d,   CS%diag)
-      if (CS%id_Tdiffx_2d > 0) call post_data(CS%id_Tdiffx_2d, CS%T_diffx_2d, CS%diag)
-      if (CS%id_Tdiffy_2d > 0) call post_data(CS%id_Tdiffy_2d, CS%T_diffy_2d, CS%diag)
-
-      if (CS%id_Sadx_2d   > 0) call post_data(CS%id_Sadx_2d,   CS%S_adx_2d,   CS%diag)
-      if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
-      if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
-      if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
-
-      call post_diags_TS_tendency(G,GV,CS,CS%dt_trans)
+      call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
       call disable_averaging(CS%diag)
-
-      call cpu_clock_end(id_clock_other)
-
-      call cpu_clock_begin(id_clock_thermo)
-      ! Reset the accumulated transports to 0.
-      CS%uhtr(:,:,:) = 0.0
-      CS%vhtr(:,:,:) = 0.0
-      CS%dt_trans = 0.0
-      call cpu_clock_end(id_clock_thermo)
 
       CS%visc%calc_bbl = .true.
 
@@ -1374,7 +1268,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
   enddo ; enddo
 
-  call enable_averaging(dt*n_max,Time_local, CS%diag)
+  call enable_averaging(dt*n_max, Time_local, CS%diag)
   ! area mean SSH
   if (CS%id_ssh_ga > 0) then
     ssh_ga = global_area_mean(CS%ave_ssh, G)
@@ -1474,7 +1368,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS)
 
-  call enable_averaging(dt*n_max,Time_local, CS%diag)
+  call enable_averaging(dt*n_max, Time_local, CS%diag)
 
   if(.NOT. CS%use_conT_absS) then
     !Internal T&S variables are assumed to be potential&practical
@@ -1488,11 +1382,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     !from conservative temp to potential temp and
     !from absolute salinity to practical salinity
     do j=js,je ; do i=is,ie
-       pracSal(i,j,1) = gsw_sp_from_sr(state%SSS(i,j))
-       potTemp(i,j,1) = gsw_pt_from_ct(state%SSS(i,j),state%SST(i,j))
+      pracSal(i,j) = gsw_sp_from_sr(state%SSS(i,j))
+      potTemp(i,j) = gsw_pt_from_ct(state%SSS(i,j),state%SST(i,j))
     enddo ; enddo
-    if (CS%id_sst > 0) call post_data(CS%id_sst, potTemp(:,:,1), CS%diag, mask=G%mask2dT)
-    if (CS%id_sss > 0) call post_data(CS%id_sss, pracSal(:,:,1), CS%diag, mask=G%mask2dT)
+    if (CS%id_sst > 0) call post_data(CS%id_sst, potTemp, CS%diag, mask=G%mask2dT)
+    if (CS%id_sss > 0) call post_data(CS%id_sss, pracSal, CS%diag, mask=G%mask2dT)
   endif
 
   if (CS%id_sst_sq > 0) then
@@ -3027,19 +2921,128 @@ subroutine MOM_timing_init(CS)
 
 end subroutine MOM_timing_init
 
+!> This routine posts diagnostics of the transports, including the subgridscale
+!! contributions.
+subroutine post_transport_diagnostics(G, GV, CS, diag, dt, h, h_pre_dyn)
+  type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
+  type(MOM_control_struct), intent(in)    :: CS  !< control structure
+  type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
+  real                    , intent(in)    :: dt  !< total time step associated with the transports, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: h   !< The updated layer thicknesses, in H
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
 
-!> Post diagnostics for temp/heat and saln/salt tendencies.
-subroutine post_diags_TS_tendency(G, GV, CS, dt)
+  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
+  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport, in kg s-1
+  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport, in kg s-1
+  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
+  integer :: i, j, k, is, ie, js, je, nz
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  call cpu_clock_begin(id_clock_Z_diag)
+  call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
+                             CS%diag_to_Z_CSp)
+  call cpu_clock_end(id_clock_Z_diag)
+
+  ! Post mass transports, including SGS
+  ! Build the remap grids using the layer thicknesses from before the dynamics
+  call diag_update_remap_grids(diag, alt_h = h_pre_dyn)
+
+  H_to_kg_m2_dt = GV%H_to_kg_m2 / CS%dt_trans
+  if (CS%id_umo_2d > 0) then
+    umo2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      umo2d(I,j) = umo2d(I,j) + CS%uhtr(I,j,k) * H_to_kg_m2_dt
+    enddo ; enddo ; enddo
+    call post_data(CS%id_umo_2d, umo2d, diag)
+  endif
+  if (CS%id_umo > 0) then
+    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    do k=1,nz ; do j=js,je ; do I=is-1,ie
+      umo(I,j,k) =  CS%uhtr(I,j,k) * H_to_kg_m2_dt
+    enddo ; enddo ; enddo
+    call post_data(CS%id_umo, umo, diag, alt_h = h_pre_dyn)
+  endif
+  if (CS%id_vmo_2d > 0) then
+    vmo2d(:,:) = 0.0
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      vmo2d(i,J) = vmo2d(i,J) + CS%vhtr(i,J,k) * H_to_kg_m2_dt
+    enddo ; enddo ; enddo
+    call post_data(CS%id_vmo_2d, vmo2d, diag)
+  endif
+  if (CS%id_vmo > 0) then
+    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
+    do k=1,nz ; do J=js-1,je ; do i=is,ie
+      vmo(i,J,k) = CS%vhtr(i,J,k) * H_to_kg_m2_dt
+    enddo ; enddo ; enddo
+    call post_data(CS%id_vmo, vmo, diag, alt_h = h_pre_dyn)
+  endif
+
+  if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, diag, alt_h = h_pre_dyn)
+  if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, diag, alt_h = h_pre_dyn)
+
+end subroutine post_transport_diagnostics
+
+!> Post diagnostics of temperatures and salinities, their fluxes, and tendencies.
+subroutine post_TS_diagnostics(G, GV, CS, dt)
   type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV  !< ocean vertical grid structure
   type(MOM_control_struct), intent(inout) :: CS  !< control structure
   real                    , intent(in)    :: dt  !< total time step for T,S update
 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: potTemp, pracSal !TEOS10 Diagnostics
   real    :: work3d(SZI_(G),SZJ_(G),SZK_(G))
   real    :: work2d(SZI_(G),SZJ_(G))
   real    :: Idt, ppt2mks
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  if (.NOT. CS%use_conT_absS) then
+    !Internal T&S variables are assumed to be potential&practical
+    if (CS%id_T > 0) call post_data(CS%id_T, CS%tv%T, CS%diag)
+    if (CS%id_S > 0) call post_data(CS%id_S, CS%tv%S, CS%diag)
+
+    if (CS%id_tob > 0) call post_data(CS%id_tob, CS%tv%T(:,:,G%ke), CS%diag, mask=G%mask2dT)
+    if (CS%id_sob > 0) call post_data(CS%id_sob, CS%tv%S(:,:,G%ke), CS%diag, mask=G%mask2dT)
+  else
+    !Internal T&S variables are assumed to be conservative&absolute
+    if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, CS%tv%T, CS%diag)
+    if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, CS%tv%S, CS%diag)
+    !Using TEOS-10 function calls convert T&S diagnostics
+    !from conservative temp to potential temp and
+    !from absolute salinity to practical salinity
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      pracSal(i,j,k) = gsw_sp_from_sr(CS%tv%S(i,j,k))
+      potTemp(i,j,k) = gsw_pt_from_ct(CS%tv%S(i,j,k),CS%tv%T(i,j,k))
+    enddo; enddo ; enddo
+    if (CS%id_T > 0) call post_data(CS%id_T, potTemp, CS%diag)
+    if (CS%id_S > 0) call post_data(CS%id_S, pracSal, CS%diag)
+    if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), CS%diag, mask=G%mask2dT)
+    if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), CS%diag, mask=G%mask2dT)
+  endif
+
+  if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   CS%diag)
+  if (CS%id_Tady   > 0) call post_data(CS%id_Tady,   CS%T_ady,   CS%diag)
+  if (CS%id_Tdiffx > 0) call post_data(CS%id_Tdiffx, CS%T_diffx, CS%diag)
+  if (CS%id_Tdiffy > 0) call post_data(CS%id_Tdiffy, CS%T_diffy, CS%diag)
+
+  if (CS%id_Sadx   > 0) call post_data(CS%id_Sadx,   CS%S_adx,   CS%diag)
+  if (CS%id_Sady   > 0) call post_data(CS%id_Sady,   CS%S_ady,   CS%diag)
+  if (CS%id_Sdiffx > 0) call post_data(CS%id_Sdiffx, CS%S_diffx, CS%diag)
+  if (CS%id_Sdiffy > 0) call post_data(CS%id_Sdiffy, CS%S_diffy, CS%diag)
+
+  if (CS%id_Tadx_2d   > 0) call post_data(CS%id_Tadx_2d,   CS%T_adx_2d,   CS%diag)
+  if (CS%id_Tady_2d   > 0) call post_data(CS%id_Tady_2d,   CS%T_ady_2d,   CS%diag)
+  if (CS%id_Tdiffx_2d > 0) call post_data(CS%id_Tdiffx_2d, CS%T_diffx_2d, CS%diag)
+  if (CS%id_Tdiffy_2d > 0) call post_data(CS%id_Tdiffy_2d, CS%T_diffy_2d, CS%diag)
+
+  if (CS%id_Sadx_2d   > 0) call post_data(CS%id_Sadx_2d,   CS%S_adx_2d,   CS%diag)
+  if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   CS%diag)
+  if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, CS%diag)
+  if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, CS%diag)
 
   if(.not. CS%tendency_diagnostics) return
 
@@ -3047,7 +3050,6 @@ subroutine post_diags_TS_tendency(G, GV, CS, dt)
   ppt2mks       = 0.001
   work3d(:,:,:) = 0.0
   work2d(:,:)   = 0.0
-
 
   ! Diagnose tendency of heat from convergence of lateral advective,
   ! fluxes, where advective transport arises from residual mean velocity.
@@ -3139,8 +3141,7 @@ subroutine post_diags_TS_tendency(G, GV, CS, dt)
     endif
   endif
 
-
-end subroutine post_diags_TS_tendency
+end subroutine post_TS_diagnostics
 
 !> Calculate and post variance decay diagnostics for temp/salt
 subroutine post_diags_TS_vardec(G, CS, dt)
