@@ -93,7 +93,7 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)  :: tv
+  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn
   integer,                                  intent(in)  :: ModeNum
   real,                                     intent(in)  :: freq

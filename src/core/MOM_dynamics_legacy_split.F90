@@ -277,10 +277,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(forcing),                             intent(in)    :: fluxes
   real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
   real,                                      intent(in)    :: dt_since_flux, dt_therm
@@ -1063,7 +1063,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 
 ! Arguments: u - The zonal velocity, in m s-1.
@@ -1229,7 +1229,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag
   type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
   type(ocean_internal_state),                intent(inout) :: MIS

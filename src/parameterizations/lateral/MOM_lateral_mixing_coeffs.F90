@@ -785,7 +785,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  units='m', default=2000.)
   endif
   if (khth_use_ebt_struct) then
-    allocate(CS%ebt_struct(isd:ied,JsdB:JedB,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
+    allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
   if (use_variable_mixing) then
     call get_param(param_file, mod, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
