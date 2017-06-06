@@ -1561,7 +1561,7 @@ end subroutine register_forcing_type_diags
 subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp
   type(forcing),         intent(inout) :: fluxes
-  real,                  intent(in)    :: dt
+  real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   real,                  intent(out)   :: wt2
 
