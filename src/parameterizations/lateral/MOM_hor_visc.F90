@@ -510,11 +510,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
 ! Vorticity gradient
-    do J=Jsq-1,Jeq+1 ; do I=Isq,Ieq+1
+    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
       vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
     enddo ; enddo
 
-    do J=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
+    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
       vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
     enddo ; enddo
 
