@@ -278,7 +278,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
     vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
- 
+
   real, dimension(SZI_(G),SZJB_(G)) :: &
     vort_xy_dx    ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
 
@@ -510,10 +510,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
 ! Vorticity gradient
-   do J=js-1,Jeq+1 ; do I=is-1,Ieq+1
+    do J=Jsq-1,Jeq+1 ; do I=Isq,Ieq+1
       vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+    enddo ; enddo
+
+    do J=Jsq,Jeq+1 ; do I=Isq-1,Ieq+1
       vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-   enddo ; enddo
+    enddo ; enddo
 
 !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
