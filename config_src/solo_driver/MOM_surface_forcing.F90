@@ -119,6 +119,8 @@ type, public :: surface_forcing_CS ; private
   real :: Rho0                  ! Boussinesq reference density (kg/m^3)
   real :: G_Earth               ! gravitational acceleration (m/s^2)
   real :: Flux_const            ! piston velocity for surface restoring (m/s)
+  real :: Flux_const_T          ! piston velocity for surface temperature restoring (m/s)
+  real :: Flux_const_S          ! piston velocity for surface salinity restoring (m/s)
   real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
   real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
   real :: tau_x0, tau_y0        ! Constant wind stresses used in the WIND_CONFIG="const" forcing
@@ -1037,8 +1039,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
+          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -1193,8 +1195,8 @@ subroutine buoyancy_forcing_from_data_override(sfc_state, fluxes, day, dt, G, CS
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const_T)
+          fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const_S) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -1758,8 +1760,25 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
                  fail_if_missing=.true.)
-    ! Convert CS%Flux_const from m day-1 to m s-1.
+
+    if (CS%use_temperature) then
+      call get_param(param_file, mdl, "FLUXCONST_T", CS%Flux_const_T, &
+           "The constant that relates the restoring surface temperature\n"//&
+           "flux to the relative surface anomaly (akin to a piston \n"//&
+           "velocity).  Note the non-MKS units.", units="m day-1", &
+           default=CS%Flux_const)
+      call get_param(param_file, mdl, "FLUXCONST_S", CS%Flux_const_S, &
+           "The constant that relates the restoring surface salinity\n"//&
+           "flux to the relative surface anomaly (akin to a piston \n"//&
+           "velocity).  Note the non-MKS units.", units="m day-1", &
+           default=CS%Flux_const)
+    endif
+
+    ! Convert flux constants from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
+    CS%Flux_const_T = CS%Flux_const_T / 86400.0
+    CS%Flux_const_S = CS%Flux_const_S / 86400.0
+
     if (trim(CS%buoy_config) == "linear") then
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature \n"//&
