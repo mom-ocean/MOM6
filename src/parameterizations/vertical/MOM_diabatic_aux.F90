@@ -174,15 +174,14 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
-!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
-!$OMP                      firstprivate(pressure)
+!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps,pressure)
   do j=js,je
-     ps(:) = 0.0
-     if (PRESENT(p_surf)) then
-       ps(:) = p_surf(:,j)
-     endif
+    ps(:) = 0.0
+    if (PRESENT(p_surf)) then ; do i=is,ie
+      ps(i) = p_surf(i,j)
+    enddo ; endif
 
-    do i=is,ie ; fraz_col(:) = 0.0 ; enddo
+    do i=is,ie ; fraz_col(i) = 0.0 ; enddo
 
     if (CS%pressure_dependent_frazil) then
       do i=is,ie
@@ -732,32 +731,42 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pRef_MLD(:) = 0. ; pRef_N2(:) = 0.
-  do j = js, je
-    dK(:) = 0.5 * h(:,j,1) * GV%H_to_m ! Depth of center of surface layer
+  do j=js,je
+    do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_m ; enddo ! Depth of center of surface layer
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is, ie-is+1, tv%eqn_of_state)
-    deltaRhoAtK(:) = 0.
-    MLD(:,j) = 0.
-    if (id_N2>0) then
-      subMLN2(:,j) = 0.
-      rho1(:) = 0.
-      d1(:) = 0.
-      pRef_N2(:) = GV%g_Earth * GV%Rho0 * h(:,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
-    endif
-    do k = 2, nz
-      dKm1(:) = dK(:) ! Depth of center of layer K-1
-      dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
+    do i=is,ie
+      deltaRhoAtK(i) = 0.
+      MLD(i,j) = 0.
+      if (id_N2>0) then
+        subMLN2(i,j) = 0.
+        rho1(i) = 0.
+        d1(i) = 0.
+        pRef_N2(i) = GV%g_Earth * GV%Rho0 * h(i,j,1) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+        !### This should be: pRef_N2(i) = GV%g_Earth * GV%H_to_kg_m2 * h(i,j,1) ! This might change answers at roundoff.
+      endif
+    enddo
+    do k=2,nz
+      do i=is,ie
+        dKm1(i) = dK(i) ! Depth of center of layer K-1
+        dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
+      enddo
 
       ! Stratification, N2, immediately below the mixed layer, averaged over at least 50 m.
       if (id_N2>0) then
-        pRef_N2(:) = pRef_N2(:) + GV%g_Earth * GV%Rho0 * h(:,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+        do i=is,ie
+          pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+          !### This should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k) ! This might change answers at roundoff.
+        enddo
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_N2, rhoAtK, is, ie-is+1, tv%eqn_of_state)
-        do i = is, ie
+        do i=is,ie
           if (MLD(i,j)>0. .and. subMLN2(i,j)==0.) then ! This block is below the mixed layer
             if (d1(i)==0.) then ! Record the density, depth and pressure, immediately below the ML
               rho1(i) = rhoAtK(i)
               d1(i) = dK(i)
+              !### It looks to me like there is bad logic here. - RWH
               ! Use pressure at the bottom of the upper layer used in calculating d/dz rho
               pRef_N2(i) = pRef_N2(i) + GV%g_Earth * GV%Rho0 * h(i,j,k) * GV%H_to_m ! Boussinesq approximation!!!! ?????
+              !### This line should be: pRef_N2(i) = pRev_N2(i) + GV%g_Earth * GV%H_to_kg_m2 * h(i,j,k) ! This might change answers at roundoff.
             endif
             if (d1(i)>0. .and. dK(i)-d1(i)>=dz_subML) then
               subMLN2(i,j) = GV%g_Earth/ GV%Rho0 * (rho1(i)-rhoAtK(i)) / (d1(i) - dK(i))
@@ -767,7 +776,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
       endif ! id_N2>0
 
       ! Mixed-layer depth, using sigma-0 (surface reference pressure)
-      deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
+      do i=is,ie ; deltaRhoAtKm1(i) = deltaRhoAtK(i) ; enddo ! Store value from previous iteration of K
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is, ie-is+1, tv%eqn_of_state)
       do i = is, ie
         deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
@@ -777,10 +786,10 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, dia
           aFac = ( densityDiff - deltaRhoAtKm1(i) ) / ddRho
           MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
         endif
+        if (id_SQ > 0) MLD2(i,j) = MLD(i,j)**2
       enddo ! i-loop
-      if (id_SQ > 0) MLD2(is:ie,j) = MLD(is:ie,j)**2
     enddo ! k-loop
-    do i = is, ie
+    do i=is,ie
       if ((MLD(i,j)==0.) .and. (deltaRhoAtK(i)<densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
    !  if (id_N2>0 .and. subMLN2(i,j)==0. .and. d1(i)>0. .and. dK(i)-d1(i)>0.) then
    !    ! Use what ever stratification we can, measured over what ever distance is available
