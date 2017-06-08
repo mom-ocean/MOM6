@@ -108,7 +108,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u    !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v    !< The meridional velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(inout) :: tv
+  type(thermo_var_ptrs),                     intent(inout) :: tv   !< A structure pointing to various thermodynamic variables
   type(time_type),                           intent(inout) :: Time
   type(param_file_type),                     intent(in)    :: PF
   type(directories),                         intent(in)    :: dirs
@@ -420,7 +420,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call pass_var(h, G%Domain)
 
   if (debug) then
-    call hchksum(h*GV%H_to_m, "MOM_initialize_state: h ", G%HI, haloshift=1)
+    call hchksum(h, "MOM_initialize_state: h ", G%HI, haloshift=1, scale=GV%H_to_m)
     if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1)
     if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1)
   endif
@@ -479,7 +479,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
                  "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
                  "   USER - user specified", default="none")
-    if (trim(config) /= "none") OBC%OBC_user_config = trim(config)
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
     elseif (lowercase(trim(config)) == "supercritical") then
@@ -737,7 +736,7 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, being converted from m to H (m or kg m-2)
   type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -809,7 +808,7 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(thermo_var_ptrs),                  intent(in)    :: tv
+  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -1435,7 +1434,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                 intent(in) :: use_temperature
-  type(thermo_var_ptrs),   intent(in) :: tv
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),         pointer    :: CSp
 !   This subroutine sets the inverse restoration time (Idamp), and   !
@@ -1642,7 +1641,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    !< Layer thicknesses, in m
-  type(thermo_var_ptrs),                 intent(inout) :: tv
+  type(thermo_var_ptrs),                 intent(inout) :: tv   !< A structure pointing to various thermodynamic variables
   type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   type(param_file_type),                 intent(in)    :: PF
   type(directories),                     intent(in)    :: dirs

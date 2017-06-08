@@ -950,15 +950,14 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     endif
   enddo ! end of v-point j loop
 
-
   if (CS%debug) then
-    call uvchksum("vertvisc_coef h_[uv]", CS%h_u*H_to_m, &
-                  CS%h_v*H_to_m, G%HI,haloshift=0)
+    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, &
+                  CS%h_v, G%HI,haloshift=0, scale=GV%H_to_m)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, &
-                  CS%a_v, G%HI,haloshift=0)
+                  CS%a_v, G%HI, haloshift=0)
     if (allocated(hML_u) .and. allocated(hML_v)) &
-        call uvchksum("vertvisc_coef hML_[uv]", hML_u*H_to_m, &
-                      hML_v*H_to_m, G%HI,haloshift=0)
+      call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, &
+                    G%HI, haloshift=0, scale=GV%H_to_m)
   endif
 
 ! Offer diagnostic fields for averaging.
