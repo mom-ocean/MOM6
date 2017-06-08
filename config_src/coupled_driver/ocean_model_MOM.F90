@@ -494,7 +494,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 !  See if it is time to write out the energy.
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
-      (OS%MOM_CSp%dt_trans==0.0)) then
+      (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
     call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
@@ -616,33 +616,34 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
 end subroutine add_berg_flux_to_shelf
 
 subroutine ocean_model_restart(OS, timestamp)
-   type(ocean_state_type),        pointer :: OS
-   character(len=*), intent(in), optional :: timestamp
+  type(ocean_state_type),        pointer :: OS
+  character(len=*), intent(in), optional :: timestamp
 
-   if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_restart "//&
-       "called with a non-zero dt_trans.  Additional restart fields are required.")
-   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
-       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
-       "restart files can only be created after the buoyancy forcing is applied.")
+  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+       "with inconsistent dynamics and advective times.  Additional restart fields "//&
+       "that have not been coded yet would be required for reproducibility.")
+  if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
+      "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
+      "restart files can only be created after the buoyancy forcing is applied.")
 
-   if (BTEST(OS%Restart_control,1)) then
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                               OS%dirs%restart_output_dir, .true.)
-     if (OS%use_ice_shelf) then
-        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-     endif
-   endif
-   if (BTEST(OS%Restart_control,0)) then
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, GV=OS%GV)
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                               OS%dirs%restart_output_dir)
-     if (OS%use_ice_shelf) then
-        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-     endif
-   endif
+  if (BTEST(OS%Restart_control,1)) then
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                      OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                              OS%dirs%restart_output_dir, .true.)
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+    endif
+  endif
+  if (BTEST(OS%Restart_control,0)) then
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                      OS%MOM_CSp%restart_CSp, GV=OS%GV)
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                              OS%dirs%restart_output_dir)
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+    endif
+  endif
 
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
@@ -692,9 +693,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_save_restart "//&
-       "called with a non-zero dt_trans.  Additional restart fields are required.")
-   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
+  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+       "with inconsistent dynamics and advective times.  Additional restart fields "//&
+       "that have not been coded yet would be required for reproducibility.")
+  if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")
 

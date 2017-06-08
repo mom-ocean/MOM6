@@ -220,7 +220,7 @@ type, public :: MOM_control_struct
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
-  real    :: dt_trans                !< The elapsed time since updating the tracers and
+  real    :: t_dyn_rel_adv           !< The elapsed time since updating the tracers and
                                      !! applying diabatic processes (sec); may
                                      !! span multiple timesteps.
   type(time_type) :: Z_diag_interval !< amount of time between calculating Z-space diagnostics
@@ -549,7 +549,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
-  if ((CS%thickness_diffuse .and. (.not.CS%thickness_diffuse_first .or. CS%dt_trans == 0) )  .OR. CS%mixedlayer_restrat) &
+  if ((CS%thickness_diffuse .and. (.not.CS%thickness_diffuse_first .or. CS%t_dyn_rel_adv == 0) )  .OR. CS%mixedlayer_restrat) &
     call create_group_pass(CS%pass_h, h, G%Domain) !###, halo=max(2,cont_stensil))
 
   if (CS%diabatic_first) then
@@ -661,7 +661,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
     call cpu_clock_end(id_clock_other)
 
-    if (CS%diabatic_first .and. (CS%dt_trans==0.0)) then ! do thermodynamics.
+    if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0)) then ! do thermodynamics.
 
       if (thermo_does_span_coupling) then
         dtdia = dt_therm
@@ -716,7 +716,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_thermo)
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
-    endif ! end of block "(CS%diabatic_first .and. (CS%dt_trans==0.0))"
+    endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     call cpu_clock_begin(id_clock_other)
 
@@ -731,7 +731,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
 
     if (CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
-      if (CS%dt_trans == 0.0) then
+      if (CS%t_dyn_rel_adv == 0.0) then
         if (thermo_does_span_coupling) then
           dtth = dt_therm
         else
@@ -804,12 +804,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%legacy_split) then
         call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    CS%dt_trans, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    CS%t_dyn_rel_adv, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, GV, CS%dyn_legacy_split_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       else
         call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
-                    CS%dt_trans, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                    CS%t_dyn_rel_adv, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       endif
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
@@ -886,9 +886,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_dynamics)
 
-    CS%dt_trans = CS%dt_trans + dt
+    CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
     if (thermo_does_span_coupling) then
-      do_advection = (CS%dt_trans + 0.5*dt > dt_therm)
+      do_advection = (CS%t_dyn_rel_adv + 0.5*dt > dt_therm)
     else
       do_advection = ((MOD(n,ntstep) == 0) .or. (n==n_max))
     endif
@@ -916,24 +916,24 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
 
       call cpu_clock_begin(id_clock_thermo)
-      call enable_averaging(CS%dt_trans, Time_local, CS%diag)
+      call enable_averaging(CS%t_dyn_rel_adv, Time_local, CS%diag)
 
       call cpu_clock_begin(id_clock_tracer)
-      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%dt_trans, G, GV, &
+      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, &
                          CS%tracer_adv_CSp, CS%tracer_Reg)
-      call tracer_hordiff(h, CS%dt_trans, CS%MEKE, CS%VarMix, G, GV, &
+      call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
       call cpu_clock_end(id_clock_tracer)
       if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
 
-      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%dt_trans, h, h_pre_dyn)
+      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn)
 
       ! Store the time to be used for the diabatic forcing.
-      dtdia = CS%dt_trans
+      dtdia = CS%t_dyn_rel_adv
       ! Reset the accumulated transports to 0.
       CS%uhtr(:,:,:) = 0.0
       CS%vhtr(:,:,:) = 0.0
-      CS%dt_trans = 0.0
+      CS%t_dyn_rel_adv = 0.0
 
       ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
       ! from before the dynamics calls
@@ -1000,7 +1000,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
-        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%dt_trans, &
+        call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, CS%t_dyn_rel_adv, &
                                      G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
         call disable_averaging(CS%diag)
@@ -1861,7 +1861,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ALLOC_(CS%uhtr(IsdB:IedB,jsd:jed,nz)) ; CS%uhtr(:,:,:) = 0.0
   ALLOC_(CS%vhtr(isd:ied,JsdB:JedB,nz)) ; CS%vhtr(:,:,:) = 0.0
-  CS%dt_trans = 0.0
+  CS%t_dyn_rel_adv = 0.0
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
@@ -2720,7 +2720,7 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt, h, h_pre_dyn)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call cpu_clock_begin(id_clock_Z_diag)
-  call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%dt_trans, G, GV, &
+  call calculate_Z_transport(CS%uhtr, CS%vhtr, h, CS%t_dyn_rel_adv, G, GV, &
                              CS%diag_to_Z_CSp)
   call cpu_clock_end(id_clock_Z_diag)
 
@@ -2728,7 +2728,7 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt, h, h_pre_dyn)
   ! Build the remap grids using the layer thicknesses from before the dynamics
   call diag_update_remap_grids(diag, alt_h = h_pre_dyn)
 
-  H_to_kg_m2_dt = GV%H_to_kg_m2 / CS%dt_trans
+  H_to_kg_m2_dt = GV%H_to_kg_m2 / CS%t_dyn_rel_adv
   if (CS%id_umo_2d > 0) then
     umo2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
