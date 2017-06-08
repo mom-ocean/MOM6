@@ -74,6 +74,7 @@ type, public :: OBC_segment_type
   logical :: oblique        !< Oblique waves supported at radiation boundary.
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
+  logical :: open           !< Boundary is open for continuity solver.
   logical :: gradient       !< Zero gradient at boundary.
   logical :: values_needed  !< Whether or not external OBC fields are needed.
   integer :: direction      !< Boundary faces one of the four directions.
@@ -279,6 +280,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%segment(l)%oblique = .false.
       OBC%segment(l)%nudged = .false.
       OBC%segment(l)%specified = .false.
+      OBC%segment(l)%open = .false.
       OBC%segment(l)%gradient = .false.
       OBC%segment(l)%values_needed = .false.
       OBC%segment(l)%direction = OBC_NONE
@@ -601,13 +603,16 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%oblique_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -617,6 +622,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%segment(l_seg)%Flather = .true.
@@ -700,13 +706,16 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
       OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%oblique_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -716,6 +725,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
       OBC%segment(l_seg)%radiation = .true.

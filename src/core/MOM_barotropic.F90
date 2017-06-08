@@ -2006,6 +2006,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       e_anom(i,j) = dgeo_de * (0.5 * (eta(i,j) + eta_in(i,j)) - eta_PF(i,j))
     enddo ; enddo
   endif
+  if (apply_OBCs) then
+    if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+!GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
+!GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
+      do j=js,je ; do I=is-1,ie
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+          e_anom(i+1,j) = e_anom(i,j)
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+          e_anom(i,j) = e_anom(i+1,j)
+        endif
+      enddo ; enddo
+    endif
+
+    if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+!GOMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
+!GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
+      do J=js-1,je ; do I=is,ie
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+          e_anom(i,j+1) = e_anom(i,j)
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+          e_anom(i,j) = e_anom(i,j+1)
+        endif
+      enddo ; enddo
+    endif
+  endif
 
   ! It is possible that eta_out and eta_in are the same.
   do j=js,je ; do i=is,ie
