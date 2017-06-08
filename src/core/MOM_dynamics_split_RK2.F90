@@ -48,8 +48,8 @@ use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_v
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : ocean_OBC_type
-use MOM_open_boundary,         only : radiation_open_bdry_conds
+use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
+use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -324,10 +324,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
-      u_old_rad_OBC(I,j,k) = u(I,j,k)  !### Should be u_av(I,j,k)?
+      u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
-      v_old_rad_OBC(i,J,k) = v(i,J,k)  !### Should be u_av(I,j,k)?
+      v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -451,6 +451,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
@@ -575,9 +578,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym)
-    call hchksum(GV%H_to_kg_m2*h,"Predictor 1 h",G%HI,haloshift=1)
-    call uvchksum("Predictor 1 [uv]h", &
-                  GV%H_to_kg_m2*uh, GV%H_to_kg_m2*vh, G%HI,haloshift=2, symmetric=sym)
+    call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, scale=GV%H_to_m)
+    call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI,haloshift=2, &
+                  symmetric=sym, scale=GV%H_to_m)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
@@ -693,8 +696,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, symmetric=sym)
     call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
-    call hchksum(GV%H_to_kg_m2*h_av,"Predictor avg h",G%HI,haloshift=0)
-  ! call MOM_state_chksum("Predictor avg ", u_av, v_av,  h_av,uh, vh, G, GV)
+    call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_m)
+  ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV)
     call check_redundant("Predictor up ", up, vp, G)
     call check_redundant("Predictor uh ", uh, vh, G)
   endif
@@ -726,6 +729,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
@@ -780,9 +786,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (CS%debug) then
     call uvchksum("Corrector 1 [uv]", u, v, G%HI,haloshift=0, symmetric=sym)
-    call hchksum(GV%H_to_kg_m2*h,"Corrector 1 h",G%HI,haloshift=2)
-    call uvchksum("Corrector 1 [uv]h", GV%H_to_kg_m2*uh, &
-                  GV%H_to_kg_m2*vh, G%HI,haloshift=2, symmetric=sym)
+    call hchksum(h, "Corrector 1 h", G%HI, haloshift=2, scale=GV%H_to_m)
+    call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
+                  symmetric=sym, scale=GV%H_to_m)
   ! call MOM_state_chksum("Corrector 1", u, v, h, uh, vh, G, GV, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
@@ -889,7 +895,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u, v, h, uh, vh, G, GV, symmetric=sym)
     call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI,haloshift=1, symmetric=sym)
-    call hchksum(GV%H_to_kg_m2*h_av,"Corrector avg h",G%HI,haloshift=1)
+    call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, scale=GV%H_to_m)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV)
   endif
 

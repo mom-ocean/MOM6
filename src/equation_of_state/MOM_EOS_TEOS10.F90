@@ -47,8 +47,8 @@ contains
 subroutine calculate_density_scalar_teos10(T, S, pressure, rho)
 real,    intent(in)  :: T, S, pressure
 real,    intent(out) :: rho
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
+! * Arguments: T - conservative temperature in C.                      *
+! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
 ! *  (out)     rho - in situ density in kg m-3.                        *
 ! *  (in)      start - the starting point in the arrays.               *
@@ -61,8 +61,6 @@ real,    intent(out) :: rho
 ! *  TEOS10 website.                                                   *
 ! *====================================================================*
 
-  real :: al0, p0, lambda
-  integer :: j
   real, dimension(1) :: T0, S0, pressure0
   real, dimension(1) :: rho0
 

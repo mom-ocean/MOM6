@@ -299,7 +299,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(time_type),                           intent(inout) :: day
   integer,                                   intent(in)    :: n
   type(Sum_output_CS),                       pointer       :: CS
@@ -872,7 +872,7 @@ end subroutine write_energy
 subroutine accumulate_net_input(fluxes, state, dt, G, CS)
   type(forcing),         intent(in) :: fluxes
   type(surface),         intent(in) :: state
-  real,                  intent(in) :: dt
+  real,                  intent(in) :: dt   !< The amount of time over which to average, in s
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS
 ! This subroutine accumates the net input of volume, and perhaps later salt and

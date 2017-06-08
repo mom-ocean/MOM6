@@ -3,7 +3,7 @@ module MOM_MEKE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging,     only : hchksum
+use MOM_debugging,     only : hchksum, uvchksum
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -115,7 +115,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     baroHu, &       ! Depth integrated zonal mass flux (m3).
     drag_vel_u      ! A (vertical) viscosity associated with bottom drag at
                     ! u-points, in m s-1.
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     MEKE_vflux, &   ! The meridional diffusive flux of MEKE, in kg m2 s-3.
     Kh_v, &         ! The meridional diffusivity that is actually used, in m2 s-1.
     baroHv, &       ! Depth integrated meridional mass flux (m3).
@@ -157,6 +157,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
       if (associated(MEKE%mom_src)) call hchksum(MEKE%mom_src, 'MEKE mom_src',G%HI)
       if (associated(MEKE%GM_src)) call hchksum(MEKE%GM_src, 'MEKE GM_src',G%HI)
       if (associated(MEKE%MEKE)) call hchksum(MEKE%MEKE, 'MEKE MEKE',G%HI)
+      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI)
+      call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=1)
     endif
 
     ! Why are these 3 lines repeated from above?
@@ -236,7 +238,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     do j=js-1,je+1
       do i=is-1,ie+1 ; mass(i,j) = 0.0 ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        mass(i,j) = mass(i,j) + GV%H_to_kg_m2 * h(i,j,k)
+        mass(i,j) = mass(i,j) + G%mask2dT(i,j) * (GV%H_to_kg_m2 * h(i,j,k))
       enddo ; enddo
       do i=is-1,ie+1
         I_mass(i,j) = 0.0
@@ -252,6 +254,14 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
 
     ! Calculates bottomFac2, barotrFac2 and LmixScale
     call MEKE_lengthScales(CS, MEKE, G, SN_u, SN_v, MEKE%MEKE, bottomFac2, barotrFac2, LmixScale)
+    if (CS%debug) then
+      call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI)
+      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1)
+      call hchksum(drag_rate_visc, 'MEKE drag_rate_visc',G%HI)
+      call hchksum(bottomFac2, 'MEKE bottomFac2',G%HI)
+      call hchksum(barotrFac2, 'MEKE barotrFac2',G%HI)
+      call hchksum(LmixScale, 'MEKE LmixScale',G%HI)
+    endif
 
 !$OMP parallel default(none) shared(MEKE,CS,is,ie,js,je,nz,src,mass,G,h,I_mass, &
 !$OMP                               sdt,drag_vel_u,visc,drag_vel_v,drag_rate_visc, &
@@ -306,7 +316,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, CS, hu, hv)
     enddo ; enddo
 !$OMP end parallel
 
-    if (CS%MEKE_KH >= 0.0 .or. CS%MEKE_K4 >= 0.0) then
+    if (CS%MEKE_KH >= 0.0 .or. CS%KhMEKE_FAC > 0.0 .or. CS%MEKE_K4 >= 0.0) then
       ! Update halos for lateral or bi-harmonic diffusion
       call cpu_clock_begin(CS%id_clock_pass)
       call do_group_pass(CS%pass_MEKE, G%Domain)
