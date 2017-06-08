@@ -5,14 +5,12 @@ stages:
   - run
   - tests
 
-# Creates and moves to re-used workspace
+# Moves to re-used workspace
 before_script:
-  - export MOM6_SRC=`pwd | sed 's:/[1-9]/:/0/:'`
-  - echo $MOM6_SRC
-  - export WORKSPACE=`pwd | sed 's:/[0-9]/:/:'`
-  - echo $WORKSPACE
+  - MOM6_SRC=$CI_PROJECT_DIR
+  - WORKSPACE=`pwd | sed 's:/[0-9]/:/:'`
+  - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
   - test -d $WORKSPACE/tests && cd $WORKSPACE/tests
-  - pwd
 
 # Merge
 merge:
@@ -20,7 +18,8 @@ merge:
   tags:
     - ncrc3
   script:
-    - cd $MOM6_SRC && git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
+    - cd $CI_PROJECT_DIR
+    - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
 
 # Clones regression repo, if necessary, pulls latest of everything, and sets up working space
 setup:
@@ -74,6 +73,7 @@ run:
   tags:
     - ncrc3
   script:
+    - rm MOM6-examples/*.tar
     - bash Gitlab/run_stage.sh
 
 # Tests
@@ -85,7 +85,7 @@ gnu:regressions:
     - cd regressions && git checkout .
     - md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
     - echo "Regression results for non-symmetric gnu executables"
-    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum -c all_gnu.md5
+    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum -c all_gnu.md5 && rm all_gnu.md5
 
 intel:regressions:
   stage: tests
@@ -95,7 +95,7 @@ intel:regressions:
     - cd regressions && git checkout .
     - md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
     - echo "Regression results for non-symmetric intel executables"
-    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum -c all_intel.md5
+    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum -c all_intel.md5 && rm all_intel.md5
 
 pgi:regressions:
   stage: tests
@@ -105,7 +105,7 @@ pgi:regressions:
     - cd regressions && git checkout .
     - md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
     - echo "Regression results for non-symmetric pgi executables"
-    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum -c all_pgi.md5
+    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum -c all_pgi.md5 && rm all_pgi.md5
 
 gnu:symmetric:
   stage: tests
@@ -115,7 +115,7 @@ gnu:symmetric:
     - mkdir -p _gnu && cd _gnu
     - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
     - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_gnu.tar && md5sum -c all_gnu.md5
+    - tar xf ../MOM6-examples/symmetric_gnu.tar && md5sum -c all_gnu.md5 && rm all_gnu.md5
 
 intel:symmetric:
   stage: tests
@@ -125,7 +125,7 @@ intel:symmetric:
     - mkdir -p _intel && cd _intel
     - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
     - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_intel.tar && md5sum -c all_intel.md5
+    - tar xf ../MOM6-examples/symmetric_intel.tar && md5sum -c all_intel.md5 && rm all_intel.md5
 
 pgi:symmetric:
   stage: tests
@@ -135,4 +135,4 @@ pgi:symmetric:
     - mkdir -p _pgi && cd _pgi
     - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
     - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_pgi.tar && md5sum -c all_pgi.md5
+    - tar xf ../MOM6-examples/symmetric_pgi.tar && md5sum -c all_pgi.md5 && rm all_pgi.md5
