@@ -115,6 +115,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
+  if (calc_modal_structure) then
+    do j=js,je; do i=is,ie; do k=1,nz;modal_structure(i,j,k)=1.0
+    enddo; enddo; enddo
+  endif
 
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth/GV%Rho0
