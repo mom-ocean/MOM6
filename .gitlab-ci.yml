@@ -73,7 +73,7 @@ run:
   tags:
     - ncrc3
   script:
-    - rm MOM6-examples/*.tar
+    - rm -f MOM6-examples/*.tar
     - bash Gitlab/run_stage.sh
 
 # Tests
