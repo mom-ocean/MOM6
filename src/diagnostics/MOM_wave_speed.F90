@@ -116,7 +116,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
   if (calc_modal_structure) then
-    do j=js,je; do i=is,ie; do k=1,nz;modal_structure(i,j,k)=1.0
+    do j=js,je; do i=is,ie; do k=1,nz;modal_structure(i,j,k)=0.0
     enddo; enddo; enddo
   endif
 
