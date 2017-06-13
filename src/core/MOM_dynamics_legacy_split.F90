@@ -117,7 +117,7 @@ use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_C
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
 
