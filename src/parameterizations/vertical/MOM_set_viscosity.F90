@@ -1470,8 +1470,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
           vhtot(i) = dt_Rho0 * fluxes%tauy(i,J)
-          uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%tauy(I-1,j+1)) + &
-                                       (fluxes%taux(I-1,j) + fluxes%tauy(I,j+1)))
+          uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%taux(I-1,j+1)) + &
+                                       (fluxes%taux(I-1,j) + fluxes%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
            absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
