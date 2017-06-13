@@ -347,26 +347,6 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV)
 
-! visc contains viscosity and BBL thickness (u_in,h_in)
-  if (visc%calc_bbl) then
-    call enable_averaging(visc%bbl_calc_time_interval, &
-              Time_local+set_time(int(visc%bbl_calc_time_interval-dt)), CS%diag)
-    call set_viscous_BBL(u_in, v_in, h_av, tv, visc, G, GV, CS%set_visc_CSp)
-    call disable_averaging(CS%diag)
-    call cpu_clock_begin(id_clock_pass)
-    if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-      call pass_vector(visc%Ray_u, visc%Ray_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE)
-    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call pass_vector(visc%bbl_thick_u, visc%bbl_thick_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-      call pass_vector(visc%kv_bbl_u, visc%kv_bbl_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE)
-    endif
-    call cpu_clock_end(id_clock_pass)
-    visc%calc_bbl = .false.
-  endif
-
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)

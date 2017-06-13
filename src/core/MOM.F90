@@ -460,7 +460,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-  real,             intent(in)       :: time_interval !< time interval
+  real,             intent(in)       :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
 
   ! local
@@ -511,7 +511,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   type(time_type) :: Time_local
   logical :: showCallTree
   ! These are used for group halo passes.
-  logical :: do_pass_kd_kv_turb, do_pass_ray, do_pass_kv_bbl_thick
+  logical :: do_pass_kd_kv_turb, do_pass_Ray, do_pass_kv_bbl_thick
 
   G => CS%G ; GV => CS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
@@ -569,28 +569,29 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   if (CS%thickness_diffuse .OR. CS%mixedlayer_restrat) &
     call create_group_pass(CS%pass_h, h, G%Domain) !###, halo=max(2,cont_stensil))
 
-  if (CS%diabatic_first) then
-    do_pass_ray = .FALSE.
-    if ((.not.G%Domain%symmetric) .and. &
-        associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) then
-      call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
-                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-      do_pass_ray = .TRUE.
-    endif
-    do_pass_kv_bbl_thick = .FALSE.
-    if (associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) then
-      call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
-                             CS%visc%bbl_thick_v, G%Domain, &
-                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-      do_pass_kv_bbl_thick = .TRUE.
-    endif
-    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
-      call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
-                             CS%visc%kv_bbl_v, G%Domain, &
-                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-      do_pass_kv_bbl_thick = .TRUE.
-    endif
+  do_pass_Ray = .FALSE.
+  if ((.not.G%Domain%symmetric) .and. &
+      associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) then
+    call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+    do_pass_Ray = .TRUE.
   endif
+  do_pass_kv_bbl_thick = .FALSE.
+  if (associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) then
+    call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
+                           CS%visc%bbl_thick_v, G%Domain, &
+                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+    do_pass_kv_bbl_thick = .TRUE.
+  endif
+  if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+    call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
+                           CS%visc%kv_bbl_v, G%Domain, &
+                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+    do_pass_kv_bbl_thick = .TRUE.
+  endif
+  do_pass_kd_kv_turb = associated(CS%visc%Kv_turb)
+  if (associated(CS%visc%Kv_turb)) &
+    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
 
   if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
     if (CS%use_temperature) then
@@ -605,13 +606,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain, halo=1)
   endif
 
-  if (associated(CS%visc%Kv_turb)) &
-    call create_group_pass(CS%pass_kd_kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
-
   !---------- End setup for group halo pass
 
-
-  do_pass_kd_kv_turb = associated(CS%visc%Kv_turb)
 
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
@@ -714,7 +710,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       !call cpu_clock_end(id_clock_vertvisc)
 
       call cpu_clock_begin(id_clock_pass)
-      if (do_pass_ray) call do_group_pass(CS%pass_ray, G%Domain )
+      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain )
       if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
       call cpu_clock_end(id_clock_pass)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (diabatic_first)")
@@ -738,13 +734,13 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
 
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
+    !===========================================================================
+    ! This is the start of the dynamics stepping part of the algorithm.
+
     call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_pass)
     if (do_pass_kd_kv_turb) call do_group_pass(CS%pass_kd_kv_turb, G%Domain)
     call cpu_clock_end(id_clock_pass) ; call cpu_clock_end(id_clock_other)
 
-
-    !===========================================================================
-    ! This is the start of the dynamics stepping part of the algorithm.
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
@@ -776,6 +772,39 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
     endif
 
+    ! The bottom boundary layer properties are out-of-date and need to be recalculated.
+    if (CS%t_dyn_rel_adv == 0.0) CS%visc%calc_bbl = .true.
+    if (CS%visc%calc_bbl) then ; if (thermo_does_span_coupling) then
+      CS%visc%bbl_calc_time_interval = dt_therm
+    else
+      CS%visc%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
+    endif ; endif
+
+    if (CS%visc%calc_bbl) then
+      ! Calculate the BBL properties and store them inside visc (u,h).
+!      call cpu_clock_begin(id_clock_vertvisc)
+      call enable_averaging(CS%visc%bbl_calc_time_interval, &
+                Time_local+set_time(int(CS%visc%bbl_calc_time_interval-dt)), CS%diag)
+      call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
+      call disable_averaging(CS%diag)
+!      call cpu_clock_end(id_clock_vertvisc)
+      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
+    endif
+
+    if (CS%visc%calc_bbl) then
+      call cpu_clock_begin(id_clock_pass)
+      if (G%nonblocking_updates) then
+        if (do_pass_Ray) call start_group_pass(CS%pass_Ray, G%Domain)
+        if (do_pass_kv_bbl_thick) call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        ! CS%visc%calc_bbl will be set to .false. when the message passing is complete.
+      else
+        if (do_pass_Ray) call do_group_pass(CS%pass_Ray, G%Domain)
+        if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        CS%visc%calc_bbl = .false.
+      endif
+      call cpu_clock_end(id_clock_pass)
+    endif
+
     if (CS%interp_p_surf) then
       wt_end = real(n) / real(n_max)
       wt_beg = real(n-1) / real(n_max)
@@ -786,12 +815,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                         (1.0-wt_beg) * CS%p_surf_prev(i,j)
       enddo ; enddo
     endif
-
-    if (CS%visc%calc_bbl) then ; if (thermo_does_span_coupling) then
-      CS%visc%bbl_calc_time_interval = dt_therm
-    else
-      CS%visc%bbl_calc_time_interval = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
-    endif ; endif
 
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
@@ -806,6 +829,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre_dyn(i,j,k) = h(i,j,k)
     enddo ; enddo ; enddo
+
+    if (G%nonblocking_updates) then ; if (CS%visc%calc_bbl) then
+      call cpu_clock_begin(id_clock_pass)
+      
+        if (do_pass_Ray) call complete_group_pass(CS%pass_Ray, G%Domain)
+        if (do_pass_kv_bbl_thick) call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        ! CS%visc%calc_bbl is set to .false. now that the message passing is completed.
+        CS%visc%calc_bbl = .false.
+      call cpu_clock_end(id_clock_pass)
+    endif ; endif
 
     if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
       ! This section uses a split time stepping scheme for the dynamic equations,
@@ -1015,8 +1048,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     endif
 
     call cpu_clock_begin(id_clock_dynamics)
-    ! The bottom boundary layer properties are out-of-date and need to be recalculated.
-    if (CS%t_dyn_rel_adv == 0.0) CS%visc%calc_bbl = .true.
 
     ! Determining the time-average sea surface height is part of the algorithm.
     ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
