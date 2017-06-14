@@ -413,7 +413,6 @@ type, public :: MOM_control_struct
 
   ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
-  type(group_pass_type) :: pass_h
   type(group_pass_type) :: pass_ray
   type(group_pass_type) :: pass_bbl_thick_kv_bbl
   type(group_pass_type) :: pass_T_S_h
@@ -568,8 +567,6 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
   if (ASSOCIATED(fluxes%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
-  if ((CS%thickness_diffuse .and. (.not.CS%thickness_diffuse_first .or. CS%t_dyn_rel_adv == 0)) .OR. CS%mixedlayer_restrat) &
-    call create_group_pass(CS%pass_h, h, G%Domain) !###, halo=max(2,cont_stensil))
 
   do_pass_Ray = .FALSE.
   if ((.not.G%Domain%symmetric) .and. &
@@ -758,7 +755,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                                CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
         call cpu_clock_end(id_clock_thick_diff)
         call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_h, G%Domain)
+        call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
         call cpu_clock_end(id_clock_pass)
         call disable_averaging(CS%diag)
         if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
@@ -898,7 +895,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
       call cpu_clock_end(id_clock_thick_diff)
       call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_h, G%Domain)
+      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
       call cpu_clock_end(id_clock_pass)
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
@@ -915,7 +912,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                               G, GV, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_h, G%Domain)
+      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
       call cpu_clock_end(id_clock_pass)
       if (CS%debug) then
         call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1396,7 +1393,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     fluxes%netMassOut(:,:) = CS%offline_CSp%netMassOut(:,:)
     call offline_diabatic_ale(fluxes, Time_start, Time_end, time_interval, CS%offline_CSp, &
         CS%h, eatr, ebtr)
-    call pass_var(CS%h,G%Domain)
+    call pass_var(CS%h, G%Domain)
 
     ! Do the transport, the final ALE remappings,  horizontal diffusion if it is
     ! the last iteration
@@ -1415,9 +1412,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_ALE)
       call ALE_offline_tracer_final( G, GV, CS%h, h_end, CS%tracer_Reg, CS%ALE_CSp)
       call cpu_clock_end(id_clock_ALE)
-      call pass_var(CS%h,G%Domain)
-
-
+      call pass_var(CS%h, G%Domain)
     endif
 
   else ! NON-ALE MODE...NOT WELL TESTED
@@ -1445,9 +1440,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
     CS%tv%S = salt_mean
     CS%h = h_end
 
-    call pass_var(CS%tv%T,G%Domain)
-    call pass_var(CS%tv%S,G%Domain)
-    call pass_var(CS%h,G%Domain)
+    call pass_var(CS%tv%T, G%Domain)
+    call pass_var(CS%tv%S, G%Domain)
+    call pass_var(CS%h, G%Domain)
 
   endif
 
