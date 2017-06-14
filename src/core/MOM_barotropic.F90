@@ -2804,10 +2804,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (GV%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)
+          endif
         else
-          BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(i,j) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(i,j) = eta(i+1,j)
+          endif
         endif
       endif
     endif ; enddo ; enddo
@@ -2850,10 +2857,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (GV%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)
+          endif
         else
-          BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = eta(i,j+1)
+          endif
         endif
       endif
     endif ; enddo ; enddo
