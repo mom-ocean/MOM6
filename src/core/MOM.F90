@@ -186,7 +186,7 @@ type, public :: MOM_control_struct
   logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
   logical :: use_temperature         !< If true, temp and saln used as state variables.
-  logical :: calc_rho_for_sea_lev   !< If true, calculate rho to convert pressure to sea level
+  logical :: calc_rho_for_sea_lev    !< If true, calculate rho to convert pressure to sea level
   logical :: use_frazil              !< If true, liquid seawater freezes if temp below freezing,
                                      !! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity          !< If true, salt is added to keep salinity above
@@ -774,17 +774,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     ! recalculated.  This always occurs at the start of a coupling time
     ! step because the externally prescribed stresses may have changed.
     do_calc_bbl = ((CS%t_dyn_rel_adv == 0.0) .or. (n==1))
-    if (do_calc_bbl) then ; if (thermo_does_span_coupling) then
-      bbl_time_int = dt_therm
-    else  !### This is inconsistent with corresponding expressions above. -RWH
-      bbl_time_int = dt*real(1+MIN(ntstep-MOD(n,ntstep),n_max-n))
-    endif ; endif
-
     if (do_calc_bbl) then
       ! Calculate the BBL properties and store them inside visc (u,h).
       call cpu_clock_begin(id_clock_BBL_visc)
+      bbl_time_int = max(dt, min(dt_therm - CS%t_dyn_rel_adv, dt*(1+n_max-n)) )
       call enable_averaging(bbl_time_int, &
-                Time_local+set_time(int(bbl_time_int-dt)), CS%diag)
+                Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
       call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
       call disable_averaging(CS%diag)
       call cpu_clock_end(id_clock_BBL_visc)
@@ -852,9 +847,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         dtbt_reset_time = CS%rel_time
       endif
 
-      mass_src_time = CS%t_dyn_rel_adv
-      !### This should be   mass_src_time = CS%t_dyn_rel_thermo
-
+      mass_src_time = CS%t_dyn_rel_thermo
       if (CS%legacy_split) then
         call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
                     Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
