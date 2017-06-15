@@ -214,7 +214,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(forcing),                             intent(in)    :: fluxes        !< forcing fields
   real, dimension(:,:),                      pointer       :: p_surf_begin  !< surf pressure at start of this dynamic time step (Pa)
   real, dimension(:,:),                      pointer       :: p_surf_end    !< surf pressure at end   of this dynamic time step (Pa)
-  real,                                      intent(in)    :: dt_since_flux !< elapesed time since fluxes were applied (sec)
+  real,                                      intent(in)    :: dt_since_flux !< elapsed time since fluxes were applied (sec)
   real,                                      intent(in)    :: dt_therm      !< thermodynamic time step (sec)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh    !< zonal volume/mass transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh    !< merid volume/mass transport (m3/s or kg/s)
