@@ -1,7 +1,8 @@
-!> Contains routines related to offline transport of tracers
+!> Contains routines related to offline transport of tracers. These routines are likely to be called from
+!> the MOM_offline_main module
 module MOM_offline_aux
-! This file is part of MOM6. See LICENSE.md for the license.
 
+! This file is part of MOM6. See LICENSE.md for the license.
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
 use data_override_mod,    only : data_override_init, data_override
 use MOM_time_manager,     only : time_type, operator(-)
@@ -800,3 +801,4 @@ function next_modulo_time(inidx, numtime)
 end function next_modulo_time
 
 end module MOM_offline_aux
+
