@@ -1,6 +1,8 @@
+!> The routines here implement the offline tracer algorithm used in MOM6. These are called from step_offline
+!! Some routines called here can be found in the MOM_offline_aux module.
 module MOM_offline_main
 
-use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
+use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs, ALE_offline_tracer_final
 use MOM_checksums,            only : hchksum, uvchksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -41,18 +43,18 @@ implicit none ; private
 type, public :: offline_transport_CS ; private
 
   !> Pointers to relevant fields from the main MOM control structure
-  type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
-  type(diabatic_CS),             pointer :: diabatic_CSp           => NULL()
-  type(diag_ctrl),               pointer :: diag                   => NULL()
-  type(ocean_OBC_type),          pointer :: OBC                    => NULL()
-  type(tracer_advect_CS),        pointer :: tracer_adv_CSp         => NULL()
-  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
-  type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
-  type(thermo_var_ptrs),         pointer :: tv                     => NULL()
-  type(ocean_grid_type),         pointer :: G                      => NULL()
-  type(verticalGrid_type),       pointer :: GV                     => NULL()
-  type(optics_type),             pointer :: optics                 => NULL()
-  type(opacity_CS),              pointer :: opacity_CSp            => NULL()
+  type(ALE_CS),                  pointer :: ALE_CSp         => NULL()
+  type(diabatic_CS),             pointer :: diabatic_CSp    => NULL()
+  type(diag_ctrl),               pointer :: diag            => NULL()
+  type(ocean_OBC_type),          pointer :: OBC             => NULL()
+  type(tracer_advect_CS),        pointer :: tracer_adv_CSp  => NULL()
+  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp => NULL()
+  type(tracer_registry_type),    pointer :: tracer_Reg      => NULL()
+  type(thermo_var_ptrs),         pointer :: tv              => NULL()
+  type(ocean_grid_type),         pointer :: G               => NULL()
+  type(verticalGrid_type),       pointer :: GV              => NULL()
+  type(optics_type),             pointer :: optics          => NULL()
+  type(opacity_CS),              pointer :: opacity_CSp     => NULL()
 
   !> Variables related to reading in fields from online run
   integer :: start_index  !< Timelevel to start
@@ -60,15 +62,15 @@ type, public :: offline_transport_CS ; private
   integer :: numtime      !< How many timelevels in the input fields
   integer :: accumulated_time !< Length of time accumulated in the current offline interval
   integer :: &            !< Index of each of the variables to be read in
-    ridx_sum = -1, &      !! Separate indices for each variabile if they are
+    ridx_sum = -1, &      !! Separate indices for each variable if they are
     ridx_snap = -1        !! setoff from each other in time
   integer :: nk_input     !! Number of input levels in the input fields
   character(len=200) :: offlinedir  ! Directory where offline fields are stored
-  character(len=200) :: & !<         ! Names of input files
-    surf_file,  &
-    snap_file,  &
-    sum_file,   &
-    mean_file
+  character(len=200) :: & ! Names of input files
+    surf_file,  &         !< Contains surface fields (2d arrays)
+    snap_file,  &         !< Snapshotted fields (layer thicknesses)
+    sum_file,   &         !< Fields which are accumulated over time
+    mean_file             !< Fields averaged over time
   character(len=20)  :: redistribute_method !< 'barotropic' if evenly distributing extra flow
                                             !! throughout entire watercolumn, 'upwards',
                                             !! if trying to do it just in the layers above
@@ -137,21 +139,18 @@ type, public :: offline_transport_CS ; private
   real, allocatable, dimension(:,:,:) :: vhtr
 
   ! Fields at T-point
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-      eatr,     &  ! Amount of fluid entrained from the layer above within
-                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
-      ebtr         ! Amount of fluid entrained from the layer below within
-                   ! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+  real, allocatable, dimension(:,:,:) :: &
+      eatr,     &  !< Amount of fluid entrained from the layer above within
+                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
+      ebtr         !< Amount of fluid entrained from the layer below within
+                   !! one time step  (m for Bouss, kg/m^2 for non-Bouss)
   ! Fields at T-points on interfaces
-  real, allocatable, dimension(:,:,:) :: Kd
+  real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity
+  real, allocatable, dimension(:,:,:) :: h_end  !< Thicknesses at the end of offline timestep
 
-  ! Arrays for temperature and salinity
-  real, allocatable, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-      h_end
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-      netMassIn, netMassOut
-  real, allocatable, dimension(:,:) :: &
-      mld          ! Mixed layer depths at thickness points, in H.
+  real, allocatable, dimension(:,:) :: netMassIn  !< Freshwater fluxes into the ocean
+  real, allocatable, dimension(:,:) :: netMassOut !< Freshwater fluxes out of the ocean
+  real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points, in H.
 
   !> Allocatable arrays to read in entire fields during initialization
   real, allocatable, dimension(:,:,:,:) :: &
@@ -611,6 +610,9 @@ real function remaining_transport_sum(CS, uhtr, vhtr)
 
 end function remaining_transport_sum
 
+!> The vertical/diabatic driver for offline tracers. First the eatr/ebtr associated with the interpolated
+!! vertical diffusivities are calculated and then any tracer column functions are done which can include
+!! vertical diffuvities and source/sink terms.
 subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, CS, h_pre, eatr, ebtr)
 
   type(forcing),    intent(inout)      :: fluxes        !< pointers to forcing fields
@@ -1356,11 +1358,11 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   ! Allocate arrays
   allocate(CS%uhtr(IsdB:IedB,jsd:jed,nz))   ; CS%uhtr(:,:,:) = 0.0
   allocate(CS%vhtr(isd:ied,JsdB:JedB,nz))   ; CS%vhtr(:,:,:) = 0.0
-  ALLOC_(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
-  ALLOC_(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
+  allocate(CS%eatr(isd:ied,jsd:jed,nz))          ; CS%eatr(:,:,:) = 0.0
+  allocate(CS%ebtr(isd:ied,jsd:jed,nz))          ; CS%ebtr(:,:,:) = 0.0
   allocate(CS%h_end(isd:ied,jsd:jed,nz))         ; CS%h_end(:,:,:) = 0.0
-  ALLOC_(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
-  ALLOC_(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
+  allocate(CS%netMassOut(G%isd:G%ied,G%jsd:G%jed)) ; CS%netMassOut(:,:) = 0.0
+  allocate(CS%netMassIn(G%isd:G%ied,G%jsd:G%jed))  ; CS%netMassIn(:,:) = 0.0
   allocate(CS%Kd(isd:ied,jsd:jed,nz+1)) ; CS%Kd = 0.
   if (CS%read_mld) then
     allocate(CS%mld(G%isd:G%ied,G%jsd:G%jed)) ; CS%mld(:,:) = 0.0
@@ -1380,6 +1382,8 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
 end subroutine offline_transport_init
 
+!> Coordinates the allocation and reading in all time levels of uh, vh, hend, temp, and salt from files. Used
+!! when read_all_ts_uvh
 subroutine read_all_input(CS)
   type(offline_transport_CS), pointer, intent(inout)  :: CS
 
@@ -1425,13 +1429,23 @@ end subroutine read_all_input
 subroutine offline_transport_end(CS)
   type(offline_transport_CS), pointer, intent(inout)  :: CS
 
-  DEALLOC_(CS%uhtr)
-  DEALLOC_(CS%vhtr)
-  DEALLOC_(CS%eatr)
-  DEALLOC_(CS%ebtr)
-  DEALLOC_(CS%h_end)
-  DEALLOC_(CS%netMassOut)
-  DEALLOC_(CS%netMassIn)
+  ! Explicitly allocate all allocatable arrays
+  deallocate(CS%uhtr)
+  deallocate(CS%vhtr)
+  deallocate(CS%eatr)
+  deallocate(CS%ebtr)
+  deallocate(CS%h_end)
+  deallocate(CS%netMassOut)
+  deallocate(CS%netMassIn)
+  deallocate(CS%Kd)
+  if (CS%read_mld) deallocate(CS%mld)
+  if (CS%read_all_ts_uvh) then
+    deallocate(CS%uhtr_all)
+    deallocate(CS%vhtr_all)
+    deallocate(CS%hend_all)
+    deallocate(CS%temp_all)
+    deallocate(CS%salt_all)
+  endif
 
   deallocate(CS)
 
@@ -1517,3 +1531,4 @@ end subroutine offline_transport_end
 !!                          and 'none' which does no redistribution"
 
 end module MOM_offline_main
+
