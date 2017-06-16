@@ -117,7 +117,7 @@ use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_C
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_remnant
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_verticalGrid, only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid, only : get_flux_units, get_tr_flux_units
 
@@ -383,7 +383,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
-  integer :: pid_Ray, pid_bbl_h, pid_kv_bbl, pid_eta_PF, pid_eta, pid_visc
+  integer :: pid_bbl_h, pid_eta_PF, pid_eta, pid_visc
   integer :: pid_h, pid_u, pid_u_av, pid_uh, pid_uhbt_in
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -427,42 +427,6 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   if (CS%split_bottom_stress) then
     taux_bot => CS%taux_bot ; tauy_bot => CS%tauy_bot
-  endif
-
-  if (visc%calc_bbl) then
-    ! Calculate the BBL properties and store them inside visc (u,h).
-    call cpu_clock_begin(id_clock_vertvisc)
-    call enable_averaging(visc%bbl_calc_time_interval, &
-              Time_local+set_time(int(visc%bbl_calc_time_interval-dt)), CS%diag)
-    call set_viscous_BBL(u, v, h, tv, visc, G, GV, CS%set_visc_CSp)
-    call disable_averaging(CS%diag)
-    call cpu_clock_end(id_clock_vertvisc)
-
-    call cpu_clock_begin(id_clock_pass)
-    if (G%nonblocking_updates) then
-      if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        pid_Ray = pass_vector_start(visc%Ray_u, visc%Ray_v, G%Domain, &
-                       To_All+SCALAR_PAIR, CGRID_NE)
-      if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
-        pid_bbl_h = pass_vector_start(visc%bbl_thick_u, visc%bbl_thick_v, &
-                       G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-      if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        pid_kv_bbl = pass_vector_start(visc%kv_bbl_u, visc%kv_bbl_v, &
-                       G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-      ! visc%calc_bbl will be set to .false. when the message passing is complete.
-    else
-      if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call pass_vector(visc%Ray_u, visc%Ray_v, G%Domain, &
-                       To_All+SCALAR_PAIR, CGRID_NE)
-      if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-        call pass_vector(visc%bbl_thick_u, visc%bbl_thick_v, G%Domain, &
-                       To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-        call pass_vector(visc%kv_bbl_u, visc%kv_bbl_v, G%Domain, &
-                       To_All+SCALAR_PAIR, CGRID_NE)
-      endif
-      visc%calc_bbl = .false.
-    endif
-    call cpu_clock_end(id_clock_pass)
   endif
 
 ! PFu = d/dx M(h,T,S)
@@ -526,20 +490,6 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
-    if (visc%calc_bbl) then
-      if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-        call pass_vector_complete(pid_Ray, visc%Ray_u, visc%Ray_v, G%Domain, &
-                         To_All+SCALAR_PAIR, CGRID_NE)
-      if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) &
-        call pass_vector_complete(pid_bbl_h, visc%bbl_thick_u, visc%bbl_thick_v, &
-                       G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-      if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) &
-        call pass_vector_complete(pid_kv_bbl, visc%kv_bbl_u, visc%kv_bbl_v, &
-                       G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
-
-      ! visc%calc_bbl is set to .false. now that the message passing is completed.
-      visc%calc_bbl = .false.
-    endif
     call pass_var_complete(pid_eta_PF, CS%eta_PF, G%Domain)
     call pass_var_complete(pid_eta, eta, G%Domain)
     if (CS%readjust_velocity) &
@@ -1062,7 +1012,7 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 

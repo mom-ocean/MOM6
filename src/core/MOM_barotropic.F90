@@ -2006,6 +2006,31 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       e_anom(i,j) = dgeo_de * (0.5 * (eta(i,j) + eta_in(i,j)) - eta_PF(i,j))
     enddo ; enddo
   endif
+  if (apply_OBCs) then
+    if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
+!GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
+!GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
+      do j=js,je ; do I=is-1,ie
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+          e_anom(i+1,j) = e_anom(i,j)
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+          e_anom(i,j) = e_anom(i+1,j)
+        endif
+      enddo ; enddo
+    endif
+
+    if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
+!GOMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
+!GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
+      do J=js-1,je ; do I=is,ie
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+          e_anom(i,j+1) = e_anom(i,j)
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+          e_anom(i,j) = e_anom(i,j+1)
+        endif
+      enddo ; enddo
+    endif
+  endif
 
   ! It is possible that eta_out and eta_in are the same.
   do j=js,je ; do i=is,ie
@@ -2317,7 +2342,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! column mass anomaly, in m or kg m-2.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic step,
                                                                   !! m s-1.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of ubt in a barotropic step,
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic step,
                                                                   !! m s-1.
   type(BT_OBC_type),                     intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                                   !! related to the open boundary conditions,
@@ -2325,12 +2350,11 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   integer,                               intent(in)    :: halo    !< The extra halo size to use here.
   real,                                  intent(in)    :: dtbt    !< The time step, in s.
   real,                                  intent(in)    :: bebt    !< The fractional weighting of the future velocity
-                                                                  !! in
-                                                                  !! determining the transport.
+                                                                  !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at u points.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                   !! for a dynamic estimate of the face areas at
                                                                   !! u-points.
