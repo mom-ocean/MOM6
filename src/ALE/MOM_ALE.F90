@@ -492,6 +492,9 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
 end subroutine ALE_main_offline
 
+!> Regrid/remap stored fields used for offline tracer integrations. These input fields are assumed to have
+!! the same layer thicknesses at the end of the last offline interval (which should be a Zstar grid). This
+!! routine builds a grid on the runtime specified vertical coordinate
 subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
   type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
   type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
@@ -517,17 +520,18 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
 
   if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h, Reg%Tr, Reg%ntr)
 
-  ! Build new grid. The new grid is stored in h_new. The old grid is h.
-  ! Both are needed for the subsequent remapping of variables.
+  ! Build new grid from the Zstar state onto the requested vertical coordinate. The new grid is stored
+  ! in h_new. The old grid is h. Both are needed for the subsequent remapping of variables. Convective
+  ! adjustment right now is not used because it is unclear what to do with vanished layers
   call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust = .false. )
   call check_grid( G, GV, h_new, 0. )
-  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
+  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_offline_inputs)")
 
   ! Remap all variables from old grid h onto new grid h_new
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
-  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_main)")
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
 
-  ! Reintegrate mass transports
+  ! Reintegrate mass transports from Zstar to the offline vertical coordinate
   do j=jsc,jec ; do i=G%iscB,G%iecB
     if (G%mask2dCu(i,j)>0.) then
       h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
@@ -567,15 +571,18 @@ subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
   if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
 end subroutine ALE_offline_inputs
 
+
 !> Remaps all tracers from h onto h_target. This is intended to be called when tracers
 !! are done offline. In the case where transports don't quite conserve, we still want to
 !! make sure that layer thicknesses offline do not drift too far away from the online model
 subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after
+                                                                   !! last time step (m or Pa)
   type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target !< Current 3D grid obtained after
+                                                                        !! last time step (m or Pa)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   ! Local variables
@@ -592,13 +599,13 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   call check_grid( G, GV, h_target, 0. )
 
 
-  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer)")
+  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer_final)")
 
   ! Remap all variables from old grid h onto new grid h_new
 
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
 
-  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer_final)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
@@ -608,7 +615,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
       h(i,j,k) = h_new(i,j,k)
     enddo ; enddo
   enddo
-  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer()")
+  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer_final()")
 end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses

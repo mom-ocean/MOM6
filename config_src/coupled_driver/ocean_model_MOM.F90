@@ -36,7 +36,7 @@ module ocean_model_mod
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state, finish_MOM_initialization
-use MOM, only : step_tracers
+use MOM, only : step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -470,7 +470,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_tracers(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   else
     call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   endif

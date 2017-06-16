@@ -1965,20 +1965,21 @@ end subroutine
 !! \note The target grids need to be updated whenever sea surface
 !! height changes.
 subroutine diag_update_remap_grids(diag_cs, alt_h)
-  type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
-  real, dimension(:,:,:), target, optional :: alt_h
-
+  type(diag_ctrl),        intent(inout) :: diag_cs      !< Diagnostics control structure
+  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be
+                                                        !! something other than the current
+                                                        !! thicknesses
   ! Local variables
   integer :: i
   real, dimension(:,:,:), pointer :: h_diag
 
-  if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
-
-  if (present(alt_h)) then
+  if(present(alt_h)) then
     h_diag => alt_h
   else
     h_diag => diag_cs%h
   endif
+
+  if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
