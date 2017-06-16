@@ -214,7 +214,7 @@ type, public :: MOM_control_struct
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
                                      !! undocumented run-time flag that is fragile.
   logical :: offline_tracer_mode = .false.
-                                     !< If true, step_tracers() is called instead of step_MOM().
+                                     !< If true, step_offline() is called instead of step_MOM().
                                      !! This is intended for running MOM6 in offline tracer mode
   logical :: advect_TS               !< If false, then no horizontal advection of temperature
                                      !! and salnity is performed
@@ -431,7 +431,7 @@ end type MOM_control_struct
 public initialize_MOM
 public finish_MOM_initialization
 public step_MOM
-public step_tracers
+public step_offline
 public MOM_end
 public calculate_surface_state
 
@@ -1286,11 +1286,11 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
 end subroutine step_MOM_thermo
 
 
-!> step_tracers is the main driver for running tracers offline in MOM6. This has been primarily
+!> step_offline is the main driver for running tracers offline in MOM6. This has been primarily
 !! developed with ALE configurations in mind. Some work has been done in isopycnal configuration, but
 !! the work is very preliminary. Some more detail about this capability along with some of the subroutines
 !! called here can be found in tracers/MOM_offline_control.F90
-subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
+subroutine step_offline(fluxes, state, Time_start, time_interval, CS)
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
@@ -1303,7 +1303,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
   type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                       ! about the vertical grid
 
-  logical :: first_iter    !< True if this is the first time step_tracers has been called in a given interval
+  logical :: first_iter    !< True if this is the first time step_offline has been called in a given interval
   logical :: last_iter     !< True if this is the last time step_tracer is to be called in an offline interval
   logical :: do_vertical   !< If enough time has elapsed, do the diabatic tracer sources/sinks
   logical :: adv_converged !< True if all the horizontal fluxes have been used
@@ -1380,7 +1380,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
             CS%h, uhtr, vhtr, converged=adv_converged)
 
         ! Redistribute any remaining transport
-        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged, id_clock_ALE)
+        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
 
         ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
@@ -1394,7 +1394,6 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         endif
       endif
     endif
-    CS%offline_CSp%iter_no = CS%offline_CSp%iter_no + 1
     ! The functions related to column physics of tracers is performed separately in ALE mode
     if (do_vertical) then
       call offline_diabatic_ale(fluxes, Time_start, Time_end, CS%offline_CSp, CS%h, eatr, ebtr)
@@ -1406,10 +1405,9 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
         call offline_advection_ale(fluxes, Time_start, time_interval, CS%offline_CSp, id_clock_ALE, &
             CS%h, uhtr, vhtr, converged=adv_converged)
 
-        ! Redistribute any remaining transport
-        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged, id_clock_ALE)
-
-        ! Perform offline diffusion if requested
+        ! Redistribute any remaining transport and perform the remaining advection
+        call offline_redistribute_residual(CS%offline_CSp, CS%h, uhtr, vhtr, adv_converged)
+                ! Perform offline diffusion if requested
         if (.not. skip_diffusion) then
           if (associated(CS%VarMix)) then
             call pass_var(CS%h,G%Domain)
@@ -1422,6 +1420,8 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
       endif
 
       if(is_root_pe()) print *, "Last iteration of offline interval"
+
+      ! Apply freshwater fluxes out of the ocean
       call offline_fw_fluxes_out_ocean(G, GV, CS%offline_CSp, fluxes, CS%h)
       ! These diagnostic can be used to identify which grid points did not converge within
       ! the specified number of advection sub iterations
@@ -1473,7 +1473,7 @@ subroutine step_tracers(fluxes, state, Time_start, time_interval, CS)
 
   call cpu_clock_end(id_clock_offline_tracer)
 
-end subroutine step_tracers
+end subroutine step_offline
 
 !> This subroutine initializes MOM.
 subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mode)

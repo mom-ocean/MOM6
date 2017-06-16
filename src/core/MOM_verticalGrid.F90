@@ -40,7 +40,6 @@ type, public :: verticalGrid_type
   real :: Rho0      !   The density used in the Boussinesq approximation or
                     ! nominal density used to convert depths into mass
                     ! units, in kg m-3.
-  real :: ALE_min   ! Minimum layer thickness in ALE remapping
 
   ! Vertical coordinate descriptions for diagnostics and I/O
   character(len=40) :: &
@@ -115,10 +114,6 @@ subroutine verticalGridInit( param_file, GV )
   call get_param(param_file, mod, "ANGSTROM", GV%Angstrom_z, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
-  call get_param(param_file, mod, "MIN_THICKNESS", GV%ALE_min, &
-                 "When regridding, this is the minimum layer\n"//&
-                 "thickness allowed.", units="m",&
-                 default=GV%Angstrom_z )
   if (.not.GV%Boussinesq) then
     call get_param(param_file, mod, "H_TO_KG_M2", GV%H_to_kg_m2,&
                  "A constant that translates thicknesses from the model's \n"//&

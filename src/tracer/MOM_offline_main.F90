@@ -175,8 +175,10 @@ public offline_transport_end
 
 contains
 
-subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
-      id_clock_ale, h_pre, uhtr, vhtr, converged)
+!> 3D advection is done by doing flux-limited nonlinear horizontal advection interspersed with an ALE
+!! regridding/remapping step. The loop in this routine is exited if remaining residual transports are below
+!! a runtime-specified value or a maximum number of iterations is reached.
+subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, id_clock_ale, h_pre, uhtr, vhtr, converged)
   type(forcing),    intent(inout)      :: fluxes        !< pointers to forcing fields
   type(time_type),  intent(in)         :: Time_start    !< starting time of a segment, as a time type
   real,             intent(in)         :: time_interval !< time interval
@@ -379,14 +381,17 @@ subroutine offline_advection_ale(fluxes, Time_start, time_interval, CS, &
 
 end subroutine offline_advection_ale
 
-subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged, id_clock_ALE)
+!> In the case where the main advection routine did not converge, something needs to be done with the remaining
+!! transport. Two different ways are offered, 'barotropic' means that the residual is distributed equally
+!! throughout the water column. 'upwards' attempts to redistribute the transport in the layers above and will
+!! eventually work down the entire water column
+subroutine offline_redistribute_residual(CS, h_pre, uhtr, vhtr, converged)
   type(offline_transport_CS), pointer  :: CS           !< control structure from initialize_MOM
 
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout)  :: h_pre !< layer thicknesses before advection
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G)), intent(inout)  :: uhtr  !< Zonal mass transport
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G)), intent(inout)  :: vhtr  !< Meridional mass transport
   logical,                                            intent(in   )  :: converged
-  integer,                                            intent(in   )  :: id_clock_ALE
 
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
                                                       ! metrics and related information
@@ -787,11 +792,13 @@ subroutine offline_fw_fluxes_out_ocean(G, GV, CS, fluxes, h, out_flux_optional)
 
 end subroutine offline_fw_fluxes_out_ocean
 
+!> When in layer mode, 3D horizontal advection using stored mass fluxes must be used. Horizontal advection is
+!! done via tracer_advect, whereas the vertical component is actually handled by vertdiff in tracer_column_fns
 subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre, eatr, ebtr, uhtr, vhtr)
-  type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
-  type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-  real,             intent(in)       :: time_interval !< time interval
-  type(offline_transport_CS), pointer  :: CS            !< control structure from initialize_MOM
+  type(forcing),              intent(inout)    :: fluxes        !< pointers to forcing fields
+  type(time_type),            intent(in)       :: Time_start    !< starting time of a segment, as a time type
+  real,                       intent(in)       :: time_interval !< Offline transport time interval
+  type(offline_transport_CS), pointer  :: CS                    !< control structure from initialize_MOM
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: h_pre !< layer thicknesses before advection
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: eatr !< Entrainment from layer above
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: ebtr !< Entrainment from layer below
@@ -802,13 +809,13 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
                                                       ! metrics and related information
   type(verticalGrid_type),    pointer :: GV => NULL() ! Pointer to structure containing information
                                                       ! about the vertical grid
-  ! Zonal mass transports
+  ! Remaining zonal mass transports
   real, dimension(SZIB_(CS%G),SZJ_(CS%G),SZK_(CS%G))   :: uhtr_sub
-  ! Meridional mass transports
+  ! Remaining meridional mass transports
   real, dimension(SZI_(CS%G),SZJB_(CS%G),SZK_(CS%G))   :: vhtr_sub
 
   real :: sum_abs_fluxes, sum_u, sum_v  ! Used to keep track of how close to convergence we are
-  real :: dt_offline ! Shorthand variables from offline CS
+  real :: dt_offline
 
   ! Local variables
   ! Vertical diffusion related variables
@@ -951,6 +958,8 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
 
 end subroutine offline_advection_layer
 
+!> Update fields used in this round of offline transport. First fields are updated from files or from arrays
+!! read during initialization. Then if in an ALE-dependent coordinate, regrid/remap fields.
 subroutine update_offline_fields(CS, h, fluxes, do_ale)
   type(offline_transport_CS), pointer               :: CS !< Control structure for offline module
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h !< The regridded layer thicknesses
@@ -967,32 +976,35 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   ! Store a copy of the layer thicknesses before ALE regrid/remap
   h_start(:,:,:) = h(:,:,:)
 
-  ! Get the timelevel for all fields used during this offline interval
-  call update_offline_from_files( CS%G, CS%GV, CS%nk_input, CS%mean_file, CS%sum_file, CS%snap_file, CS%surf_file,  &
-                                  CS%h_end, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S, CS%mld, CS%Kd, fluxes,  &
+  ! Most fields will be read in from files
+  call update_offline_from_files( CS%G, CS%GV, CS%nk_input, CS%mean_file, CS%sum_file, CS%snap_file, CS%surf_file,    &
+                                  CS%h_end, CS%uhtr, CS%vhtr, CS%tv%T, CS%tv%S, CS%mld, CS%Kd, fluxes,                &
                                   CS%ridx_sum, CS%ridx_snap, CS%read_mld, CS%read_sw, .not. CS%read_all_ts_uvh, do_ale)
-  call update_offline_from_arrays(CS%G, CS%GV, CS%nk_input, CS%ridx_sum, CS%mean_file, CS%sum_file, CS%snap_file,   &
-                                  CS%uhtr, CS%vhtr, CS%h_end, CS%uhtr_all, CS%vhtr_all, &
-                                  CS%hend_all, CS%tv%T, CS%tv%s, CS%temp_all, CS%salt_all, CS%read_all_ts_uvh)
+  ! If uh, vh, h_end, temp, salt were read in at the beginning, fields are copied from those arrays
+  if (CS%read_all_ts_uvh) then
+      call update_offline_from_arrays(CS%G, CS%GV, CS%nk_input, CS%ridx_sum, CS%mean_file, CS%sum_file, CS%snap_file, &
+        CS%uhtr, CS%vhtr, CS%h_end, CS%uhtr_all, CS%vhtr_all, CS%hend_all, CS%tv%T, CS%tv%S, CS%temp_all, CS%salt_all)
+    endif
   if (CS%debug) then
     call uvchksum("[uv]h after update offline from files and arrays", CS%uhtr, CS%vhtr, CS%G%HI)
   endif
 
-  ! These halo passes are necessary because u, v fields will need information 1 step into the halo
-  call pass_var(h, CS%G%Domain)
-  call pass_var(CS%tv%T, CS%G%Domain)
-  call pass_var(CS%tv%S, CS%G%Domain)
-  call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, CS%debug)
-
-  if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag)
-  if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag)
-  if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag)
-  if (CS%id_vhtr_regrid>0) call post_data(CS%id_vhtr_regrid, CS%vhtr, CS%diag)
-  if (CS%id_h_regrid>0) call post_data(CS%id_h_regrid, h, CS%diag)
-
-  if (CS%debug) then
-    call uvchksum("[uv]h after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, CS%G%HI)
-    call hchksum(h_start,"h_start after update offline from files and arrays", CS%G%HI)
+  ! If using an ALE-dependent vertical coordinate, fields will need to be remapped
+  if (do_ale) then
+    ! These halo passes are necessary because u, v fields will need information 1 step into the halo
+    call pass_var(h, CS%G%Domain)
+    call pass_var(CS%tv%T, CS%G%Domain)
+    call pass_var(CS%tv%S, CS%G%Domain)
+    call ALE_offline_inputs(CS%ALE_CSp, CS%G, CS%GV, h, CS%tv, CS%tracer_Reg, CS%uhtr, CS%vhtr, CS%Kd, CS%debug)
+    if (CS%id_temp_regrid>0) call post_data(CS%id_temp_regrid, CS%tv%T, CS%diag)
+    if (CS%id_salt_regrid>0) call post_data(CS%id_salt_regrid, CS%tv%S, CS%diag)
+    if (CS%id_uhtr_regrid>0) call post_data(CS%id_uhtr_regrid, CS%uhtr, CS%diag)
+    if (CS%id_vhtr_regrid>0) call post_data(CS%id_vhtr_regrid, CS%vhtr, CS%diag)
+    if (CS%id_h_regrid>0) call post_data(CS%id_h_regrid, h, CS%diag)
+    if (CS%debug) then
+      call uvchksum("[uv]h after ALE regridding/remapping of inputs", CS%uhtr, CS%vhtr, CS%G%HI)
+      call hchksum(h_start,"h_start after update offline from files and arrays", CS%G%HI)
+    endif
   endif
 
   ! Update halos for some
@@ -1008,8 +1020,6 @@ subroutine update_offline_fields(CS, h, fluxes, do_ale)
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (CS%G%mask2dT(i,j)<1.0) then
       CS%h_end(i,j,k) = CS%GV%Angstrom
-      CS%tv%T(i,j,k) = 10.0
-      CS%tv%S(i,j,k) = 30.0
     endif
   enddo; enddo ; enddo
 

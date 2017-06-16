@@ -724,8 +724,7 @@ end subroutine update_offline_from_files
 
 !> Fields for offline transport are copied from the stored arrays read during initialization
 subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_file, snap_file, uhtr, vhtr, &
-                                      hend, uhtr_all, vhtr_all, hend_all, temp, salt, temp_all, salt_all,&
-                                      copy_ts_uvh)
+                                      hend, uhtr_all, vhtr_all, hend_all, temp, salt, temp_all, salt_all )
   type(ocean_grid_type),                     intent(inout) :: G         !< Horizontal grid type
   type(verticalGrid_type),                   intent(in   ) :: GV        !< Vertical grid type
   integer,                                   intent(in   ) :: nk_input  !< Number of levels in input file
@@ -743,37 +742,40 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt      !< Salinity array
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array
-  logical,                                   intent(in   ) :: copy_ts_uvh  !< True if copying 3d fields
 
   integer :: i, j, k, is, ie, js, je, nz
+  real, parameter :: fill_value = 0.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  if (copy_ts_uvh) then
-    if (.not. allocated(uhtr_all)) &
-        call MOM_error(FATAL, "uhtr_all not allocated before call to update_transport_from_arrays")
-    if (.not. allocated(vhtr_all)) &
-        call MOM_error(FATAL, "vhtr_all not allocated before call to update_transport_from_arrays")
-    if (.not. allocated(hend_all)) &
-        call MOM_error(FATAL, "hend_all not allocated before call to update_transport_from_arrays")
-    if (.not. allocated(temp_all)) &
-        call MOM_error(FATAL, "temp_all not allocated before call to update_transport_from_arrays")
-    if (.not. allocated(salt_all)) &
-        call MOM_error(FATAL, "salt_all not allocated before call to update_transport_from_arrays")
+  ! Check that all fields are allocated (this is a redundant check)
+  if (.not. allocated(uhtr_all)) &
+      call MOM_error(FATAL, "uhtr_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(vhtr_all)) &
+      call MOM_error(FATAL, "vhtr_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(hend_all)) &
+      call MOM_error(FATAL, "hend_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(temp_all)) &
+      call MOM_error(FATAL, "temp_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(salt_all)) &
+      call MOM_error(FATAL, "salt_all not allocated before call to update_transport_from_arrays")
 
-    uhtr(:,:,:) = 0.
-    vhtr(:,:,:) = 0.
-    hend(:,:,:) = 0.
-    salt(:,:,:) = 0.
-    temp(:,:,:) = 0.
+  ! Copy uh, vh, h_end, temp, and salt
+  do k=1,nk_input ; do j=js,je ; do i=is,ie
+    uhtr(I,j,k) = uhtr_all(I,j,k,ridx_sum)
+    vhtr(i,J,k) = vhtr_all(i,J,k,ridx_sum)
+    hend(i,j,k) = hend_all(i,j,k,ridx_sum)
+    temp(i,j,k) = temp_all(i,j,k,ridx_sum)
+    salt(i,j,k) = salt_all(i,j,k,ridx_sum)
+  enddo ; enddo ; enddo
 
-    do k=1,nk_input ; do j=js,je ; do i=is,ie
-      uhtr(I,j,k) = uhtr_all(I,j,k,ridx_sum)
-      vhtr(i,J,k) = vhtr_all(i,J,k,ridx_sum)
-      hend(i,j,k) = hend_all(i,j,k,ridx_sum)
-      temp(i,j,k) = temp_all(i,j,k,ridx_sum)
-      salt(i,j,k) = salt_all(i,j,k,ridx_sum)
-    enddo ; enddo ; enddo
-  endif
+  ! Fill the rest of the arrays with 0s (fill_value could probably be changed to a runtime parameter)
+  do k=nk_input+1,nz ; do j=js,je ; do i=is,ie
+    uhtr(I,j,k) = fill_value
+    vhtr(i,J,k) = fill_value
+    hend(i,j,k) = fill_value
+    temp(i,j,k) = fill_value
+    salt(i,j,k) = fill_value
+  enddo ; enddo ; enddo
 
 end subroutine update_offline_from_arrays
 
