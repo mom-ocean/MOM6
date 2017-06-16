@@ -104,7 +104,7 @@ use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : radiation_open_bdry_conds
 use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
-use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
+use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
 use MOM_vert_friction, only : vertvisc, vertvisc_coef
 use MOM_vert_friction, only : vertvisc_limit_vel, vertvisc_init, vertvisc_CS
@@ -346,26 +346,6 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (CS%debug) &
     call MOM_accel_chksum("Predictor 1 accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv,&
                           CS%diffu, CS%diffv, G, GV)
-
-! visc contains viscosity and BBL thickness (u_in,h_in)
-  if (visc%calc_bbl) then
-    call enable_averaging(visc%bbl_calc_time_interval, &
-              Time_local+set_time(int(visc%bbl_calc_time_interval-dt)), CS%diag)
-    call set_viscous_BBL(u_in, v_in, h_av, tv, visc, G, GV, CS%set_visc_CSp)
-    call disable_averaging(CS%diag)
-    call cpu_clock_begin(id_clock_pass)
-    if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) &
-      call pass_vector(visc%Ray_u, visc%Ray_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE)
-    if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
-      call pass_vector(visc%bbl_thick_u, visc%bbl_thick_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE, complete=.false.)
-      call pass_vector(visc%kv_bbl_u, visc%kv_bbl_v, G%Domain, &
-                     To_All+SCALAR_PAIR, CGRID_NE)
-    endif
-    call cpu_clock_end(id_clock_pass)
-    visc%calc_bbl = .false.
-  endif
 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)

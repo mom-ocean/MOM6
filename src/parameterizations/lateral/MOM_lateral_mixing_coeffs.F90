@@ -934,7 +934,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "If true, then retain a legacy bug in the calculation of weights \n"//&
                  "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
                  "for layer thicknesses. In addition, masking at coastlines was not \n"//&
-                 "used which introduced potential restart issues.  This flag will be \m"//&
+                 "used which introduced potential restart issues.  This flag will be \n"//&
                  "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &

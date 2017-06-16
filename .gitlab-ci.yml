@@ -31,8 +31,8 @@ setup:
     - ln -sf $MOM6_SRC/{config_src,src,pkg} .
     - test -d tests || (git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests)
     - cd tests
-    - git checkout dev/gfdl
-    - git checkout . && git pull
+    - git checkout . && git checkout dev/gfdl
+    - git pull
     - git status
     - bash Gitlab/before_script.sh
     - (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
@@ -73,7 +73,7 @@ run:
   tags:
     - ncrc3
   script:
-    - rm MOM6-examples/*.tar
+    - rm -f MOM6-examples/*.tar
     - bash Gitlab/run_stage.sh
 
 # Tests
