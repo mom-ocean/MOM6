@@ -205,7 +205,7 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
                                                               !! for a tracer.
   type(verticalGrid_type),    intent(in) :: GV                !< The ocean's vertical
                                                               !! grid structure.
-  character(len=*), optional, intent(in) :: tr_units          !<Units for a tracer, for example
+  character(len=*), optional, intent(in) :: tr_units          !< Units for a tracer, for example
                                                               !! Celsius or PSU.
   character(len=*), optional, intent(in) :: tr_vol_conc_units !< The concentration units per unit
                                                               !! volume, forexample if the units are
