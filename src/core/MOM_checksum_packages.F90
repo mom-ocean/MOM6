@@ -166,7 +166,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
                                                !! and momentum advection terms, in m s-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                             intent(in) :: CAv  !< Meridional acceleration due to Coriolis
-			                                         !! and momentum advection terms, in m s-2.
+                                               !! and momentum advection terms, in m s-2.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                             intent(in) :: PFu  !< Zonal acceleration due to pressure gradients
                                                !! (equal to -dM/dx) in m s-2.
@@ -254,7 +254,6 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, allowChange, permitDimi
   logical, optional,                         &
                            intent(in) :: permitDiminishing !< do not flag error
                                                            !!if the extrema are diminishing.
-                                                           
 !   This subroutine monitors statistics for the model's state variables.
 ! Arguments: mesg - A message that appears on the chksum lines.
 !  (in) u - Zonal velocity, in m s-1.
