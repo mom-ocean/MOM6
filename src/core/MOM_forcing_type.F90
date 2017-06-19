@@ -1066,7 +1066,7 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
          'kilogram meter-2')
 
   handles%id_massin_flux  = register_diag_field('ocean_model', 'massin_flux', diag%axesT1, Time, &
-        'Net mass mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kilogram meter-2')
+        'Net mass flux of freshwater into the ocean (used in boundary flux calculation)', 'kilogram meter-2')
   !=========================================================================
   ! area integrated surface mass transport
 
