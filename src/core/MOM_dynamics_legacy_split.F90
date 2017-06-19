@@ -1241,7 +1241,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   real,                          intent(in)    :: dt          !< The baroclinic dynamics time step,
                                                               !! in s.
   type(accel_diag_ptrs), target, intent(inout) :: Accel_diag  !<A set of pointers to the various
-                                        !! accelerations in the momentum equations, which can be 
+                                        !! accelerations in the momentum equations, which can be
                                         !! used for later derived diagnostics, like energy budgets.
   type(cont_diag_ptrs),  target, intent(inout) :: Cont_diag  !< A structure with pointers to various
                                                               !! terms in the continuity equations.
