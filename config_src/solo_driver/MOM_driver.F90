@@ -47,7 +47,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
-  use MOM,                 only : step_tracers
+  use MOM,                 only : step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -468,7 +468,7 @@ program MOM_main
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+      call step_offline(fluxes, state, Time1, time_step, MOM_CSp)
     else
       call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
     endif

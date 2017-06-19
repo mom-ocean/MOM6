@@ -757,7 +757,7 @@ end subroutine end_regridding
 !------------------------------------------------------------------------------
 ! Dispatching regridding routine: regridding & remapping
 !------------------------------------------------------------------------------
-subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h)
+subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_shelf_h, conv_adjust)
 !------------------------------------------------------------------------------
 ! This routine takes care of (1) building a new grid and (2) remapping between
 ! the old grid and the new grid. The creation of the new grid can be based
@@ -785,9 +785,14 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in position of each interface
   real, dimension(:,:),                   optional, pointer :: frac_shelf_h !< Fractional ice shelf coverage
+  logical,                          optional, intent(in   ) :: conv_adjust ! If true, do convective adjustment
   ! Local variables
   real :: trickGnuCompiler
   logical :: use_ice_shelf
+  logical :: do_convective_adjustment
+
+  do_convective_adjustment = .true.
+  if (present(conv_adjust)) do_convective_adjustment = conv_adjust
 
   use_ice_shelf = .false.
   if (present(frac_shelf_h)) then
@@ -813,7 +818,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
-      call convective_adjustment(G, GV, h, tv)
+      if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
       call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
@@ -1275,6 +1280,9 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   integer :: i, j, k
   real    :: nominalDepth, totalThickness
   real, dimension(SZK_(GV)+1) :: zOld, zNew
+#ifdef __DO_SAFETY_CHECKS__
+  real    :: dh
+#endif
 
   nz = GV%ke
 

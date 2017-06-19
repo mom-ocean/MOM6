@@ -1,12 +1,17 @@
-!> Contains routines related to offline transport of tracers
+!> Contains routines related to offline transport of tracers. These routines are likely to be called from
+!> the MOM_offline_main module
 module MOM_offline_aux
-! This file is part of MOM6. See LICENSE.md for the license.
 
+! This file is part of MOM6. See LICENSE.md for the license.
+use mpp_domains_mod,      only : CENTER, CORNER, NORTH, EAST
 use data_override_mod,    only : data_override_init, data_override
 use MOM_time_manager,     only : time_type, operator(-)
+use MOM_debugging,        only : check_column_integrals
 use MOM_domains,          only : pass_var, pass_vector, To_All
+use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
+use MOM_io,               only : read_data
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
@@ -18,6 +23,8 @@ use MOM_forcing_type,     only : forcing
 
 implicit none
 
+public update_offline_from_files
+public update_offline_from_arrays
 public update_h_horizontal_flux
 public update_h_vertical_flux
 public limit_mass_flux_3d
@@ -25,6 +32,7 @@ public distribute_residual_uh_barotropic
 public distribute_residual_vh_barotropic
 public distribute_residual_uh_upwards
 public distribute_residual_vh_upwards
+public next_modulo_time
 public offline_add_diurnal_sw
 
 #include "MOM_memory.h"
@@ -35,8 +43,8 @@ contains
 !> This updates thickness based on the convergence of horizontal mass fluxes
 !! NOTE: Only used in non-ALE mode
 subroutine update_h_horizontal_flux(G, GV, uhtr, vhtr, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)       :: uhtr
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)       :: vhtr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
@@ -69,8 +77,8 @@ end subroutine update_h_horizontal_flux
 !> Updates layer thicknesses due to vertical mass transports
 !! NOTE: Only used in non-ALE configuration
 subroutine update_h_vertical_flux(G, GV, ea, eb, h_pre, h_new)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: ea
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: eb
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
@@ -114,21 +122,21 @@ end subroutine update_h_vertical_flux
 
 !> This routine limits the mass fluxes so that the a layer cannot be completely depleted.
 !! NOTE: Only used in non-ALE mode
-subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
+subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre)
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: ea
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(inout)    :: eb
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) , intent(in)       :: h_pre
-  real,                                      intent(in)       :: max_off_cfl
 
   ! Local variables
   integer :: i, j, k, m, is, ie, js, je, nz
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G))                    :: top_flux, bottom_flux
-  real                                                        :: pos_flux, hvol, h_neglect, scale_factor
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: top_flux, bottom_flux
+  real :: pos_flux, hvol, h_neglect, scale_factor, max_off_cfl
 
+  max_off_cfl =0.5
 
   ! In this subroutine, fluxes out of the box are scaled away if they deplete
   ! the layer, note that we define the positive direction as flux out of the box.
@@ -180,24 +188,24 @@ subroutine limit_mass_flux_3d(G, GV, uh, vh, ea, eb, h_pre, max_off_cfl)
 
     if (k>1 .and. k<nz) then
     ! Scale interior layers
-      if(top_flux(i,j,k)>0.0) then
+      if (top_flux(i,j,k)>0.0) then
         ea(i,j,k) = ea(i,j,k)*scale_factor
         eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
       endif
-      if(bottom_flux(i,j,k)>0.0) then
+      if (bottom_flux(i,j,k)>0.0) then
         eb(i,j,k) = eb(i,j,k)*scale_factor
         ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
       endif
     ! Scale top layer
     elseif (k==1) then
-      if(top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
-      if(bottom_flux(i,j,k)>0.0) then
+      if (top_flux(i,j,k)>0.0)    ea(i,j,k) = ea(i,j,k)*scale_factor
+      if (bottom_flux(i,j,k)>0.0) then
         eb(i,j,k)   = eb(i,j,k)*scale_factor
         ea(i,j,k+1) = ea(i,j,k+1)*scale_factor
       endif
     ! Scale bottom layer
     elseif (k==nz) then
-      if(top_flux(i,j,k)>0.0) then
+      if (top_flux(i,j,k)>0.0) then
         ea(i,j,k)   = ea(i,j,k)*scale_factor
         eb(i,j,k-1) = eb(i,j,k-1)*scale_factor
       endif
@@ -209,10 +217,10 @@ end subroutine limit_mass_flux_3d
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into remainder of the water column as a barotropic equivalent
-subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+subroutine distribute_residual_uh_barotropic(G, GV, hvol, uh)
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
@@ -234,28 +242,27 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
       uh2d_sum(I) = uh2d_sum(I) + uh2d(I,k)
     enddo ; enddo
 
-    ! Copy over h to a working array and calculate column height
+    ! Copy over h to a working array and calculate total column volume
     h2d_sum(:) = 0.0
-    do k=1,nz ; do i=is-2,ie+1
-      h2d(i,k) = h(i,j,k)*G%areaT(i,j)
-      if(h(i,j,k)>GV%Angstrom) then
+    do k=1,nz ; do i=is-1,ie+1
+      h2d(i,k) = hvol(i,j,k)
+      if (hvol(i,j,k)>0.) then
         h2d_sum(i) = h2d_sum(i) + h2d(i,k)
       else
-        h2d(i,k) = 0.0
+        h2d(i,k) = GV%H_subroundoff
       endif
     enddo; enddo;
-
 
     ! Distribute flux. Note min/max is intended to make sure that the mass transport
     ! does not deplete a cell
     do i=is-1,ie
-      if( uh2d_sum(I)>0.0 ) then
+      if ( uh2d_sum(I)>0.0 ) then
         do k=1,nz
-          uh2d(I,k) = min(uh2d_sum(I)*(h2d(i,k)/h2d_sum(i)),h2d(i,k))
+          uh2d(I,k) = uh2d_sum(I)*(h2d(i,k)/h2d_sum(i))
         enddo
       elseif (uh2d_sum(I)<0.0) then
         do k=1,nz
-          uh2d(I,k) = max(uh2d_sum(I)*(h2d(i+1,k)/h2d_sum(i+1)),-h2d(i+1,k))
+          uh2d(I,k) = uh2d_sum(I)*(h2d(i+1,k)/h2d_sum(i+1))
         enddo
       else
         do k=1,nz
@@ -264,16 +271,12 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      uh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
-      if( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
+      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      if ( abs(sum(uh2d(I,:))-uh2d_sum(I)) > uh_neglect) &
         call MOM_error(WARNING,"Column integral of uh does not match after "//&
         "barotropic redistribution")
     enddo
 
-    ! Update layer thicknesses at the end
-    do k=1,nz ; do i=is,ie
-      h(i,j,k) = h(i,j,k) + (uh2d(I-1,k) - uh2d(I,k))/G%areaT(i,j)
-    enddo ; enddo
     do k=1,nz ; do i=is-1,ie
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
@@ -282,10 +285,10 @@ subroutine distribute_residual_uh_barotropic(G, GV, h, uh)
 end subroutine distribute_residual_uh_barotropic
 
 !> Redistribute the v-flux as a barotropic equivalent
-subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+subroutine distribute_residual_vh_barotropic(G, GV, hvol, vh)
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)    :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -309,27 +312,24 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
 
     ! Copy over h to a working array and calculate column volume
     h2d_sum(:) = 0.0
-    do k=1,nz ; do j=js-2,je+1
-      h2d(j,k) = h(i,j,k)*G%areaT(i,j)
-      if(h(i,j,k)>GV%Angstrom) then
+    do k=1,nz ; do j=js-1,je+1
+      h2d(j,k) = hvol(i,j,k)
+      if (hvol(i,j,k)>0.) then
         h2d_sum(j) = h2d_sum(j) + h2d(j,k)
       else
-        h2d(j,k) = 0.0
+        h2d(j,k) = GV%H_subroundoff
       endif
     enddo; enddo;
 
-
-    ! Distribute flux. Note min/max is intended to make sure that the mass transport
-    ! does not deplete a cell. If this limit is hit for some reason, tracer will
-    ! not be conserved
+    ! Distribute flux evenly throughout a column
     do j=js-1,je
-      if( vh2d_sum(J)>0.0 ) then
+      if ( vh2d_sum(J)>0.0 ) then
         do k=1,nz
-          vh2d(J,k) = min(vh2d_sum(J)*(h2d(j,k)/h2d_sum(j)),0.5*h2d(j,k))
+          vh2d(J,k) = vh2d_sum(J)*(h2d(j,k)/h2d_sum(j))
         enddo
       elseif (vh2d_sum(J)<0.0) then
         do k=1,nz
-          vh2d(J,k) = max(vh2d_sum(J)*(h2d(j+1,k)/h2d_sum(j+1)),-0.5*h2d(j+1,k))
+          vh2d(J,k) = vh2d_sum(J)*(h2d(j+1,k)/h2d_sum(j+1))
         enddo
       else
         do k=1,nz
@@ -338,18 +338,14 @@ subroutine distribute_residual_vh_barotropic(G, GV, h, vh)
       endif
       ! Calculate and check that column integrated transports match the original to
       ! within the tolerance limit
-      vh_neglect = nz*GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
-      if( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) &
+      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      if ( abs(sum(vh2d(J,:))-vh2d_sum(J)) > vh_neglect) then
           call MOM_error(WARNING,"Column integral of vh does not match after "//&
           "barotropic redistribution")
+      endif
 
     enddo
 
-    ! Update layer thicknesses at the end.
-    ! This may not be needed since the limits on the flux are half of the original thickness
-    do k=1,nz ; do j=js,je
-      h(i,j,k) = h(i,j,k) + (vh2d(J-1,k) - vh2d(J,k))/G%areaT(i,j)
-    enddo ; enddo
     do k=1,nz ; do j=js-1,je
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
@@ -359,86 +355,90 @@ end subroutine distribute_residual_vh_barotropic
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
-subroutine distribute_residual_uh_upwards(G, GV, h, uh)
-  type(ocean_grid_type),    pointer                           :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                           :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+subroutine distribute_residual_uh_upwards(G, GV, hvol, uh)
+  type(ocean_grid_type),    pointer                           :: G
+  type(verticalGrid_type),  pointer                           :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )    :: hvol
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout)    :: uh
 
   real, dimension(SZIB_(G),SZK_(G))   :: uh2d
   real, dimension(SZI_(G),SZK_(G))    :: h2d
 
-  real  :: uh_neglect, uh_remain, uh_LB, uh_UB, uh_add
+  real  :: uh_neglect, uh_remain, uh_add, uh_sum, uh_col, uh_max
   real  :: hup, hdown, hlos, min_h
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
   ! Set index-related variables for fields on T-grid
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
 
-  min_h = 0.1*GV%Angstrom
+  min_h = GV%Angstrom*0.1
 
-  do j=js-1,je
+  do j=js,je
     ! Copy over uh and cell volume to working arrays
-    do k=1,nz ; do i=is-1,ie
+    do k=1,nz ; do i=is-2,ie+1
       uh2d(I,k) = uh(I,j,k)
     enddo ; enddo
-    do k=1,nz ; do i=is-2,ie+1
+    do k=1,nz ; do i=is-1,ie+1
       ! Subtract just a little bit of thickness to avoid roundoff errors
-      h2d(i,k) = max(h(i,j,k)*G%areaT(i,j)-min_h*G%areaT(i,j),min_h*G%areaT(i,j))
+      h2d(i,k) = hvol(i,j,k)-min_h*G%areaT(i,j)
     enddo ; enddo
 
     do i=is-1,ie
+      uh_col = SUM(uh2d(I,:)) ! Store original column-integrated transport
       do k=1,nz
         uh_remain = uh2d(I,k)
-        uh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i+1,j))
-        if(uh_remain<-uh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration
-          uh2d(I,k) = 0.0
-          do k_rev=k,1,-1
-            ! This lower bound only allows half of the layer to be depleted
-            uh_LB = -0.5*h2d(i+1,k_rev)
-            ! You can either add the difference between the lower bound and the
-            ! current uh, or the remaining mass transport to be distributed.
-            ! The max is there because it represents the minimum of these two with respect
-            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
-            ! not quite the same potentially because of roundoff error
-            uh_add = min(max(uh_LB-uh2d(I,k_rev), uh_remain),0.0)
-            uh_remain = uh_remain - uh_add
-            uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
-            if(uh_remain>-uh_neglect) exit
-          enddo
-        elseif (uh_remain>uh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
-          ! in the first iteration of the redistribution loop
-          uh2d(I,k) = 0.0
-          ! Loop to distribute remaining flux in layers above
-          do k_rev=k,1,-1
-            ! This lower bound only allows half of the layer to be depleted
-            uh_UB = 0.5*h2d(i,k_rev)
-            uh_add = max(min(uh_UB-uh2d(I,k_rev), uh_remain), 0.0)
-            uh_remain = uh_remain - uh_add
-            uh2d(I,k_rev) = uh2d(I,k_rev) + uh_add
-            if(uh_remain<uh_neglect) exit
-          enddo
-          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
-          ! unless we've bottomed out
+        uh2d(I,k) = 0.0
+        if (abs(uh_remain)>0.0) then
+          do k_rev = k,1,-1
+            uh_sum = uh_remain + uh2d(I,k_rev)
+            if (uh_sum<0.0) then ! Transport to the left
+              hup = h2d(i+1,k_rev)
+              hlos = max(0.0,uh2d(I+1,k_rev))
+              if ((((hup - hlos) + uh_sum) < 0.0) .and. &
+                  ((0.5*hup + uh_sum) < 0.0)) then
+                uh2d(I,k_rev) = min(-0.5*hup,-hup+hlos,0.0)
+                uh_remain = uh_sum - uh2d(I,k_rev)
+              else
+                uh2d(I,k_rev) = uh_sum
+                uh_remain = 0.0
+                exit
+              endif
+            else ! Transport to the right
+              hup = h2d(i,k_rev)
+              hlos = max(0.0,-uh2d(I-1,k_rev))
+              if ((((hup - hlos) - uh_sum) < 0.0) .and. &
+                  ((0.5*hup - uh_sum) < 0.0)) then
+                uh2d(I,k_rev) = max(0.5*hup,hup-hlos,0.0)
+                uh_remain = uh_sum - uh2d(I,k_rev)
+              else
+                uh2d(I,k_rev) = uh_sum
+                uh_remain = 0.0
+                exit
+              endif
+            endif
+          enddo ! k_rev
         endif
-        if(abs(uh_remain)>uh_neglect) then
-          if(k<nz) then
+
+        if (abs(uh_remain)>0.0) then
+          if (k<nz) then
             uh2d(I,k+1) = uh2d(I,k+1) + uh_remain
           else
-            call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
+            uh2d(I,k) = uh2d(I,k) + uh_remain
+            call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer may not be conserved")
           endif
         endif
+      enddo ! k-loop
 
-      enddo
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      uh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i+1,j))
+      if (abs(uh_col - sum(uh2d(I,:)))>uh_neglect) then
+        call MOM_error(WARNING,"Column integral of uh does not match after "//&
+        "upwards redistribution")
+      endif
 
-    enddo
+    enddo ! i-loop
 
-    ! Update layer thicknesses at the end
-    do k=1,nz ; do i=is,ie
-      h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (uh2d(I-1,k) - uh2d(I,k)))/G%areaT(i,j)
-    enddo ; enddo
     do k=1,nz ; do i=is-1,ie
       uh(I,j,k) = uh2d(I,k)
     enddo ; enddo
@@ -448,10 +448,10 @@ end subroutine distribute_residual_uh_upwards
 
 !> In the case where offline advection has failed to converge, redistribute the u-flux
 !! into layers above
-subroutine distribute_residual_vh_upwards(G, GV, h, vh)
-  type(ocean_grid_type),    pointer                          :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  pointer                          :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+subroutine distribute_residual_vh_upwards(G, GV, hvol, vh)
+  type(ocean_grid_type),    pointer                          :: G
+  type(verticalGrid_type),  pointer                          :: GV
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in   )   :: hvol
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout)   :: vh
 
   real, dimension(SZJB_(G),SZK_(G))   :: vh2d
@@ -459,7 +459,7 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
   real, dimension(SZJ_(G),SZK_(G))    :: h2d
   real, dimension(SZJ_(G))            :: h2d_sum
 
-  real  :: vh_neglect, vh_remain, vh_max, vh_add, vh_UB, vh_LB, vh_sum
+  real  :: vh_neglect, vh_remain, vh_col, vh_sum
   real  :: hup, hlos, min_h
   integer :: i, j, k, m, is, ie, js, je, nz, k_rev
 
@@ -468,71 +468,75 @@ subroutine distribute_residual_vh_upwards(G, GV, h, vh)
 
   min_h = 0.1*GV%Angstrom
 
-  do i=is-1,ie
+  do i=is,ie
     ! Copy over uh and cell volume to working arrays
-    do k=1,nz ; do j=js-1,je
+    do k=1,nz ; do j=js-2,je+1
       vh2d(J,k) = vh(i,J,k)
     enddo ; enddo
-    do k=1,nz ; do j=js-2,je+1
-      h2d(j,k) = (h(i,j,k)-min_h)*G%areaT(i,j)
+    do k=1,nz ; do j=js-1,je+1
+      h2d(j,k) = hvol(i,j,k)-min_h*G%areaT(i,j)
     enddo ; enddo
 
     do j=js-1,je
+      vh_col = SUM(vh2d(J,:))
       do k=1,nz
         vh_remain = vh2d(J,k)
-        vh_neglect = GV%H_subroundoff*min(G%areaT(i,j),G%areaT(i,j+1))
-        if(vh_remain<-vh_neglect) then
-          ! Set the mass flux to zero. This will be refilled in the first iteration
-          vh2d(J,k) = 0.0
-          do k_rev=k,1,-1
-            ! This lower bound only allows half of the layer to be depleted
-            vh_LB = -0.5*h2d(j+1,k_rev)
-            ! You can either add the difference between the lower bound and the
-            ! current uh, or the remaining mass transport to be distributed.
-            ! The max is there because it represents the minimum of these two with respect
-            ! to magnitude. The minimum is to guard against the case where uh2d>uh_LB
-            ! not quite the same potentially because of roundoff error
-            vh_add = min(max(vh_LB-vh2d(J,k_rev), vh_remain),0.0)
-            vh_remain = vh_remain - vh_add
-            vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
-            if(vh_remain>-vh_neglect) exit
-          enddo
-        elseif (vh_remain>vh_neglect) then
-          ! Set the amount in the layer with remaining fluxes to zero. This will be reset
-          ! in the first iteration of the redistribution loop
-          vh2d(J,k) = 0.0
-          ! Loop to distribute remaining flux in layers above
-          do k_rev=k,1,-1
-            ! This lower bound only allows half of the layer to be depleted
-            vh_UB = 0.5*h2d(j,k_rev)
-            vh_add = max(min(vh_UB-vh2d(J,k_rev), vh_remain), 0.0)
-            vh_remain = vh_remain - vh_add
-            vh2d(J,k_rev) = vh2d(J,k_rev) + vh_add
-            if(vh_remain<vh_neglect) exit
-          enddo
-          ! Check to see if there's any mass flux left. If so, put it in the layer beneath,
-          ! unless we've bottomed out
+        vh2d(J,k) = 0.0
+        if (abs(vh_remain)>0.0) then
+          do k_rev = k,1,-1
+            vh_sum = vh_remain + vh2d(J,k_rev)
+            if (vh_sum<0.0) then ! Transport to the left
+              hup = h2d(j+1,k_rev)
+              hlos = MAX(0.0,vh2d(J+1,k_rev))
+              if ((((hup - hlos) + vh_sum) < 0.0) .and. &
+                  ((0.5*hup + vh_sum) < 0.0)) then
+                vh2d(J,k_rev) = MIN(-0.5*hup,-hup+hlos,0.0)
+                vh_remain = vh_sum - vh2d(J,k_rev)
+              else
+                vh2d(J,k_rev) = vh_sum
+                vh_remain = 0.0
+                exit
+              endif
+            else ! Transport to the right
+              hup = h2d(j,k_rev)
+              hlos = MAX(0.0,-vh2d(J-1,k_rev))
+              if ((((hup - hlos) - vh_sum) < 0.0) .and. &
+                  ((0.5*hup - vh_sum) < 0.0)) then
+                vh2d(J,k_rev) = MAX(0.5*hup,hup-hlos,0.0)
+                vh_remain = vh_sum - vh2d(J,k_rev)
+              else
+                vh2d(J,k_rev) = vh_sum
+                vh_remain = 0.0
+                exit
+              endif
+            endif
+
+          enddo ! k_rev
         endif
-        if(abs(vh_remain)>vh_neglect) then
-          if(k<nz) then
+
+        if (abs(vh_remain)>0.0) then
+         if (k<nz) then
             vh2d(J,k+1) = vh2d(J,k+1) + vh_remain
           else
-            call MOM_error(WARNING,"Water column cannot accommodate UH redistribution. Tracer will not be conserved")
+            vh2d(J,k) = vh2d(J,k) + vh_remain
+            call MOM_error(WARNING,"Water column cannot accommodate VH redistribution. Tracer will not be conserved")
           endif
-        endif
+        endif ! k-loop
       enddo
 
+      ! Calculate and check that column integrated transports match the original to
+      ! within the tolerance limit
+      vh_neglect = GV%Angstrom*min(G%areaT(i,j),G%areaT(i,j+1))
+      if ( ABS(vh_col-SUM(vh2d(J,:))) > vh_neglect) then
+        call MOM_error(WARNING,"Column integral of vh does not match after "//&
+                               "upwards redistribution")
+      endif
     enddo
 
-    ! Update layer thicknesses at the end
-    do k=1,nz ; do j=js,je
-      h(i,j,k) = (h(i,j,k)*G%areaT(i,j) + (vh2d(J-1,k) - vh2d(J,k)))/G%areaT(i,j)
-    enddo ; enddo
     do k=1,nz ; do j=js-1,je
       vh(i,J,k) = vh2d(J,k)
     enddo ; enddo
   enddo
-
 
 end subroutine distribute_residual_vh_upwards
 
@@ -580,12 +584,221 @@ subroutine offline_add_diurnal_SW(fluxes, G, Time_start, Time_end)
     i2 = i+i_off ; j2 = j+j_off
     fluxes%sw(i2,j2) = fluxes%sw(i2,j2) * diurnal_factor
     fluxes%sw_vis_dir(i2,j2) = fluxes%sw_vis_dir(i2,j2) * diurnal_factor
-    fluxes%sw_vis_dif(i2,j2) = fluxes%sw_vis_dif(i2,j2) * diurnal_factor
+    fluxes%sw_vis_dif (i2,j2) = fluxes%sw_vis_dif (i2,j2) * diurnal_factor
     fluxes%sw_nir_dir(i2,j2) = fluxes%sw_nir_dir(i2,j2) * diurnal_factor
-    fluxes%sw_nir_dif(i2,j2) = fluxes%sw_nir_dif(i2,j2) * diurnal_factor
+    fluxes%sw_nir_dif (i2,j2) = fluxes%sw_nir_dif (i2,j2) * diurnal_factor
   enddo ; enddo
 
 end subroutine offline_add_diurnal_sw
+
+!> Controls the reading in 3d mass fluxes, diffusive fluxes, and other fields stored
+!! in a previous integration of the online model
+subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_file, surf_file, h_end, &
+    uhtr, vhtr, temp_mean, salt_mean, mld, Kd, fluxes, ridx_sum, ridx_snap, read_mld, read_sw, &
+    read_ts_uvh, do_ale_in)
+
+  type(ocean_grid_type), pointer,                   intent(inout) :: G         !< Horizontal grid type
+  type(verticalGrid_type), pointer,                   intent(in   ) :: GV        !< Vertical grid type
+  integer,                                   intent(in   ) :: nk_input  !< Number of levels in input file
+  character(len=*),                          intent(in   ) :: mean_file !< Name of file with averages fields
+  character(len=*),                          intent(in   ) :: sum_file  !< Name of file with summed fields
+  character(len=*),                          intent(in   ) :: snap_file !< Name of file with snapshot fields
+  character(len=*),                          intent(in   ) :: surf_file !< Name of file with surface fields
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_end     !< End of timestep layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp_mean !< Averaged temperature
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt_mean !< Averaged salinity
+  real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: mld       !< Averaged mixed layer depth
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),intent(inout) :: Kd       !< Averaged mixed layer depth
+  type(forcing),                             intent(inout) :: fluxes    !< Fields with surface fluxes
+  integer,                                   intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
+  integer,                                   intent(in   ) :: ridx_snap !< Read index for snapshot file
+  logical,                                   intent(in   ) :: read_mld  !< True if reading in MLD
+  logical,                                   intent(in   ) :: read_sw   !< True if reading in radiative fluxes
+  logical,                                   intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
+  logical, optional,                         intent(in   ) :: do_ale_in !< True if using ALE algorithms
+
+  logical :: do_ale
+  integer :: i, j, k, is, ie, js, je, nz
+  real    :: Initer_vert
+
+  do_ale = .false.;
+  if (present(do_ale_in) ) do_ale = do_ale_in
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  ! Check if reading in UH, VH, and h_end
+  if (read_ts_uvh) then
+    h_end(:,:,:) = 0.0
+    temp_mean(:,:,:) = 0.0
+    salt_mean(:,:,:) = 0.0
+    uhtr(:,:,:) = 0.0
+    vhtr(:,:,:) = 0.0
+    ! Time-summed fields
+    call read_data(sum_file, 'uhtr_sum', uhtr(:,:,1:nk_input),domain=G%Domain%mpp_domain, &
+      timelevel=ridx_sum, position=EAST)
+    call read_data(sum_file, 'vhtr_sum', vhtr(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
+      timelevel=ridx_sum, position=NORTH)
+    call read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
+      timelevel=ridx_snap,position=CENTER)
+    call read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
+      timelevel=ridx_sum,position=CENTER)
+    call read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), domain=G%Domain%mpp_domain, &
+      timelevel=ridx_sum,position=CENTER)
+  endif
+
+  do j=js,je ; do i=is,ie
+    if (G%mask2dT(i,j)>0.) then
+      temp_mean(:,:,nk_input:nz) = temp_mean(i,j,nk_input)
+      salt_mean(:,:,nk_input:nz) = salt_mean(i,j,nk_input)
+    endif
+  enddo ; enddo
+
+  ! Check if reading vertical diffusivities or entrainment fluxes
+  call read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), domain=G%Domain%mpp_domain, &
+                  timelevel=ridx_sum,position=CENTER)
+
+  ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
+  ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine
+  if (do_ale) then
+    if (.not. ASSOCIATED(fluxes%netMassOut)) then
+      allocate(fluxes%netMassOut(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassOut(:,:) = 0.0
+    endif
+    if (.not. ASSOCIATED(fluxes%netMassIn)) then
+      allocate(fluxes%netMassIn(G%isd:G%ied,G%jsd:G%jed))
+      fluxes%netMassIn(:,:) = 0.0
+    endif
+
+    fluxes%netMassOut(:,:) = 0.0
+    fluxes%netMassIn(:,:) = 0.0
+    call read_data(surf_file,'massout_flux_sum',fluxes%netMassOut, domain=G%Domain%mpp_domain, &
+        timelevel=ridx_sum)
+    call read_data(surf_file,'massin_flux_sum', fluxes%netMassIn,  domain=G%Domain%mpp_domain, &
+        timelevel=ridx_sum)
+
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j)<1.0) then
+        fluxes%netMassOut(i,j) = 0.0
+        fluxes%netMassIn(i,j) = 0.0
+      endif
+    enddo ; enddo
+
+  endif
+
+  if (read_mld) then
+    call read_data(surf_file, 'ePBL_h_ML', mld, domain=G%Domain%mpp_domain, timelevel=ridx_sum)
+  endif
+
+  if (read_sw) then
+    ! Shortwave radiation is only needed for offline mode with biogeochemistry but without the coupler.
+    ! Need to double check, but set_opacity seems to only need the sum of the diffuse and
+    ! direct fluxes in the visible and near-infrared bands. For convenience, we store the
+    ! sum of the direct and diffuse fluxes in the 'dir' field and set the 'dif' fields to zero
+    call read_data(mean_file,'sw_vis',fluxes%sw_vis_dir, domain=G%Domain%mpp_domain, &
+        timelevel=ridx_sum)
+    call read_data(mean_file,'sw_nir',fluxes%sw_nir_dir, domain=G%Domain%mpp_domain, &
+        timelevel=ridx_sum)
+    fluxes%sw_vis_dir(:,:) = fluxes%sw_vis_dir(:,:)*0.5
+    fluxes%sw_vis_dif (:,:) = fluxes%sw_vis_dir
+    fluxes%sw_nir_dir(:,:) = fluxes%sw_nir_dir(:,:)*0.5
+    fluxes%sw_nir_dif (:,:) = fluxes%sw_nir_dir
+    fluxes%sw = fluxes%sw_vis_dir + fluxes%sw_vis_dif + fluxes%sw_nir_dir + fluxes%sw_nir_dif
+    do j=js,je ; do i=is,ie
+      if (G%mask2dT(i,j)<1.0) then
+        fluxes%sw(i,j) = 0.0
+        fluxes%sw_vis_dir(i,j) = 0.0
+        fluxes%sw_nir_dir(i,j) = 0.0
+        fluxes%sw_vis_dif (i,j) = 0.0
+        fluxes%sw_nir_dif (i,j) = 0.0
+      endif
+    enddo ; enddo
+    call pass_var(fluxes%sw,G%Domain)
+    call pass_var(fluxes%sw_vis_dir,G%Domain)
+    call pass_var(fluxes%sw_vis_dif,G%Domain)
+    call pass_var(fluxes%sw_nir_dir,G%Domain)
+    call pass_var(fluxes%sw_nir_dif,G%Domain)
+  endif
+
+end subroutine update_offline_from_files
+
+!> Fields for offline transport are copied from the stored arrays read during initialization
+subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_file, snap_file, uhtr, vhtr, &
+                                      hend, uhtr_all, vhtr_all, hend_all, temp, salt, temp_all, salt_all )
+  type(ocean_grid_type),                     intent(inout) :: G         !< Horizontal grid type
+  type(verticalGrid_type),                   intent(in   ) :: GV        !< Vertical grid type
+  integer,                                   intent(in   ) :: nk_input  !< Number of levels in input file
+  integer,                                   intent(in   ) :: ridx_sum  !< Index to read from
+  character(len=200),                        intent(in   ) :: mean_file !< Name of file with averages fields
+  character(len=200),                        intent(in   ) :: sum_file  !< Name of file with summed fields
+  character(len=200),                        intent(in   ) :: snap_file !< Name of file with snapshot fields
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hend      !< End of timestep layer thickness
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: uhtr_all  !< Zonal mass fluxes
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: vhtr_all  !< Meridional mass fluxes
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: hend_all  !< End of timestep layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp      !< Temperature array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt      !< Salinity array
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: temp_all  !< Temperature array
+  real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array
+
+  integer :: i, j, k, is, ie, js, je, nz
+  real, parameter :: fill_value = 0.
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  ! Check that all fields are allocated (this is a redundant check)
+  if (.not. allocated(uhtr_all)) &
+      call MOM_error(FATAL, "uhtr_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(vhtr_all)) &
+      call MOM_error(FATAL, "vhtr_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(hend_all)) &
+      call MOM_error(FATAL, "hend_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(temp_all)) &
+      call MOM_error(FATAL, "temp_all not allocated before call to update_transport_from_arrays")
+  if (.not. allocated(salt_all)) &
+      call MOM_error(FATAL, "salt_all not allocated before call to update_transport_from_arrays")
+
+  ! Copy uh, vh, h_end, temp, and salt
+  do k=1,nk_input ; do j=js,je ; do i=is,ie
+    uhtr(I,j,k) = uhtr_all(I,j,k,ridx_sum)
+    vhtr(i,J,k) = vhtr_all(i,J,k,ridx_sum)
+    hend(i,j,k) = hend_all(i,j,k,ridx_sum)
+    temp(i,j,k) = temp_all(i,j,k,ridx_sum)
+    salt(i,j,k) = salt_all(i,j,k,ridx_sum)
+  enddo ; enddo ; enddo
+
+  ! Fill the rest of the arrays with 0s (fill_value could probably be changed to a runtime parameter)
+  do k=nk_input+1,nz ; do j=js,je ; do i=is,ie
+    uhtr(I,j,k) = fill_value
+    vhtr(i,J,k) = fill_value
+    hend(i,j,k) = fill_value
+    temp(i,j,k) = fill_value
+    salt(i,j,k) = fill_value
+  enddo ; enddo ; enddo
+
+end subroutine update_offline_from_arrays
+
+!> Calculates the next timelevel to read from the input fields. This allows the 'looping'
+!! of the fields
+function next_modulo_time(inidx, numtime)
+  ! Returns the next time interval to be read
+  integer                 :: numtime              ! Number of time levels in input fields
+  integer                 :: inidx                ! The current time index
+
+  integer                 :: read_index           ! The index in the input files that corresponds
+                                                  ! to the current timestep
+
+  integer                 :: next_modulo_time
+
+  read_index = mod(inidx+1,numtime)
+  if (read_index < 0)  read_index = inidx-read_index
+  if (read_index == 0) read_index = numtime
+
+  next_modulo_time = read_index
+
+end function next_modulo_time
 
 end module MOM_offline_aux
 
