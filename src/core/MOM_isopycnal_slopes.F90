@@ -22,7 +22,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e
-  type(thermo_var_ptrs),                       intent(in)    :: tv
+  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   real,                                        intent(in)    :: dt_kappa_smooth
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y
@@ -208,7 +208,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
           slope_x(I,j,K) = 0.0
         endif
 
-        if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+        if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
         slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * GV%m_to_H
@@ -292,7 +292,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
           slope_y(i,J,K) = 0.0
         endif
 
-        if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+        if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
         slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * GV%m_to_H
@@ -310,7 +310,7 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: T_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: S_in
   real,                                     intent(in)    :: kappa
-  real,                                     intent(in)    :: dt
+  real,                                     intent(in)    :: dt   !< The time increment, in s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: T_f
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: S_f
   integer,                        optional, intent(in)    :: halo_here

@@ -105,6 +105,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : radiation_open_bdry_conds
+use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -187,10 +188,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The dynamics time step, in s.
   type(forcing),                             intent(in)    :: fluxes
   real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uh
@@ -330,6 +331,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
     call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
 
 ! up = u + dt_pred * (PFu + CAu)
   call cpu_clock_begin(id_clock_mom_update)
@@ -418,6 +423,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
     call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
 
 ! upp = u + dt/2 * ( PFu + CAu )
   call cpu_clock_begin(id_clock_mom_update)
@@ -499,6 +508,10 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   endif; endif
 
 ! u = u + dt * ( PFu + CAu )
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%CAu, CS%CAv)
+  endif
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = G%mask2dCu(I,j) * (u(I,j,k) + dt * &
             (CS%PFu(I,j,k) + CS%CAu(I,j,k)))

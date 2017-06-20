@@ -519,10 +519,10 @@ contains
     type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
-    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml !< Mixed layer depth
-    real,                                  intent(in) :: dt
+    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth
+    real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
     type(MOM_generic_tracer_CS),           pointer    :: CS
-    type(thermo_var_ptrs),                 intent(in) :: tv
+    type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),                     intent(in) :: optics
     real,                        optional,intent(in)  :: evap_CFL_limit
     real,                        optional,intent(in)  :: minimum_forcing_depth
@@ -563,7 +563,6 @@ contains
     real :: sosga
 
     real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
-    real, dimension(G%isd:G%ied,G%jsd:G%jed)      :: hblt_depth
     real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
@@ -621,17 +620,6 @@ contains
       dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
-
-    ! Boussinesq model
-    hblt_depth(:,:) = GV%H_to_m * GV%Angstrom
-    do j=jsc,jec ; do i=isc,iec ;
-      hblt_depth(i,j) = GV%H_to_m * h_old(i,j,1)
-    enddo; enddo
-    do k=2,GV%nkml ; do j=jsc,jec ; do i=isc,iec
-      hblt_depth(i,j) = hblt_depth(i,j) + GV%H_to_m * h_old(i,j,k)
-    enddo; enddo ; enddo
-
-
     do j=jsc,jec ; do i=isc,iec
        surface_field(i,j) = tv%S(i,j,1)
     enddo ; enddo
@@ -641,7 +629,7 @@ contains
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,Hml,dt,&
+    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
          optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
 
