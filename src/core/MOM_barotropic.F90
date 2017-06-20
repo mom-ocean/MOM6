@@ -2007,6 +2007,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
   endif
   if (apply_OBCs) then
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -2076,7 +2077,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
 ! Now calculate each layer's accelerations.
   if (apply_OBCs) then
-!   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
         u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
