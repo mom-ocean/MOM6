@@ -3,6 +3,7 @@ module MOM_lateral_mixing_coeffs
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,     only : hchksum, uvchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
@@ -39,6 +40,11 @@ type, public :: VarMix_CS ;
                                   !! of first baroclinic wave for calculating the resolution fn.
   logical :: khth_use_ebt_struct  !< If true, uses the equivalent barotropic structure
                                   !! as the vertical structure of thickness diffusivity.
+  logical :: use_Visbeck_slope_bug !< If true, then retain a legacy bug in the calculation of weights
+                                   !! applied to isoneutral slopes. There was an erroneous k-indexing
+                                   !! for layer thicknesses. In addition, masking at coastlines was not
+                                   !! used which introduced potential restart issues.  This flag will be
+                                   !! deprecated in a future release.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points (s^-1)
     SN_v => NULL(), &  !< S*N at v-points (s^-1)
@@ -106,7 +112,7 @@ type, public :: VarMix_CS ;
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL() !< Wave speed control structure
   type(group_pass_type) :: pass_cg1 !< For group halo pass
-
+  logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
@@ -442,7 +448,6 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     CS%SN_v(i,j) = 0.0
   enddo ; enddo
 
-
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
@@ -469,14 +474,25 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
-      wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
-      wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
-      wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
-      S2 =  slope_x(I,j,K)**2  + ( &
-           (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
-          +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
-           ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      if (CS%use_Visbeck_slope_bug) then
+        wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
+        wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
+        wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
+        wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
+        S2 =  slope_x(I,j,K)**2  + ( &
+             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
+             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      else
+        wSE = G%mask2dCv(i+1,J-1) * ( (h(i+1,j,k)*h(i+1,j-1,k)) * (h(i+1,j,k-1)*h(i+1,j-1,k-1)) )
+        wNW = G%mask2dCv(i  ,J  ) * ( (h(i  ,j,k)*h(i  ,j+1,k)) * (h(i  ,j,k-1)*h(i  ,j+1,k-1)) )
+        wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
+        wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
+        S2 =  slope_x(I,j,K)**2  + ( &
+             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
+             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
+      endif
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
       N2 = max(0., N2_u(I,j,k))
       CS%SN_u(I,j) = CS%SN_u(I,j) + sqrt( S2*N2 )*H_geom
@@ -485,8 +501,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do I=is-1,ie
       if (H_u(I)>0.) then
-        CS%SN_u(I,j) = CS%SN_u(I,j) / H_u(I)
-        S2_u(I,j) = S2_u(I,j) / H_u(I)
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * CS%SN_u(I,j) / H_u(I)
+        S2_u(I,j) =  G%mask2dCu(I,j) * S2_u(I,j) / H_u(I)
       else
         CS%SN_u(I,j) = 0.
       endif
@@ -504,14 +520,25 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
-      wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
-      wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
-      wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
-      S2 =  slope_y(i,J,K)**2  + ( &
-           (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
-          +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
-           ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      if (CS%use_Visbeck_slope_bug) then
+        wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
+        wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
+        wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
+        wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
+        S2 =  slope_y(i,J,K)**2  + ( &
+             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
+             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      else
+        wSE = G%mask2dCu(I,j)     * ( (h(i,j  ,k)*h(i+1,j  ,k)) * (h(i,j  ,k-1)*h(i+1,j  ,k-1)) )
+        wNW = G%mask2dCu(I-1,j+1) * ( (h(i,j+1,k)*h(i-1,j+1,k)) * (h(i,j+1,k-1)*h(i-1,j+1,k-1)) )
+        wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
+        wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
+        S2 =  slope_y(i,J,K)**2  + ( &
+             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
+             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 ) !### This should be **4 for consistent units.
+      endif
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
       N2 = max(0., N2_v(i,J,K))
       CS%SN_v(i,J) = CS%SN_v(i,J) + sqrt( S2*N2 )*H_geom
@@ -520,8 +547,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do i=is,ie
       if (H_v(i)>0.) then
-        CS%SN_v(i,J) = CS%SN_v(i,J) / H_v(i)
-        S2_v(i,J) = S2_v(i,J) / H_v(i)
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * CS%SN_v(i,J) / H_v(i)
+        S2_v(i,J) = G%mask2dCv(i,J) * S2_v(i,J) / H_v(i)
       else
         CS%SN_v(i,J) = 0.
       endif
@@ -534,6 +561,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
     if (CS%id_S2_v > 0) call post_data(CS%id_S2_v, S2_v, CS%diag)
+  endif
+
+  if (CS%debug) then
+      call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+      call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI)
+      call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -663,7 +696,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
       else
         CS%SN_u(I,j) = 0.0
       endif
@@ -678,7 +711,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
       else
         CS%SN_v(I,j) = 0.0
       endif
@@ -775,6 +808,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%khth_use_ebt_struct = khth_use_ebt_struct
     CS%use_variable_mixing = use_variable_mixing
     CS%use_stored_slopes = use_stored_slopes
+    call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   else
     return
   endif
@@ -785,7 +819,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  units='m', default=2000.)
   endif
   if (khth_use_ebt_struct) then
-    allocate(CS%ebt_struct(isd:ied,JsdB:JedB,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
+    allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
   if (use_variable_mixing) then
     call get_param(param_file, mod, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
@@ -896,6 +930,12 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                  "velocity points from the thickness points; otherwise \n"//&
                  "interpolate the wave speed and calculate the resolution \n"//&
                  "function independently at each point.", default=.true.)
+    call get_param(param_file, mod, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
+                 "If true, then retain a legacy bug in the calculation of weights \n"//&
+                 "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
+                 "for layer thicknesses. In addition, masking at coastlines was not \n"//&
+                 "used which introduced potential restart issues.  This flag will be \n"//&
+                 "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&

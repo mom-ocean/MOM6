@@ -182,7 +182,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
   type(boundary_impulse_tracer_CS), pointer,intent(inout) :: CS
   type(sponge_CS), pointer,                 intent(inout) :: sponge_CSp
   type(diag_to_Z_CS), pointer,              intent(inout) :: diag_to_Z_CSp
-  type(thermo_var_ptrs),                    intent(in   ) :: tv
+  type(thermo_var_ptrs),                    intent(in   ) :: tv   !< A structure pointing to various thermodynamic variables
 !   This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -284,9 +284,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   type(verticalGrid_type),                    intent(in   ) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in   ) :: h_old, h_new, ea, eb
   type(forcing),                              intent(in   ) :: fluxes
-  real,                                       intent(in   ) :: dt
+  real,                                       intent(in   ) :: dt   !< The amount of time covered by this call, in s
   type(boundary_impulse_tracer_CS), pointer,  intent(inout) :: CS
-  type(thermo_var_ptrs),                      intent(in   ) :: tv
+  type(thermo_var_ptrs),                      intent(in   ) :: tv   !< A structure pointing to various thermodynamic variables
   logical,                                    intent(in   ) :: debug
   real,                             optional, intent(in   ) :: evap_CFL_limit
   real,                             optional, intent(in   ) :: minimum_forcing_depth

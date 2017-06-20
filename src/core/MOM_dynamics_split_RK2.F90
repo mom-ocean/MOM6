@@ -48,8 +48,8 @@ use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init, hor_v
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
-use MOM_open_boundary,         only : ocean_OBC_type
-use MOM_open_boundary,         only : radiation_open_bdry_conds
+use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
+use MOM_open_boundary,         only : open_boundary_zero_normal_flow
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -324,10 +324,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   if (associated(CS%OBC)) then
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
-      u_old_rad_OBC(I,j,k) = u(I,j,k)  !### Should be u_av(I,j,k)?
+      u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
-      v_old_rad_OBC(i,J,k) = v(i,J,k)  !### Should be u_av(I,j,k)?
+      v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -451,6 +451,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
@@ -726,6 +729,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
       v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
     enddo ; enddo
   enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then

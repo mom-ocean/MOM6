@@ -111,6 +111,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : radiation_open_bdry_conds
+use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_boundary_update, only : update_OBC_data, update_OBC_CS
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_CS
@@ -276,10 +277,10 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   type(vertvisc_type),                       intent(inout) :: visc
   type(time_type),                           intent(in)    :: Time_local
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(forcing),                             intent(in)    :: fluxes
   real, dimension(:,:),                      pointer       :: p_surf_begin, p_surf_end
   real,                                      intent(in)    :: dt_since_flux, dt_therm
@@ -511,6 +512,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
   enddo ; enddo ; enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
@@ -828,6 +832,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     v_bc_accel(i,J,k) = (CS%Cav(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
   enddo ; enddo ; enddo
+  if (associated(CS%OBC)) then
+    call open_boundary_zero_normal_flow(CS%OBC, G, u_bc_accel, v_bc_accel)
+  endif
   call cpu_clock_end(id_clock_btforce)
 
   if (CS%debug) then
@@ -1055,8 +1062,8 @@ subroutine adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS)
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real,                                      intent(in)    :: dt
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
 
 ! Arguments: u - The zonal velocity, in m s-1.
@@ -1222,7 +1229,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   type(diag_ctrl),                   target, intent(inout) :: diag
   type(MOM_dyn_legacy_split_CS),             pointer       :: CS
   type(MOM_restart_CS),                      pointer       :: restart_CS
-  real,                                      intent(in)    :: dt
+  real,                                      intent(in)    :: dt   !< The baroclinic dynamics time step, in s
   type(accel_diag_ptrs),             target, intent(inout) :: Accel_diag
   type(cont_diag_ptrs),              target, intent(inout) :: Cont_diag
   type(ocean_internal_state),                intent(inout) :: MIS

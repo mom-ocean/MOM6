@@ -108,7 +108,7 @@ subroutine BFB_initialize_sponges_southonly(G, use_temperature, tv, param_file, 
 ! boundary. The damping linearly decreases northward over the next 2 degrees.
   type(ocean_grid_type), intent(in)                   :: G    !< The ocean's grid structure
   logical,               intent(in)                   :: use_temperature
-  type(thermo_var_ptrs), intent(in)                   :: tv
+  type(thermo_var_ptrs), intent(in)                   :: tv   !< A structure pointing to various thermodynamic variables
   type(param_file_type), intent(in)                   :: param_file !< A structure to parse for run-time parameters
   type(sponge_CS),       pointer                      :: CSp
   real, dimension(NIMEM_, NJMEM_, NKMEM_), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)

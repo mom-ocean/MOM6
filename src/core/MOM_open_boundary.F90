@@ -62,7 +62,7 @@ type, public :: OBC_segment_data_type
   integer                         :: nk_src     !< Number of vertical levels in the source data
   real, dimension(:,:,:), pointer :: dz_src=>NULL()     !< vertical grid cell spacing of the incoming segment data (m)
   real, dimension(:,:,:), pointer :: buffer_dst=>NULL() !< buffer src data remapped to the target vertical grid
-  real, dimension(:,:), pointer   :: bt_vel=>NULL() !< barotropic velocity (m s-1)
+  real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity (m s-1)
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
@@ -74,6 +74,7 @@ type, public :: OBC_segment_type
   logical :: oblique        !< Oblique waves supported at radiation boundary.
   logical :: nudged         !< Optional supplement to radiation boundary.
   logical :: specified      !< Boundary fixed to external value.
+  logical :: open           !< Boundary is open for continuity solver.
   logical :: gradient       !< Zero gradient at boundary.
   logical :: values_needed  !< Whether or not external OBC fields are needed.
   integer :: direction      !< Boundary faces one of the four directions.
@@ -173,9 +174,8 @@ type, public :: ocean_OBC_type
                    !! velocity (or speed of characteristics), in m s-1.  The
                    !! default value is 10 m s-1.
   logical :: OBC_pe !< Is there an open boundary on this tile?
-  character(len=200) :: OBC_user_config
-  type(remapping_CS), pointer         :: remap_CS   ! ALE remapping control structure for segments only
-  type(OBC_registry_type),       pointer :: OBC_Reg                => NULL()
+  type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
+  type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -193,7 +193,7 @@ end type OBC_struct_type
 type, public :: OBC_registry_type
   integer               :: nobc = 0          !< number of registered open boundary types.
   type(OBC_struct_type) :: OB(MAX_FIELDS_)   !< array of registered boundary types.
-  logical               :: locked = .false.  !< New tracers may be registered if locked=.false.
+  logical               :: locked = .false.  !< New OBC types may be registered if locked=.false.
                                              !! When locked=.true.,no more boundaries can be registered.
 end type OBC_registry_type
 
@@ -280,6 +280,7 @@ subroutine open_boundary_config(G, param_file, OBC)
       OBC%segment(l)%oblique = .false.
       OBC%segment(l)%nudged = .false.
       OBC%segment(l)%specified = .false.
+      OBC%segment(l)%open = .false.
       OBC%segment(l)%gradient = .false.
       OBC%segment(l)%values_needed = .false.
       OBC%segment(l)%direction = OBC_NONE
@@ -567,7 +568,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   integer,                 intent(in) :: l_seg !< which segment is this?
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
-  integer :: j, this_kind, a_loop
+  integer :: j, a_loop
   character(len=32) :: action_str(5)
 
   ! This returns the global indices for the segment
@@ -578,8 +579,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   I_obc = I_obc - G%idg_offset ! Convert to local tile indices on this tile
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
-
-  this_kind = OBC_NONE
 
   ! Hack to extend segment by one point
   if (OBC%extend_segments) then
@@ -603,15 +602,17 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
-      this_kind = OBC_FLATHER
       OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%oblique_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -621,9 +622,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      this_kind = OBC_FLATHER
       OBC%segment(l_seg)%Flather = .true.
       OBC%segment(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
@@ -670,7 +671,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   integer,                 intent(in) :: l_seg !< which segment is this?
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
-  integer :: i, this_kind, a_loop
+  integer :: i, a_loop
   character(len=32) :: action_str(5)
 
   ! This returns the global indices for the segment
@@ -681,7 +682,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   J_obc = J_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
   Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
-  this_kind = OBC_NONE
 
   ! Hack to extend segment by one point
   if (OBC%extend_segments) then
@@ -705,15 +705,17 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     if (len_trim(action_str(a_loop)) == 0) then
       cycle
     elseif (trim(action_str(a_loop)) == 'FLATHER') then
-      this_kind = OBC_FLATHER
       OBC%segment(l_seg)%Flather = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'ORLANSKI') then
       OBC%segment(l_seg)%radiation = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%oblique_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
@@ -723,9 +725,9 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
+      OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'LEGACY') then
-      this_kind = OBC_FLATHER
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%Flather = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
@@ -1800,15 +1802,16 @@ subroutine open_boundary_test_extern_h(G, OBC, h)
 
 end subroutine open_boundary_test_extern_h
 
+!> Update the OBC values on the segments.
 subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
-  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV  !<  Ocean vertical grid structure
-  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h   !< Thickness
-! real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: e   !< Layer interface height
-! real, dimension(SZI_(G),SZJ_(G))         , intent(inout) :: eta !< Thickness
-  type(time_type),                           intent(in)    :: Time
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !<  Ocean vertical grid structure
+  type(ocean_OBC_type),                      pointer       :: OBC  !< Open boundary structure
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Thickness
+! real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: e    !< Layer interface height
+! real, dimension(SZI_(G),SZJ_(G))         , intent(inout) :: eta  !< Thickness
+  type(time_type),                           intent(in)    :: Time !< Time
   ! Local variables
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
@@ -1854,26 +1857,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       is_obc=is_obc+1
     endif
 
-!    do j=jsd,jed ; do I=isd,ied-1
-!      if (segment%direction == OBC_DIRECTION_E .and. OBC%segnum_u(I,j) /= OBC_NONE ) then
-!        do k=1,nz
-!          tv%T(i+1,j,k) = tv%T(i,j,k) ; tv%S(i+1,j,k) = tv%S(i,j,k); h(i+1,j,k) = h(i,j,k)
-!        enddo
-!      else if (segment%direction == OBC_DIRECTION_W .and. OBC%segnum_u(I,j) /= OBC_NONE ) then
-!        tv%T(i,j,k) = tv%T(i+1,j,k) ; tv%S(i,j,k) = tv%S(i+1,j,k); h(i,j,k) = h(i+1,j,k)
-!      endif
-!    enddo ; enddo
-
-!    do j=jsd,jed-1 ; do I=isd,ied-1
-!      if (segment%direction == OBC_DIRECTION_N .and. OBC%segnum_v(I,j) /= OBC_NONE ) then
-!        do k=1,nz
-!          tv%T(i,j+1,k) = tv%T(i,j,k) ; tv%S(i,j+1,k) = tv%S(i,j,k); h(i,j+1,k) = h(i,j,k)
-!        enddo
-!      else if (segment%direction == OBC_DIRECTION_S .and. OBC%segnum_v(I,j) /= OBC_NONE ) then
-!        tv%T(i,j,k) = tv%T(i,j+1,k) ; tv%S(i,j,k) = tv%S(i,j+1,k); h(i,j,k) = h(i,j+1,k)
-!      endif
-!    enddo ; enddo
-
 ! Calculate auxiliary fields at staggered locations.
 ! Segment indices are on q points:
 !
@@ -1889,10 +1872,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       if (segment%direction == OBC_DIRECTION_W) ishift=1
       I=segment%HI%IscB
       do j=segment%HI%jsd,segment%HI%jed
-!        i2 =  segment%Is_obc + i - 1
-!        j2 =  segment%Js_obc + j - 1
-!        if ((i2 .gt. ied .or. i2 .lt. isd) .or. (j2 .gt. jed .or. j2 .lt. jsd)) cycle
-!        if (OBC%segnum_u(i2,j2) /= n) cycle
         segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
  !       if (GV%Boussinesq) then
         segment%Htot(I,j) = G%bathyT(i+ishift,j)*GV%m_to_H! + eta(i+ishift,j)

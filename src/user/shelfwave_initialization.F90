@@ -44,8 +44,8 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 
 !> Control structure for shelfwave open boundaries.
 type, public :: shelfwave_OBC_CS ; private
-  real :: Lx = 20.0         !< Long-shore length scale of bathymetry.
-  real :: Ly = 10.0         !< Cross-shore length scale.
+  real :: Lx = 100.0        !< Long-shore length scale of bathymetry.
+  real :: Ly = 50.0         !< Cross-shore length scale.
   real :: f0 = 1.e-4        !< Coriolis parameter.
   real :: jj = 1            !< Cross-shore wave mode.
   real :: kk                !< Parameter.
@@ -88,7 +88,7 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
   call get_param(param_file,mod,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
                  "Length scale of exponential dropoff of topography\n"//&
                  "in the y-direction.", &
-                 units="Same as x,y", default=10.)
+                 units="Same as x,y", default=50.)
   call get_param(param_file,mod,"SHELFWAVE_Y_MODE",CS%jj, &
                  "Cross-shore wave mode.",               &
                  units="nondim", default=1.)
@@ -124,7 +124,7 @@ subroutine shelfwave_initialize_topography ( D, G, param_file, max_depth )
   real      :: y, rLy, Ly, H0
 
   call get_param(param_file,mod,"SHELFWAVE_Y_LENGTH_SCALE",Ly, &
-                 default=10., do_not_log=.true.)
+                 default=50., do_not_log=.true.)
   call get_param(param_file,mod,"MINIMUM_DEPTH",H0, &
                  default=10., do_not_log=.true.)
 
@@ -179,8 +179,8 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed
     do j=jsd,jed ; do I=IsdB,IedB
-      x = G%geoLonCu(i,j) - G%west_lon
-      y = G%geoLatCu(i,j) - G%south_lat
+      x = G%geoLonCu(I,j) - G%west_lon
+      y = G%geoLatCu(I,j) - G%south_lat
       sin_wt = sin(ll*x - omega*time_sec)
       cos_wt = cos(ll*x - omega*time_sec)
       sin_ky = sin(kk * y)

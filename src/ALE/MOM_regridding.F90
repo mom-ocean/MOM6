@@ -690,6 +690,7 @@ subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
   ! Local variables
   character (len=200) :: units, long_name
   integer :: ncid, status, intid, vid
+  integer :: i
 
   ierr = .false.
   status = NF90_OPEN(trim(filename), NF90_NOWRITE, ncid);
@@ -712,6 +713,12 @@ subroutine check_grid_def(filename, varname, expected_units, msg, ierr)
     msg = 'Attribute not found: units'
     return
   endif
+  ! NF90_GET_ATT can return attributes with null characters, which TRIM will not truncate.
+  ! This loop replaces any null characters with a space so that the following check between
+  ! the read units and the expected units will pass
+  do i=1,LEN_TRIM(units)
+    if (units(i:i) == CHAR(0)) units(i:i) = " "
+  enddo
 
   if (trim(units) /= trim(expected_units)) then
     if (trim(expected_units) == "meters") then
@@ -1406,7 +1413,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                       intent(in)    :: tv
+  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface
   type(remapping_CS),                          intent(in)    :: remapCS
   type(regridding_CS),                         intent(in)    :: CS
@@ -1722,7 +1729,7 @@ subroutine convective_adjustment(G, GV, h, tv)
   type(ocean_grid_type), intent(in)                  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)                :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs), intent(inout)               :: tv
+  type(thermo_var_ptrs), intent(inout)               :: tv   !< A structure pointing to various thermodynamic variables
 
   ! Local variables
   integer   :: i, j, k
@@ -1818,6 +1825,8 @@ subroutine initCoord(CS, coord_mode)
 
   select case (coordinateMode(coord_mode))
   case (REGRIDDING_ZSTAR)
+    call init_coord_zlike(CS%zlike_CS, CS%nk, CS%coordinateResolution)
+  case (REGRIDDING_SIGMA_SHELF_ZSTAR)
     call init_coord_zlike(CS%zlike_CS, CS%nk, CS%coordinateResolution)
   case (REGRIDDING_SIGMA)
     call init_coord_sigma(CS%sigma_CS, CS%nk, CS%coordinateResolution)
@@ -2082,6 +2091,8 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
 
   select case (CS%regridding_scheme)
   case (REGRIDDING_ZSTAR)
+    if (present(min_thickness)) call set_zlike_params(CS%zlike_CS, min_thickness=min_thickness)
+  case (REGRIDDING_SIGMA_SHELF_ZSTAR)
     if (present(min_thickness)) call set_zlike_params(CS%zlike_CS, min_thickness=min_thickness)
   case (REGRIDDING_SIGMA)
     if (present(min_thickness)) call set_sigma_params(CS%sigma_CS, min_thickness=min_thickness)

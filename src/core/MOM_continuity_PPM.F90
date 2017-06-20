@@ -8,7 +8,7 @@ use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_variables, only : BT_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -79,7 +79,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, CS, uhbt, vhbt, OBC, 
   type(continuity_PPM_CS),                   pointer       :: CS  !< Module's control structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< Zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< Meridional velocity, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: hin !< Initial layer thickness, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hin !< Initial layer thickness, in H.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h   !< Final layer thickness, in H.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh  !< Zonal volume flux,
                                                                   !! u*h*dy, H m2 s-1.
@@ -286,7 +286,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< Zonal velocity, in m s-1.
-  real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h_in !< Layer thickness used to
+  real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_in !< Layer thickness used to
                                                                    !! calculate fluxes, in H.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: uh   !< Volume flux through zonal
                                                                    !! faces = u*h*dy, H m2 s-1.
@@ -331,18 +331,21 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   real :: I_dt    ! 1.0 / dt, in s-1.
   real :: du_lim  ! The velocity change that give a relative CFL of 1, in m s-1.
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west, in m.
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, local_open_BC, is_simple
+  type(OBC_segment_type), pointer :: segment
 
   do_aux = (present(uhbt_aux) .and. present(u_cor_aux))
   use_visc_rem = present(visc_rem_u)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
+  local_open_BC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
                         OBC%Flather_v_BCs_exist_globally
+    local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -364,6 +367,27 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
+  if (local_open_BC) then
+    do n=1, OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (segment%direction == OBC_DIRECTION_E) then
+        I=segment%HI%IsdB
+        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+          h_in(i+1,j,k) = h_in(i,j,k)
+          h_L(i+1,j,k) = h_in(i,j,k)
+          h_R(i+1,j,k) = h_in(i,j,k)
+        enddo ; enddo
+      elseif (segment%direction == OBC_DIRECTION_W) then
+        I=segment%HI%IsdB
+        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+            h_in(i,j,k) = h_in(i+1,j,k)
+            h_L(i,j,k) = h_in(i+1,j,k)
+            h_R(i,j,k) = h_in(i+1,j,k)
+        enddo ; enddo
+      endif
+    enddo
+  endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
@@ -385,10 +409,12 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       call zonal_flux_layer(u(:,j,k), h_in(:,j,k), h_L(:,j,k), h_R(:,j,k), &
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, j, ish, ieh, do_I, CS%vol_CFL)
-      if (local_specified_BC) then ; do I=ish-1,ieh
-        if (OBC%segment(OBC%segnum_u(I,j))%specified) &
-          uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
-      enddo ; endif
+      if (local_specified_BC) then
+        do I=ish-1,ieh
+          if (OBC%segment(OBC%segnum_u(I,j))%specified) &
+            uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+        enddo
+      endif
     enddo
 
     if ((.not.use_visc_rem).or.(.not.CS%use_visc_rem_max)) then ; do I=ish-1,ieh
@@ -1027,7 +1053,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< Meridional velocity, in m s-1.
-  real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h_in !< Layer thickness used to
+  real,  dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h_in !< Layer thickness used to
                                                                    !! calculate fluxes, in H.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: vh   !< Volume flux through meridional
                                                                    !! faces = v*h*dx, H m2 s-1.
@@ -1078,18 +1104,21 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   real :: I_dt    ! 1.0 / dt, in s-1.
   real :: dv_lim  ! The velocity change that give a relative CFL of 1, in m s-1.
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south, in m.
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   logical :: do_aux, local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple
+  logical :: local_Flather_OBC, is_simple, local_open_BC
+  type(OBC_segment_type), pointer :: segment
 
   do_aux = (present(vhbt_aux) .and. present(v_cor_aux))
   use_visc_rem = present(visc_rem_v)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
+  local_open_BC = .false.
   if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally .or. &
                         OBC%Flather_v_BCs_exist_globally
+    local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif ; endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
@@ -1111,6 +1140,27 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
+  if (local_open_BC) then
+    do n=1, OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (segment%direction == OBC_DIRECTION_N) then
+        J=segment%HI%JsdB
+        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+          h_in(i,j+1,k) = h_in(i,j,k)
+          h_L(i,j+1,k) = h_in(i,j,k)
+          h_R(i,j+1,k) = h_in(i,j,k)
+        enddo ; enddo
+      elseif (segment%direction == OBC_DIRECTION_S) then
+        J=segment%HI%JsdB
+        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+          h_in(i,j,k) = h_in(i,j+1,k)
+          h_L(i,j,k) = h_in(i,j+1,k)
+          h_R(i,j,k) = h_in(i,j+1,k)
+        enddo ; enddo
+      endif
+    enddo
+  endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
@@ -1134,10 +1184,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), &
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, J, ish, ieh, do_I, CS%vol_CFL)
-      if (local_specified_BC) then ; do i=ish,ieh
-        if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-          vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
-      enddo ; endif
+      if (local_specified_BC) then
+        do i=ish,ieh
+          if (OBC%segment(OBC%segnum_v(i,J))%specified) &
+            vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+        enddo
+      endif
     enddo ! k-loop
     if ((.not.use_visc_rem) .or. (.not.CS%use_visc_rem_max)) then ; do i=ish,ieh
       visc_rem_max(i) = 1.0

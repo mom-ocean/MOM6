@@ -509,7 +509,7 @@ program MOM_main
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
-        (MOM_CSp%dt_trans == 0.0)) then
+        (MOM_CSp%t_dyn_rel_adv == 0.0)) then
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                         MOM_CSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
@@ -546,12 +546,13 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-         "with a non-zero dt_trans.  Additional restart fields are required.")
-     if (.not.fluxes%fluxes_used .and. .not. offline_tracer_mode) call MOM_error(FATAL, &
-         "End of MOM_main reached "//&
-         "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
-         "files can only be created after the buoyancy forcing is applied.")
+    if (MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+         "with inconsistent dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
+     if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
+         "End of MOM_main reached with unused buoyancy fluxes. "//&
+         "For conservation, the ocean restart files can only be "//&
+         "created after the buoyancy forcing is applied.")
 
     call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &

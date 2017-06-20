@@ -993,7 +993,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
                             min_halo, domain_name, include_name, param_suffix)
   type(MOM_domain_type),           pointer       :: MOM_dom
-  type(param_file_type),           intent(in)    :: param_file
+  type(param_file_type),           intent(in)    :: param_file !< A structure to parse for run-time parameters
   logical, optional,               intent(in)    :: symmetric
   logical, optional,               intent(in)    :: static_memory
   integer, optional,               intent(in)    :: NIHALO, NJHALO
@@ -1152,8 +1152,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, "THIN_HALO_UPDATES", MOM_dom%thin_halo_updates, &
                  "If true, optional arguments may be used to specify the \n"//&
                  "The width of the halos that are updated with each call.", &
-                 default=.false., layoutParam=.true.)
-            !### THIS DEFAULT SHOULD BE CHANGED TO TRUE ONCE FMS IS FIXED. -RWH
+                 default=.true., layoutParam=.true.)
 
   nihalo_dflt = 4 ; njhalo_dflt = 4
   if (present(NIHALO)) nihalo_dflt = NIHALO
