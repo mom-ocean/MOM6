@@ -609,7 +609,7 @@ subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
+  !$OMP parallel do default(shared)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
       h(i,j,k) = h_new(i,j,k)
