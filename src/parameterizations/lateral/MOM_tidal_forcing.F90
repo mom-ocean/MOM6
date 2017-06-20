@@ -50,12 +50,14 @@ module MOM_tidal_forcing
 !*                                                                     *
 !***********************************************************************
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, &
+                              CLOCK_MODULE
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : field_exists, file_exists, read_data
-use MOM_time_manager, only : time_type, time_type_to_real
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
+use MOM_io,            only : field_exists, file_exists, read_data
+use MOM_time_manager,  only : time_type, time_type_to_real
 
 implicit none ; private
 
@@ -164,11 +166,11 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     lon_rad(i,j) = G%geoLonT(i,j)*deg_to_rad
   enddo ; enddo
   do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%sin_struct(i,j,1) = -sin(2.0*lat_rad(i,j)) * cos(lon_rad(i,j))
-    CS%cos_struct(i,j,1) = sin(2.0*lat_rad(i,j)) * sin(lon_rad(i,j))
+    CS%sin_struct(i,j,1) = -sin(2.0*lat_rad(i,j)) * sin(lon_rad(i,j))
+    CS%cos_struct(i,j,1) =  sin(2.0*lat_rad(i,j)) * cos(lon_rad(i,j))
     CS%sin_struct(i,j,2) = -cos(lat_rad(i,j))**2 * sin(2.0*lon_rad(i,j))
-    CS%cos_struct(i,j,2) = cos(lat_rad(i,j))**2 * cos(2.0*lon_rad(i,j))
-    CS%sin_struct(i,j,3) = 0.0
+    CS%cos_struct(i,j,2) =  cos(lat_rad(i,j))**2 * cos(2.0*lon_rad(i,j))
+    CS%sin_struct(i,j,3) =  0.0
     CS%cos_struct(i,j,3) = (0.5-1.5*sin(lat_rad(i,j))**2)
   enddo ; enddo
 
@@ -361,6 +363,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
       ! Read variables with names like PHASE_SAL_M2 and AMP_SAL_M2.
       call find_in_files(tidal_input_files,"PHASE_SAL_"//trim(CS%const_name(c)),phase,G)
       call find_in_files(tidal_input_files,"AMP_SAL_"//trim(CS%const_name(c)),CS%ampsal(:,:,c),G)
+      call pass_var(phase,           G%domain,complete=.false.)
+      call pass_var(CS%ampsal(:,:,c),G%domain,complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
         CS%cosphasesal(i,j,c) = cos(phase(i,j)*deg_to_rad)
         CS%sinphasesal(i,j,c) = sin(phase(i,j)*deg_to_rad)
@@ -376,6 +380,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
       ! Read variables with names like PHASE_PREV_M2 and AMP_PREV_M2.
       call find_in_files(tidal_input_files,"PHASE_PREV_"//trim(CS%const_name(c)),phase,G)
       call find_in_files(tidal_input_files,"AMP_PREV_"//trim(CS%const_name(c)),CS%amp_prev(:,:,c),G)
+      call pass_var(phase,             G%domain,complete=.false.)
+      call pass_var(CS%amp_prev(:,:,c),G%domain,complete=.true.)
       do j=js-1,je+1 ; do i=is-1,ie+1
         CS%cosphase_prev(i,j,c) = cos(phase(i,j)*deg_to_rad)
         CS%sinphase_prev(i,j,c) = sin(phase(i,j)*deg_to_rad)
