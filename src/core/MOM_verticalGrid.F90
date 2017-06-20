@@ -201,11 +201,21 @@ end function get_flux_units
 
 !> Returns the model's tracer flux units.
 function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
-  character(len=48)                      :: get_tr_flux_units
-  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
-  character(len=*), optional, intent(in) :: tr_units
-  character(len=*), optional, intent(in) :: tr_vol_conc_units
-  character(len=*), optional, intent(in) :: tr_mass_conc_units
+  character(len=48)                      :: get_tr_flux_units !< The model's flux units
+                                                              !! for a tracer.
+  type(verticalGrid_type),    intent(in) :: GV                !< The ocean's vertical
+                                                              !! grid structure.
+  character(len=*), optional, intent(in) :: tr_units          !< Units for a tracer, for example
+                                                              !! Celsius or PSU.
+  character(len=*), optional, intent(in) :: tr_vol_conc_units !< The concentration units per unit
+                                                              !! volume, forexample if the units are
+                                                              !! umol m-3, tr_vol_conc_units would
+                                                              !! be umol.
+  character(len=*), optional, intent(in) :: tr_mass_conc_units !< The concentration units per unit
+                                                              !! mass of sea water, for example if
+                                                              !! the units are mol kg-1,
+                                                              !! tr_vol_conc_units would be mol.
+
 !   This subroutine returns the appropriate units for thicknesses and fluxes,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.

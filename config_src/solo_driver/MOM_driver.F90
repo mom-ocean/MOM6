@@ -47,7 +47,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
-  use MOM,                 only : step_tracers
+  use MOM,                 only : step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -60,6 +60,7 @@ program MOM_main
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : save_restart
+  use MOM_string_functions, only : uppercase
   use MOM_sum_output,      only : write_energy, accumulate_net_input
   use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
@@ -68,7 +69,8 @@ program MOM_main
   use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager,    only : operator(>), operator(<), operator(>=)
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager,    only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
+  use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
+  use MOM_time_manager,    only : NO_CALENDAR
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -263,12 +265,14 @@ program MOM_main
     read(unit,*) date
     call close_file(unit)
   else
-    if (calendar(1:6) == 'julian') then ;         calendar_type = JULIAN
+    calendar = uppercase(calendar)
+    if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
+    else if (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
     else if (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    else if (calendar(1:10)=='thirty_day') then ; calendar_type = THIRTY_DAY_MONTHS
-    else if (calendar(1:11)=='no_calendar') then; calendar_type = NO_CALENDAR
+    else if (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
+    else if (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
     else if (calendar(1:1) /= ' ') then
-      call MOM_error(FATAL,'MOM_driver: Invalid namelist value for calendar')
+      call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
     endif
@@ -464,7 +468,7 @@ program MOM_main
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+      call step_offline(fluxes, state, Time1, time_step, MOM_CSp)
     else
       call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
     endif
