@@ -834,23 +834,35 @@ logical function check_column_integral(nk, field, known_answer)
 end function check_column_integral
 
 !> Returns false if the column integrals of two given quantities are within roundoff of each other
-logical function check_column_integrals(nk_1, field_1, nk_2, field_2)
-  integer,               intent(in) :: nk_1    !< Number of levels in field 1
-  integer,               intent(in) :: nk_2    !< Number of levels in field 2
-  real, dimension(nk_1), intent(in) :: field_1 !< First field to be summed
-  real, dimension(nk_2), intent(in) :: field_2 !< Second field to be summed
+logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_value)
+  integer,               intent(in) :: nk_1           !< Number of levels in field 1
+  integer,               intent(in) :: nk_2           !< Number of levels in field 2
+  real, dimension(nk_1), intent(in) :: field_1        !< First field to be summed
+  real, dimension(nk_2), intent(in) :: field_2        !< Second field to be summed
+  real, optional,        intent(in) :: missing_value  !< If column contains missing values,
+                                                      !! mask them from the sum
+
 
   ! Local variables
-  real    :: u1_sum, error1, u2_sum, error2
+  real    :: u1_sum, error1, u2_sum, error2, misval
   integer :: k
+
+  ! Assign missing value
+  if (present(missing_value)) then
+    misval = missing_value
+  else
+    misval = 0.
+  endif
 
   u1_sum = field_1(1)
   error1 = 0.
 
   ! Reintegrate and sum roundoff errors
   do k=2,nk_1
-    u1_sum = u1_sum + field_1(k)
-    error1 = error1 + EPSILON(u1_sum)*MAX(ABS(u1_sum),ABS(field_1(k)))
+    if (field_1(k)/=misval) then
+      u1_sum = u1_sum + field_1(k)
+      error1 = error1 + EPSILON(u1_sum)*MAX(ABS(u1_sum),ABS(field_1(k)))
+    endif
   enddo
 
   u2_sum = field_2(1)
@@ -858,8 +870,10 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2)
 
   ! Reintegrate and sum roundoff errors
   do k=2,nk_2
-    u2_sum = u2_sum + field_2(k)
-    error2 = error2 + EPSILON(u2_sum)*MAX(ABS(u2_sum),ABS(field_2(k)))
+    if (field_2(k)/=misval) then
+      u2_sum = u2_sum + field_2(k)
+      error2 = error2 + EPSILON(u2_sum)*MAX(ABS(u2_sum),ABS(field_2(k)))
+    endif
   enddo
 
   ! Compare the column integrals against calculated roundoff error
