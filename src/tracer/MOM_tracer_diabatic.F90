@@ -278,7 +278,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,Tr,G,GV,fluxes,dt,    &
 !$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
-!$OMP                                  numberOfGroundings,iGround,jGround,      &
+!$OMP                                  numberOfGroundings,iGround,jGround,update_h, &
 !$OMP                                  in_flux,out_flux,hGrounding,Idt,evap_CFL_limit) &
 !$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
 !$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
