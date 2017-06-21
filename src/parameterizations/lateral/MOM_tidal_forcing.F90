@@ -105,10 +105,10 @@ integer :: id_clock_tides
 contains
 
 subroutine tidal_forcing_init(Time, G, param_file, CS)
-  type(time_type),       intent(in) :: Time
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(tidal_forcing_CS), pointer   :: CS
+  type(time_type),       intent(in)    :: Time
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
+  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
+  type(tidal_forcing_CS), pointer      :: CS
 
 ! This subroutine allocates space for the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
