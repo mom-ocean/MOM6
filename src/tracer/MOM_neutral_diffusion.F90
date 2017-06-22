@@ -934,7 +934,7 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
       hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
       hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
-        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR )
+        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Analogous of effective resistance for two resistors
       else
         hEff(k_surface-1) = 0.
       endif
@@ -947,188 +947,220 @@ end subroutine find_neutral_surface_positions_continuous
 !> Higher order version of find_neutral_surface_positions. Returns positions within left/right columns
 !! of combined interfaces using intracell reconstructions of T/S
 subroutine find_neutral_surface_positions_discontinuous(nk, &
-                                Pl, Tint_lt, Tint_lb, Sint_lt, Sint_lb, dRdT_lt, dRdT_lb, dRdS_lt, dRdS_lb, &
-                                Pr, Tint_rt, Tint_rb, Sint_rt, Sint_rb, dRdT_rt, dRdT_rb, dRdS_rt, dRdS_rb, &
+                                Pres_l, Tint_lt, Tint_lb, Sint_lt, Sint_lb, dRdT_lt, dRdT_lb, dRdS_lt, dRdS_lb, &
+                                Pres_r, Tint_rt, Tint_rb, Sint_rt, Sint_rb, dRdT_rt, dRdT_rb, dRdS_rt, dRdS_rb, &
                                 PoL, PoR, KoL, KoR, hEff)
-  integer,                    intent(in)    :: nk     !< Number of levels
-  real, dimension(nk+1),      intent(in)    :: Pl     !< Left-column interface pressure (Pa)
+  integer,                    intent(in)    :: nk      !< Number of levels
+  real, dimension(nk+1),      intent(in)    :: Pres_l  !< Left-column interface pressure (Pa)
   real, dimension(nk+1),      intent(in)    :: Tint_lt !< Left-column top interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Tint_lb !< Left-column bottom interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Sint_lt !< Left-column top interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: Sint_lb !< Left-column bottom interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdT_lt !< Left-column, top interface dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdT_lb !< Left-column, bottom interface dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdS_lt !< Left-column, top interface dRho/dS (kg/m3/ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdS_lb !< Left-column, bottom interface  dRho/dS (kg/m3/ppt)
-  real, dimension(nk+1),      intent(in)    :: Pr     !< Right-column interface pressure (Pa)
-  real, dimension(nk+1),      intent(in)    :: Tint_rt !< Right-column top interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Tint_rb !< Right-column bottom interface potential temperature (degC)
-  real, dimension(nk+1),      intent(in)    :: Sint_rt !< Right-column top interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: Sint_rb !< Right-column bottom interface salinity (ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdT_rt !< Right-column, top interface dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdT_rb !< Right-column, bottom interface dRho/dT (kg/m3/degC)
-  real, dimension(nk+1),      intent(in)    :: dRdS_rt !< Right-column, top interface dRho/dS (kg/m3/ppt)
-  real, dimension(nk+1),      intent(in)    :: dRdS_rb !< Right-column, bottom interface  dRho/dS (kg/m3/ppt)
-  real, dimension(4*nk+2),    intent(inout) :: PoL    !< Fractional position of neutral surface within layer KoL of left column
-  real, dimension(4*nk+2),    intent(inout) :: PoR    !< Fractional position of neutral surface within layer KoR of right column
-  integer, dimension(4*nk+2), intent(inout) :: KoL    !< Index of first left interface above neutral surface
-  integer, dimension(4*nk+2), intent(inout) :: KoR    !< Index of first right interface above neutral surface
-  real, dimension(4*nk+1),    intent(inout) :: hEff   !< Effective thickness between two neutral surfaces (Pa)
+  real, dimension(nk),        intent(in)    :: Tint_lb !< Left-column bottom interface potential temperature (degC)
+  real, dimension(nk),        intent(in)    :: Sint_lt !< Left-column top interface salinity (ppt)
+  real, dimension(nk),        intent(in)    :: Sint_lb !< Left-column bottom interface salinity (ppt)
+  real, dimension(nk),        intent(in)    :: dRdT_lt !< Left-column, top interface dRho/dT (kg/m3/degC)
+  real, dimension(nk),        intent(in)    :: dRdT_lb !< Left-column, bottom interface dRho/dT (kg/m3/degC)
+  real, dimension(nk),        intent(in)    :: dRdS_lt !< Left-column, top interface dRho/dS (kg/m3/ppt)
+  real, dimension(nk),        intent(in)    :: dRdS_lb !< Left-column, bottom interface  dRho/dS (kg/m3/ppt)
+  real, dimension(nk+1),      intent(in)    :: Pres_r  !< Right-column interface pressure (Pa)
+  real, dimension(nk),        intent(in)    :: Tint_rt !< Right-column top interface potential temperature (degC)
+  real, dimension(nk),        intent(in)    :: Tint_rb !< Right-column bottom interface potential temperature (degC)
+  real, dimension(nk),        intent(in)    :: Sint_rt !< Right-column top interface salinity (ppt)
+  real, dimension(nk),        intent(in)    :: Sint_rb !< Right-column bottom interface salinity (ppt)
+  real, dimension(nk),        intent(in)    :: dRdT_rt !< Right-column, top interface dRho/dT (kg/m3/degC)
+  real, dimension(nk),        intent(in)    :: dRdT_rb !< Right-column, bottom interface dRho/dT (kg/m3/degC)
+  real, dimension(nk),        intent(in)    :: dRdS_rt !< Right-column, top interface dRho/dS (kg/m3/ppt)
+  real, dimension(nk),        intent(in)    :: dRdS_rb !< Right-column, bottom interface  dRho/dS (kg/m3/ppt)
+  real, dimension(4*nk),      intent(inout) :: PoL     !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(4*nk),      intent(inout) :: PoR     !< Fractional position of neutral surface within layer KoR of right column
+  integer, dimension(4*nk),   intent(inout) :: KoL     !< Index of first left interface above neutral surface
+  integer, dimension(4*nk),   intent(inout) :: KoR     !< Index of first right interface above neutral surface
+  real, dimension(4*nk-1),    intent(inout) :: hEff    !< Effective thickness between two neutral surfaces (Pa)
 
-  ! ! Local variables
-  ! integer :: k_surface              ! Index of neutral surface
-  ! integer :: kl                     ! Index of left interface
-  ! integer :: kr                     ! Index of right interface
-  ! real    :: dRdT, dRdS             ! dRho/dT and dRho/dS for the neutral surface
-  ! logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
-  ! logical :: searching_right_column ! True if searching for the position of a left interface in the right column
-  ! logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-  ! integer :: krm1, klm1
-  ! real    :: dRho, dRhoTop, dRhoBot, hL, hR
-  ! integer :: lastK_left, lastK_right
-  ! real    :: lastP_left, lastP_right
+  ! Local variables
+  integer :: k_surface              ! Index of neutral surface
+  integer :: kl                     ! Index of left interface
+  integer :: kr                     ! Index of right interface
+  real    :: dRdT, dRdS             ! dRho/dT and dRho/dS for the neutral surface
+  logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
+  logical :: searching_right_column ! True if searching for the position of a left interface in the right column
+  logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
+  integer :: krm1, klm1             !
+  logical :: klm1_is_t, krm1_is_t   ! True if the klm1 or krm1 index is the top
+  real    :: dRho, dRhoTop, dRhoBot, hL, hR
+  integer :: lastK_left, lastK_right
+  real    :: lastP_left, lastP_right
 
-  ! ! Initialize variables for the search
-  ! kr = 1 ; lastK_right = 1 ; lastP_right = 0.
-  ! kl = 1 ; lastK_left = 1 ; lastP_left = 0.
-  ! reached_bottom = .false.
+  ! Vectors with all the values of the discontinuous reconstruction
+  real, dimension(4*nk) :: Pl, Pr, Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
 
-  ! ! Loop over each neutral surface, working from top to bottom
-  ! neutral_surfaces: do k_surface = 1, 2*nk+2
-  !   klm1 = max(kl-1, 1)
-  !   if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
-  !   krm1 = max(kr-1, 1)
-  !   if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
+  ! Initialize variables for the search
+  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
+  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
+  reached_bottom = .false.
 
-  !   ! Potential density difference, rho(kr) - rho(kl)
-  !   dRho = 0.5 *  ( ( dRdTr(kr) + dRdTl(kl) ) * ( Tr(kr) - Tl(kl) ) &
-  !                 + ( dRdSr(kr) + dRdSl(kl) ) * ( Sr(kr) - Sl(kl) ) )
-  !   ! Which column has the lighter surface for the current indexes, kr and kl
-  !   if (.not. reached_bottom) then
-  !     if (dRho < 0.) then
-  !       searching_left_column = .true.
-  !       searching_right_column = .false.
-  !     elseif (dRho > 0.) then
-  !       searching_right_column = .true.
-  !       searching_left_column = .false.
-  !     else ! dRho == 0.
-  !       if (kl + kr == 2) then ! Still at surface
-  !         searching_left_column = .true.
-  !         searching_right_column = .false.
-  !       else ! Not the surface so we simply change direction
-  !         searching_left_column = .not.  searching_left_column
-  !         searching_right_column = .not.  searching_right_column
-  !       endif
-  !     endif
-  !   endif
+  ! Create a single vector for temperature, salinity, and pressure with the discontinuous reconstruction
+  do kl=1,nk
+    ! Left column
+    Pl(2*kl-1) = Pres_l(kl)
+    Pl(2*kl)   = Pres_l(kl+1)
+    Sl(2*kl-1) = Sint_lt(kl)
+    Sl(2*kl)   = Sint_lb(kl)
+    Tl(2*kl-1) = Tint_lt(kl)
+    Tl(2*kl)   = Tint_lb(kl)
+    dRdT_l(2*kl-1) = dRdT_lt(kl)
+    dRdS_l(2*kl) = dRdS_lt(kl)
+  enddo
+  do kr=1,nk
+    ! Right column
+    Pr(2*kr-1) = Pres_r(kr)
+    Pr(2*kr)   = Pres_r(kr+1)
+    Sr(2*kr-1) = Sint_rt(kr)
+    Sr(2*kr)   = Sint_rb(kr)
+    Tr(2*kr-1) = Tint_rt(kr)
+    Tr(2*kr)   = Tint_rb(kr)
+    dRdT_r(2*kr-1) = dRdT_rt(kr)
+    dRdS_r(2*kr) = dRdS_rt(kr)
+  enddo
 
-  !   if (searching_left_column) then
-  !     ! Interpolate for the neutral surface position within the left column, layer klm1
-  !     ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
-  !     dRhoTop = 0.5 * ( ( dRdTl(klm1) + dRdTr(kr) ) * ( Tl(klm1) - Tr(kr) ) &
-  !                    + ( dRdSl(klm1) + dRdSr(kr) ) * ( Sl(klm1) - Sr(kr) ) )
-  !     ! Potential density difference, rho(kl) - rho(kr) (will be positive)
-  !     dRhoBot = 0.5 * ( ( dRdTl(klm1+1) + dRdTr(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
-  !                     + ( dRdSl(klm1+1) + dRdSr(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
+  ! Loop over each neutral surface, working from top to bottom
+  neutral_surfaces: do k_surface = 1, 4*nk
+    klm1 = max(kl-1, 1)
+    if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
+    krm1 = max(kr-1, 1)
+    if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
 
-  !     ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
-  !     ! unless we are still at the top of the left column (kl=1)
-  !     if (dRhoTop > 0. .or. kr+kl==2) then
-  !       PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
-  !     elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
-  !       PoL(k_surface) = 1.
-  !     else
-  !       ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
-  !       ! between right and left is zero.
-  !       PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
-  !     endif
-  !     if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
-  !       klm1 = klm1 + 1
-  !       PoL(k_surface) = PoL(k_surface) - 1.
-  !     endif
-  !     if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
-  !       PoL(k_surface) = lastP_left
-  !       klm1 = lastK_left
-  !     endif
-  !     KoL(k_surface) = klm1
-  !     if (kr <= nk) then
-  !       PoR(k_surface) = 0.
-  !       KoR(k_surface) = kr
-  !     else
-  !       PoR(k_surface) = 1.
-  !       KoR(k_surface) = nk
-  !     endif
-  !     if (kr <= nk) then
-  !       kr = kr + 1
-  !     else
-  !       reached_bottom = .true.
-  !       searching_right_column = .true.
-  !       searching_left_column = .false.
-  !     endif
-  !   elseif (searching_right_column) then
-  !     ! Interpolate for the neutral surface position within the right column, layer krm1
-  !     ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
-  !     dRhoTop = 0.5 * ( ( dRdTr(krm1) + dRdTl(kl) ) * ( Tr(krm1) - Tl(kl) ) &
-  !                    + ( dRdSr(krm1) + dRdSl(kl) ) * ( Sr(krm1) - Sl(kl) ) )
-  !     ! Potential density difference, rho(kr) - rho(kl) (will be positive)
-  !     dRhoBot = 0.5 * ( ( dRdTr(krm1+1) + dRdTl(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
-  !                  + ( dRdSr(krm1+1) + dRdSl(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
+    ! Potential density difference, rho(kr) - rho(kl)
+    dRho = 0.5 * ( ( dRdT_r(kr) + dRdT_l(kl) ) * ( Tr(kr) - Tl(kl) ) &
+                 + ( dRdS_r(kr) + dRdS_l(kl) ) * ( Sr(kr) - Sl(kl) ) )
+    ! Which column has the lighter surface for the current indexes, kr and kl
+    if (.not. reached_bottom) then
+      if (dRho < 0.) then
+        searching_left_column = .true.
+        searching_right_column = .false.
+      elseif (dRho > 0.) then
+        searching_right_column = .true.
+        searching_left_column = .false.
+      else ! dRho == 0.
+        if (kl + kr == 2) then ! Still at surface
+          searching_left_column = .true.
+          searching_right_column = .false.
+        else ! Not the surface so we simply change direction
+          searching_left_column = .not.  searching_left_column
+          searching_right_column = .not.  searching_right_column
+        endif
+      endif
+    endif
 
-  !     ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
-  !     ! unless we are still at the top of the right column (kr=1)
-  !     if (dRhoTop >= 0. .or. kr+kl==2) then
-  !       PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
-  !     elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
-  !       PoR(k_surface) = 1.
-  !     else
-  !       ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
-  !       ! between right and left is zero.
-  !       PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
-  !     endif
-  !     if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
-  !       krm1 = krm1 + 1
-  !       PoR(k_surface) = PoR(k_surface) - 1.
-  !     endif
-  !     if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
-  !       PoR(k_surface) = lastP_right
-  !       krm1 = lastK_right
-  !     endif
-  !     KoR(k_surface) = krm1
-  !     if (kl <= nk) then
-  !       PoL(k_surface) = 0.
-  !       KoL(k_surface) = kl
-  !     else
-  !       PoL(k_surface) = 1.
-  !       KoL(k_surface) = nk
-  !     endif
-  !     if (kl <= nk) then
-  !       kl = kl + 1
-  !     else
-  !       reached_bottom = .true.
-  !       searching_right_column = .false.
-  !       searching_left_column = .true.
-  !     endif
-  !   else
-  !     stop 'Else what?'
-  !   endif
+    if (searching_left_column) then
+      ! Interpolate for the neutral surface position within the left column, layer klm1
+      ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
+      dRhoTop = 0.5 * ( ( dRdT_l(klm1) + dRdT_r(kr) ) * ( Tl(klm1) - Tr(kr) ) &
+                     + ( dRdS_l(klm1) + dRdS_r(kr) ) * ( Sl(klm1) - Sr(kr) ) )
+      ! Potential density difference, rho(kl) - rho(kr) (will be positive)
+      dRhoBot = 0.5 * ( ( dRdT_l(klm1+1) + dRdT_r(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
+                      + ( dRdS_l(klm1+1) + dRdS_r(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
 
-  !   lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
-  !   lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
+      ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
+      ! unless we are still at the top of the left column (kl=1)
+      if (dRhoTop > 0. .or. kr+kl==2) then
+        PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
+      elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
+        PoL(k_surface) = 1.
+      elseif ( (dRhoBot > dRhoTop) .and. (Pl(klm1) == Pl(klm1+1)) ) then ! Density exists at a discontinuity
+        PoL(k_surface) = 0
+      else
+        ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
+        ! between right and left is zero.
+        PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
+      endif
+      if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
+        klm1 = klm1 + 1
+        PoL(k_surface) = PoL(k_surface) - 1.
+      endif
+      if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
+        PoL(k_surface) = lastP_left
+        klm1 = lastK_left
+      endif
+      KoL(k_surface) = klm1
+      if (kr <= nk) then
+        PoR(k_surface) = 0.
+        KoR(k_surface) = kr
+      else
+        PoR(k_surface) = 1.
+        KoR(k_surface) = nk
+      endif
+      if (kr <= nk) then
+        kr = kr + 1
+      else
+        reached_bottom = .true.
+        searching_right_column = .true.
+        searching_left_column = .false.
+      endif
+    elseif (searching_right_column) then
+      ! Interpolate for the neutral surface position within the right column, layer krm1
+      ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
+      dRhoTop = 0.5 * ( ( dRdT_r(krm1) + dRdT_l(kl) ) * ( Tr(krm1) - Tl(kl) ) &
+                     + ( dRdS_r(krm1) + dRdS_l(kl) ) * ( Sr(krm1) - Sl(kl) ) )
+      ! Potential density difference, rho(kr) - rho(kl) (will be positive)
+      dRhoBot = 0.5 * ( ( dRdT_r(krm1+1) + dRdT_l(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
+                   + ( dRdS_r(krm1+1) + dRdS_l(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
 
-  !   ! Effective thickness
-  !   ! NOTE: This would be better expressed in terms of the layers thicknesses rather
-  !   ! than as differences of position - AJA
-  !   if (k_surface>1) then
-  !     hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
-  !     hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
-  !     if ( hL + hR > 0.) then
-  !       hEff(k_surface-1) = 2. * hL * hR / ( hL + hR )
-  !     else
-  !       hEff(k_surface-1) = 0.
-  !     endif
-  !   endif
+      ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
+      ! unless we are still at the top of the right column (kr=1)
+      if (dRhoTop >= 0. .or. kr+kl==2) then
+        PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
+      elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
+        PoR(k_surface) = 1.
+      elseif ( (dRhoBot > dRhoTop) .and. (Pr(krm1) == Pr(krm1+1)) ) then ! Density exists at a discontinuity
+        PoR(k_surface) = 0
+      else
+        ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
+        ! between right and left is zero.
+        PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
+      endif
+      if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
+        krm1 = krm1 + 1
+        PoR(k_surface) = PoR(k_surface) - 1.
+      endif
+      if (real(krm1-lastK_right)+(PoR(k_surface)-lastP_right)<0.) then
+        PoR(k_surface) = lastP_right
+        krm1 = lastK_right
+      endif
+      KoR(k_surface) = krm1
+      if (kl <= nk) then
+        PoL(k_surface) = 0.
+        KoL(k_surface) = kl
+      else
+        PoL(k_surface) = 1.
+        KoL(k_surface) = nk
+      endif
+      if (kl <= nk) then
+        kl = kl + 1
+      else
+        reached_bottom = .true.
+        searching_right_column = .false.
+        searching_left_column = .true.
+      endif
+    else
+      stop 'Else what?'
+    endif
 
-  ! enddo neutral_surfaces
+    lastK_left = KoL(k_surface) ; lastP_left = PoL(k_surface)
+    lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
+
+    ! Effective thickness
+    ! NOTE: This would be better expressed in terms of the layers thicknesses rather
+    ! than as differences of position - AJA
+    if (k_surface>1) then
+      hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
+      hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
+      if ( hL + hR > 0.) then
+        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Analogous of effective resistance for two resistors
+      else
+        hEff(k_surface-1) = 0.
+      endif
+    endif
+
+  enddo neutral_surfaces
 
 end subroutine find_neutral_surface_positions_discontinuous
 
