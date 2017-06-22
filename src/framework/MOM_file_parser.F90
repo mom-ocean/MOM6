@@ -846,7 +846,7 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_f
                              ' found but not set in input files.')
       endif
     endif ; endif
-  endif 
+  endif
   return
  1005 call MOM_error(FATAL,'read_param_time: read error for time-type variable '//&
                            trim(varname)// ' parsing "'//trim(value_string(1))//'"')
@@ -1501,7 +1501,7 @@ end subroutine log_param_time
 function convert_date_to_string(date) result(date_string)
   type(time_type), intent(in) :: date !< The date to be translated into a string.
   character(len=40) :: date_string    !< A date string in a format like YYYY-MM-DD HH:MM:SS.sss
- 
+
   character(len=40) :: sub_string
   real    :: real_secs
   integer :: yrs, mons, days, hours, mins, secs, ticks, ticks_per_sec
