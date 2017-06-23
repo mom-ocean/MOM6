@@ -28,7 +28,7 @@ public neutral_diffusion_unit_tests
 
 type, public :: neutral_diffusion_CS ; private
   integer :: nkp1   ! Number of interfaces for a column = nk + 1
-  integer :: nkp1X2 ! Number of intersecting interfaces between columns = 2 * nkp1
+  integer :: nsurf  ! Number of neutral surfaces
   logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
 
   real,    allocatable, dimension(:,:,:) :: uPoL  ! Non-dimensional position with left layer uKoL-1, u-point
@@ -71,7 +71,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
-  integer :: factor ! How many connections between two columns
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -94,28 +93,34 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
 
   ! Read all relevant parameters and write them to the model log.
+  call get_param(param_file, mod, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
+                 "If true, uses a continuous reconstruction of T and S when  \n"//  &
+                 "finding neutral surfaces along which diffusion will happen.\n"//  &
+                 "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
+                 "is done which results in a higher order routine but exacts \n"//  &
+                 "a higher computational cost.", default=.true.)
 ! call openParameterBlock(param_file,'NEUTRAL_DIFF')
 ! call get_param(param_file, mod, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
 ! call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
-    factor = 2
+    CS%nsurf = 2*G%ke+2 ! Continuous reconstruction means that every interface has two connections
   else
-    factor = 4
+    CS%nsurf = 4*G%ke   ! Discontinuous means that every interface has four connections
   endif
   ! U-points
-  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
-  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
-  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
+  allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
+  allocate(CS%uKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
+  allocate(CS%uKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uKoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0
+  allocate(CS%uHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%uHeff(G%isc-1:G%iec,G%jsc:G%jec,:) = 0
   ! V-points
-  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
-  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+2)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
-  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,factor*G%ke+1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
+  allocate(CS%vPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vPoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0.
+  allocate(CS%vKoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoL(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
+  allocate(CS%vKoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%vKoR(G%isc:G%iec,G%jsc-1:G%jec,:)   = 0
+  allocate(CS%vHeff(G%isd:G%ied,G%jsd:G%jed,CS%nsurf-1)); CS%vHeff(G%isc:G%iec,G%jsc-1:G%jec,:) = 0
 
 end function neutral_diffusion_init
 
@@ -273,14 +278,15 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Sint ! Interface S (ppt)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: Pint ! Interface pressure (Pa)
   ! Allocatable variables for discontinuous reconstructions
-  real, dimension(:,:,:), allocatable        :: T_l     ! Left edge reconstruction of temperature (degC)
-  real, dimension(:,:,:), allocatable        :: T_r     ! Right edge reconstruction of temperature (degC)
-  real, dimension(:,:,:), allocatable        :: S_l     ! Left edge reconstruction of salinity (ppt)
-  real, dimension(:,:,:), allocatable        :: S_r     ! Right edge reconstruction of temperature (ppt)
-  real, dimension(:,:,:), allocatable        :: dRdT_l  ! dRho/dT (kg/m3/degC) at left edge
-  real, dimension(:,:,:), allocatable        :: dRdT_r  ! dRho/dT (kg/m3/degC) at right edge
-  real, dimension(:,:,:), allocatable        :: dRdS_l  ! dRho/dS (kg/m3/ppt) at left edge
-  real, dimension(:,:,:), allocatable        :: dRdS_r  ! dRho/dS (kg/m3/ppt) at right edge
+  ! Note here that the underscript 't' for top interface is equivalent to 'left' edge in the PPM literature
+  real, dimension(:,:,:), allocatable        :: T_t     ! Top edge reconstruction of temperature (degC)
+  real, dimension(:,:,:), allocatable        :: T_b     ! Bottom edge reconstruction of temperature (degC)
+  real, dimension(:,:,:), allocatable        :: S_t     ! Top edge reconstruction of salinity (ppt)
+  real, dimension(:,:,:), allocatable        :: S_b     ! Bottom edge reconstruction of temperature (ppt)
+  real, dimension(:,:,:), allocatable        :: dRdT_t  ! dRho/dT (kg/m3/degC) at top edge
+  real, dimension(:,:,:), allocatable        :: dRdT_b  ! dRho/dT (kg/m3/degC) at bottom edge
+  real, dimension(:,:,:), allocatable        :: dRdS_t  ! dRho/dS (kg/m3/ppt) at top edge
+  real, dimension(:,:,:), allocatable        :: dRdS_b  ! dRho/dS (kg/m3/ppt) at bottom edge
   ! Allcoatable variables for continuous reconstructions
   real, dimension(:,:,:), allocatable        :: dRdT_i ! dRho/dT (kg/m3/degC) at interface
   real, dimension(:,:,:), allocatable        :: dRdS_i ! dRho/dS (kg/m3/ppt) at interfaces
@@ -288,15 +294,26 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   if (CS%continuous_reconstruction) then
     if (.not. ALLOCATED(dRdT_i)) ALLOCATE(dRdT_i(SZI_(G),SZJ_(G),SZK_(G)+1))
     if (.not. ALLOCATED(dRdS_i)) ALLOCATE(dRdS_i(SZI_(G),SZJ_(G),SZK_(G)+1))
+    dRdT_i(:,:,:) = 0.
+    dRdS_i(:,:,:) = 0.
   else
-    if (.not. ALLOCATED(T_l))     ALLOCATE(T_l(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(T_r))     ALLOCATE(T_r(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(S_l))     ALLOCATE(S_l(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(S_r))     ALLOCATE(S_r(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(dRdT_l))  ALLOCATE(dRdT_l(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(dRdS_l))  ALLOCATE(dRdS_l(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(dRdT_r))  ALLOCATE(dRdT_r(SZI_(G),SZJ_(G),SZK_(G)))
-    if (.not. ALLOCATED(dRdS_r))  ALLOCATE(dRdS_r(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(T_t))     ALLOCATE(T_t(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(T_b))     ALLOCATE(T_b(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(S_t))     ALLOCATE(S_t(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(S_b))     ALLOCATE(S_b(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(dRdT_t))  ALLOCATE(dRdT_t(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(dRdS_t))  ALLOCATE(dRdS_t(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(dRdT_b))  ALLOCATE(dRdT_b(SZI_(G),SZJ_(G),SZK_(G)))
+    if (.not. ALLOCATED(dRdS_b))  ALLOCATE(dRdS_b(SZI_(G),SZJ_(G),SZK_(G)))
+
+    T_t(:,:,:) = 0.
+    T_b(:,:,:) = 0.
+    S_t(:,:,:) = 0.
+    S_b(:,:,:) = 0.
+    dRdT_t(:,:,:) = 0.
+    dRdT_b(:,:,:) = 0.
+    dRdS_t(:,:,:) = 0.
+    dRdS_b(:,:,:) = 0.
   endif
 
   do j = G%jsc-1, G%jec+1
@@ -306,59 +323,70 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
       call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:), 2)
       ! If doing continuous reconstructions, need to calculate left and right edge values
       if (.not. CS%continuous_reconstruction) then
-        call ppm_left_right_edge_values(G%ke, T(i,j,:), Tint(i,j,:), T_l, T_r)
-        call ppm_left_right_edge_values(G%ke, S(i,j,:), Sint(i,j,:), T_l, T_r)
+        call ppm_left_right_edge_values(G%ke, T(i,j,:), Tint(i,j,:), T_t(i,j,:), T_b(i,j,:))
+        call ppm_left_right_edge_values(G%ke, S(i,j,:), Sint(i,j,:), S_t(i,j,:), S_b(i,j,:))
       endif
     enddo
 
     ! Calculate interface properties
     Pint(:,j,1) = 0. ! Assume P=0 (Pa) at surface - needs correcting for atmospheric and ice loading - AJA
-    do k = 1, G%ke+1
-      call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
-                                    dRdT_i(:,j,k), dRdS_i(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
-      if (k<=G%ke) then
-        Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
-        if (.not. CS%continuous_reconstruction) then
-          call calculate_density_derivs(T_l(:,j,k), S_l(:,j,k), Pint(:,j,k), &
-                                        dRdT_l(:,j,k), dRdS_l(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
-          call calculate_density_derivs(T_r(:,j,k), S_r(:,j,k), Pint(:,j,k+1), &
-                                        dRdT_r(:,j,k), dRdS_r(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+    ! Continuous reconstruction
+    if (CS%continuous_reconstruction) then
+      do k = 1, G%ke
+          call calculate_density_derivs(Tint(:,j,k), Sint(:,j,k), Pint(:,j,k), &
+                                        dRdT_i(:,j,k), dRdS_i(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+        if (k<=G%ke) then
+          Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
         endif
-      endif
-    enddo
+      enddo
+    else ! Discontinuous reconstruction
+      do k = 1, G%ke
+        call calculate_density_derivs(T_t(:,j,k), S_t(:,j,k), Pint(:,j,k), &
+                                      dRdT_t(:,j,k), dRdS_t(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+        if (k<=G%ke) then
+          Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
+          call calculate_density_derivs(T_b(:,j,k), S_b(:,j,k), Pint(:,j,k+1), &
+                                        dRdT_b(:,j,k), dRdS_b(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
+        endif
+      enddo
+    endif
   enddo
 
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-    if (CS%continuous_reconstruction) then
-      call find_neutral_surface_positions_continuous(G%ke,                                    &
-              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),            &
-              Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT_i(i+1,j,:), dRdS_i(i+1,j,:),  &
+    if (G%mask2dcu(I,j)>0.) then
+      if (CS%continuous_reconstruction) then
+        call find_neutral_surface_positions_continuous(G%ke,                                    &
+                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),            &
+                Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT_i(i+1,j,:), dRdS_i(i+1,j,:),  &
+                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      else
+        call find_neutral_surface_positions_discontinuous(G%ke,                       &
+              Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
+              dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
+              Pint(i+1,j,:), T_t(i+1,j,:), T_b(i+1,j,:), S_t(i+1,j,:), S_b(i+1,j,:),  &
+              dRdT_t(i+1,j,:), dRdT_b(i+1,j,:), dRdS_t(i+1,j,:), dRdS_b(i+1,j,:),     &
               CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
-    else
-      call find_neutral_surface_positions_discontinuous(G%ke,                       &
-            Pint(i,j,:), T_l(i,j,:), T_r(i,j,:), S_l(i,j,:), S_r(i,j,:),            &
-            dRdT_l(i,j,:), dRdT_r(i,j,:), dRdS_l(i,j,:), dRdS_r(i,j,:),             &
-            Pint(i+1,j,:), T_l(i+1,j,:), T_r(i+1,j,:), S_l(i+1,j,:), S_r(i+1,j,:),  &
-            dRdT_l(i+1,j,:), dRdS_r(i+1,j,:), dRdS_l(i+1,j,:), dRdS_l(i+1,j,:),     &
-            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      endif
     endif
   enddo ; enddo
 
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-    if (CS%continuous_reconstruction) then
-      call find_neutral_surface_positions_continuous(G%ke,                                   &
-              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),           &
-              Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT_i(i,j+1,:), dRdS_i(i,j+1,:), &
-              CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
-    else
-      call find_neutral_surface_positions_discontinuous(G%ke,                     &
-          Pint(i,j,:), T_l(i,j,:), T_r(i,j,:), S_l(i,j,:), S_r(i,j,:),            &
-          dRdT_l(i,j,:), dRdT_r(i,j,:), dRdS_l(i,j,:), dRdS_r(i,j,:),             &
-          Pint(i,j+1,:), T_l(i,j+1,:), T_r(i,j+1,:), S_l(i,j+1,:), S_r(i,j+1,:),  &
-          dRdT_l(i,j+1,:), dRdS_r(i,j+1,:), dRdS_l(i,j+1,:), dRdS_l(i,j+1,:),     &
-          CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
+    if (G%mask2dcv(i,J)>0.) then
+      if (CS%continuous_reconstruction) then
+        call find_neutral_surface_positions_continuous(G%ke,                                   &
+                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),           &
+                Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT_i(i,j+1,:), dRdS_i(i,j+1,:), &
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
+      else
+        call find_neutral_surface_positions_discontinuous(G%ke,                     &
+            Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
+            dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
+            Pint(i,j+1,:), T_t(i,j+1,:), T_b(i,j+1,:), S_t(i,j+1,:), S_b(i,j+1,:),  &
+            dRdT_t(i,j+1,:), dRdT_b(i,j+1,:), dRdS_t(i,j+1,:), dRdS_b(i,j+1,:),     &
+            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
+      endif
     endif
   enddo ; enddo
 
@@ -382,13 +410,13 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),2*G%ke+1) :: uFlx        ! Zonal flux of tracer      (concentration * H)
-  real, dimension(SZI_(G),SZJB_(G),2*G%ke+1) :: vFlx        ! Meridional flux of tracer (concentration * H)
-  real, dimension(SZI_(G),SZJ_(G),G%ke)      :: tendency    ! tendency array for diagn
-  real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d ! depth integrated content tendency for diagn
-  real, dimension(SZIB_(G),SZJ_(G))          :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
-  real, dimension(SZI_(G),SZJB_(G))          :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
-  real, dimension(G%ke)                      :: dTracer     ! change in tracer concentration due to ndiffusion
+  real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer      (concentration * H)
+  real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer (concentration * H)
+  real, dimension(SZI_(G),SZJ_(G),G%ke)        :: tendency    ! tendency array for diagn
+  real, dimension(SZI_(G),SZJ_(G))             :: tendency_2d ! depth integrated content tendency for diagn
+  real, dimension(SZIB_(G),SZJ_(G))            :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
+  real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
+  real, dimension(G%ke)                        :: dTracer     ! change in tracer concentration due to ndiffusion
   integer :: i, j, k, ks, nk
   real :: ppt2mks, Idt, convert
 
@@ -415,7 +443,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! x-flux
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
     if (G%mask2dCu(I,j)>0.) then
-      call neutral_surface_flux(nk, h(i,j,:), h(i+1,j,:),       &
+      call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i+1,j,:),       &
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
@@ -428,7 +456,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! y-flux
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
     if (G%mask2dCv(i,J)>0.) then
-      call neutral_surface_flux(nk, h(i,j,:), h(i,j+1,:),       &
+      call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i,j+1,:),       &
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
@@ -769,7 +797,8 @@ end function fvlsq_slope
 
 
 !> Returns positions within left/right columns of combined interfaces using continuous reconstructions of T/S
-subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, PoR, KoL, KoR, hEff)
+subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdSl, Pr, Tr, Sr, dRdTr, dRdSr, PoL, &
+                                                     PoR, KoL, KoR, hEff)
   integer,                    intent(in)    :: nk    !< Number of levels
   real, dimension(nk+1),      intent(in)    :: Pl    !< Left-column interface pressure (Pa)
   real, dimension(nk+1),      intent(in)    :: Tl    !< Left-column interface potential temperature (degC)
@@ -983,20 +1012,16 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
   logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-  integer :: krm1, klm1             !
-  logical :: klm1_is_t, krm1_is_t   ! True if the klm1 or krm1 index is the top
+  integer :: krm1, klm1
   real    :: dRho, dRhoTop, dRhoBot, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
 
   ! Vectors with all the values of the discontinuous reconstruction
-  real, dimension(4*nk) :: Pl, Pr, Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
+  real, dimension(2*nk) :: Pl, Pr, Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
 
-  ! Initialize variables for the search
-  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
-  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
-  reached_bottom = .false.
-
+  Pl(:) = 0. ; Sl(:) = 0. ; Tl(:) = 0. ; dRdT_l(:) = 0. ; dRdS_l(:) = 0.
+  Pr(:) = 0. ; Sr(:) = 0. ; Tr(:) = 0. ; dRdT_r(:) = 0. ; dRdS_r(:) = 0.
   ! Create a single vector for temperature, salinity, and pressure with the discontinuous reconstruction
   do kl=1,nk
     ! Left column
@@ -1007,7 +1032,9 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     Tl(2*kl-1) = Tint_lt(kl)
     Tl(2*kl)   = Tint_lb(kl)
     dRdT_l(2*kl-1) = dRdT_lt(kl)
-    dRdS_l(2*kl) = dRdS_lt(kl)
+    dRdT_l(2*kl)   = dRdT_lb(kl)
+    dRdS_l(2*kl-1) = dRdS_lt(kl)
+    dRdS_l(2*kl)   = dRdS_lb(kl)
   enddo
   do kr=1,nk
     ! Right column
@@ -1018,15 +1045,23 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     Tr(2*kr-1) = Tint_rt(kr)
     Tr(2*kr)   = Tint_rb(kr)
     dRdT_r(2*kr-1) = dRdT_rt(kr)
-    dRdS_r(2*kr) = dRdS_rt(kr)
+    dRdT_r(2*kr)   = dRdT_rb(kr)
+    dRdS_r(2*kr-1) = dRdS_rt(kr)
+    dRdS_r(2*kr)   = dRdS_rb(kr)
   enddo
+
+  ! Initialize variables for the search
+  kr = 1 ; lastK_right = 1 ; lastP_right = 0.
+  kl = 1 ; lastK_left = 1 ; lastP_left = 0.
+
+  reached_bottom = .false.
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, 4*nk
     klm1 = max(kl-1, 1)
-    if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
+    if (klm1>2*nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
     krm1 = max(kr-1, 1)
-    if (krm1>nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
+    if (krm1>2*nk) stop 'find_neutral_surface_positions(): krm1 went out of bounds!'
 
     ! Potential density difference, rho(kr) - rho(kl)
     dRho = 0.5 * ( ( dRdT_r(kr) + dRdT_l(kl) ) * ( Tr(kr) - Tl(kl) ) &
@@ -1054,7 +1089,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       ! Interpolate for the neutral surface position within the left column, layer klm1
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
       dRhoTop = 0.5 * ( ( dRdT_l(klm1) + dRdT_r(kr) ) * ( Tl(klm1) - Tr(kr) ) &
-                     + ( dRdS_l(klm1) + dRdS_r(kr) ) * ( Sl(klm1) - Sr(kr) ) )
+                      + ( dRdS_l(klm1) + dRdS_r(kr) ) * ( Sl(klm1) - Sr(kr) ) )
       ! Potential density difference, rho(kl) - rho(kr) (will be positive)
       dRhoBot = 0.5 * ( ( dRdT_l(klm1+1) + dRdT_r(kr) ) * ( Tl(klm1+1) - Tr(kr) ) &
                       + ( dRdS_l(klm1+1) + dRdS_r(kr) ) * ( Sl(klm1+1) - Sr(kr) ) )
@@ -1063,16 +1098,16 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       ! unless we are still at the top of the left column (kl=1)
       if (dRhoTop > 0. .or. kr+kl==2) then
         PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
+      elseif ( (dRhoTop<0. .and. dRhoBot>0.) .and. (Pl(klm1) == Pl(klm1+1)) ) then ! Density exists at a discontinuity
+        PoL(k_surface) = 0.
       elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
         PoL(k_surface) = 1.
-      elseif ( (dRhoBot > dRhoTop) .and. (Pl(klm1) == Pl(klm1+1)) ) then ! Density exists at a discontinuity
-        PoL(k_surface) = 0
       else
         ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
         ! between right and left is zero.
         PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
       endif
-      if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
+      if (PoL(k_surface)>=1. .and. klm1<2*nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
         klm1 = klm1 + 1
         PoL(k_surface) = PoL(k_surface) - 1.
       endif
@@ -1080,15 +1115,15 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
         PoL(k_surface) = lastP_left
         klm1 = lastK_left
       endif
-      KoL(k_surface) = klm1
-      if (kr <= nk) then
+      KoL(k_surface) = CEILING( 0.5*klm1 )
+      if (kr < 2*nk) then
         PoR(k_surface) = 0.
-        KoR(k_surface) = kr
+        KoR(k_surface) = CEILING( 0.5*kr )
       else
         PoR(k_surface) = 1.
         KoR(k_surface) = nk
       endif
-      if (kr <= nk) then
+      if (kr < 2*nk) then
         kr = kr + 1
       else
         reached_bottom = .true.
@@ -1099,25 +1134,25 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       ! Interpolate for the neutral surface position within the right column, layer krm1
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
       dRhoTop = 0.5 * ( ( dRdT_r(krm1) + dRdT_l(kl) ) * ( Tr(krm1) - Tl(kl) ) &
-                     + ( dRdS_r(krm1) + dRdS_l(kl) ) * ( Sr(krm1) - Sl(kl) ) )
+                      + ( dRdS_r(krm1) + dRdS_l(kl) ) * ( Sr(krm1) - Sl(kl) ) )
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
       dRhoBot = 0.5 * ( ( dRdT_r(krm1+1) + dRdT_l(kl) ) * ( Tr(krm1+1) - Tl(kl) ) &
-                   + ( dRdS_r(krm1+1) + dRdS_l(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
+                      + ( dRdS_r(krm1+1) + dRdS_l(kl) ) * ( Sr(krm1+1) - Sl(kl) ) )
 
       ! Because we are looking right, the left surface, kl, is lighter than krm1+1 and should be denser than krm1
       ! unless we are still at the top of the right column (kr=1)
       if (dRhoTop >= 0. .or. kr+kl==2) then
         PoR(k_surface) = 0. ! The left surface is lighter than anything in layer krm1
+      elseif ( (dRhoTop<0. .and. dRhoBot>0.) .and. (Pr(krm1) == Pr(krm1+1)) ) then ! Density exists at a discontinuity
+        PoR(k_surface) = 0.
       elseif (dRhoTop >= dRhoBot) then ! Right layer is unstratified
         PoR(k_surface) = 1.
-      elseif ( (dRhoBot > dRhoTop) .and. (Pr(krm1) == Pr(krm1+1)) ) then ! Density exists at a discontinuity
-        PoR(k_surface) = 0
       else
         ! Linearly interpolate for the position between Pr(kr-1) and Pr(kr) where the density difference
         ! between right and left is zero.
         PoR(k_surface) = interpolate_for_nondim_position( dRhoTop, Pr(krm1), dRhoBot, Pr(krm1+1) )
       endif
-      if (PoR(k_surface)>=1. .and. krm1<nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
+      if (PoR(k_surface)>=1. .and. krm1<2*nk) then ! >= is really ==, when PoR==1 we point to the bottom of the cell
         krm1 = krm1 + 1
         PoR(k_surface) = PoR(k_surface) - 1.
       endif
@@ -1125,15 +1160,15 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
         PoR(k_surface) = lastP_right
         krm1 = lastK_right
       endif
-      KoR(k_surface) = krm1
-      if (kl <= nk) then
+      KoR(k_surface) = CEILING( 0.5*krm1 )
+      if (kl < 2*nk) then
         PoL(k_surface) = 0.
-        KoL(k_surface) = kl
+        KoL(k_surface) = CEILING( 0.5*kl )
       else
         PoL(k_surface) = 1.
         KoL(k_surface) = nk
       endif
-      if (kl <= nk) then
+      if (kl < 2*nk) then
         kl = kl + 1
       else
         reached_bottom = .true.
@@ -1151,10 +1186,13 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
     if (k_surface>1) then
-      hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
-      hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
+      hL = absolute_position_discontinuous(nk,Pl,KoL,PoL,k_surface) - absolute_position_discontinuous(nk,Pl,KoL,PoL,k_surface-1)
+      hR = absolute_position_discontinuous(nk,Pr,KoR,PoR,k_surface) - absolute_position_discontinuous(nk,Pr,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Analogous of effective resistance for two resistors
+        if (hEff(k_surface-1)<0.) then
+          call MOM_error(FATAL,"hEff<0. in find_neutral_surface_positions_discontinuous")
+        endif
       else
         hEff(k_surface-1) = 0.
       endif
@@ -1163,6 +1201,22 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
   enddo neutral_surfaces
 
 end subroutine find_neutral_surface_positions_discontinuous
+
+!> Converts non-dimensional position within a layer to absolute position (for debugging)
+real function absolute_position_discontinuous(n,Pint,Karr,NParr,k_surface)
+  integer, intent(in) :: n            !< Number of levels
+  real,    intent(in) :: Pint(2*n)    !< Position of interfaces (Pa)
+  integer, intent(in) :: Karr(4*n)    !< Index of interface above position
+  real,    intent(in) :: NParr(4*n)   !< Non-dimensional position within layer Karr(:)
+
+  ! Local variables
+  integer :: k_surface, k
+
+  k = Karr(k_surface)
+  if (k>4*n) stop 'absolute_position: k>nk is out of bounds!'
+  absolute_position_discontinuous = Pint(k) + NParr(k_surface) * ( Pint(k+1) - Pint(k) )
+
+end function absolute_position_discontinuous
 
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
 real function absolute_position(n,Pint,Karr,NParr,k_surface)
@@ -1231,18 +1285,19 @@ end function interpolate_for_nondim_position
 
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
+subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
   integer,                    intent(in)    :: nk    !< Number of levels
+  integer,                    intent(in)    :: nsurf !< Number of neutral surfaces
   real, dimension(nk),        intent(in)    :: hl    !< Left-column layer thickness (Pa)
   real, dimension(nk),        intent(in)    :: hr    !< Right-column layer thickness (Pa)
   real, dimension(nk),        intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
   real, dimension(nk),        intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
-  real, dimension(2*nk+2),    intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
-  real, dimension(2*nk+2),    intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
-  integer, dimension(2*nk+2), intent(in)    :: KoL   !< Index of first left interface above neutral surface
-  integer, dimension(2*nk+2), intent(in)    :: KoR   !< Index of first right interface above neutral surface
-  real, dimension(2*nk+1),    intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
-  real, dimension(2*nk+1),    intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
+  real, dimension(nsurf),     intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(nsurf),     intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
+  integer, dimension(nsurf),  intent(in)    :: KoL   !< Index of first left interface above neutral surface
+  integer, dimension(nsurf),  intent(in)    :: KoR   !< Index of first right interface above neutral surface
+  real, dimension(nsurf-1),   intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+  real, dimension(nsurf-1),   intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
 
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt, k
@@ -1283,7 +1338,7 @@ subroutine neutral_surface_flux(nk, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Fl
     endif
   enddo
 
-  do k_sublayer = 1, 2*nk+1
+  do k_sublayer = 1, nsurf-1
     if (hEff(k_sublayer) == 0.) then
       Flx(k_sublayer) = 0.
     else
@@ -1422,12 +1477,12 @@ logical function neutral_diffusion_unit_tests(verbose)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
-  call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+  call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
-  call neutral_surface_flux(3, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+  call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
