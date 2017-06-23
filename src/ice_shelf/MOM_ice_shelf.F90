@@ -1053,17 +1053,6 @@ subroutine add_shelf_flux(G, CS, state, fluxes)
       endif
 
 
-      ! Add frazil formation diagnosed by the ocean model (J m-2) in the
-      ! form of surface layer evaporation (kg m-2 s-1). Update lprec in the
-      ! control structure for diagnostic purposes.
-
-      if (associated(state%frazil)) then
-        fraz = state%frazil(i,j) / CS%time_step / CS%Lat_fusion
-        if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
-        CS%lprec(i,j)=CS%lprec(i,j) - fraz
-        state%frazil(i,j) = 0.0
-      endif
-
       if (associated(fluxes%sens)) fluxes%sens(i,j) = -frac_area*CS%t_flux(i,j)*CS%flux_factor
       if (associated(fluxes%salt_flux)) fluxes%salt_flux(i,j) = frac_area * CS%salt_flux(i,j)*CS%flux_factor
       if (associated(fluxes%p_surf)) fluxes%p_surf(i,j) = frac_area * CS%g_Earth * CS%mass_shelf(i,j)
