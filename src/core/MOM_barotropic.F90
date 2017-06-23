@@ -2007,6 +2007,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
   endif
   if (apply_OBCs) then
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -2076,7 +2077,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
 ! Now calculate each layer's accelerations.
   if (apply_OBCs) then
-!   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
         u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
@@ -2803,10 +2804,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (GV%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)
+          endif
         else
-          BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(i,j) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(i,j) = eta(i+1,j)
+          endif
         endif
       endif
     endif ; enddo ; enddo
@@ -2849,10 +2857,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (GV%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)
+          endif
         else
-          BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = eta(i,j+1)
+          endif
         endif
       endif
     endif ; enddo ; enddo
