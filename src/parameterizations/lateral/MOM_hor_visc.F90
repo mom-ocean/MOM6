@@ -1048,6 +1048,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
+  CS%Modified_Leith = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
@@ -1084,6 +1085,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mod, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
+
+    call get_param(param_file, mod, "MODIFIED_LEITH", CS%Modified_Leith, &
+                 "If true, add a term to Leith viscosity which is \n"//&
+                 "proportional to the gradient of divergence.", &
+                 default=.false.)
+
     if (CS%Leith_Kh .or. get_all) &
       call get_param(param_file, mod, "LEITH_LAP_CONST", Leith_Lap_const, &
                  "The nondimensional Laplacian Leith constant, \n"//&
