@@ -377,6 +377,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
           h_in(i+1,j,k) = h_in(i,j,k)
           h_L(i+1,j,k) = h_in(i,j,k)
           h_R(i+1,j,k) = h_in(i,j,k)
+          h_R(i,j,k) = h_in(i,j,k)
         enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IsdB
@@ -384,6 +385,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
             h_in(i,j,k) = h_in(i+1,j,k)
             h_L(i,j,k) = h_in(i+1,j,k)
             h_R(i,j,k) = h_in(i+1,j,k)
+            h_L(i+1,j,k) = h_in(i+1,j,k)
         enddo ; enddo
       endif
     enddo
@@ -1150,6 +1152,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
           h_in(i,j+1,k) = h_in(i,j,k)
           h_L(i,j+1,k) = h_in(i,j,k)
           h_R(i,j+1,k) = h_in(i,j,k)
+          h_R(i,j,k) = h_in(i,j,k)
         enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
@@ -1157,6 +1160,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
           h_in(i,j,k) = h_in(i,j+1,k)
           h_L(i,j,k) = h_in(i,j+1,k)
           h_R(i,j,k) = h_in(i,j+1,k)
+          h_L(i,j+1,k) = h_in(i,j+1,k)
         enddo ; enddo
       endif
     enddo

@@ -140,13 +140,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     hArea_u, &  ! The cell area weighted thickness interpolated to u points
                 ! times the effective areas, in H m2.
-    KEx         ! The zonal gradient of Kinetic energy per unit mass,
+    KEx, &      ! The zonal gradient of Kinetic energy per unit mass,
                 ! KEx = d/dx KE, in m s-2.
+    uh_center   ! centered u times h at u-points
   real, dimension(SZI_(G),SZJB_(G)) :: &
     hArea_v, &  ! The cell area weighted thickness interpolated to v points
                 ! times the effective areas, in H m2.
-    KEy         ! The meridonal gradient of Kinetic energy per unit mass,
+    KEy, &      ! The meridonal gradient of Kinetic energy per unit mass,
                 ! KEy = d/dy KE, in m s-2.
+    vh_center   ! centered v times h at v-points
   real, dimension(SZI_(G),SZJ_(G)) :: &
     uh_min, uh_max, &   ! The smallest and largest estimates of the volume
     vh_min, vh_max, &   ! fluxes through the faces (i.e. u*h*dy & v*h*dx),
@@ -246,6 +248,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
       hArea_u(I,j) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i+1,j) * h(i+1,j,k))
     enddo ; enddo
+    if (CS%Coriolis_En_Dis) then
+      do j=Jsq,Jeq+1 ; do I=is-1,ie
+        uh_center(I,j) = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+      enddo ; enddo
+      do J=js-1,je ; do i=Isq,Ieq+1
+        vh_center(i,J) = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+      enddo ; enddo
+    endif
 
     ! Adjust circulation components to relative vorticity and thickness projected onto
     ! velocity points on open boundaries.
@@ -268,6 +278,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
             hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
           endif
         enddo
+
+        if (CS%Coriolis_En_Dis) then
+          do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+            if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+              vh_center(i,J) = G%dx_Cv(i,J) * v(i,J,k) * h(i,j,k)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+              vh_center(i,J) = G%dx_Cv(i,J) * v(i,J,k) * h(i,j+1,k)
+            endif
+          enddo
+        endif
       elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
         if (OBC%zero_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
           dvdx(I,J) = 0. ; dudy(I,J) = 0.
@@ -284,6 +304,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
             hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
           endif
         enddo
+        if (CS%Coriolis_En_Dis) then
+          do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+            if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+              uh_center(I,j) = G%dy_Cu(I,j) * u(I,j,k) * h(i,j,k)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+              uh_center(I,j) = G%dy_Cu(I,j) * u(I,j,k) * h(i+1,j,k)
+            endif
+          enddo
+        endif
       endif
     enddo ; endif
 
@@ -441,7 +470,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
       do j=Jsq,Jeq+1 ; do I=is-1,ie
-        uhc = 0.5 * (G%dy_Cu(I,j) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+        uhc = uh_center(I,j)
         uhm = uh(I,j,k)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dy_Cu(I,j) == 0.0) uhc = uhm
@@ -462,7 +491,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         endif
       enddo ; enddo
       do J=js-1,je ; do i=Isq,Ieq+1
-        vhc = 0.5 * (G%dx_Cv(i,J) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+        vhc = vh_center(i,J)
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dx_Cv(i,J) == 0.0) vhc = vhm
