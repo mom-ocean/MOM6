@@ -192,22 +192,81 @@ integer :: num_msg = 0, max_msg = 2
 
 contains
 
+!>    This subroutine partially steps the bulk mixed layer model.
+!!  The following processes are executed, in the order listed.
+!!    1. Undergo convective adjustment into mixed layer.
+!!    2. Apply surface heating and cooling.
+!!    3. Starting from the top, entrain whatever fluid the TKE budget
+!!       permits.  Penetrating shortwave radiation is also applied at
+!!      this point.
+!!    4. If there is any unentrained fluid that was formerly in the
+!!      mixed layer, detrain this fluid into the buffer layer.  This
+!!     is equivalent to the mixed layer detraining to the Monin-
+!!       Obukhov depth.
+!!    5. Divide the fluid in the mixed layer evenly into CS%nkml pieces.
+!!    6. Split the buffer layer if appropriate.
+!! Layers 1 to nkml are the mixed layer, nkml+1 to nkml+nkbl are the
+!! buffer layers. The results of this subroutine are mathematically
+!! identical if there are multiple pieces of the mixed layer with
+!! the same density or if there is just a single layer. There is no
+!! stability limit on the time step.
+!!
+!!   The key parameters for the mixed layer are found in the control structure.
+!! These include mstar, nstar, nstar2, pen_SW_frac, pen_SW_scale, and TKE_decay.
+!!   For the Oberhuber (1993) mixed layer, the values of these are:
+!!      pen_SW_frac = 0.42, pen_SW_scale = 15.0 m, mstar = 1.25,
+!!      nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
+!!  TKE_decay is 1/kappa in eq. 28 of Oberhuber (1993), while conv_decay is 1/mu.
+!!  Conv_decay has been eliminated in favor of the well-calibrated form for the
+!!  efficiency of penetrating convection from Wang (2003).
+!!    For a traditional Kraus-Turner mixed layer, the values are:
+!!      pen_SW_frac = 0.0, pen_SW_scale = 0.0 m, mstar = 1.25,
+!!      nstar = 0.4, TKE_decay = 0.0, conv_decay = 0.0
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
                           optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d
-  type(thermo_var_ptrs),                     intent(inout) :: tv
-  type(forcing),                             intent(inout) :: fluxes
-  real,                                      intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: ea, eb
-  type(bulkmixedlayer_CS),                   pointer       :: CS
-  type(optics_type),                         pointer       :: optics
-  real, dimension(:,:),                      pointer       :: Hml !< active mixed layer depth
-  logical,                                   intent(in)    :: aggregate_FW_forcing
-  real,                            optional, intent(in)    :: dt_diag
-  logical,                         optional, intent(in)    :: last_call
+  type(ocean_grid_type),      intent(inout) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(inout) :: h_3d   !< Layer thickness, in m or kg m-2.
+                                                      !! (Intent in/out) The units of h are
+                                                      !! referred to as H below.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in)    :: u_3d   !< Zonal velocities interpolated to h points,
+                                                      !! m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in)    :: v_3d   !< Zonal velocities interpolated to h points,
+                                                      !! m s-1.
+  type(thermo_var_ptrs),      intent(inout) :: tv     !< A structure containing pointers to any
+                                                      !! available thermodynamic fields. Absent
+                                                      !! fields have NULL ptrs.
+  type(forcing),              intent(inout) :: fluxes !< A structure containing pointers to any
+                                                      !! possible forcing fields.  Unused fields
+                                                      !! have NULL ptrs.
+  real,                       intent(in)    :: dt     !< Time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(inout) :: ea     !< The amount of fluid moved downward into a
+                                                      !! layer; this should be increased due to
+                                                      !! mixed layer detrainment, in the same units
+                                                      !! as h - usually m or kg m-2 (i.e., H).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(inout) :: eb     !< The amount of fluid moved upward into a
+                                                      !! layer; this should be increased due to
+                                                      !! mixed layer entrainment, in the same units
+                                                      !! as h - usually m or kg m-2 (i.e., H).
+  type(bulkmixedlayer_CS),    pointer       :: CS     !< The control structure returned by a
+                                                      !! previous call to mixedlayer_init.
+  type(optics_type),          pointer       :: optics !< The structure containing the inverse of the
+                                                      !! vertical absorption decay scale for
+                                                      !! penetrating shortwave radiation, in m-1.
+  real, dimension(:,:),       pointer       :: Hml    !< active mixed layer depth
+  logical,                    intent(in)    :: aggregate_FW_forcing
+  real,                       optional, intent(in)    :: dt_diag   !< The diagnostic time step,
+                                                      !! which may be less than dt if there are
+                                                      !! two callse to mixedlayer, in s.
+  logical,                    optional, intent(in)    :: last_call !< if true, this is the last call
+                                                      !! to mixedlayer in the current time step, so
+                                                      !! diagnostics will be written. The default is
+                                                      !! .true.
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -850,17 +909,43 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, CS, &
 
 end subroutine bulkmixedlayer
 
+!>   This subroutine does instantaneous convective entrainment into the buffer
+!! layers and mixed layers to remove hydrostatic instabilities.  Any water that
+!! is lighter than currently in the mixed- or buffer- layer is entrained.
 subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
                                  dKE_CA, cTKE, j, G, GV, CS, nz_conv)
-  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, u, v
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: T, S, R0, Rcv, d_eb
+  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h    !< Layer thickness, in m or kg m-2.
+                                                           !! (Intent in/out)  The units of h are
+                                                           !! referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: u    !< Zonal velocities interpolated to h
+                                                           !! points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: v    !< Zonal velocities interpolated to h
+                                                           !! points, m s-1.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: T    !< Layer temperatures, in deg C.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: S
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: R0   !< Potential density referenced to
+                                                           !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
+                                                           !! density, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: d_eb !< The downward increase across a layer
+                                                           !! in the entrainment from below, in H.
+                                                           !! Positive values go with mass gain by
+                                                           !! a layer.
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: eps
-  real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: dKE_CA, cTKE
-  integer,                           intent(in)    :: j
-  type(bulkmixedlayer_CS),           pointer       :: CS
-  integer,                 optional, intent(in)    :: nz_conv
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: dKE_CA !< The vertically integrated change in
+                                                           !! kinetic energy due to convective
+                                                           !! adjustment, in m3 s-2.
+  real, dimension(SZI_(G),SZK_(GV)), intent(out)   :: cTKE !< The buoyant turbulent kinetic energy
+                                                           !! source due to convective adjustment,
+                                                           !! in m3 s-2.
+  integer,                           intent(in)    :: j    !< The j-index to work on.
+  type(bulkmixedlayer_CS),           pointer       :: CS   !< The control structure for this module.
+  integer,                 optional, intent(in)    :: nz_conv !< If present, the number of layers
+                                                           !! over which to do convective adjustment
+                                                           !! (perhaps CS%nkml).
+
 !   This subroutine does instantaneous convective entrainment into the buffer
 ! layers and mixed layers to remove hydrostatic instabilities.  Any water that
 ! is lighter than currently in the mixed- or buffer- layer is entrained.
@@ -975,6 +1060,9 @@ subroutine convective_adjustment(h, u, v, R0, Rcv, T, S, eps, d_eb, &
 
 end subroutine convective_adjustment
 
+!>   This subroutine causes the mixed layer to entrain to the depth of free
+!! convection.  The depth of free convection is the shallowest depth at which the
+!! fluid is denser than the average of the fluid above.
 subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps,    &
                                  dR0_dT, dRcv_dT, dR0_dS, dRcv_dS,             &
@@ -982,22 +1070,54 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
                                  nsw, Pen_SW_bnd, opacity_band, Conv_en,       &
                                  dKE_FC, j, ksort, G, GV, CS, tv, fluxes, dt,      &
                                  aggregate_FW_forcing)
-  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, d_eb
-  real, dimension(SZI_(G)),          intent(out)   :: htot, Ttot, Stot
-  real, dimension(SZI_(G)),          intent(out)   :: uhtot, vhtot, R0_tot, Rcv_tot
+  type(ocean_grid_type),             intent(in)    :: G       !< The ocean's grid structure.
+  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
+                                                              !! structure.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h       !< Layer thickness, in m or kg m-2.
+                                                              !! (Intent in/out)  The units of h are
+                                                              !! referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: d_eb    !< The downward increase across a
+                                                              !! layer in the entrainment from below
+                                                              !! , in H. Positive values go with
+                                                              !! mass gain by a layer.
+  real, dimension(SZI_(G)),          intent(out)   :: htot    !< The accumulated mixed layer
+                                                              !! thickness, in H.
+  real, dimension(SZI_(G)),          intent(out)   :: Ttot    !< The depth integrated mixed layer
+                                                              !! temperature, in deg C H.
+  real, dimension(SZI_(G)),          intent(out)   :: Stot    !< The depth integrated mixed layer
+                                                              !! salinity, in psu H.
+  real, dimension(SZI_(G)),          intent(out)   :: uhtot   !< The depth integrated mixed layer
+                                                              !! zonal velocity, H m s-1.
+  real, dimension(SZI_(G)),          intent(out)   :: vhtot   !< The integrated mixed layer
+                                                              !! meridional velocity, H m s-1.
+  real, dimension(SZI_(G)),          intent(out)   :: R0_tot  !< The integrated mixed layer
+                                                              !! potential density referenced to 0
+                                                              !! pressure, in kg m-2.
+  real, dimension(SZI_(G)),          intent(out)   :: Rcv_tot !< The integrated mixed layer
+                                                              !! coordinate variable potential
+                                                              !! density, in kg m-2.
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: u, v, T, S, R0, Rcv, eps
   real, dimension(SZI_(G)),          intent(in)    :: dR0_dT, dRcv_dT, dR0_dS, dRcv_dS
   real, dimension(SZI_(G)),          intent(in)    :: netMassInOut, netMassOut
   real, dimension(SZI_(G)),          intent(in)    :: Net_heat, Net_salt
-  integer,                           intent(in)    :: nsw
-  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
+  integer,                           intent(in)    :: nsw     !< The number of bands of penetrating
+                                                              !! shortwave radiation.
+  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                              !! heating at the sea surface in each
+                                                              !! penetrating band, in K H,
+                                                              !! size nsw x SZI_(G).
   real, dimension(:,:,:),            intent(in)    :: opacity_band
-  real, dimension(SZI_(G)),          intent(out)   :: Conv_en, dKE_FC
-  integer,                           intent(in)    :: j
-  integer, dimension(SZI_(G),SZK_(GV)), intent(in) :: ksort
-  type(bulkmixedlayer_CS),           pointer       :: CS
+  real, dimension(SZI_(G)),          intent(out)   :: Conv_en !< The buoyant turbulent kinetic
+                                                              !! energy source due to free
+                                                              !! convection, in m3 s-2.
+  real, dimension(SZI_(G)),          intent(out)   :: dKE_FC  !< The vertically integrated change
+                                                              !! in kinetic energy due to free
+                                                              !! convection, in m3 s-2.
+  integer,                           intent(in)    :: j       !< The j-index to work on.
+  integer, dimension(SZI_(G),SZK_(GV)), &
+                                     intent(in)    :: ksort   !< The density-sorted k-indices.
+  type(bulkmixedlayer_CS),           pointer       :: CS      !< The control structure for this
+                                                              !! module.
   type(thermo_var_ptrs),             intent(inout) :: tv
   type(forcing),                     intent(inout) :: fluxes
   real,                              intent(in)    :: dt
@@ -1303,23 +1423,49 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
 
 end subroutine mixedlayer_convection
 
+!>   This subroutine determines the TKE available at the depth of free
+!! convection to drive mechanical entrainment.
 subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
                              TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                              j, ksort, G, GV, CS)
-  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G)),          intent(in)    :: htot, h_CA
-  type(forcing),                     intent(in)    :: fluxes
-  real, dimension(SZI_(G)),          intent(inout) :: Conv_En
-  real, dimension(SZI_(G)),          intent(in)    :: dKE_FC
-  real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: cTKE, dKE_CA
-  real, dimension(SZI_(G)),          intent(out)   :: TKE, Idecay_len_TKE
-  real, dimension(SZI_(G)),          intent(in)    :: TKE_river
-  real, dimension(2,SZI_(G)),        intent(out)   :: cMKE
-  real,                              intent(in)    :: dt, Idt_diag
-  integer,                           intent(in)    :: j
-  integer, dimension(SZI_(G),SZK_(GV)), intent(in) :: ksort
-  type(bulkmixedlayer_CS),           pointer       :: CS
+  type(ocean_grid_type),      intent(in)    :: G       !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV      !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G)),   intent(in)    :: htot    !< The accumlated mixed layer thickness, in m
+                                                       !! or kg m-2. (Intent in).
+  real, dimension(SZI_(G)),   intent(in)    :: h_CA    !< The mixed layer depth after convective
+                                                       !! adjustment, in H.
+  type(forcing),              intent(in)    :: fluxes  !< A structure containing pointers to any
+                                                       !! possible forcing fields.  Unused fields
+                                                       !! have NULL ptrs.
+  real, dimension(SZI_(G)),   intent(inout) :: Conv_En !< The buoyant turbulent kinetic energy
+                                                       !! source due to free convection,
+                                                       !! in m3 s-2.
+  real, dimension(SZI_(G)),   intent(in)    :: dKE_FC  !< The vertically integrated change in
+                                                       !! kinetic energy due to free convection,
+                                                       !! in m3 s-2.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                              intent(in)    :: cTKE    !< The buoyant turbulent kinetic energy
+                                                       !! source due to convective adjustment,
+                                                       !! in m3 s-2.
+  real, dimension(SZI_(G),SZK_(GV)), &
+                              intent(in)    :: dKE_CA  !< The vertically integrated change in
+                                                       !! kinetic energy due to convective
+                                                       !! adjustment, in m3 s-2.
+  real, dimension(SZI_(G)),   intent(out)   :: TKE     !< The turbulent kinetic energy available for
+                                                       !! mixing over a time step, in m3 s-2.
+  real, dimension(SZI_(G)),   intent(out)   :: Idecay_len_TKE !< The inverse of the vertical decay
+                                                       !! scale for TKE, in H-1.
+  real, dimension(SZI_(G)),   intent(in)    :: TKE_river
+  real, dimension(2,SZI_(G)), intent(out)   :: cMKE    !< Coefficients of HpE and HpE^2 in
+                                                       !! calculating the denominator of MKE_rate,
+                                                       !! in H-1 and H-2.
+  real,                       intent(in)    :: dt      !< The time step in s.
+  real,                       intent(in)    :: Idt_diag
+  integer,                    intent(in)    :: j       !< The j-index to work on.
+  integer, dimension(SZI_(G),SZK_(GV)), &
+                              intent(in)    :: ksort   !< The density-sorted k-indicies.
+  type(bulkmixedlayer_CS),    pointer       :: CS      !< The control structure for this module.
+
 !   This subroutine determines the TKE available at the depth of free
 ! convection to drive mechanical entrainment.
 
@@ -1486,30 +1632,58 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
 end subroutine find_starting_TKE
 
-
+!> This subroutine calculates mechanically driven entrainment.
 subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
                                   R0_tot, Rcv_tot, u, v, T, S, R0, Rcv, eps, &
                                   dR0_dT, dRcv_dT, cMKE, Idt_diag, nsw, &
                                   Pen_SW_bnd, opacity_band, TKE, &
                                   Idecay_len_TKE, j, ksort, G, GV, CS)
-  type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),           intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h, d_eb
-  real, dimension(SZI_(G)),          intent(inout) :: htot, Ttot, Stot
-  real, dimension(SZI_(G)),          intent(inout) :: uhtot, vhtot
-  real, dimension(SZI_(G)),          intent(inout) :: R0_tot, Rcv_tot
+  type(ocean_grid_type),             intent(in)    :: G       !< The ocean's grid structure.
+  type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid
+                                                              !! structure.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: h       !< Layer thickness, in m or kg m-2.
+                                                              !! (Intent in/out)  The units of h are
+                                                              !! referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)), intent(inout) :: d_eb    !< The downward increase across a
+                                                              !! layer in the entrainment from
+                                                              !! below, in H. Positive values go
+                                                              !! with mass gain by a layer.
+  real, dimension(SZI_(G)),          intent(inout) :: htot    !< The accumlated mixed layer
+                                                              !! thickness, in H.
+  real, dimension(SZI_(G)),          intent(inout) :: Ttot    !< The depth integrated mixed layer
+                                                              !! temperature, in deg C H.
+  real, dimension(SZI_(G)),          intent(inout) :: Stot    !< The depth integrated mixed layer
+                                                              !! salinity, in psu H.
+  real, dimension(SZI_(G)),          intent(inout) :: uhtot   !< The depth integrated mixed layer
+                                                              !! zonal velocity, H m s-1.
+  real, dimension(SZI_(G)),          intent(inout) :: vhtot   !< The integrated mixed layer
+                                                              !! meridional velocity, H m s-1.
+  real, dimension(SZI_(G)),          intent(inout) :: R0_tot  !< The integrated mixed layer
+                                                              !! potential density referenced to 0
+                                                              !! pressure, in H kg m-3.
+  real, dimension(SZI_(G)),          intent(inout) :: Rcv_tot !< The integrated mixed layer
+                                                              !! coordinate variable potential
+                                                              !! density, in H kg m-3.
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: u, v, T, S, R0, Rcv, eps
   real, dimension(SZI_(G)),          intent(in)    :: dR0_dT, dRcv_dT
   real, dimension(2,SZI_(G)),        intent(in)    :: cMKE
   real,                              intent(in)    :: Idt_diag
-  integer,                           intent(in)    :: nsw
-  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd
+  integer,                           intent(in)    :: nsw     !< The number of bands of penetrating
+                                                              !! shortwave radiation.
+  real, dimension(:,:),              intent(inout) :: Pen_SW_bnd !< The penetrating shortwave
+                                                              !! heating at the sea surface in each
+                                                              !! penetrating band, in K H,
+                                                              !! size nsw x SZI_(G).
   real, dimension(:,:,:),            intent(in)    :: opacity_band
-  real, dimension(SZI_(G)),          intent(inout) :: TKE
+  real, dimension(SZI_(G)),          intent(inout) :: TKE     !< The turbulent kinetic energy
+                                                              !! available for mixing over a time
+                                                              !! step, in m3 s-2.
   real, dimension(SZI_(G)),          intent(inout) :: Idecay_len_TKE
-  integer,                           intent(in)    :: j
-  integer, dimension(SZI_(G),SZK_(GV)), intent(in) :: ksort
-  type(bulkmixedlayer_CS),           pointer       :: CS
+  integer,                           intent(in)    :: j       !< The j-index to work on.
+  integer, dimension(SZI_(G),SZK_(GV)), &
+                                     intent(in)    :: ksort !< The density-sorted k-indicies.
+  type(bulkmixedlayer_CS),           pointer       :: CS    !< The control structure for this
+                                                            !! module.
 
 ! This subroutine calculates mechanically driven entrainment.
 ! Arguments: h - Layer thickness, in m or kg m-2. (Intent in/out)  The units
@@ -1807,12 +1981,21 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
 
 end subroutine mechanical_entrainment
 
+!> This subroutine generates an array of indices that are sorted by layer
+!! density.
 subroutine sort_ML(h, R0, eps, G, GV, CS, ksort)
-  type(ocean_grid_type),                intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),              intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: h, R0, eps
-  type(bulkmixedlayer_CS),              pointer     :: CS
-  integer, dimension(SZI_(G),SZK_(GV)), intent(out) :: ksort
+  type(ocean_grid_type),                intent(in)  :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),              intent(in)  :: GV    !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: h     !< Layer thickness, in m or kg m-2.
+                                                             !! (Intent in/out)  The units of h are
+                                                             !! referred to as H below.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: R0    !< The potential density used to sort
+                                                             !! the layers, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(in)  :: eps   !< The (small) thickness that must
+                                                             !! remain in each layer, in H.
+  type(bulkmixedlayer_CS),              pointer     :: CS    !< The control structure returned by a
+                                                             !! previous call to mixedlayer_init.
+  integer, dimension(SZI_(G),SZK_(GV)), intent(out) :: ksort !< The k-index to use in the sort.
 
 !   This subroutine generates an array of indices that are sorted by layer
 ! density.
@@ -1864,17 +2047,57 @@ subroutine sort_ML(h, R0, eps, G, GV, CS, ksort)
 
 end subroutine sort_ML
 
+!>   This subroutine actually moves properties between layers to achieve a
+!! resorted state, with all of the resorted water either moved into the correct
+!! interior layers or in the top nkmb layers.
 subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS, &
                      dR0_dT, dR0_dS, dRcv_dT, dRcv_dS)
-  type(ocean_grid_type),                intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),              intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(SZK_(GV)),            intent(in)    :: RcvTgt
-  real, dimension(SZI_(G),SZK_(GV)),    intent(inout) :: eps, d_ea, d_eb
-  integer, dimension(SZI_(G),SZK_(GV)), intent(in)    :: ksort
-  type(bulkmixedlayer_CS),              pointer       :: CS
-  real, dimension(SZI_(G)),             intent(in)    :: dR0_dT, dR0_dS
-  real, dimension(SZI_(G)),             intent(in)    :: dRcv_dT, dRcv_dS
+  type(ocean_grid_type),                intent(in)    :: G       !< The ocean's grid structure.
+  type(verticalGrid_type),              intent(in)    :: GV      !< The ocean's vertical grid
+                                                                 !! structure.
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: h       !< Layer thickness, in m or kg m-2.
+                                                                 !! (Intent in/out)  The units of h
+                                                                 !! are referred to as H below.
+                                                                 !! Layer 0 is the new mixed layer.
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: T       !< Layer temperatures, in deg C.
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: S       !< Layer salinities, in psu.
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: R0      !< Potential density referenced to
+                                                                 !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK0_(GV)),   intent(inout) :: Rcv     !< The coordinate defining
+                                                                 !! potential density, in kg m-3.
+  real, dimension(SZK_(GV)),            intent(in)    :: RcvTgt  !< The target value of Rcv for each
+                                                                 !! layer, in kg m-3.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(inout) :: eps     !< The (small) thickness that must
+                                                                 !! remain in each layer, in H.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(inout) :: d_ea    !< The upward increase across a
+                                                                 !! layer in the entrainment from
+                                                                 !! above, in m or kg m-2 (H).
+                                                                 !!  Positive d_ea goes with layer
+                                                                 !! thickness increases.
+  real, dimension(SZI_(G),SZK_(GV)),    intent(inout) :: d_eb    !< The downward increase across a
+                                                                 !! layer in the entrainment from
+                                                                 !! below, in H. Positive values go
+                                                                 !! with mass gain by a layer.
+  integer, dimension(SZI_(G),SZK_(GV)), intent(in)    :: ksort   !< The density-sorted k-indicies.
+  type(bulkmixedlayer_CS),              pointer       :: CS      !< The control structure for this
+                                                                 !! module.
+  real, dimension(SZI_(G)),             intent(in)    :: dR0_dT  !< The partial derivative of
+                                                                 !! potential density referenced
+                                                                 !! to the surface with potential
+                                                                 !! temperature, in kg m-3 K-1.
+  real, dimension(SZI_(G)),             intent(in)    :: dR0_dS  !< The partial derivative of
+                                                                 !! cpotential density referenced
+                                                                 !! to the surface with salinity,
+                                                                 !! in kg m-3 psu-1.
+  real, dimension(SZI_(G)),             intent(in)    :: dRcv_dT !< The partial derivative of
+                                                                 !! coordinate defining potential
+                                                                 !! density with potential
+                                                                 !! temperature, in kg m-3 K-1.
+  real, dimension(SZI_(G)),             intent(in)    :: dRcv_dS !< The partial derivative of
+                                                                 !! coordinate defining potential
+                                                                 !! density with salinity,
+                                                                 !! in kg m-3 psu-1.
+
 !   This subroutine actually moves properties between layers to achieve a
 ! resorted state, with all of the resorted water either moved into the correct
 ! interior layers or in the top nkmb layers.
@@ -2177,18 +2400,53 @@ subroutine resort_ML(h, T, S, R0, Rcv, RcvTgt, eps, d_ea, d_eb, ksort, G, GV, CS
 
 end subroutine resort_ML
 
+!> This subroutine moves any water left in the former mixed layers into the
+!! two buffer layers and may also move buffer layer water into the interior
+!! isopycnal layers.
 subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, G, GV, CS, &
                                 dR0_dT, dR0_dS, dRcv_dT, dRcv_dS, max_BL_det)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt
-  real,                               intent(in)    :: dt, dt_diag
-  real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea
-  integer,                            intent(in)    :: j
-  type(bulkmixedlayer_CS),            pointer       :: CS
-  real, dimension(SZI_(G)),           intent(in)    :: dR0_dT, dR0_dS, dRcv_dT, dRcv_dS
-  real, dimension(SZI_(G)),           intent(in)    :: max_BL_det
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness, in m or kg m-2.
+                                                            !! (Intent in/out)  The units of h are
+                                                            !! referred to as H below.
+                                                            !!  Layer 0 is the new mixed layer.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature, in C.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity, in psu.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
+                                                            !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
+                                                            !! density, in kg m-3.
+  real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt  !< The target value of Rcv for each
+                                                            !! layer, in kg m-3.
+  real,                               intent(in)    :: dt   !< Time increment, in s.
+  real,                               intent(in)    :: dt_diag !< The diagnostic time step, in s.
+  real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea !< The upward increase across a layer in
+                                                            !! the entrainment from above, in m or
+                                                            !! kg m-2 (H).  Positive d_ea goes with
+                                                            !! layer thickness increases.
+  integer,                            intent(in)    :: j    !< The meridional row to work on.
+  type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
+                                                            !! previous call to mixedlayer_init.
+  real, dimension(SZI_(G)),           intent(in)    :: dR0_dT  !< The partial derivative of
+                                                            !! potential density referenced to the
+                                                            !! surface with potential temperature,
+                                                            !! in kg m-3 K-1.
+  real, dimension(SZI_(G)),           intent(in)    :: dR0_dS  !< The partial derivative of
+                                                            !! cpotential density referenced to the
+                                                            !! surface with salinity,
+                                                            !! in kg m-3 psu-1.
+  real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
+                                                            !! coordinate defining potential density
+                                                            !! with potential temperature,
+                                                            !! in kg m-3 K-1.
+  real, dimension(SZI_(G)),           intent(in)    :: dRcv_dS !< The partial derivative of
+                                                            !! coordinate defining potential density
+                                                            !! with salinity, in kg m-3 psu-1.
+  real, dimension(SZI_(G)),           intent(in)    :: max_BL_det !< If non-negative, the maximum
+                                                            !! detrainment permitted from the buffer
+                                                            !! layers, in H.
+
 ! This subroutine moves any water left in the former mixed layers into the
 ! two buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
@@ -3066,17 +3324,49 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, j, 
 
 end subroutine mixedlayer_detrain_2
 
+!> This subroutine moves any water left in the former mixed layers into the
+!! single buffer layers and may also move buffer layer water into the interior
+!! isopycnal layers.
 subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_eb, &
                                 j, G, GV, CS, dRcv_dT, dRcv_dS, max_BL_det)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h, T, S, R0, Rcv
-  real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt
-  real,                               intent(in)    :: dt, dt_diag
-  real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea, d_eb
-  integer,                            intent(in)    :: j
-  type(bulkmixedlayer_CS),            pointer       :: CS
-  real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT, dRcv_dS, max_BL_det
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: h    !< Layer thickness, in m or kg m-2.
+                                                            !! (Intent in/out) The units of h are
+                                                            !! referred to as H below. Layer 0 is
+                                                            !! the new mixed layer.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: T    !< Potential temperature, in C.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: S    !< Salinity, in psu.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
+                                                            !! surface pressure, in kg m-3.
+  real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
+                                                            !! density, in kg m-3.
+  real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt !< The target value of Rcv for each
+                                                            !! layer, in kg m-3.
+  real,                               intent(in)    :: dt   !< Time increment, in s.
+  real,                               intent(in)    :: dt_diag
+  real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_ea !< The upward increase across a layer in
+                                                            !! the entrainment from above, in m or
+                                                            !! kg m-2 (H). Positive d_ea goes with
+                                                            !! layer thickness increases.
+  real, dimension(SZI_(G),SZK_(GV)),  intent(inout) :: d_eb !< The downward increase across a layer
+                                                            !! in the entrainment from below, in H.
+                                                            !! Positive values go with mass gain by
+                                                            !! a layer.
+  integer,                            intent(in)    :: j    !< The meridional row to work on.
+  type(bulkmixedlayer_CS),            pointer       :: CS   !< The control structure returned by a
+                                                            !! previous call to mixedlayer_init.
+  real, dimension(SZI_(G)),           intent(in)    :: dRcv_dT !< The partial derivative of
+                                                            !! coordinate defining potential density
+                                                            !! with potential temperature,
+                                                            !! in kg m-3 K-1.
+  real, dimension(SZI_(G)),           intent(in)    :: dRcv_dS    !< The partial derivative of
+                                                            !! coordinate defining potential density
+                                                            !! with salinity, in kg m-3 psu-1.
+  real, dimension(SZI_(G)),           intent(in)    :: max_BL_det !< If non-negative, the maximum
+                                                            !! detrainment permitted from the buffer
+                                                            !! layers, in H.
+
 ! This subroutine moves any water left in the former mixed layers into the
 ! single buffer layers and may also move buffer layer water into the interior
 ! isopycnal layers.
@@ -3352,13 +3642,17 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, Rcv, RcvTgt, dt, dt_diag, d_ea, d_e
 
 end subroutine mixedlayer_detrain_1
 
+! #@# This subroutine needs a doxygen description.
 subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(bulkmixedlayer_CS), pointer       :: CS
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(bulkmixedlayer_CS), pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module.
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -3617,9 +3911,17 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine bulkmixedlayer_init
 
+!> This subroutine returns an approximation to the integral
+!!   R = exp(-L*(H+E)) integral(LH to L(H+E)) L/(1-(1+x)exp(-x)) dx.
+!! The approximation to the integrand is good to within -2% at x~.3
+!! and +25% at x~3.5, but the exponential deemphasizes the importance of
+!! large x.  When L=0, EF4 returns E/((H+E)*H).
 function EF4(H, E, L, dR_de)
-real, intent(in) :: H, E, L
-real, intent(inout), optional :: dR_de
+real, intent(in)              :: H !< Total thickness, in m or kg m-2. (Intent in) The units of h
+                                   !! are referred to as H below.
+real, intent(in)              :: E !< Entrainment, in units of H.
+real, intent(in)              :: L !< The e-folding scale in H-1.
+real, intent(inout), optional :: dR_de !< The partial derivative of the result R with E, in H-2.
 real :: EF4
 ! This subroutine returns an approximation to the integral
 !   R = exp(-L*(H+E)) integral(LH to L(H+E)) L/(1-(1+x)exp(-x)) dx.
