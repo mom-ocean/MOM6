@@ -158,12 +158,14 @@ end type OCMIP2_CFC_CS
 contains
 
 function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),    intent(in) :: HI
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(OCMIP2_CFC_CS),     pointer    :: CS
-  type(tracer_registry_type), pointer :: tr_Reg
-  type(MOM_restart_CS),    pointer    :: restart_CS
+  type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
+  type(OCMIP2_CFC_CS),     pointer    :: CS         !< A pointer that is set to point to the control
+                                                    !! structure for this module.
+  type(tracer_registry_type), &
+                           pointer    :: tr_Reg     !< A pointer to the tracer registry.
+  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: HI - A horizontal index type structure.
@@ -365,19 +367,30 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   register_OCMIP2_CFC = .true.
 end function register_OCMIP2_CFC
-
+!>This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
+!! and it sets up the tracer output.
 subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                                  sponge_CSp, diag_to_Z_CSp)
-  logical,                               intent(in) :: restart
-  type(time_type), target,               intent(in) :: day
-  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,               intent(in) :: diag
-  type(ocean_OBC_type),                  pointer    :: OBC
-  type(OCMIP2_CFC_CS),                   pointer    :: CS
-  type(sponge_CS),                       pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
+  logical,                        intent(in) :: restart    !< .true. if the fields have already been
+                                                           !! read from a restart file.
+  type(time_type), target,        intent(in) :: day        !< Time of the start of the run.
+  type(ocean_grid_type),          intent(in) :: G          !< The ocean's grid structure.
+  type(verticalGrid_type),        intent(in) :: GV         !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                  intent(in) :: h          !< Layer thicknesses, in H
+                                                           !! (usually m or kg m-2).
+  type(diag_ctrl), target,        intent(in) :: diag       !< A structure that is used to regulate
+                                                           !! diagnostic output.
+  type(ocean_OBC_type),           pointer    :: OBC        !< This open boundary condition type
+                                                           !! specifies whether, where, and what
+                                                           !! open boundary conditions are used.
+  type(OCMIP2_CFC_CS),            pointer    :: CS         !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  type(sponge_CS),                pointer    :: sponge_CSp !< A pointer to the control structure for
+                                                           !! the sponges, if they are in use.
+                                                           !! Otherwise this may be unassociated.
+  type(diag_to_Z_CS),             pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                           !! for diagnostics in depth space.
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -483,7 +496,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   enddo
 
 end subroutine initialize_OCMIP2_CFC
-
+!>This subroutine initializes a tracer array.
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -525,16 +538,37 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 
 end subroutine init_tracer_CFC
 
+!>  This subroutine applies diapycnal diffusion and any other column
+! tracer physics or chemistry to the tracers from this file.
+! CFCs are relatively simple, as they are passive tracers. with only a surface
+! flux as a source.
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(OCMIP2_CFC_CS),                pointer    :: CS
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),              intent(in) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),            intent(in) :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h_old  !< Layer thickness before entrainment,
+                                                           !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h_new  !< Layer thickness after entrainment,
+                                                           !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: ea     !< an array to which the amount of fluid
+                                                         !! entrained from the layer above during
+                                                         !! this call will be added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: eb   !< an array to which the amount of fluid
+                                                         !! entrained from the layer below during
+                                                         !! this call will be added, in m or kg m-2.
+  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to any
+                                                           !! possible forcing fields. Unused fields
+                                                           !! have NULL ptrs.
+  real,                               intent(in) :: dt     !< The amount of time covered by this
+                                                           !! call, in s
+  type(OCMIP2_CFC_CS),                pointer    :: CS     !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  real,                     optional,intent(in)  :: evap_CFL_limit
+  real,                     optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -633,16 +667,25 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 
 end subroutine OCMIP2_CFC_column_physics
 
+!> This function calculates the mass-weighted integral of all tracer stocks,
+!! returning the number of stocks it has calculated.  If the stock_index
+!! is present, only the stock corresponding to that coded index is returned.
 function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(:),                 intent(out)   :: stocks
-  type(OCMIP2_CFC_CS),                pointer       :: CS
-  character(len=*), dimension(:),     intent(out)   :: names
-  character(len=*), dimension(:),     intent(out)   :: units
-  integer, optional,                  intent(in)    :: stock_index
-  integer                                           :: OCMIP2_CFC_stock
+  type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                   intent(in)    :: h      !< Layer thicknesses, in H
+                                                           !! (usually m or kg m-2).
+  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount
+                                                           !! of each tracer, in kg times
+                                                           !! concentration units.
+  type(OCMIP2_CFC_CS),             pointer       :: CS     !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
+  character(len=*), dimension(:),  intent(out)   :: units  !< The units of the stocks calculated.
+  integer, optional,               intent(in)    :: stock_index !< The coded index of a specific
+                                                                !! stock being sought.
+  integer                                        :: OCMIP2_CFC_stock
 ! This function calculates the mass-weighted integral of all tracer stocks,
 ! returning the number of stocks it has calculated.  If the stock_index
 ! is present, only the stock corresponding to that coded index is returned.
@@ -691,10 +734,13 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function OCMIP2_CFC_stock
 
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure.
   type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(OCMIP2_CFC_CS),                      pointer    :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
+                                                                  !! (usually m or kg m-2).
+  type(OCMIP2_CFC_CS),                      pointer       :: CS   !< The control structure returned
+                                                                  !! by a previous call to
+                                                                  !! register_OCMIP2_CFC.
 !   This subroutine sets up the fields that the coupler needs to calculate the
 ! CFC fluxes between the ocean and atmosphere.
 ! Arguments: state - A structure containing fields that describe the

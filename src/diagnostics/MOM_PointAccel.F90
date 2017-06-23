@@ -92,20 +92,37 @@ end type PointAccel_CS
 
 contains
 
+!> This subroutine writes to an output file all of the accelerations
+!! that have been applied to a column of zonal velocities over the
+!! previous timestep.  This subroutine is called from vertvisc.
 subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
-  integer,                                intent(in) :: I, j
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: um
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
-  type(accel_diag_ptrs),                  intent(in) :: ADp
-  type(cont_diag_ptrs),                   intent(in) :: CDp
-  real,                                   intent(in) :: dt   !< The ocean dynamics time step, in s.
-  type(PointAccel_CS),                    pointer    :: CS
-  real,                                   intent(in) :: maxvel, minvel
-  real, optional,                         intent(in) :: str
-  real, dimension(SZIB_(G),SZK_(G)), optional, intent(in) :: a, hv
+  integer,                     intent(in) :: I   !< The zonal index of the column to be documented.
+  integer,                     intent(in) :: j   !< The meridional index of the column to be
+                                                 !! documented.
+  type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                               intent(in) :: um  !< The new zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                               intent(in) :: hin !< The layer thickness, in m.
+  type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
+                                                 !! accelerations in the momentum equations.
+  type(cont_diag_ptrs),        intent(in) :: CDp !<  A structure with pointers to various terms
+                                                 !! in the continuity equations.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
+                                                 !! call to PointAccel_init.
+  real,                        intent(in) :: maxvel, minvel
+  real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
+                                                 !! step, in m2 s-1.
+  real, dimension(SZIB_(G),SZK_(G)),         &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from
+                                                 !! vertvisc, m.
+  real, dimension(SZIB_(G),SZK_(G)),         &
+                     optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
+                                                 !! from vertvisc, in m.
+
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of zonal velocities over the
 ! previous timestep.  This subroutine is called from vertvisc.
@@ -429,21 +446,36 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, CS, &
 
 end subroutine write_u_accel
 
-
+!> This subroutine writes to an output file all of the accelerations
+!! that have been applied to a column of meridional velocities over
+!! the previous timestep.  This subroutine is called from vertvisc.
 subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
                          maxvel, minvel, str, a, hv)
-  integer,                                intent(in) :: i, J
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: vm
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: hin
-  type(accel_diag_ptrs),                  intent(in) :: ADp
-  type(cont_diag_ptrs),                   intent(in) :: CDp
-  real,                                   intent(in) :: dt   !< The ocean dynamics time step, in s.
-  type(PointAccel_CS),                    pointer    :: CS
-  real,                                   intent(in) :: maxvel, minvel
-  real, optional,                         intent(in) :: str
-  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: a, hv
+  integer,                     intent(in) :: i   !< The zonal index of the column to be documented.
+  integer,                     intent(in) :: J   !< The meridional index of the column to be
+                                                 !! documented.
+  type(ocean_grid_type),       intent(in) :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),     intent(in) :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                               intent(in) :: vm  !< The new meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                               intent(in) :: hin !< The layer thickness, in m.
+  type(accel_diag_ptrs),       intent(in) :: ADp !< A structure pointing to the various
+                                                 !! accelerations in the momentum equations.
+  type(cont_diag_ptrs),        intent(in) :: CDp !< A structure with pointers to various terms in
+                                                 !! the continuity equations.
+  real,                        intent(in) :: dt  !< The ocean dynamics time step, in s.
+  type(PointAccel_CS),         pointer    :: CS  !< The control structure returned by a previous
+                                                 !! call to PointAccel_init.
+  real,                        intent(in) :: maxvel, minvel
+  real, optional,              intent(in) :: str !< The surface wind stress integrated over a time
+                                                 !! step, in m2 s-1.
+  real, dimension(SZI_(G),SZK_(G)),          &
+                     optional, intent(in) :: a   !< The layer coupling coefficients from
+                                                 !! vertvisc, m.
+  real, dimension(SZI_(G),SZK_(G)),          &
+                     optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
+                                                 !! from vertvisc, in m.
 
 ! This subroutine writes to an output file all of the accelerations
 ! that have been applied to a column of meridional velocities over
@@ -767,14 +799,23 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, CS, &
 
 end subroutine write_v_accel
 
+! #@# This subroutine needs a doxygen description
 subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
-  type(ocean_internal_state), target, intent(in) :: MIS
-  type(time_type), target, intent(in) :: Time
-  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(directories),       intent(in) :: dirs
-  type(PointAccel_CS),     pointer    :: CS
+  type(ocean_internal_state), &
+                        target, intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers
+                                                      !! to the fields and accelerations that make
+                                                      !! up the ocean's physical state.
+  type(time_type),      target, intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),        intent(in)    :: G    !< The ocean's grid structure.
+  type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time
+                                                      !! parameters.
+  type(diag_ctrl),      target, intent(inout) :: diag !< A structure that is used to regulate
+                                                      !! diagnostic output.
+  type(directories),            intent(in)    :: dirs !< A structure containing several relevant
+                                                      !! directory paths.
+  type(PointAccel_CS),          pointer       :: CS   !< A pointer that is set to point to the
+                                                      !! control structure for this module.
+
 ! Arguments: MIS - For "MOM Internal State" a set of pointers to the fields and
 !                  accelerations that make up the ocean's physical state.
 !  (in)      Time - The current model time.

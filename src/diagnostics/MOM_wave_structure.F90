@@ -89,17 +89,29 @@ end type wave_structure_CS
 
 contains
 
+!>  This subroutine determines the internal wave velocity structure for any mode.
 subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn
-  integer,                                  intent(in)  :: ModeNum
-  real,                                     intent(in)  :: freq
-  type(wave_structure_CS),                  pointer     :: CS
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: En
-  logical,optional,                         intent(in)  :: full_halos
+  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid
+                                                                !! structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H
+                                                                !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                    intent(in)  :: tv   !< A structure pointing to various
+                                                                !! thermodynamic variables.
+  real, dimension(SZI_(G),SZJ_(G)),         intent(in)  :: cn   !< The (non-rotational) mode
+                                                                !! internal gravity wave speed,
+                                                                !! in m s-1.
+  integer,                                  intent(in)  :: ModeNum !< Mode number
+  real,                                     intent(in)  :: freq !< Intrinsic wave frequency, in s-1.
+  type(wave_structure_CS),                  pointer     :: CS   !< The control structure returned
+                                                                !! by a previous call to
+                                                                !! wave_structure_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                                  optional, intent(in)  :: En   !< Internal wave energy density,
+                                                                !! in Jm-2.
+  logical,optional,                         intent(in)  :: full_halos !< If true, do the calculation
+                                                                !! over the entire computational
+                                                                !! domain.
 
 !    This subroutine determines the internal wave velocity structure for any mode.
 ! Arguments: h - Layer thickness, in m or kg m-2.
@@ -600,10 +612,23 @@ subroutine wave_structure(h, tv, G, GV, cn, ModeNum, freq, CS, En, full_halos)
 
 end subroutine wave_structure
 
+!>    This subroutine solves a tri-diagonal system Ax=y using either the standard
+!! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
+!! "Hallberg substitution" (TDMA_H).
 subroutine tridiag_solver(a,b,c,h,y,method,x)
-  real, dimension(:), intent(in)  :: a, b, c, h, y
-  character(len=*), intent(in)    :: method
-  real, dimension(:), intent(out) :: x
+  real, dimension(:), intent(in)  :: a !< lower diagonal with first entry equal to zero.
+  real, dimension(:), intent(in)  :: b !< middle diagonal.
+  real, dimension(:), intent(in)  :: c !< upper diagonal with last entry equal to zero.
+  real, dimension(:), intent(in)  :: h !< vector of values that have already been added to b; used
+           !! for systems of the form (e.g. average layer thickness in vertical diffusion case):
+           !! [ -alpha(k-1/2) ]                       * e(k-1) +
+           !! [  alpha(k-1/2) + alpha(k+1/2) + h(k) ] * e(k)   +
+           !! [ -alpha(k+1/2) ]                       * e(k+1) = y(k)
+           !! where a(k)=[-alpha(k-1/2)], b(k)=[alpha(k-1/2)+alpha(k+1/2) + h(k)],
+           !! and c(k)=[-alpha(k+1/2)]. Only used with TDMA_H method.
+  real, dimension(:), intent(in)  :: y !< vector of known values on right hand side.
+  character(len=*),   intent(in)  :: method
+  real, dimension(:), intent(out) :: x !< vector of unknown values to solve for.
 
 !    This subroutine solves a tri-diagonal system Ax=y using either the standard
 ! Thomas algorithim (TDMA_T) or its more stable variant that invokes the
@@ -732,11 +757,14 @@ end subroutine tridiag_solver
 
 
 subroutine wave_structure_init(Time, G, param_file, diag, CS)
-  type(time_type),             intent(in)    :: Time
-  type(ocean_grid_type),       intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),       intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,     intent(in)    :: diag
-  type(wave_structure_CS),     pointer       :: CS
+  type(time_type),             intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),       intent(in)    :: G    !< The ocean's grid structure.
+  type(param_file_type),       intent(in)    :: param_file !< A structure to parse for run-time
+                                                     !! parameters.
+  type(diag_ctrl), target,     intent(in)    :: diag !< A structure that is used to regulate
+                                                     !! diagnostic output.
+  type(wave_structure_CS),     pointer       :: CS   !< A pointer that is set to point to the
+                                                     !! control structure for this module.
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for

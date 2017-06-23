@@ -218,18 +218,39 @@ end type hor_visc_CS
 
 contains
 
+!>    This subroutine determines the acceleration due to the
+!! horizontal viscosity.  A combination of biharmonic and Laplacian
+!! forms can be used.  The coefficient may either be a constant or
+!! a shear-dependent form.  The biharmonic is determined by twice
+!! taking the divergence of an appropriately defined stress tensor.
+!! The Laplacian is determined by doing so once.
+!!   To work, the following fields must be set outside of the usual
+!! is to ie range before this subroutine is called:
+!!  v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
+!! with a similarly sized halo in the y-direction.
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: diffu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: diffv
-  type(MEKE_type),                           pointer     :: MEKE
-  type(VarMix_CS),                           pointer     :: VarMix
-  type(hor_visc_CS),                         pointer     :: CS
-  type(ocean_OBC_type),              pointer, optional   :: OBC
+  type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                                 intent(in)  :: u      !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                                 intent(in)  :: v      !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                                 intent(in)  :: h      !< Layer thicknesses, in H
+                                                       !! (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                                 intent(out) :: diffu  !< Zonal acceleration due to convergence of
+                                                       !! along-coordinate stress tensor (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                                 intent(out) :: diffv  !< Meridional acceleration due to convergence
+                                                       !! of along-coordinate stress tensor (m/s2).
+  type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
+                                                       !! related to Mesoscale Eddy Kinetic Energy.
+  type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
+                                                       !! specify the spatially variable viscosities
+  type(hor_visc_CS),             pointer     :: CS     !< Pontrol structure returned by a previous
+                                                       !! call to hor_visc_init.
+  type(ocean_OBC_type), pointer, optional    :: OBC    !< Pointer to an open boundary condition type
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -963,13 +984,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
 end subroutine horizontal_viscosity
 
-
+!> This subroutine allocates space for and calculates static variables
+!! used by this module. The metrics may be 0, 1, or 2-D arrays,
+!! while fields like the background viscosities are 2-D arrays.
+!! ALLOC is a macro defined in MOM_memory.h to either allocate
+!! for dynamic memory, or do nothing when using static memory.
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
-  type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(hor_visc_CS), pointer             :: CS
+  type(time_type),         intent(in)    :: Time !< current model time.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< structure to regulate diagnostic output.
+  type(hor_visc_CS), pointer             :: CS   !< pointer to the control structure for this module
 
 ! This subroutine allocates space for and calculates static variables
 ! used by this module. The metrics may be 0, 1, or 2-D arrays,

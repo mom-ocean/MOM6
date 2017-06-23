@@ -104,11 +104,18 @@ integer :: id_clock_tides
 
 contains
 
+!> This subroutine allocates space for the static variables used
+!! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
+!! while fields like the background viscosities are 2-D arrays.
+!! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
+!! static memory.
 subroutine tidal_forcing_init(Time, G, param_file, CS)
-  type(time_type),       intent(in)    :: Time
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(tidal_forcing_CS), pointer      :: CS
+  type(time_type),       intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time
+                                               !! parameters.
+  type(tidal_forcing_CS), pointer      :: CS   !< A pointer that is set to point to the control
+                                               !! structure for this module.
 
 ! This subroutine allocates space for the static variables used
 ! by this module.  The metrics may be effectively 0, 1, or 2-D arrays,
@@ -393,6 +400,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
 
 end subroutine tidal_forcing_init
 
+! #@# This subroutine needs a doxygen description.
 subroutine find_in_files(tidal_input_files,varname,array,G)
   character(len=*),                 intent(in)  :: tidal_input_files(:)
   character(len=*),                 intent(in)  :: varname
@@ -422,10 +430,15 @@ subroutine find_in_files(tidal_input_files,varname,array,G)
 
 end subroutine find_in_files
 
+!>   This subroutine calculates returns the partial derivative of the local
+!! geopotential height with the input sea surface height due to self-attraction
+!! and loading.
 subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
-  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
-  type(tidal_forcing_CS), pointer     :: CS
-  real,                   intent(out) :: deta_tidal_deta
+  type(ocean_grid_type),  intent(in)  :: G  !< The ocean's grid structure.
+  type(tidal_forcing_CS), pointer     :: CS !< The control structure returned by a previous call to
+                                            !! tidal_forcing_init.
+  real,                   intent(out) :: deta_tidal_deta !< The partial derivative of eta_tidal with
+                                            !! the local value of eta, nondim.
 !   This subroutine calculates returns the partial derivative of the local
 ! geopotential height with the input sea surface height due to self-attraction
 ! and loading.
@@ -444,13 +457,24 @@ subroutine tidal_forcing_sensitivity(G, CS, deta_tidal_deta)
   endif
 end subroutine tidal_forcing_sensitivity
 
+!>   This subroutine calculates the geopotential anomalies that drive the tides,
+!! including self-attraction and loading.  Optionally, it also returns the
+!! partial derivative of the local geopotential height with the input sea surface
+!! height.  For now, eta and eta_tidal are both geopotential heights in m, but
+!! probably the input for eta should really be replaced with the column mass
+!! anomalies.
 subroutine calc_tidal_forcing(Time, eta, eta_tidal, G, CS, deta_tidal_deta)
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  type(time_type),                  intent(in)  :: Time
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal
-  type(tidal_forcing_CS),           pointer     :: CS
-  real, optional,                   intent(out) :: deta_tidal_deta
+  type(ocean_grid_type),            intent(in)  :: G         !< The ocean's grid structure.
+  type(time_type),                  intent(in)  :: Time      !< The time for the caluculation.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta       !< The sea surface height anomaly from
+                                                             !! a time-mean geoid in m.
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_tidal !< The tidal forcing geopotential
+                                                             !! anomalies, in m.
+  type(tidal_forcing_CS),           pointer     :: CS        !< The control structure returned by a
+                                                             !! previous call to tidal_forcing_init.
+  real, optional,                   intent(out) :: deta_tidal_deta !< The partial derivative of
+                                                             !! eta_tidal with the local value of
+                                                             !! eta, nondim.
 
 !   This subroutine calculates the geopotential anomalies that drive the tides,
 ! including self-attraction and loading.  Optionally, it also returns the

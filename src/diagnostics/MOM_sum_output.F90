@@ -158,14 +158,19 @@ end type sum_output_CS
 
 contains
 
+! #@# This subroutine needs a doxygen description.
 subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                                 Input_start_time, CS)
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
-  character(len=*),         intent(in)    :: directory
-  integer, target,          intent(inout) :: ntrnc
-  type(time_type),          intent(in)    :: Input_start_time
-  type(Sum_output_CS),      pointer       :: CS
+  type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
+                                                      !! parameters.
+  character(len=*),       intent(in)    :: directory  !< The directory where the energy file goes.
+  integer, target,        intent(inout) :: ntrnc      !< The integer that stores the number of times
+                                                      !! the velocity has been truncated since the
+                                                      !! last call to write_energy.
+  type(time_type),        intent(in)    :: Input_start_time !< The start time of the simulation.
+  type(Sum_output_CS),    pointer       :: CS         !< A pointer that is set to point to the
+                                                      !! control structure for this module.
 ! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -293,16 +298,26 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
+!>  This subroutine calculates and writes the total model energy, the
+!! energy and mass of each layer, and other globally integrated
+!! physical quantities.
 subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
-  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
-  type(time_type),                           intent(inout) :: day
-  integer,                                   intent(in)    :: n
-  type(Sum_output_CS),                       pointer       :: CS
+  type(ocean_grid_type),                     intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid
+                                                                  !! structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< The meridional velocity,
+                                                                  !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thicknesses, in H
+                                                                  !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< A structure pointing to various
+                                                                  !! thermodynamic variables.
+  type(time_type),                           intent(inout) :: day !< The current model time.
+  integer,                                   intent(in)    :: n   !< The time step number of the
+                                                                  !! current execution.
+  type(Sum_output_CS),                       pointer       :: CS  !< The control structure returned
+                                                                  !! by a previous call to
+                                                                  !! MOM_sum_output_init.
   type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp
 
 
@@ -869,12 +884,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   endif
 end subroutine write_energy
 
+!> This subroutine accumates the net input of volume, and perhaps later salt and
+!! heat, through the ocean surface for use in diagnosing conservation.
 subroutine accumulate_net_input(fluxes, state, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes
+  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: state
-  real,                  intent(in) :: dt   !< The amount of time over which to average, in s
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
-  type(Sum_output_CS),   pointer    :: CS
+  real,                  intent(in) :: dt     !< The amount of time over which to average, in s.
+  type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
+  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call to MOM_sum_output_init.
+
 ! This subroutine accumates the net input of volume, and perhaps later salt and
 ! heat, through the ocean surface for use in diagnosing conservation.
 ! Arguments: fluxes - A structure containing pointers to any possible
@@ -992,7 +1010,10 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
 end subroutine accumulate_net_input
 
-
+!>  This subroutine sets up an ordered list of depths, along with the
+!! cross sectional areas at each depth and the volume of fluid deeper
+!! than each depth.  This might be read from a previously created file
+!! or it might be created anew.  (For now only new creation occurs.
 subroutine depth_list_setup(G, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS
@@ -1026,7 +1047,7 @@ end subroutine depth_list_setup
 !>  create_depth_list makes an ordered list of depths, along with the cross
 !! sectional areas at each depth and the volume of fluid deeper than each depth.
 subroutine create_depth_list(G, CS)
-  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure
+  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
                                           !! in which the ordered depth list is stored.
 
@@ -1149,8 +1170,9 @@ subroutine create_depth_list(G, CS)
 
 end subroutine create_depth_list
 
+!> This subroutine writes out the depth list to the specified file.
 subroutine write_depth_list(G, CS, filename, list_size)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS
   character(len=*),      intent(in) :: filename
   integer,               intent(in) :: list_size
@@ -1229,6 +1251,8 @@ subroutine write_depth_list(G, CS, filename, list_size)
 
 end subroutine write_depth_list
 
+!> This subroutine reads in the depth list to the specified file
+!! and allocates and sets up CS%DL and CS%list_size .
 subroutine read_depth_list(G, CS, filename)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS
