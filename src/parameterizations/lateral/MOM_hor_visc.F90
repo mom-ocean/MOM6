@@ -133,6 +133,8 @@ type, public :: hor_visc_CS ; private
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: Leith_Kh        ! If true, use 2D Leith nonlinear eddy
                              ! viscosity. KH is the background value.
+  logical :: Modified_Leith  ! If true, use extra component of Leith viscosity
+                             ! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
   logical :: Leith_Ah        ! If true, use a biharmonic form of 2D Leith
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
@@ -291,6 +293,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
     str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    div_xx, &     ! horizontal divergence (du/dx + dv/dy) (1/sec) including metric terms
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -301,10 +304,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vort_xy_dx    ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 sec-1) including metric terms
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    vort_xy_dy    ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 sec-1) including metric terms
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
@@ -321,6 +326,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
+  real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
+                     ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
+                     ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
   real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
@@ -409,6 +417,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
+      div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+                          G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+                          G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+                                    (h(i,j,k) + h_neglect)
     enddo ; enddo
     ! Components for the shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
@@ -540,6 +553,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
     enddo ; enddo
 
+! Divergence gradient
+    do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+      div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+    enddo ; enddo
+
+    do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+      div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+    enddo ; enddo
+
+! Coefficient for modified Leith
+    if (CS%Modified_Leith) then
+      mod_Leith = 1.0
+    else
+      mod_Leith = 0.0
+    endif
+
 !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -572,10 +601,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         Vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
-                (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))))
+                (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
+                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+      endif
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
                             (h(i,j,k) + h_neglect) )
@@ -702,7 +734,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
-                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))))
+                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
@@ -1041,6 +1075,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
+  CS%Modified_Leith = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
@@ -1077,6 +1112,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mod, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
+
+    call get_param(param_file, mod, "MODIFIED_LEITH", CS%Modified_Leith, &
+                 "If true, add a term to Leith viscosity which is \n"//&
+                 "proportional to the gradient of divergence.", &
+                 default=.false.)
+
     if (CS%Leith_Kh .or. get_all) &
       call get_param(param_file, mod, "LEITH_LAP_CONST", Leith_Lap_const, &
                  "The nondimensional Laplacian Leith constant, \n"//&
