@@ -974,7 +974,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !Temporary action to preserve answers while fixing a bug.
     ! To fix a bug in diagnostic calculation, applyboundaryfluxesinout now returns
     !  the surface buoyancy flux. Previously, extractbuoyancyflux2d was called, meaning
-    !  a second call to extractfluxes1d (causing the diagnostic to be incorrectly computed).
+    !  a second call to extractfluxes1d (causing the diagnostic net_heat to be incorrect).
     !  Note that this call to extract buoyancyflux2d was AFTER applyboundaryfluxesinout,
     !  which means it used the T/S fields after this routine.  Therefore, the surface
     !  buoyancy flux is computed here at the very end of this routine for legacy reasons.
@@ -986,11 +986,12 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !  2. There are a few issues to ensure answers are reproduced:
     !     a) The old method did not included river/calving contributions to heat flux.  This
     !        is accounted for by extractFluxes1d, but we may reconsider this approach.
-    !     b) The old method computed the buoyancy flux rate directly, instead of computing
-    !        the integrated value (and dividing by dt). For answers: ( A*dt/dt =/=  A )
+    !     b) The old method computed the buoyancy flux rate directly (by setting dt=1), instead
+    !        of computing the integrated value (and dividing by dt).
+    !        This is because: A*dt/dt =/=  A due to round off.
     !     c) The old method computed buoyancy flux after this routine, meaning the returned
     !        surface fluxes (from extractfluxes1d) must be recorded for use later in the code.
-    !     For all these reasons we output additional values of '_rate' which are preserved
+    !     For all these reasons we compute additional values of '_rate' which are preserved
     !     for the buoyancy flux calculation and reproduce the old answers.
     !   In the future we should look at this and make sure we do the absolute correct thing.
     !   These details shouldn't effect climate, but will change answers.
