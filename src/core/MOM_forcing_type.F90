@@ -318,15 +318,14 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW                 !< non-downwelling SW; use in net_heat.
                                                                                !! Sum over SW bands when diagnosing nonpenSW.
                                                                                !! Units are (K * H).
-  real, dimension(SZI_(G)), optional, intent(out) :: net_Heat_rate                               !! Units... a legacy repeat of netHeat meant to reproduce answers.
-                                                                               !! added 6/26/2017 by BGR and not meant to be used permanently.
-  real, dimension(SZI_(G)), optional, intent(out) :: net_salt_rate
-  real, dimension(SZI_(G)), optional, intent(out) :: netmassInOut_rate
-  real, dimension(:,:), optional, intent(out)     :: pen_sw_bnd_rate 
+  real, dimension(SZI_(G)), optional, intent(out) :: net_Heat_rate             !< Optional outputs of contributions to surface
+  real, dimension(SZI_(G)), optional, intent(out) :: net_salt_rate             !<  buoyancy flux which do not include dt
+  real, dimension(SZI_(G)), optional, intent(out) :: netmassInOut_rate         !<  and therefore are used to compute the rate.
+  real, dimension(:,:), optional, intent(out)     :: pen_sw_bnd_rate           !<  Perhaps just a temporary fix.
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW (K * H)
-  real :: pen_sw_tot_rate(SZI_(G))
+  real :: pen_sw_tot_rate(SZI_(G)) ! Similar but sum but as a rate (no dt in calculation)
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited (1/H)
   real :: scale               ! scale scales away fluxes if depth < DepthBeforeScalingFluxes
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
@@ -338,11 +337,11 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
   logical :: do_NHR, do_NSR, do_NMIOR, do_PSWBR
 
+  ! Initializes/sets logicals if 'rates' are requested
   do_NHR = .false.
   do_NSR = .false.
   do_NMIOR = .false.
   do_PSWBR = .false.
-
   if (present(net_heat_rate)) do_NHR = .true.
   if (present(net_salt_rate)) do_NSR = .true.
   if (present(netmassinout_rate)) do_NMIOR = .true.
@@ -437,7 +436,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! salt mass is added to the ocean, which may still need to be coded.
     if (.not.GV%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
       netMassInOut(i) = netMassInOut(i) + (dt * GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
-      
+
       if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + (GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
     endif
 
@@ -475,13 +474,11 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
     net_heat(i) = scale * dt * J_m2_to_H * &
                   ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-    ! Include in Legacy net_heat
     if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
          ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (ASSOCIATED(fluxes%heat_added)) then
        net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
-       !Including in Legacy net_heat
        if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * (J_m2_to_H)) * fluxes%heat_added(i,j)
     endif
 
@@ -491,9 +488,9 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove lrunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
                      (GV%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
-      !DON'T include in Legacy net_heat
-!      net_heat_rate(i) = (net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
-!                     (GV%kg_m2_to_H * (scale)) * fluxes%lrunoff(i,j) * T(i,1)
+      !DON'T include this in rate for legacy reasons.
+      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
+      !               (GV%kg_m2_to_H * (scale)) * fluxes%lrunoff(i,j) * T(i,1)
 
       if (ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
@@ -507,8 +504,8 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove frunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
                     (GV%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
-      !DON'T include in Legacy net_heat
-!      net_heat_rate(i) = net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
+      !DON'T include this in rate for legacy reasons
+!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
 !                    (GV%kg_m2_to_H * (scale)) * fluxes%frunoff(i,j) * T(i,1)
 
       if (ASSOCIATED(tv%TempxPmE)) then
@@ -549,7 +546,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! remove penetrative portion of the SW that is NOT absorbed within a
     ! tiny layer at the top of the ocean.
     net_heat(i) = net_heat(i) - Pen_SW_tot(i)
-    ! include in Legacy net_heat
     if (do_NHR) net_heat_rate(i) = net_heat_rate(i) - Pen_SW_tot_rate(i)
 
     ! diagnose non-downwelling SW
