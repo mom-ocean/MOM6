@@ -877,25 +877,28 @@ end subroutine ocean_model_init_sfc
 !WGA
 
 subroutine ocean_model_flux_init(OS)
-  type(ocean_state_type),  pointer :: OS
+  type(ocean_state_type), optional, pointer :: OS
+
   integer :: dummy
   character(len=128) :: default_ice_restart_file, default_ocean_restart_file
   character(len=40)  :: mod = "ocean_model_flux_init"  ! This module's name.
-
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
   logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
+  logical :: OS_is_set
+
+  OS_is_set = .false. ; if (present(OS)) OS_is_set = associated(OS)
 
   call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
 
   call get_param(param_file, mod, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
-                 default=.false.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mod, "USE_generic_tracer", use_MOM_generic_tracer,&
-                 default=.false.)
+                 default=.false., do_not_log=.true.)
 
   call close_param_file(param_file, quiet_close=.true.)
 
-  if(.not.associated(OS)) then
+  if(.not.OS_is_set) then
     if (use_OCMIP_CFCs)then
       default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
       default_ocean_restart_file = 'ocmip2_cfc.res.nc'
@@ -917,7 +920,7 @@ subroutine ocean_model_flux_init(OS)
 
   if (use_MOM_generic_tracer) then
 #ifdef _USE_GENERIC_TRACER
-    call MOM_generic_flux_init
+    call MOM_generic_flux_init()
 #else
     call MOM_error(FATAL, &
        "call_tracer_register: use_MOM_generic_tracer=.true. BUT not compiled with _USE_GENERIC_TRACER")
