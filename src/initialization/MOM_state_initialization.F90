@@ -154,6 +154,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   integer :: regrid_iterations
   logical :: Analytic_FV_PGF, obsol_test
   logical :: convert
+  logical :: just_read  ! If true, only read the parameters because this
+                        ! is a run from a restart file; this option
+                        ! allows the use of Fatal unused parameters.
   type(EOS_type), pointer :: eos => NULL()
   logical :: debug    ! indicates whether to write debugging output
 ! This include declares and sets the variable "version".
@@ -174,6 +177,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   if ((dirs%input_filename(1:1) == 'n') .and. &
       (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
 
+  just_read = .not.new_sim
+
   call get_param(PF, mod, "INPUTDIR", inputdir, &
          "The directory in which input files are found.", default=".")
   inputdir = slasher(inputdir)
@@ -189,225 +194,264 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 !====================================================================
 
   if (new_sim) then
-!  This block initializes all of the fields internally.              !
     call MOM_mesg("Run initialized internally.", 3)
 
     if (present(Time_in)) Time = Time_in
     ! Otherwise leave Time at its input value.
 
-    call get_param(PF, mod, "INIT_LAYERS_FROM_Z_FILE", from_Z_file, &
-               "If true, intialize the layer thicknesses, temperatures, \n"//&
-               "and salnities from a Z-space file on a latitude- \n"//&
-               "longitude grid.", default=.false.)
     ! h will be converted from m to H below
     h(:,:,:) = GV%Angstrom_z
+  endif
 
-    if (from_Z_file) then
+  ! The remaining initialization calls are done, regardless of whether the
+  ! fields are actually initialized here (if just_read=.false.) or whether it
+  ! is just to make sure that all valid parameters are read to enable the
+  ! detection of unused parameters.
+  call get_param(PF, mod, "INIT_LAYERS_FROM_Z_FILE", from_Z_file, &
+             "If true, intialize the layer thicknesses, temperatures, \n"//&
+             "and salnities from a Z-space file on a latitude- \n"//&
+             "longitude grid.", default=.false., do_not_log=just_read)
+
+  if (from_Z_file) then
 !     Initialize thickness and T/S from z-coordinate data in a file.
-      if (.NOT.use_temperature) call MOM_error(FATAL,"MOM_initialize_state : "//&
-         "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
+    if (.NOT.use_temperature) call MOM_error(FATAL,"MOM_initialize_state : "//&
+       "use_temperature must be true if INIT_LAYERS_FROM_Z_FILE is true")
 
-      call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
-      call pass_var(h, G%Domain)
+    call MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params=just_read)
 
-    else
+  else
 !     Initialize thickness, h.
-      call get_param(PF, mod, "THICKNESS_CONFIG", config, &
-               "A string that determines how the initial layer \n"//&
-               "thicknesses are specified for a new run: \n"//&
-               " \t file - read interface heights from the file specified \n"//&
-               " \t thickness_file - read thicknesses from the file specified \n"//&
-               " \t\t by (THICKNESS_FILE).\n"//&
-               " \t coord - determined by ALE coordinate.\n"//&
-               " \t uniform - uniform thickness layers evenly distributed \n"//&
-               " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
-               " \t DOME - use a slope and channel configuration for the \n"//&
-               " \t\t DOME sill-overflow test case. \n"//&
-               " \t ISOMIP - use a configuration for the \n"//&
-               " \t\t ISOMIP test case. \n"//&
-               " \t benchmark - use the benchmark test case thicknesses. \n"//&
-               " \t search - search a density profile for the interface \n"//&
-               " \t\t densities. This is not yet implemented. \n"//&
-               " \t circle_obcs - the circle_obcs test case is used. \n"//&
-               " \t DOME2D - 2D version of DOME initialization. \n"//&
-               " \t adjustment2d - TBD AJA. \n"//&
-               " \t sloshing - TBD AJA. \n"//&
-               " \t seamount - TBD AJA. \n"//&
-               " \t soliton - Equatorial Rossby soliton. \n"//&
-               " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
-               " \t USER - call a user modified routine.", &
-               fail_if_missing=.true.)
-      select case (trim(config))
-         case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false.)
-         case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true.)
-         case ("coord")
-           if (useALE) then
-             call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
-           else
-             call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
-                                   "for THICKNESS_CONFIG of 'coord'")
-           endif
-         case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF)
-         case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF)
-         case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv)
-         case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
-                                 tv%eqn_of_state, tv%P_Ref)
-         case ("search"); call initialize_thickness_search
-         case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF)
-         case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, GV, PF)
-         case ("external_gwave"); call external_gwave_initialize_thickness(h, G, PF)
-         case ("DOME2D"); call DOME2d_initialize_thickness(h, G, GV, PF)
-         case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, PF)
-         case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF)
-         case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF)
-         case ("soliton"); call soliton_initialize_thickness(h, G)
-         case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF)
-         case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, PF)
-         case ("USER"); call user_initialize_thickness(h, G, PF, tv%T)
-         case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-              "Unrecognized layer thickness configuration "//trim(config))
-      end select
-      call pass_var(h, G%Domain)
-
-!     Initialize temperature and salinity (T and S).
-      if ( use_temperature ) then
-        call get_param(PF, mod, "TS_CONFIG", config, &
-               "A string that determines how the initial tempertures \n"//&
-               "and salinities are specified for a new run: \n"//&
-               " \t file - read velocities from the file specified \n"//&
-               " \t\t by (TS_FILE). \n"//&
-               " \t fit - find the temperatures that are consistent with \n"//&
-               " \t\t the layer densities and salinity S_REF. \n"//&
-               " \t TS_profile - use temperature and salinity profiles \n"//&
-               " \t\t (read from TS_FILE) to set layer densities. \n"//&
-               " \t benchmark - use the benchmark test case T & S. \n"//&
-               " \t linear - linear in logical layer space. \n"//&
-               " \t DOME2D - 2D DOME initialization. \n"//&
-               " \t ISOMIP - ISOMIP initialization. \n"//&
-               " \t adjustment2d - TBD AJA. \n"//&
-               " \t sloshing - TBD AJA. \n"//&
-               " \t seamount - TBD AJA. \n"//&
-               " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
-               " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
-               " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
-               " \t USER - call a user modified routine.", &
-               fail_if_missing=.true.)
-!              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
-        select case (trim(config))
-          case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, eos, tv%P_Ref)
-          case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, PF)
-          case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
-                                   G, GV, PF, eos, tv%P_Ref)
-          case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, G, PF)
-          case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF)
-          case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos)
-          case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, GV, PF, eos)
-          case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
-                                      tv%S, h, G, PF, eos)
-          case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
-                                tv%S, h, G, PF)
-          case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, PF, eos)
-          case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
-                                  tv%S, h, G, GV, PF, eos)
-          case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                tv%S, h, G, PF, eos)
-          case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
-                                tv%S, h, G, GV, PF)
-          case ("SCM_CVmix_tests"); call SCM_CVmix_tests_TS_init (tv%T, &
-                                tv%S, h, G, GV, PF)
-          case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, h)
-          case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos)
-          case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-                 "Unrecognized Temp & salt configuration "//trim(config))
-        end select
-      endif
-    endif  ! not from_Z_file.
-
-!   Initialize velocity components, u and v
-    call get_param(PF, mod, "VELOCITY_CONFIG", config, &
-         "A string that determines how the initial velocities \n"//&
-         "are specified for a new run: \n"//&
-         " \t file - read velocities from the file specified \n"//&
-         " \t\t by (VELOCITY_FILE). \n"//&
-         " \t zero - the fluid is initially at rest. \n"//&
-         " \t uniform - the flow is uniform (determined by\n"//&
-         " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
-         " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
-         " \t soliton - Equatorial Rossby soliton.\n"//&
-         " \t USER - call a user modified routine.", default="zero")
+    call get_param(PF, mod, "THICKNESS_CONFIG", config, &
+             "A string that determines how the initial layer \n"//&
+             "thicknesses are specified for a new run: \n"//&
+             " \t file - read interface heights from the file specified \n"//&
+             " \t thickness_file - read thicknesses from the file specified \n"//&
+             " \t\t by (THICKNESS_FILE).\n"//&
+             " \t coord - determined by ALE coordinate.\n"//&
+             " \t uniform - uniform thickness layers evenly distributed \n"//&
+             " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
+             " \t DOME - use a slope and channel configuration for the \n"//&
+             " \t\t DOME sill-overflow test case. \n"//&
+             " \t ISOMIP - use a configuration for the \n"//&
+             " \t\t ISOMIP test case. \n"//&
+             " \t benchmark - use the benchmark test case thicknesses. \n"//&
+             " \t search - search a density profile for the interface \n"//&
+             " \t\t densities. This is not yet implemented. \n"//&
+             " \t circle_obcs - the circle_obcs test case is used. \n"//&
+             " \t DOME2D - 2D version of DOME initialization. \n"//&
+             " \t adjustment2d - TBD AJA. \n"//&
+             " \t sloshing - TBD AJA. \n"//&
+             " \t seamount - TBD AJA. \n"//&
+             " \t soliton - Equatorial Rossby soliton. \n"//&
+             " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+             " \t USER - call a user modified routine.", &
+             fail_if_missing=new_sim, do_not_log=just_read)
     select case (trim(config))
-       case ("file"); call initialize_velocity_from_file(u, v, G, PF)
-       case ("zero"); call initialize_velocity_zero(u, v, G, PF)
-       case ("uniform"); call initialize_velocity_uniform(u, v, G, PF)
-       case ("circular"); call initialize_velocity_circular(u, v, G, PF)
-       case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF)
-       case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, G, GV, PF)
-       case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
-       case ("USER"); call user_initialize_velocity(u, v, G, PF)
+       case ("file"); call initialize_thickness_from_file(h, G, GV, PF, .false., just_read_params=just_read)
+       case ("thickness_file"); call initialize_thickness_from_file(h, G, GV, PF, .true., just_read_params=just_read)
+       case ("coord")
+         if (new_sim .and. useALE) then
+           call ALE_initThicknessToCoord( ALE_CSp, G, GV, h )
+         elseif (new_sim) then
+           call MOM_error(FATAL, "MOM_initialize_state: USE_REGRIDDING must be True "//&
+                                 "for THICKNESS_CONFIG of 'coord'")
+         endif
+       case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF, &
+                                  just_read_params=just_read)
+       case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF, &
+                               just_read_params=just_read)
+       case ("ISOMIP"); call ISOMIP_initialize_thickness(h, G, GV, PF, tv, &
+                                 just_read_params=just_read)
+       case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
+                                    tv%eqn_of_state, tv%P_Ref, just_read_params=just_read)
+       case ("search"); call initialize_thickness_search
+       case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF, &
+                                      just_read_params=just_read)
+       case ("lock_exchange"); call lock_exchange_initialize_thickness(h, G, GV, &
+                                        PF, just_read_params=just_read)
+       case ("external_gwave"); call external_gwave_initialize_thickness(h, G, &
+                                         PF, just_read_params=just_read)
+       case ("DOME2D"); call DOME2d_initialize_thickness(h, G, GV, PF, &
+                                 just_read_params=just_read)
+       case ("adjustment2d"); call adjustment_initialize_thickness(h, G, GV, &
+                                       PF, just_read_params=just_read)
+       case ("sloshing"); call sloshing_initialize_thickness(h, G, GV, PF, &
+                                   just_read_params=just_read)
+       case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF, &
+                                   just_read_params=just_read)
+       case ("soliton"); call soliton_initialize_thickness(h, G)
+       case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF, &
+                                   just_read_params=just_read)
+       case ("rossby_front"); call Rossby_front_initialize_thickness(h, G, GV, &
+                                       PF, just_read_params=just_read)
+       case ("USER"); call user_initialize_thickness(h, G, PF, tv%T, &
+                               just_read_params=just_read)
        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-            "Unrecognized velocity configuration "//trim(config))
+            "Unrecognized layer thickness configuration "//trim(config))
     end select
 
-    call pass_vector(u, v, G%Domain)
-    if (debug) then
-        call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+!     Initialize temperature and salinity (T and S).
+    if ( use_temperature ) then
+      call get_param(PF, mod, "TS_CONFIG", config, &
+             "A string that determines how the initial tempertures \n"//&
+             "and salinities are specified for a new run: \n"//&
+             " \t file - read velocities from the file specified \n"//&
+             " \t\t by (TS_FILE). \n"//&
+             " \t fit - find the temperatures that are consistent with \n"//&
+             " \t\t the layer densities and salinity S_REF. \n"//&
+             " \t TS_profile - use temperature and salinity profiles \n"//&
+             " \t\t (read from TS_FILE) to set layer densities. \n"//&
+             " \t benchmark - use the benchmark test case T & S. \n"//&
+             " \t linear - linear in logical layer space. \n"//&
+             " \t DOME2D - 2D DOME initialization. \n"//&
+             " \t ISOMIP - ISOMIP initialization. \n"//&
+             " \t adjustment2d - TBD AJA. \n"//&
+             " \t sloshing - TBD AJA. \n"//&
+             " \t seamount - TBD AJA. \n"//&
+             " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+             " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
+             " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
+             " \t USER - call a user modified routine.", &
+             fail_if_missing=new_sim, do_not_log=just_read)
+!              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
+      select case (trim(config))
+        case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, PF, &
+                               eos, tv%P_Ref, just_read_params=just_read)
+        case ("file"); call initialize_temp_salt_from_file(tv%T, tv%S, G, &
+                                PF, just_read_params=just_read)
+        case ("benchmark"); call benchmark_init_temperature_salinity(tv%T, tv%S, &
+                                     G, GV, PF, eos, tv%P_Ref, just_read_params=just_read)
+        case ("TS_profile") ; call initialize_temp_salt_from_profile(tv%T, tv%S, &
+                                       G, PF, just_read_params=just_read)
+        case ("linear"); call initialize_temp_salt_linear(tv%T, tv%S, G, PF, &
+                                  just_read_params=just_read)
+        case ("DOME2D"); call DOME2d_initialize_temperature_salinity ( tv%T, &
+                                  tv%S, h, G, PF, eos, just_read_params=just_read)
+        case ("ISOMIP"); call ISOMIP_initialize_temperature_salinity ( tv%T, &
+                                  tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+        case ("adjustment2d"); call adjustment_initialize_temperature_salinity ( tv%T, &
+                                        tv%S, h, G, PF, eos, just_read_params=just_read)
+        case ("baroclinic_zone"); call baroclinic_zone_init_temperature_salinity( tv%T, &
+                                           tv%S, h, G, PF, just_read_params=just_read)
+        case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
+                                    tv%S, h, G, PF, eos, just_read_params=just_read)
+        case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
+                                    tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+        case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
+                                        tv%S, h, G, PF, eos, just_read_params=just_read)
+        case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
+                                          tv%S, h, G, GV, PF, just_read_params=just_read)
+        case ("SCM_CVmix_tests"); call SCM_CVmix_tests_TS_init (tv%T, &
+                                           tv%S, h, G, GV, PF, just_read_params=just_read)
+        case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, &
+                                 h, just_read_params=just_read)
+        case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, PF, eos, &
+                                just_read_params=just_read)
+        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+               "Unrecognized Temp & salt configuration "//trim(config))
+      end select
     endif
+  endif  ! not from_Z_file.
+
+  ! The thicknesses in halo points might be needed to initialize the velocities.
+  if (new_sim) call pass_var(h, G%Domain)
+
+!   Initialize velocity components, u and v
+  call get_param(PF, mod, "VELOCITY_CONFIG", config, &
+       "A string that determines how the initial velocities \n"//&
+       "are specified for a new run: \n"//&
+       " \t file - read velocities from the file specified \n"//&
+       " \t\t by (VELOCITY_FILE). \n"//&
+       " \t zero - the fluid is initially at rest. \n"//&
+       " \t uniform - the flow is uniform (determined by\n"//&
+       " \t\t parameters INITIAL_U_CONST and INITIAL_V_CONST).\n"//&
+       " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
+       " \t soliton - Equatorial Rossby soliton.\n"//&
+       " \t USER - call a user modified routine.", default="zero", &
+       do_not_log=just_read)
+  select case (trim(config))
+     case ("file"); call initialize_velocity_from_file(u, v, G, PF, &
+                             just_read_params=just_read)
+     case ("zero"); call initialize_velocity_zero(u, v, G, PF, &
+                             just_read_params=just_read)
+     case ("uniform"); call initialize_velocity_uniform(u, v, G, PF, &
+                                just_read_params=just_read)
+     case ("circular"); call initialize_velocity_circular(u, v, G, PF, &
+                                 just_read_params=just_read)
+     case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, PF, &
+                                 just_read_params=just_read)
+     case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
+                                     G, GV, PF, just_read_params=just_read)
+     case ("soliton"); call soliton_initialize_velocity(u, v, h, G)
+     case ("USER"); call user_initialize_velocity(u, v, G, PF, &
+                             just_read_params=just_read)
+     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+          "Unrecognized velocity configuration "//trim(config))
+  end select
+
+  if (new_sim) call pass_vector(u, v, G%Domain)
+  if (debug .and. new_sim) then
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1)
+  endif
 
 !   Optionally convert the thicknesses from m to kg m-2.  This is particularly
 ! useful in a non-Boussinesq model.
-    call get_param(PF, mod, "CONVERT_THICKNESS_UNITS", convert, &
-                 "If true,  convert the thickness initial conditions from \n"//&
-                 "units of m to kg m-2 or vice versa, depending on whether \n"//&
-                 "BOUSSINESQ is defined. This does not apply if a restart \n"//&
-                 "file is read.", default=.false.)
+  call get_param(PF, mod, "CONVERT_THICKNESS_UNITS", convert, &
+               "If true,  convert the thickness initial conditions from \n"//&
+               "units of m to kg m-2 or vice versa, depending on whether \n"//&
+               "BOUSSINESQ is defined. This does not apply if a restart \n"//&
+               "file is read.", default=.false., do_not_log=just_read)
+  if (new_sim) then
     if (convert .and. .not. GV%Boussinesq) then
       ! Convert h from m to kg m-2 then to thickness units (H)
-      call convert_thickness(h, G, GV, PF, tv)
+      call convert_thickness(h, G, GV, tv)
     elseif (GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
       h(:,:,:) = h(:,:,:)*GV%m_to_H
     else
       h(:,:,:) = h(:,:,:)*GV%kg_m2_to_H
     endif
+  endif
 
 !  Remove the mass that would be displaced by an ice shelf or inverse barometer.
-    call get_param(PF, mod, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
-                 "If true,  depress the initial surface to avoid huge \n"//&
-                 "tsunamis when a large surface pressure is applied.", &
-                 default=.false.)
-    call get_param(PF, mod, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
-                 "If true, cuts way the top of the column for initial conditions\n"//&
-                 "at the depth where the hydrostatic presure matches the imposed\n"//&
-                 "surface pressure which is read from file.", default=.false.)
-    if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
-             "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
-    if (depress_sfc) call depress_surface(h, G, GV, PF, tv)
-    if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
+  call get_param(PF, mod, "DEPRESS_INITIAL_SURFACE", depress_sfc, &
+               "If true,  depress the initial surface to avoid huge \n"//&
+               "tsunamis when a large surface pressure is applied.", &
+               default=.false., do_not_log=just_read)
+  call get_param(PF, mod, "TRIM_IC_FOR_P_SURF", trim_ic_for_p_surf, &
+               "If true, cuts way the top of the column for initial conditions\n"//&
+               "at the depth where the hydrostatic presure matches the imposed\n"//&
+               "surface pressure which is read from file.", default=.false., &
+               do_not_log=just_read)
+  if (depress_sfc .and. trim_ic_for_p_surf) call MOM_error(FATAL, "MOM_initialize_state: "//&
+           "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
+  if (depress_sfc) call depress_surface(h, G, GV, PF, tv, just_read_params=just_read)
+  if (trim_ic_for_p_surf) call trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params=just_read)
 
-    ! Perhaps we want to run the regridding coordinate generator for multiple
-    ! iterations here so the initial grid is consistent with the coordinate
-    if (useALE) then
-      call get_param(PF, mod, "REGRID_ACCELERATE_INIT", regrid_accelerate, &
-           "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding\n"//&
-           "algorithm to push the initial grid to be consistent with the initial\n"//&
-           "condition. Useful only for state-based and iterative coordinates.", &
-           default=.false.)
-      if (regrid_accelerate) then
-        call get_param(PF, mod, "REGRID_ACCELERATE_ITERATIONS", regrid_iterations, &
-             "The number of regridding iterations to perform to generate\n"//&
-             "an initial grid that is consistent with the initial conditions.", &
-             default=1)
+  ! Perhaps we want to run the regridding coordinate generator for multiple
+  ! iterations here so the initial grid is consistent with the coordinate
+  if (useALE) then
+    call get_param(PF, mod, "REGRID_ACCELERATE_INIT", regrid_accelerate, &
+         "If true, runs REGRID_ACCELERATE_ITERATIONS iterations of the regridding\n"//&
+         "algorithm to push the initial grid to be consistent with the initial\n"//&
+         "condition. Useful only for state-based and iterative coordinates.", &
+         default=.false., do_not_log=just_read)
+    if (regrid_accelerate) then
+      call get_param(PF, mod, "REGRID_ACCELERATE_ITERATIONS", regrid_iterations, &
+           "The number of regridding iterations to perform to generate\n"//&
+           "an initial grid that is consistent with the initial conditions.", &
+           default=1, do_not_log=just_read)
 
+      if (new_sim) &
         call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h, u, v)
-      endif
     endif
+  endif
+  ! This is the end of the block of code that might have initialized fields
+  ! internally at the start of a new run.
 
-  else ! Previous block for new_sim=.T., this block restores state
-!    This line calls a subroutine that reads the initial conditions  !
-!  from a previously generated file.                                 !
+  if (.not.new_sim) then ! This block restores the state from a restart file.
+    !    This line calls a subroutine that reads the initial conditions  !
+    !  from a previously generated file.                                 !
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, &
                        G, restart_CS)
     if (present(Time_in)) Time = Time_in
@@ -430,10 +474,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "The exact location and properties of those sponges are \n"//&
                  "specified via SPONGE_CONFIG.", default=.false.)
   if ( use_sponge ) then
-! The 3 arguments here are (1) a flag indicating whether the sponge  !
-! values are to be read from files, (2) the name of a file containing!
-! the state toward which the model is damped, and (3) the file in    !
-! which the 2-D damping rate field can be found.                     !
     call get_param(PF, mod, "SPONGE_CONFIG", config, &
                  "A string that sets how the sponges are configured: \n"//&
                  " \t file - read sponge properties from the file \n"//&
@@ -516,12 +556,20 @@ end subroutine MOM_initialize_state
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness)
-  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h    !< Layer thicknesses, in m
-  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
-  logical,                                intent(in)  :: file_has_thickness
+!>  This subroutine reads the layer thicknesses or interface heights from a file.
+subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickness, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,                 intent(in)  :: file_has_thickness !< If true, this file contains layer
+                                                      !! thicknesses; otherwise it contains
+                                                      !! interface heights.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -536,32 +584,39 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
   real :: dilate     ! The amount by which each layer is dilated to agree
                      ! with the bottom depth and free surface height, nondim.
   logical :: correct_thickness
+  logical :: just_read    ! If true, just read parameters but set nothing.  character(len=20) :: verticalCoordinate
   character(len=40)  :: mod = "initialize_thickness_from_file" ! This subroutine's name.
   character(len=200) :: filename, thickness_file, inputdir, mesg ! Strings for file/path
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  if (.not.just_read) &
+    call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+
+  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".", do_not_log=just_read)
   inputdir = slasher(inputdir)
   call get_param(param_file, mod, "THICKNESS_FILE", thickness_file, &
-                 "The name of the thickness file.", fail_if_missing=.true.)
+                 "The name of the thickness file.", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
 
   filename = trim(inputdir)//trim(thickness_file)
-  call log_param(param_file, mod, "INPUTDIR/THICKNESS_FILE", filename)
+  if (.not.just_read) call log_param(param_file, mod, "INPUTDIR/THICKNESS_FILE", filename)
 
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+  if ((.not.just_read) .and. (.not.file_exists(filename, G%Domain))) call MOM_error(FATAL, &
          " initialize_thickness_from_file: Unable to open "//trim(filename))
 
   if (file_has_thickness) then
+    if (just_read) return ! All run-time parameters have been read, so return.
     call read_data(filename,"h",h(:,:,:),domain=G%Domain%mpp_domain)
   else
     call get_param(param_file, mod, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the \n"//&
                  "topography is shallower than the thickness input file \n"//&
-                 "would indicate.", default=.false.)
+                 "would indicate.", default=.false., do_not_log=just_read)
+    if (just_read) return ! All run-time parameters have been read, so return.
 
     call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
 
@@ -671,11 +726,15 @@ end subroutine adjustEtaToFitBathymetry
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_thickness_uniform(h, G, GV, param_file)
-  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h    !< Layer thicknesses, in m
-  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
+subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -689,9 +748,14 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file)
                           ! negative because it is positive upward.      !
   real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
                           ! positive upward, in m.                       !
+  logical :: just_read    ! If true, just read parameters but set nothing.  character(len=20) :: verticalCoordinate
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! This subroutine has no run-time parameters.
 
   call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
 
@@ -731,17 +795,14 @@ subroutine initialize_thickness_search
 end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
-subroutine convert_thickness(h, G, GV, param_file, tv)
+subroutine convert_thickness(h, G, GV, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, being converted from m to H (m or kg m-2)
-  type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     p_top, p_bot
   real :: dz_geo(SZI_(G),SZJ_(G))      ! The change in geopotential height
@@ -803,12 +864,15 @@ subroutine convert_thickness(h, G, GV, param_file, tv)
 
 end subroutine convert_thickness
 
-subroutine depress_surface(h, G, GV, param_file, tv)
-  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(param_file_type),                  intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+                           intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -825,8 +889,11 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   character(len=40)  :: mod = "depress_surface" ! This subroutine's name.
   character(len=200) :: inputdir, eta_srf_file ! Strings for file/path
   character(len=200) :: filename, eta_srf_var  ! Strings for file/path
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   ! Read the surface height (or pressure) from a file.
 
@@ -834,17 +901,21 @@ subroutine depress_surface(h, G, GV, param_file, tv)
   inputdir = slasher(inputdir)
   call get_param(param_file, mod, "SURFACE_HEIGHT_IC_FILE", eta_srf_file,&
                  "The initial condition file for the surface height.", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "SURFACE_HEIGHT_IC_VAR", eta_srf_var, &
                  "The initial condition variable for the surface height.",&
-                 default="SSH")
+                 default="SSH", do_not_log=just_read)
   filename = trim(inputdir)//trim(eta_srf_file)
-  call log_param(param_file,  mod, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+  if (.not.just_read) &
+    call log_param(param_file,  mod, "INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
-  call read_data(filename,eta_srf_var,eta_sfc,domain=G%Domain%mpp_domain)
   call get_param(param_file, mod, "SURFACE_HEIGHT_IC_SCALE", scale_factor, &
                  "A scaling factor to convert SURFACE_HEIGHT_IC_VAR into \n"//&
-                 "units of m", units="variable", default=1.0)
+                 "units of m", units="variable", default=1.0, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
+  call read_data(filename,eta_srf_var,eta_sfc,domain=G%Domain%mpp_domain)
 
   if (scale_factor /= 1.0) then ; do j=js,je ; do i=is,ie
     eta_sfc(i,j) = eta_sfc(i,j) * scale_factor
@@ -885,13 +956,17 @@ end subroutine depress_surface
 
 !> Adjust the layer thicknesses by cutting away the top of each model column at the depth
 !! where the hydrostatic pressure matches an imposed surface pressure read from file.
-subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
-  type(param_file_type),                    intent(in)    :: PF !< Parameter file structure
-  type(ocean_grid_type),                    intent(in)    :: G !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV !< Vertical grid structure
-  type(ALE_CS),                             pointer       :: ALE_CSp !< ALE control structure
-  type(thermo_var_ptrs),                    intent(inout) :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness (H units, m or Pa)
+subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
+  type(param_file_type),   intent(in)    :: PF !< Parameter file structure
+  type(ocean_grid_type),   intent(in)    :: G !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
+  type(ALE_CS),            pointer       :: ALE_CSp !< ALE control structure
+  type(thermo_var_ptrs),   intent(inout) :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h !< Layer thickness (H units, m or Pa)
+  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
   ! Local variables
   character(len=200) :: mod = "trim_for_ice"
   real, dimension(SZI_(G),SZJ_(G)) :: p_surf ! Imposed pressure on ocean at surface (Pa)
@@ -900,30 +975,37 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h)
   character(len=200) :: inputdir, filename, p_surf_file, p_surf_var ! Strings for file/path
   real :: scale_factor, min_thickness
   integer :: i, j, k
+  logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: use_remapping
   type(remapping_CS), pointer :: remap_CS => NULL()
 
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
   call get_param(PF, mod, "SURFACE_PRESSURE_FILE", p_surf_file, &
                  "The initial condition file for the surface height.", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(PF, mod, "SURFACE_PRESSURE_VAR", p_surf_var, &
                  "The initial condition variable for the surface height.", &
-                 units="kg m-2", default="")
+                 units="kg m-2", default="", do_not_log=just_read)
   call get_param(PF, mod, "INPUTDIR", inputdir, default=".", do_not_log=.true.)
   filename = trim(slasher(inputdir))//trim(p_surf_file)
-  call log_param(PF,  mod, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
+  if (.not.just_read) call log_param(PF,  mod, "!INPUTDIR/SURFACE_HEIGHT_IC_FILE", filename)
 
-  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
   call get_param(PF, mod, "SURFACE_PRESSURE_SCALE", scale_factor, &
                  "A scaling factor to convert SURFACE_PRESSURE_VAR from\n"//&
                  "file SURFACE_PRESSURE_FILE into a surface pressure.", &
-                 units="file dependent", default=1.)
-  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+                 units="file dependent", default=1., do_not_log=just_read)
   call get_param(PF, mod, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
-                 units='m', default=1.e-3)
+                 units='m', default=1.e-3, do_not_log=just_read)
   call get_param(PF, mod, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
+  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
+  if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
+
   if (use_remapping) then
     allocate(remap_CS)
     call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
@@ -1035,11 +1117,14 @@ subroutine cut_off_column_top(nk, tv, Rho0, G_earth, depth, min_thickness, &
 end subroutine cut_off_column_top
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_velocity_from_file(u, v, G, param_file)
-  type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
+subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
-  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
+                                                      !! parse for modelparameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1048,14 +1133,19 @@ subroutine initialize_velocity_from_file(u, v, G, param_file)
 !   This subroutine reads the initial velocity components from file
   character(len=40)  :: mod = "initialize_velocity_from_file" ! This subroutine's name.
   character(len=200) :: filename,velocity_file,inputdir ! Strings for file/path
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mod, "VELOCITY_FILE", velocity_file, &
                  "The name of the velocity initial condition file.", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   filename = trim(inputdir)//trim(velocity_file)
   call log_param(param_file, mod, "INPUTDIR/VELOCITY_FILE", filename)
@@ -1072,11 +1162,14 @@ end subroutine initialize_velocity_from_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_velocity_zero(u, v, G, param_file)
+subroutine initialize_velocity_zero(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
-  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
+                                                      !! parse for modelparameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1084,11 +1177,16 @@ subroutine initialize_velocity_zero(u, v, G, param_file)
 
 !   This subroutine sets the initial velocity components to zero
   character(len=200) :: mod = "initialize_velocity_zero" ! This subroutine's name.
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = 0.0
@@ -1102,11 +1200,14 @@ end subroutine initialize_velocity_zero
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_velocity_uniform(u, v, G, param_file)
+subroutine initialize_velocity_uniform(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
-  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
+                                                      !! parse for modelparameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1115,16 +1216,21 @@ subroutine initialize_velocity_uniform(u, v, G, param_file)
 !   This subroutine sets the initial velocity components to uniform
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   real    :: initial_u_const, initial_v_const
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: mod = "initialize_velocity_uniform" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
   call get_param(param_file, mod, "INITIAL_U_CONST", initial_u_const, &
                  "A initial uniform value for the zonal flow.", &
-                 units="m s-1", fail_if_missing=.true.)
+                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "INITIAL_V_CONST", initial_v_const, &
                  "A initial uniform value for the meridional flow.", &
-                 units="m s-1", fail_if_missing=.true.)
+                 units="m s-1", fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     u(I,j,k) = initial_u_const
@@ -1137,11 +1243,14 @@ end subroutine initialize_velocity_uniform
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_velocity_circular(u, v, G, param_file)
+subroutine initialize_velocity_circular(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                   intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G), SZK_(G)), intent(out) :: u    !< The zonal velocity that is being initialized, in m s-1
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)), intent(out) :: v    !< The meridional velocity that is being initialized, in m s-1
-  type(param_file_type),                   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
+                                                      !! parse for modelparameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 ! Arguments: u - The zonal velocity that is being initialized.
 !  (out)     v - The meridional velocity that is being initialized.
 !  (in)      G - The ocean's grid structure.
@@ -1152,14 +1261,20 @@ subroutine initialize_velocity_circular(u, v, G, param_file)
   character(len=200) :: mod = "initialize_velocity_circular"
   real :: circular_max_u
   real :: dpi, psi1, psi2
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
   call get_param(param_file, mod, "CIRCULAR_MAX_U", circular_max_u, &
                  "The amplitude of zonal flow from which to scale the\n"// &
                  "circular stream function (m/s).", &
-                 units="m s-1", default=0.)
+                 units="m s-1", default=0., do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
   dpi=acos(0.0)*2.0 ! pi
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1190,10 +1305,12 @@ end subroutine initialize_velocity_circular
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_temp_salt_from_file(T, S, G, param_file)
+subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1205,49 +1322,59 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file)
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-  character(len=200) :: filename, ts_file, salt_file, inputdir ! Strings for file/path
+  logical :: just_read    ! If true, just read parameters but set nothing.
+  character(len=200) :: filename, salt_filename ! Full paths to input files
+  character(len=200) :: ts_file, salt_file, inputdir ! Strings for file/path
   character(len=40)  :: mod = "initialize_temp_salt_from_file"
-  character(len=64)  :: temp_var, salt_var
+  character(len=64)  :: temp_var, salt_var ! Temperature and salinity names in files
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The initial condition file for temperature.", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
   filename = trim(inputdir)//trim(ts_file)
-  call log_param(param_file, mod, "INPUTDIR/TS_FILE", filename)
-  if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-     " initialize_temp_salt_from_file: Unable to open "//trim(filename))
-
+  if (.not.just_read) call log_param(param_file, mod, "INPUTDIR/TS_FILE", filename)
   call get_param(param_file, mod, "TEMP_IC_VAR", temp_var, &
                  "The initial condition variable for potential temperature.", &
-                 default="PTEMP")
+                 default="PTEMP", do_not_log=just_read)
   call get_param(param_file, mod, "SALT_IC_VAR", salt_var, &
-                 "The initial condition variable for salinity.", default="SALT")
-
-! Read the temperatures and salinities from a netcdf file.           !
-  call read_data(filename, temp_var, T(:,:,:), domain=G%Domain%mpp_domain)
-
+                 "The initial condition variable for salinity.", &
+                 default="SALT", do_not_log=just_read)
   call get_param(param_file, mod, "SALT_FILE", salt_file, &
-                 "The initial condition file for salinity.", default=trim(ts_file))
-  filename = trim(inputdir)//trim(ts_file)
+                 "The initial condition file for salinity.", &
+                 default=trim(ts_file), do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
-  call read_data(filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
+! Read the temperatures and salinities from netcdf files.           !
+  call read_data(filename, temp_var, T(:,:,:), domain=G%Domain%mpp_domain)
+
+  salt_filename = trim(inputdir)//trim(salt_file)
+  if (.not.file_exists(salt_filename, G%Domain)) call MOM_error(FATAL, &
+     " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
+
+  call read_data(salt_filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
 
   call callTree_leave(trim(mod)//'()')
 end subroutine initialize_temp_salt_from_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
+subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1261,14 +1388,20 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file)
 !                         model parameter values.
   real, dimension(SZK_(G)) :: T0, S0
   integer :: i, j, k
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=200) :: filename, ts_file, inputdir ! Strings for file/path
   character(len=40)  :: mod = "initialize_temp_salt_from_profile"
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mod, "TS_FILE", ts_file, &
                  "The file with the reference profiles for temperature \n"//&
-                 "and salinity.", fail_if_missing=.true.)
+                 "and salinity.", fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
   call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(inputdir)//trim(ts_file)
@@ -1290,13 +1423,15 @@ end subroutine initialize_temp_salt_from_profile
 
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref)
+subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   type(EOS_type),                         pointer     :: eqn_of_state
   real,                                   intent(in)  :: P_Ref
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1316,22 +1451,28 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref
   real :: drho_dS(SZK_(G))   ! Derivative of density with salinity in kg m-3 PSU-1.                             !
   real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 in kg m-3.
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mod = "initialize_temp_salt_fit" ! This subroutine's name.
   integer :: i, j, k, itt, nz
   nz = G%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
 
   call get_param(param_file, mod, "T_REF", T_Ref, &
                  "A reference temperature used in initialization.", &
-                 units="degC", fail_if_missing=.true.)
+                 units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
-                 default=35.0)
+                 default=35.0, do_not_log=just_read)
   call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the \n"//&
                  "salinity; otherwise take salinity and fit temperature.", &
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
+
   do k=1,nz
     pres(k) = P_Ref ; S0(k) = S_Ref
     T0(k) = T_Ref
@@ -1376,10 +1517,13 @@ end subroutine initialize_temp_salt_fit
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine initialize_temp_salt_linear(T, S, G, param_file)
+subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
   ! This subroutine initializes linear profiles for T and S according to
   ! reference surface layer salinity and temperature and a specified range.
   ! Note that the linear distribution is set up with respect to the layer
@@ -1389,21 +1533,26 @@ subroutine initialize_temp_salt_linear(T, S, G, param_file)
   real  :: S_top, T_top ! Reference salinity and temerature within surface layer
   real  :: S_range, T_range ! Range of salinities and temperatures over the vertical
   real  :: delta
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's name.
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
   call get_param(param_file, mod, "T_TOP", T_top, &
                  "Initial temperature of the top surface.", &
-                 units="degC", fail_if_missing=.true.)
+                 units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "T_RANGE", T_range, &
                  "Initial temperature difference (top-bottom).", &
-                 units="degC", fail_if_missing=.true.)
+                 units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "S_TOP", S_top, &
                  "Initial salinity of the top surface.", &
-                 units="PSU", fail_if_missing=.true.)
+                 units="PSU", fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mod, "S_RANGE", S_range, &
                  "Initial salinity difference (top-bottom).", &
-                 units="PSU", fail_if_missing=.true.)
+                 units="PSU", fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
 ! ! Prescribe salinity
 ! delta_S = S_range / ( G%ke - 1.0 );
@@ -1619,14 +1768,11 @@ end subroutine set_velocity_depth_min
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
-
-! Determines the isopycnal interfaces and layer potential
-! temperatures and salinities directly from a z-space file on a latitude-
-! longitude grid.
-!
-! This subroutine was written by M. Harrison, with input from R. Hallberg.
-! and A. Adcroft.
+!> This subroutine determines the isopycnal or other coordinate interfaces and
+!! layer potential temperatures and salinities directly from a z-space file on
+!! a latitude-longitude grid.
+subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
+! This subroutine was written by M. Harrison, with input from R. Hallberg & A. Adcroft.
 !
 ! Arguments:
 !  (out)     h  - Layer thickness, in m.
@@ -1637,18 +1783,22 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      PF      - A structure indicating the open file to parse for
 !                      model parameter values.
-!  (in)      dirs    - A structure containing several relevant directory paths.
 
-  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: h    !< Layer thicknesses, in m
-  type(thermo_var_ptrs),                 intent(inout) :: tv   !< A structure pointing to various thermodynamic variables
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),                 intent(in)    :: PF
-  type(directories),                     intent(in)    :: dirs
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(out)   :: h    !< Layer thicknesses being initialized, in m
+  type(thermo_var_ptrs),   intent(inout) :: tv   !< A structure pointing to various thermodynamic
+                                                 !! variables including temperature and salinity
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
+                                                 !! to parse for model parameter values.
+  logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   character(len=200) :: filename   ! The name of an input file containing temperature
                                    ! and salinity in z-space; also used for  ice shelf area.
-  character(len=200) :: inputdir ! The directory where NetCDF input files are.
+  character(len=200) :: shelf_file ! The name of an input file used for  ice shelf area.
+  character(len=200) :: inputdir ! The directory where NetCDF input filesare.
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
@@ -1673,18 +1823,17 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   real    :: min_depth
   real    :: dilate
   real    :: missing_value_temp, missing_value_salt
-  logical :: new_sim
   logical :: correct_thickness
   character(len=40) :: potemp_var, salin_var
   character(len=8)  :: laynum
 
   integer, parameter :: niter=10   ! number of iterations for t/s adjustment to layer density
+  logical :: just_read    ! If true, just read parameters but set nothing.
   logical            :: adjust_temperature = .true.  ! fit t/s to target densities
   real, parameter    :: missing_value = -1.e20
   real, parameter    :: temp_land_fill = 0.0, salt_land_fill = 35.0
   logical :: reentrant_x, tripolar_n,dbg
   logical :: debug = .false.  ! manually set this to true for verbose output
-
 
   !data arrays
   real, dimension(:), allocatable :: z_edges_in, z_in, Rb
@@ -1722,12 +1871,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   PI_180=atan(1.0)/45.
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
-  call log_version(PF, mod, version, "")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  new_sim = .false.
-  if ((dirs%input_filename(1:1) == 'n') .and. &
-      (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
+  if (.not.just_read) call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  if (.not.just_read) call log_version(PF, mod, version, "")
 
   inputdir = "." ;  call get_param(PF, mod, "INPUTDIR", inputdir)
   inputdir = slasher(inputdir)
@@ -1746,35 +1893,62 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
                  "the layer thicknesses, temperatures and salinities.", &
-                 default="temp_salt_z.nc")
+                 default="temp_salt_z.nc", do_not_log=just_read)
   filename = trim(inputdir)//trim(filename)
   call get_param(PF, mod, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="ptemp")
+                 "TEMP_SALT_Z_INIT_FILE.", default="ptemp", do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="salt")
+                 "TEMP_SALT_Z_INIT_FILE.", default="salt", do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated \n"//&
-                 "initial conditions.", default=.false.)
+                 "initial conditions.", default=.false., do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_ALE_REMAPPING", useALEremapping, &
                  "If True, then remap straight to model coordinate from file.",&
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remappingScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
-                 "is True.", default="PPM_IH4")
+                 "is True.", default="PPM_IH4", do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates.\n"//&
                  "If true, allows initialization directly to general coordinates.",&
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
                  "If false, only reconstructs profiles for valid data points.\n"//&
                  "If true, inserts vanished layers below the valid data.",&
-                 default=remap_general)
+                 default=remap_general, do_not_log=just_read)
   call get_param(PF, mod, "Z_INIT_REMAP_OLD_ALG", remap_old_alg, &
                  "If false, uses the preferred remapping algorithm for initialization.\n"//&
                  "If true, use an older, less robust algorithm for remapping.",&
-                 default=.true.)
+                 default=.true., do_not_log=just_read)
+  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false.)
+  if (use_ice_shelf) then
+    call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
+                 "The file from which the ice bathymetry and area are read.", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+    shelf_file = trim(inputdir)//trim(ice_shelf_file)
+    if (.not.just_read) call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", shelf_file)
+    call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
+                 "The name of the area variable in ICE_THICKNESS_FILE.", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  endif
+  if (.not.useALEremapping) then
+    call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
+                 "If true, all mass below the bottom removed if the \n"//&
+                 "topography is shallower than the thickness input file \n"//&
+                 "would indicate.", default=.false., do_not_log=just_read)
+
+    call get_param(PF, mod, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
+                 "If true, all the interior layers are adjusted to \n"//&
+                 "their target densities using mostly temperature \n"//&
+                 "This approach can be problematic, particularly in the \n"//&
+                 "high latitudes.", default=.true., do_not_log=just_read)
+  endif
+  if (just_read) then
+    call cpu_clock_end(id_clock_routine)
+    return ! All run-time parameters have been read, so return.
+  endif
 
 !   Read input grid coordinates for temperature and salinity field
 !   in z-coordinate dataset. The file is REQUIRED to contain the
@@ -1790,7 +1964,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !   The observation grid MUST tile the model grid. If the model grid extends
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
 !   value at the northernmost/southernmost latitude.
-
 
   call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
@@ -1821,20 +1994,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
   call pass_var(rho_z,G%Domain)
 
   ! This is needed for building an ALE grid under ice shelves
-  call get_param(PF, mod, "ICE_SHELF", use_ice_shelf, default=.false.)
   if (use_ice_shelf) then
-    call get_param(PF, mod, "ICE_THICKNESS_FILE", ice_shelf_file, &
-                   "The file from which the ice bathymetry and area are read.", &
-                   fail_if_missing=.true.)
-    filename = trim(inputdir)//trim(ice_shelf_file)
-    call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
-    call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
-                   "The name of the area variable in ICE_THICKNESS_FILE.", &
-                   fail_if_missing=.true.)
-    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-      "MOM_temp_salt_initialize_from_Z: Unable to open "//trim(filename))
+    if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
+      "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
-    call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+    call read_data(shelf_file,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
     ! initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0
@@ -1959,17 +2123,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
     zi(is:ie,js:je,:) = find_interfaces(rho_z(is:ie,js:je,:), z_in, Rb, G%bathyT(is:ie,js:je), &
                          nlevs(is:ie,js:je), nkml, nkbl, min_depth)
 
-    call get_param(PF, mod, "ADJUST_THICKNESS", correct_thickness, &
-                 "If true, all mass below the bottom removed if the \n"//&
-                 "topography is shallower than the thickness input file \n"//&
-                 "would indicate.", default=.false.)
-
-    call get_param(PF, mod, "FIT_TO_TARGET_DENSITY_IC", adjust_temperature, &
-                 "If true, all the interior layers are adjusted to \n"//&
-                 "their target densities using mostly temperature \n"//&
-                 "This approach can be problematic, particularly in the \n"//&
-                 "high latitudes.", default=.true.)
-
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, zi, h)
     else
@@ -2003,31 +2156,25 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
                                         nlevs(is:ie,js:je))
 
     do k=1,nz
+      nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
+      do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) >= 1.0) then
+        nPoints = nPoints + 1
+        tempAvg = tempAvg + tv%T(i,j,k)
+        saltAvg =saltAvg + tv%S(i,j,k)
+      endif ; enddo ; enddo
 
-       nPoints = 0 ; tempAvg = 0. ; saltAvg = 0.
-       do j=js,je
-          do i=is,ie
-             if (G%mask2dT(i,j) .ge. 1.0) then
-                nPoints = nPoints + 1
-                tempAvg = tempAvg + tv%T(i,j,k)
-                saltAvg =saltAvg + tv%S(i,j,k)
-             endif
-          enddo
-       enddo
-
-    ! Horizontally homogenize data to produce perfectly "flat" initial conditions
-       if (homogenize) then
-          call sum_across_PEs(nPoints)
-          call sum_across_PEs(tempAvg)
-          call sum_across_PEs(saltAvg)
-          if (nPoints>0) then
-             tempAvg = tempAvg/real(nPoints)
-             saltAvg = saltAvg/real(nPoints)
-          endif
-          tv%T(:,:,k) = tempAvg
-          tv%S(:,:,k) = saltAvg
-       endif
-
+   ! Horizontally homogenize data to produce perfectly "flat" initial conditions
+      if (homogenize) then
+        call sum_across_PEs(nPoints)
+        call sum_across_PEs(tempAvg)
+        call sum_across_PEs(saltAvg)
+        if (nPoints>0) then
+          tempAvg = tempAvg/real(nPoints)
+          saltAvg = saltAvg/real(nPoints)
+        endif
+        tv%T(:,:,k) = tempAvg
+        tv%S(:,:,k) = saltAvg
+      endif
     enddo
 
   endif ! useALEremapping

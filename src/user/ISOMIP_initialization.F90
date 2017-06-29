@@ -151,17 +151,19 @@ end subroutine ISOMIP_initialize_topography
 ! -----------------------------------------------------------------------------
 
 !> Initialization of thicknesses
-subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
-  type(ocean_grid_type), intent(in) :: G                !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV             !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
-                                                        !! initialized.
-  type(param_file_type), intent(in) :: param_file       !< A structure indicating the
-                                                        !! open file to parse for model
-                                                        !! parameter values.
-  type(thermo_var_ptrs), intent(in) :: tv               !< A structure containing pointers
-                                                        !! to any available thermodynamic
-                                                        !! fields, including eq. of state.
+subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  type(thermo_var_ptrs),   intent(in)  :: tv          !< A structure containing pointers to any
+                                                      !! available thermodynamic fields, including
+                                                      !! the eqn. of state.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
   ! Local variables
   real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
                           ! negative because it is positive upward.      !
@@ -171,23 +173,34 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
   real    :: x
   real    :: delta_h, rho_range
   real    :: min_thickness, s_sur, s_bot, t_sur, t_bot, rho_sur, rho_bot
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
+  if (.not.just_read) &
+    call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
+
+  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness, &
+                 'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-            default=DEFAULT_COORDINATE_MODE)
+                 default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur,'Temperature at the surface (interface)', default=-1.9)
-    call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, 'Salinity at the surface (interface)',  default=33.8)
-    call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, 'Temperature at the bottom (interface)', default=-1.9)
-    call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55)
+    call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur, &
+                   'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+    call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, &
+                   'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+    call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, &
+                   'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+    call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot,&
+                   'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
+
+    if (just_read) return ! All run-time parameters have been read, so return.
 
     ! Compute min/max density using T_SUR/S_SUR and T_BOT/S_BOT
     call calculate_density(t_sur,s_sur,0.0,rho_sur,tv%eqn_of_state)
@@ -223,6 +236,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
     enddo ; enddo
 
   case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR )                       ! Initial thicknesses for z coordinates
+    if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
@@ -237,6 +251,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv )
    enddo ; enddo
 
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
+    if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = delta_h
@@ -252,7 +267,7 @@ end subroutine ISOMIP_initialize_thickness
 
 !> Initial values for temperature and salinity
 subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
-                                                    eqn_of_state)
+                                                    eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
@@ -260,14 +275,17 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
-  ! Local variables
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
+  ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
   real      :: x, ds, dt, rho_sur, rho_bot
   real      :: xi0, xi1, dxi, r, S_sur, T_sur, S_bot, T_bot, S_range, T_range
   real      :: z          ! vertical position in z space
   character(len=40) :: verticalCoordinate, density_profile
   real :: rho_tmp
+  logical :: just_read    ! If true, just read parameters but set nothing.
   logical :: fit_salin       ! If true, accept the prescribed temperature and fit the salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: drho_dT(SZK_(G))   ! Derivative of density with temperature in kg m-3 K-1.                              !
@@ -278,12 +296,18 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   pres(:) = 0.0
 
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-            default=DEFAULT_COORDINATE_MODE)
-  call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur,'Temperature at the surface (interface)', default=-1.9)
-  call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, 'Salinity at the surface (interface)',  default=33.8)
-  call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, 'Temperature at the bottom (interface)', default=-1.9)
-  call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot,'Salinity at the bottom (interface)', default=34.55)
+                 default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+  call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur, &
+                 'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
+  call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, &
+                 'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
+  call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, &
+                 'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
+  call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot, &
+                 'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
 
   call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state)
   !write (*,*)'Density in the surface layer:', rho_sur
@@ -293,6 +317,8 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   select case ( coordinateMode(verticalCoordinate) )
 
     case (  REGRIDDING_RHO, REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_SIGMA )
+      if (just_read) return ! All run-time parameters have been read, so return.
+
       S_range = s_sur - s_bot
       T_range = t_sur - t_bot
       !write(*,*)'S_range,T_range',S_range,T_range
@@ -313,19 +339,20 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the \n"//&
                  "salinity; otherwise take salinity and fit temperature.", &
-                 default=.false.)
+                 default=.false., do_not_log=just_read)
      call get_param(param_file, mod, "DRHO_DS", drho_dS1, &
                  "Partial derivative of density with salinity.", &
-                 units="kg m-3 PSU-1", fail_if_missing=.true.)
+                 units="kg m-3 PSU-1", fail_if_missing=.not.just_read, do_not_log=just_read)
      call get_param(param_file, mod, "DRHO_DT", drho_dT1, &
                  "Partial derivative of density with temperature.", &
-                 units="kg m-3 K-1", fail_if_missing=.true.)
+                 units="kg m-3 K-1", fail_if_missing=.not.just_read, do_not_log=just_read)
      call get_param(param_file, mod, "T_REF", T_Ref, &
                  "A reference temperature used in initialization.", &
-                 units="degC", fail_if_missing=.true.)
+                 units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
      call get_param(param_file, mod, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
-                 default=35.0)
+                 default=35.0, do_not_log=just_read)
+     if (just_read) return ! All run-time parameters have been read, so return.
 
      !write(*,*)'read drho_dS, drho_dT', drho_dS1, drho_dT1
 
@@ -335,55 +362,55 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      S_range = S_range / G%max_depth ! Convert S_range into dS/dz
      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
 
-   do j=js,je ; do i=is,ie
-     xi0 = 0.0;
-     do k = 1,nz
-        !T0(k) = T_Ref; S0(k) = S_Ref
-        xi1 = xi0 + 0.5 * h(i,j,k);
-        S0(k) = S_sur +  S_range * xi1;
-        T0(k) = T_sur +  T_range * xi1;
-        xi0 = xi0 + h(i,j,k);
-        !write(*,*)'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
-     enddo
-
-     call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
-     !write(*,*)'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
-     call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state)
-
-     if (fit_salin) then
-       ! A first guess of the layers' salinity.
-       do k=nz,1,-1
-          S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
+     do j=js,je ; do i=is,ie
+       xi0 = 0.0;
+       do k = 1,nz
+          !T0(k) = T_Ref; S0(k) = S_Ref
+          xi1 = xi0 + 0.5 * h(i,j,k);
+          S0(k) = S_sur +  S_range * xi1;
+          T0(k) = T_sur +  T_range * xi1;
+          xi0 = xi0 + h(i,j,k);
+          !write(*,*)'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
        enddo
-       ! Refine the guesses for each layer.
-       do itt=1,6
-         call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-         call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-         do k=1,nz
-           S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
+
+       call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,eqn_of_state)
+       !write(*,*)'computed drho_dS, drho_dT', drho_dS(1), drho_dT(1)
+       call calculate_density(T0(1),S0(1),0.,rho_guess(1),eqn_of_state)
+
+       if (fit_salin) then
+         ! A first guess of the layers' salinity.
+         do k=nz,1,-1
+            S0(k) = max(0.0, S0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dS1)
          enddo
-       enddo
+         ! Refine the guesses for each layer.
+         do itt=1,6
+           call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+           call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+           do k=1,nz
+             S0(k) = max(0.0, S0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dS1)
+           enddo
+         enddo
 
-     else
-       ! A first guess of the layers' temperatures.
-       do k=nz,1,-1
-          T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT1
-       enddo
+       else
+         ! A first guess of the layers' temperatures.
+         do k=nz,1,-1
+           T0(k) = T0(1) + (GV%Rlay(k) - rho_guess(1)) / drho_dT1
+         enddo
 
-       do itt=1,6
-          call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
-          call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
-          do k=1,nz
+         do itt=1,6
+           call calculate_density(T0,S0,pres,rho_guess,1,nz,eqn_of_state)
+           call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,eqn_of_state)
+           do k=1,nz
              T0(k) = T0(k) + (GV%Rlay(k) - rho_guess(k)) / drho_dT(k)
-          enddo
+           enddo
+         enddo
+       endif
+
+       do k=1,nz
+         T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
        enddo
-     endif
 
-     do k=1,nz
-       T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
-     enddo
-
-   enddo ; enddo
+     enddo ; enddo
 
    case default
       call MOM_error(FATAL,"isomip_initialize: "// &
