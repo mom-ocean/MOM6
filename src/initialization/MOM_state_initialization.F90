@@ -353,7 +353,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     endif
   endif  ! not from_Z_file.
 
-  ! The thicknesses in halo points might be needed to initialize the velocities.   
+  ! The thicknesses in halo points might be needed to initialize the velocities.
   if (new_sim) call pass_var(h, G%Domain)
 
 !   Initialize velocity components, u and v
