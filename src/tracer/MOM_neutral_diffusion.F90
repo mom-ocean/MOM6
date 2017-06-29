@@ -354,39 +354,35 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
 
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-    if (G%mask2dcu(I,j)>0.) then
-      if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                    &
-                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),            &
-                Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT_i(i+1,j,:), dRdS_i(i+1,j,:),  &
-                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
-      else
-        call find_neutral_surface_positions_discontinuous(G%ke,                       &
-              Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
-              dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
-              Pint(i+1,j,:), T_t(i+1,j,:), T_b(i+1,j,:), S_t(i+1,j,:), S_b(i+1,j,:),  &
-              dRdT_t(i+1,j,:), dRdT_b(i+1,j,:), dRdS_t(i+1,j,:), dRdS_b(i+1,j,:),     &
+    if (CS%continuous_reconstruction) then
+      call find_neutral_surface_positions_continuous(G%ke,                                    &
+              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),            &
+              Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT_i(i+1,j,:), dRdS_i(i+1,j,:),  &
               CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
-      endif
+    else
+      call find_neutral_surface_positions_discontinuous(G%ke,                       &
+            Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
+            dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
+            Pint(i+1,j,:), T_t(i+1,j,:), T_b(i+1,j,:), S_t(i+1,j,:), S_b(i+1,j,:),  &
+            dRdT_t(i+1,j,:), dRdT_b(i+1,j,:), dRdS_t(i+1,j,:), dRdS_b(i+1,j,:),     &
+            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
     endif
   enddo ; enddo
 
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-    if (G%mask2dcv(i,J)>0.) then
-      if (CS%continuous_reconstruction) then
-        call find_neutral_surface_positions_continuous(G%ke,                                   &
-                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),           &
-                Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT_i(i,j+1,:), dRdS_i(i,j+1,:), &
-                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
-      else
-        call find_neutral_surface_positions_discontinuous(G%ke,                     &
-            Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
-            dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
-            Pint(i,j+1,:), T_t(i,j+1,:), T_b(i,j+1,:), S_t(i,j+1,:), S_b(i,j+1,:),  &
-            dRdT_t(i,j+1,:), dRdT_b(i,j+1,:), dRdS_t(i,j+1,:), dRdS_b(i,j+1,:),     &
-            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
-      endif
+    if (CS%continuous_reconstruction) then
+      call find_neutral_surface_positions_continuous(G%ke,                                   &
+              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT_i(i,j,:), dRdS_i(i,j,:),           &
+              Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT_i(i,j+1,:), dRdS_i(i,j+1,:), &
+              CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
+    else
+      call find_neutral_surface_positions_discontinuous(G%ke,                     &
+          Pint(i,j,:), T_t(i,j,:), T_b(i,j,:), S_t(i,j,:), S_b(i,j,:),            &
+          dRdT_t(i,j,:), dRdT_b(i,j,:), dRdS_t(i,j,:), dRdS_b(i,j,:),             &
+          Pint(i,j+1,:), T_t(i,j+1,:), T_b(i,j+1,:), S_t(i,j+1,:), S_b(i,j+1,:),  &
+          dRdT_t(i,j+1,:), dRdT_b(i,j+1,:), dRdS_t(i,j+1,:), dRdS_b(i,j+1,:),     &
+          CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
     endif
   enddo ; enddo
 
@@ -442,28 +438,20 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
 
   ! x-flux
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-    if (G%mask2dCu(I,j)>0.) then
       call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i+1,j,:),       &
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
                                 CS%uhEff(I,j,:), uFlx(I,j,:))
-    else
-      uFlx(I,j,:) = 0.
-    endif
   enddo ; enddo
 
   ! y-flux
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-    if (G%mask2dCv(i,J)>0.) then
       call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i,j+1,:),       &
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
                                 CS%vhEff(i,J,:), vFlx(i,J,:))
-    else
-      vFlx(I,j,:) = 0.
-    endif
   enddo ; enddo
 
   ! Update the tracer concentration from divergence of neutral diffusive flux components
@@ -471,7 +459,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     if (G%mask2dT(i,j)>0.) then
 
       dTracer(:) = 0.
-      do ks = 1,2*nk+1 ;
+      do ks = 1,CS%nsurf-1 ;
         k = CS%uKoL(I,j,ks)
         dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
         k = CS%uKoR(I-1,j,ks)
