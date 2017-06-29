@@ -191,7 +191,7 @@ program MOM_main
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
+  character(len=40)  :: mod_name = "MOM_main (MOM_driver)" ! This module's name.
 
   integer :: ocean_nthreads = 1
   integer :: ncores_per_node = 36
@@ -243,7 +243,7 @@ program MOM_main
 !$OMP PARALLEL private(adder)
 !$  base_cpu = get_cpu_affinity()
 !$  if (use_hyper_thread) then
-!$     if (imod(omp_get_thread_num(),2) == 0) then
+!$     if (mod(omp_get_thread_num(),2) == 0) then
 !$        adder = omp_get_thread_num()/2
 !$     else
 !$        adder = ncores_per_node + omp_get_thread_num()/2
@@ -312,7 +312,7 @@ program MOM_main
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
-  call get_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
+  call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
@@ -330,14 +330,14 @@ program MOM_main
   elapsed_time = 0.0
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DT", dt, fail_if_missing=.true.)
-  call get_param(param_file, mod, "DT_FORCING", time_step, &
+  call log_version(param_file, mod_name, version, "")
+  call get_param(param_file, mod_name, "DT", dt, fail_if_missing=.true.)
+  call get_param(param_file, mod_name, "DT_FORCING", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
                  "The default value is given by DT.", units="s", default=dt)
   if (offline_tracer_mode) then
-    call get_param(param_file, mod, "DT_OFFLINE", time_step, &
+    call get_param(param_file, mod_name, "DT_OFFLINE", time_step, &
                    "Time step for the offline time step")
     dt = time_step
   endif
@@ -349,22 +349,22 @@ program MOM_main
     call MOM_mesg("Using real elapsed time for the master clock.", 2)
 
   ! Determine the segment end time, either from the namelist file or parsed input file.
-  call get_param(param_file, mod, "TIMEUNIT", Time_unit, &
+  call get_param(param_file, mod_name, "TIMEUNIT", Time_unit, &
                  "The time unit for DAYMAX, ENERGYSAVEDAYS, and RESTINT.", &
                  units="s", default=86400.0)
   if (years+months+days+hours+minutes+seconds > 0) then
     Time_end = increment_date(Time, years, months, days, hours, minutes, seconds)
     call MOM_mesg('Segment run length determined from ocean_solo_nml.', 2)
-    call get_param(param_file, mod, "DAYMAX", daymax, timeunit=Time_unit, &
+    call get_param(param_file, mod_name, "DAYMAX", daymax, timeunit=Time_unit, &
                    default=Time_end, do_not_log=.true.)
-    call log_param(param_file, mod, "DAYMAX", daymax, &
+    call log_param(param_file, mod_name, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&
                  "TIMEUNIT seconds.  This also sets the potential end \n"//&
                  "time of the present run segment if the end time is \n"//&
                  "not set via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit)
   else
-    call get_param(param_file, mod, "DAYMAX", daymax, &
+    call get_param(param_file, mod_name, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&
                  "TIMEUNIT seconds.  This also sets the potential end \n"//&
                  "time of the present run segment if the end time is \n"//&
@@ -376,23 +376,23 @@ program MOM_main
   if (Time >= Time_end) call MOM_error(FATAL, &
     "MOM_driver: The run has been started at or after the end time of the run.")
 
-  call get_param(param_file, mod, "RESTART_CONTROL", Restart_control, &
+  call get_param(param_file, mod_name, "RESTART_CONTROL", Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
                  "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
                  "restart file is saved at the end of the run segment \n"//&
                  "for any non-negative value.", default=1)
-  call get_param(param_file, mod, "RESTINT", restint, &
+  call get_param(param_file, mod_name, "RESTINT", restint, &
                  "The interval between saves of the restart file in units \n"//&
                  "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
                  "incremental restart files at all.", default=set_time(0), &
                  timeunit=Time_unit)
-  call get_param(param_file, mod, "ENERGYSAVEDAYS", energysavedays, &
+  call get_param(param_file, mod_name, "ENERGYSAVEDAYS", energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
 
-  call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
+  call log_param(param_file, mod_name, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
