@@ -46,13 +46,15 @@ character(len=40)  :: mod = "SCM_CVmix_tests" ! This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM CVmix test example
-subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file)
+subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential tempera\ture (degC)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
   type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
   type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
   type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness (m)
@@ -64,31 +66,36 @@ subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file)
   real :: LowerLayerdTdz !< Temp gradient in lower layer (deg C m^{-1})
   real :: LowerLayerdSdz !< Salt gradient in lower layer (PPT m^{-1})
   real :: zC, DZ
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
 
-  call log_version(param_file, mod, version)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mod, version)
   call get_param(param_file,mod,"SCM_TEMP_MLD",UpperLayerTempMLD, &
-                 'Initial temp mixed layer depth', units='m',default=0.0)
+                 'Initial temp mixed layer depth', units='m',default=0.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_SALT_MLD",UpperLayerSaltMLD, &
-                 'Initial salt mixed layer depth', units='m',default=0.0)
+                 'Initial salt mixed layer depth', units='m',default=0.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L1_SALT",UpperLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0)
+                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L1_TEMP",UpperLayerTemp, &
-                 'Layer 1 surface temperature', units='C', default=20.0)
+                 'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L2_SALT",LowerLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0)
+                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L2_TEMP",LowerLayerTemp, &
-                 'Layer 2 surface temperature', units='C', default=20.0)
+                 'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
-                 units='C/m', default=0.00)
+                 units='C/m', default=0.00, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
-                 units='PPT/m', default=0.00)
+                 units='PPT/m', default=0.00, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
