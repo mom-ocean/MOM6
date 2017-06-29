@@ -90,21 +90,29 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being initialized.
-  type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file
-                                                    !! to parse for model parameter values.
+subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in m, usually !
                             ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface !
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface !
                             ! positive upward, in m.                       !
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40)  :: mod = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! This subroutine has no run-time parameters.
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_thickness: setting thickness", 5)
 
