@@ -44,32 +44,41 @@ character(len=40)  :: mod = "SCM_idealized_hurricane" ! This module's name.
 contains
 
 !> Initializes temperature and salinity for the SCM idealized hurricane example
-subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file)
+subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (psu)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
   real :: S_ref, SST_ref, dTdZ, MLD
   real :: zC
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call log_version(param_file, mod, version)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mod, version)
   call get_param(param_file,mod,"SCM_S_REF",S_ref, &
-                 'Reference salinity', units='1e-3',default=35.0)
+                 'Reference salinity', units='1e-3',default=35.0, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_SST_REF",SST_ref, &
-                 'Reference surface temperature', units='C', fail_if_missing=.true.)
+                 'Reference surface temperature', units='C', &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_DTDZ",dTdZ,                         &
                  'Initial temperature stratification below mixed layer', &
-                 units='C/m', fail_if_missing=.true.)
+                 units='C/m', fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file,mod,"SCM_MLD",MLD, &
-                 'Initial mixed layer depth', units='m', fail_if_missing=.true.)
+                 'Initial mixed layer depth', units='m', &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
