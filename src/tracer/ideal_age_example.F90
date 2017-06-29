@@ -161,7 +161,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ideal_age_example" ! This module's name.
+  character(len=40)  :: mdl = "ideal_age_example" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -178,16 +178,16 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DO_IDEAL_AGE", do_ideal_age, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DO_IDEAL_AGE", do_ideal_age, &
                  "If true, use an ideal age tracer that is set to 0 age \n"//&
                  "in the mixed layer and ages at unit rate in the interior.", &
                  default=.true.)
-  call get_param(param_file, mod, "DO_IDEAL_VINTAGE", do_vintage, &
+  call get_param(param_file, mdl, "DO_IDEAL_VINTAGE", do_vintage, &
                  "If true, use an ideal vintage tracer that is set to an \n"//&
                  "exponentially increasing value in the mixed layer and \n"//&
                  "is conserved thereafter.", default=.false.)
-  call get_param(param_file, mod, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
+  call get_param(param_file, mdl, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
                  "If true, use an ideal age tracer that is everywhere 0 \n"//&
                  "before IDEAL_AGE_DATED_START_YEAR, but the behaves like \n"//&
                  "the standard ideal age tracer - i.e. is set to 0 age in \n"//&
@@ -195,23 +195,23 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  default=.false.)
 
 
-  call get_param(param_file, mod, "AGE_IC_FILE", CS%IC_file, &
+  call get_param(param_file, mdl, "AGE_IC_FILE", CS%IC_file, &
                  "The file in which the age-tracer initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mod, "INPUTDIR/AGE_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/AGE_IC_FILE", CS%IC_file)
   endif
-  call get_param(param_file, mod, "AGE_IC_FILE_IS_Z", CS%Z_IC_file, &
+  call get_param(param_file, mdl, "AGE_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, AGE_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mod, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
                  "If true, the tracers are masked out in massless layer. \n"//&
                  "This can be a problem with time-averages.", default=.false.)
-  call get_param(param_file, mod, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+  call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
                  "it is a fatal error if the tracers are not found in the \n"//&
@@ -220,7 +220,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mod)
+    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
@@ -228,10 +228,10 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (do_vintage) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = var_desc("vintage", "years", "Exponential Vintage Tracer", &
-                            caller=mod)
+                            caller=mdl)
     CS%tracer_ages(m) = .false. ; CS%sfc_growth_rate(m) = 1.0/30.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 1e-20 ; CS%tracer_start_year(m) = 0.0
-    call get_param(param_file, mod, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
+    call get_param(param_file, mdl, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
                  "The date at which the ideal vintage tracer starts.", &
                  units="years", default=0.0)
   endif
@@ -239,10 +239,10 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = var_desc("age_dated","years","Ideal Age Tracer with a Start Date",&
-                            caller=mod)
+                            caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
-    call get_param(param_file, mod, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &
+    call get_param(param_file, mdl, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &
                  "The date at which the dated ideal age tracer starts.", &
                  units="years", default=0.0)
   endif

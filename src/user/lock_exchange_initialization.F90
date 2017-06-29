@@ -58,7 +58,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   logical :: just_read    ! If true, just read parameters but set nothing.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "lock_exchange_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -68,12 +68,12 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   if (.not.just_read) &
     call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)
 
-  if (.not.just_read) call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "FRONT_DISPLACEMENT", front_displacement, &
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
                  units="m", fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mod, "THERMOCLINE_THICKNESS", thermocline_thickness, &
+  call get_param(param_file, mdl, "THERMOCLINE_THICKNESS", thermocline_thickness, &
                  "The thickness of the thermocline in the lock exchange \n"//&
                  "experiment.  A value of zero creates a two layer system \n"//&
                  "with vanished layers in between the two inflated layers.", &

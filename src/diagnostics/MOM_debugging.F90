@@ -93,15 +93,15 @@ subroutine MOM_debugging_init(param_file)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_debugging" ! This module's name.
+  character(len=40)  :: mdl = "MOM_debugging" ! This module's name.
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "DEBUG", debug, &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "DEBUG", debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "DEBUG_CHKSUMS", debug_chksums, &
+  call get_param(param_file, mdl, "DEBUG_CHKSUMS", debug_chksums, &
                  "If true, checksums are performed on arrays in the \n"//&
                  "various vec_chksum routines.", default=debug)
-  call get_param(param_file, mod, "DEBUG_REDUNDANT", debug_redundant, &
+  call get_param(param_file, mdl, "DEBUG_REDUNDANT", debug_redundant, &
                  "If true, debug redundant data points during calls to \n"//&
                  "the various vec_chksum routines.", default=debug)
 

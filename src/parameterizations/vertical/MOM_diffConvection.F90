@@ -50,17 +50,17 @@ logical function diffConvection_init(paramFile, G, diag, Time, CS)
   type(diffConvection_CS), pointer       :: CS        ! Control structure
 ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mod = 'MOM_diffConvection' ! This module's name.
+  character(len=40) :: mdl = 'MOM_diffConvection' ! This module's name.
 
   if (associated(CS)) call MOM_error(FATAL, 'MOM_diffConvection, diffConvection_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
 
 ! Read parameters
-  call log_version(paramFile, mod, version, &
+  call log_version(paramFile, mdl, version, &
             'This module implements enhanced diffusivity as a\n' // &
             'function of static stability, N^2.')
-  call get_param(paramFile, mod, "USE_CONVECTION", diffConvection_init, &
+  call get_param(paramFile, mdl, "USE_CONVECTION", diffConvection_init, &
                  "If true, turns on the diffusive convection scheme that\n"// &
                  "increases diapycnal diffusivities at statically unstable\n"// &
                  "interfaces. Relevant parameters are contained in the\n"// &
@@ -68,14 +68,14 @@ logical function diffConvection_init(paramFile, G, diag, Time, CS)
                  default=.false.)
 
   call openParameterBlock(paramFile,'CONVECTION')
-  call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
+  call get_param(paramFile, mdl, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
                  default=.False.)
-  call get_param(paramFile, mod, 'KD_CONV', CS%Kd_convection,                  &
+  call get_param(paramFile, mdl, 'KD_CONV', CS%Kd_convection,                  &
                  'DIffusivity used in statically unstable regions of column.', &
                  units='m2/s', default=1.00)
   call closeParameterBlock(paramFile)
-  call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
+  call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
 ! Forego remainder of initialization if not using this scheme
   if (.not. diffConvection_init) return

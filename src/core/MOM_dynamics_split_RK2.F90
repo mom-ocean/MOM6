@@ -859,7 +859,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   real, dimension(SZI_(HI),SZJB_(HI),SZK_(GV)), target, intent(inout) :: vh !< merid volume/mass transport (m3/s or kg/s)
 
   type(vardesc)      :: vd
-  character(len=40)  :: mod = "MOM_dynamics_split_RK2" ! This module's name.
+  character(len=40)  :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48)  :: thickness_units, flux_units
 
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -953,7 +953,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                                                                           !! the velocity is truncated (this should be 0).
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
-  character(len=40) :: mod = "MOM_dynamics_split_RK2" ! This module's name.
+  character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   type(group_pass_type) :: pass_h_tmp, pass_av_h_uvh
   logical :: use_tides, debug_truncations
@@ -975,9 +975,9 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "TIDES", use_tides, &
+  call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  call get_param(param_file, mod, "BE", CS%be, &
+  call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting \n"//&
                  "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
                  "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
@@ -985,7 +985,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "from 0.5 to 1, but instability may occur near 0.5. \n"//&
                  "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
                  "is true.", units="nondim", default=0.6)
-  call get_param(param_file, mod, "BEGW", CS%begw, &
+  call get_param(param_file, mdl, "BEGW", CS%begw, &
                  "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
                  "controls the extent to which the treatment of gravity \n"//&
                  "waves is forward-backward (0) or simulated backward \n"//&
@@ -994,16 +994,16 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
 
-  call get_param(param_file, mod, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
+  call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
                  "If true, provide the bottom stress calculated by the \n"//&
                  "vertical viscosity to the barotropic solver.", default=.false.)
-  call get_param(param_file, mod, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
+  call get_param(param_file, mdl, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
                  "If true, use the summed layered fluxes plus an \n"//&
                  "adjustment due to the change in the barotropic velocity \n"//&
                  "in the barotropic continuity equation.", default=.true.)
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
+  call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0

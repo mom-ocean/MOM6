@@ -643,7 +643,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
 
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
-  character(len=40) :: mod = "MOM_dynamics_unsplit_RK2" ! This module's name.
+  character(len=40) :: mdl = "MOM_dynamics_unsplit_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_tides
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -661,7 +661,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "BE", CS%be, &
+  call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting \n"//&
                  "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
                  "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
@@ -669,7 +669,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
                  "from 0.5 to 1, but instability may occur near 0.5. \n"//&
                  "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
                  "is true.", units="nondim", default=0.6)
-  call get_param(param_file, mod, "BEGW", CS%begw, &
+  call get_param(param_file, mdl, "BEGW", CS%begw, &
                  "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
                  "controls the extent to which the treatment of gravity \n"//&
                  "waves is forward-backward (0) or simulated backward \n"//&
@@ -677,9 +677,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
                  "If SPLIT is false and USE_RK2 is true, BEGW can be \n"//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "TIDES", use_tides, &
+  call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0

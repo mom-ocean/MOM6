@@ -1344,7 +1344,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_hor_diff" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_hor_diff" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (associated(CS)) then
@@ -1357,45 +1357,45 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
   CS%show_call_tree = callTree_showQuery()
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "KHTR", CS%KhTr, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "KHTR", CS%KhTr, &
                  "The background along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTR_SLOPE_CFF", CS%KhTr_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTR_SLOPE_CFF", CS%KhTr_Slope_Cff, &
                  "The scaling coefficient for along-isopycnal tracer \n"//&
                  "diffusivity using a shear-based (Visbeck-like) \n"//&
                  "parameterization.  A non-zero value enables this param.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "KHTR_MIN", CS%KhTr_Min, &
+  call get_param(param_file, mdl, "KHTR_MIN", CS%KhTr_Min, &
                  "The minimum along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTR_MAX", CS%KhTr_Max, &
+  call get_param(param_file, mdl, "KHTR_MAX", CS%KhTr_Max, &
                  "The maximum along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTR_PASSIVITY_COEFF", CS%KhTr_passivity_coeff, &
+  call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", CS%KhTr_passivity_coeff, &
                "The coefficient that scales deformation radius over \n"//&
                "grid-spacing in passivity, where passiviity is the ratio \n"//&
                "between along isopycnal mxiing of tracers to thickness mixing. \n"//&
                "A non-zero value enables this parameterization.", &
                units="nondim", default=0.0)
-  call get_param(param_file, mod, "KHTR_PASSIVITY_MIN", CS%KhTr_passivity_min, &
+  call get_param(param_file, mdl, "KHTR_PASSIVITY_MIN", CS%KhTr_passivity_min, &
                "The minimum passivity which is the ratio between \n"//&
                "along isopycnal mxiing of tracers to thickness mixing. \n", &
                units="nondim", default=0.5)
-  call get_param(param_file, mod, "DT", CS%dt, fail_if_missing=.true., &
+  call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
           desc="The (baroclinic) dynamics time step.", units="s")
 
 
-  call get_param(param_file, mod, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
+  call get_param(param_file, mdl, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
                  "If true, enable epipycnal mixing between the surface \n"//&
                  "boundary layer and the interior.", default=.false.)
-  call get_param(param_file, mod, "CHECK_DIFFUSIVE_CFL", CS%check_diffusive_CFL, &
+  call get_param(param_file, mdl, "CHECK_DIFFUSIVE_CFL", CS%check_diffusive_CFL, &
                  "If true, use enough iterations the diffusion to ensure \n"//&
                  "that the diffusive equivalent of the CFL limit is not \n"//&
                  "violated.  If false, always use 1 iteration.", default=.false.)
   CS%ML_KhTR_scale = 1.0
   if (CS%Diffuse_ML_interior) then
-    call get_param(param_file, mod, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &
+    call get_param(param_file, mdl, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &
                  "With Diffuse_ML_interior, the ratio of the truly \n"//&
                  "horizontal diffusivity in the mixed layer to the \n"//&
                  "epipycnal diffusivity.  The valid range is 0 to 1.", &
@@ -1407,7 +1407,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   id_clock_diffuse = cpu_clock_id('(Ocean diffuse tracer)',          grain=CLOCK_MODULE)
   id_clock_epimix  = cpu_clock_id('(Ocean epipycnal diffuse tracer)',grain=CLOCK_MODULE)

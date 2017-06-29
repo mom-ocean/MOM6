@@ -1064,7 +1064,7 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  character(len=40)  :: mod = "MOM_diag_to_Z" ! module name
+  character(len=40)  :: mdl = "MOM_diag_to_Z" ! module name
   character(len=200) :: in_dir, zgrid_file    ! strings for directory/file
   character(len=48)  :: flux_units, string
   integer :: z_axis, zint_axis
@@ -1085,22 +1085,22 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   CS%diag => diag
 
   ! Read parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
   ! Read in z-space info from a NetCDF file.
-  call get_param(param_file, mod, "Z_OUTPUT_GRID_FILE", zgrid_file, &
+  call get_param(param_file, mdl, "Z_OUTPUT_GRID_FILE", zgrid_file, &
                  "The file that specifies the vertical grid for \n"//&
                  "depth-space diagnostics, or blank to disable \n"//&
                  "depth-space output.", default="")
 
   if (len_trim(zgrid_file) > 0) then
-    call get_param(param_file, mod, "INPUTDIR", in_dir, &
+    call get_param(param_file, mdl, "INPUTDIR", in_dir, &
                  "The directory in which input files are found.", default=".")
     in_dir = slasher(in_dir)
     call get_Z_depths(trim(in_dir)//trim(zgrid_file), "zw", CS%Z_int, "zt", &
                       z_axis, zint_axis, CS%nk_zspace)
-    call log_param(param_file, mod, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
+    call log_param(param_file, mdl, "!INPUTDIR/Z_OUTPUT_GRID_FILE", &
                    trim(in_dir)//trim(zgrid_file))
-    call log_param(param_file, mod, "!NK_ZSPACE (from file)", CS%nk_zspace, &
+    call log_param(param_file, mdl, "!NK_ZSPACE (from file)", CS%nk_zspace, &
                  "The number of depth-space levels.  This is determined \n"//&
                  "from the size of the variable zw in the output grid file.", &
                  units="nondim")

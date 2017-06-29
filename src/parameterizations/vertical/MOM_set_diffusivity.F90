@@ -2527,7 +2527,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   logical :: read_tideamp, ML_use_omega
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_set_diffusivity"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
@@ -2556,20 +2556,20 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)
-  call get_param(param_file, mod, "FLUX_RI_MAX", CS%FluxRi_max, &
+  call get_param(param_file, mdl, "FLUX_RI_MAX", CS%FluxRi_max, &
                  "The flux Richardson number where the stratification is \n"//&
                  "large enough that N2 > omega2.  The full expression for \n"//&
                  "the Flux Richardson number is usually \n"//&
                  "FLUX_RI_MAX*N2/(N2+OMEGA2).", default=0.2)
-  call get_param(param_file, mod, "OMEGA", CS%omega, &
+  call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
 
-  call get_param(param_file, mod, "ML_RADIATION", CS%ML_radiation, &
+  call get_param(param_file, mdl, "ML_RADIATION", CS%ML_radiation, &
                  "If true, allow a fraction of TKE available from wind \n"//&
                  "work to penetrate below the base of the mixed layer \n"//&
                  "with a vertical decay scale determined by the minimum \n"//&
@@ -2579,33 +2579,33 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     ! This give a minimum decay scale that is typically much less than Angstrom.
     CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom + GV%H_subroundoff)
 
-    call get_param(param_file, mod, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
+    call get_param(param_file, mdl, "ML_RAD_EFOLD_COEFF", CS%ML_rad_efold_coeff, &
                  "A coefficient that is used to scale the penetration \n"//&
                  "depth for turbulence below the base of the mixed layer. \n"//&
                  "This is only used if ML_RADIATION is true.", units="nondim", &
                  default=0.2)
-    call get_param(param_file, mod, "ML_RAD_KD_MAX", CS%ML_rad_kd_max, &
+    call get_param(param_file, mdl, "ML_RAD_KD_MAX", CS%ML_rad_kd_max, &
                  "The maximum diapycnal diffusivity due to turbulence \n"//&
                  "radiated from the base of the mixed layer. \n"//&
                  "This is only used if ML_RADIATION is true.", units="m2 s-1", &
                  default=1.0e-3)
-    call get_param(param_file, mod, "ML_RAD_COEFF", CS%ML_rad_coeff, &
+    call get_param(param_file, mdl, "ML_RAD_COEFF", CS%ML_rad_coeff, &
                  "The coefficient which scales MSTAR*USTAR^3 to obtain \n"//&
                  "the energy available for mixing below the base of the \n"//&
                  "mixed layer. This is only used if ML_RADIATION is true.", &
                  units="nondim", default=0.2)
-    call get_param(param_file, mod, "ML_RAD_APPLY_TKE_DECAY", CS%ML_rad_TKE_decay, &
+    call get_param(param_file, mdl, "ML_RAD_APPLY_TKE_DECAY", CS%ML_rad_TKE_decay, &
                  "If true, apply the same exponential decay to ML_rad as \n"//&
                  "is applied to the other surface sources of TKE in the \n"//&
                  "mixed layer code. This is only used if ML_RADIATION is true.",&
                  default=.true.)
-    call get_param(param_file, mod, "MSTAR", CS%mstar, &
+    call get_param(param_file, mdl, "MSTAR", CS%mstar, &
                  "The ratio of the friction velocity cubed to the TKE \n"//&
                  "input to the mixed layer.", "units=nondim", default=1.2)
-    call get_param(param_file, mod, "TKE_DECAY", CS%TKE_decay, &
+    call get_param(param_file, mdl, "TKE_DECAY", CS%TKE_decay, &
                  "The ratio of the natural Ekman depth to the TKE decay scale.", &
                  units="nondim", default=2.5)
-    call get_param(param_file, mod, "ML_USE_OMEGA", ML_use_omega, &
+    call get_param(param_file, mdl, "ML_USE_OMEGA", ML_use_omega, &
                  "If true, use the absolute rotation rate instead of the \n"//&
                  "vertical component of rotation when setting the decay \n"//&
                  "scale for turbulence.", default=.false., do_not_log=.true.)
@@ -2614,29 +2614,29 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
       call MOM_error(WARNING, "ML_USE_OMEGA is depricated; use ML_OMEGA_FRAC=1.0 instead.")
       omega_frac_dflt = 1.0
     endif
-    call get_param(param_file, mod, "ML_OMEGA_FRAC", CS%ML_omega_frac, &
+    call get_param(param_file, mdl, "ML_OMEGA_FRAC", CS%ML_omega_frac, &
                    "When setting the decay scale for turbulence, use this \n"//&
                    "fraction of the absolute rotation rate blended with the \n"//&
                    "local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).", &
                    units="nondim", default=omega_frac_dflt)
   endif
 
-  call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
+  call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
                  "may be an assumed value or it may be based on the \n"//&
                  "actual velocity in the bottommost HBBL, depending on \n"//&
                  "LINEAR_DRAG.", default=.true.)
   if  (CS%bottomdraglaw) then
-    call get_param(param_file, mod, "CDRAG", CS%cdrag, &
+    call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "The drag coefficient relating the magnitude of the \n"//&
                  "velocity field to the bottom stress. CDRAG is only used \n"//&
                  "if BOTTOMDRAGLAW is true.", units="nondim", default=0.003)
-    call get_param(param_file, mod, "BBL_EFFIC", CS%BBL_effic, &
+    call get_param(param_file, mdl, "BBL_EFFIC", CS%BBL_effic, &
                  "The efficiency with which the energy extracted by \n"//&
                  "bottom drag drives BBL diffusion.  This is only \n"//&
                  "used if BOTTOMDRAGLAW is true.", units="nondim", default=0.20)
-    call get_param(param_file, mod, "BBL_MIXING_MAX_DECAY", decay_length, &
+    call get_param(param_file, mdl, "BBL_MIXING_MAX_DECAY", decay_length, &
                  "The maximum decay scale for the BBL diffusion, or 0 \n"//&
                  "to allow the mixing to penetrate as far as \n"//&
                  "stratification and rotation permit.  The default is 0. \n"//&
@@ -2645,17 +2645,17 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
     CS%IMax_decay = 1.0/200.0
     if (decay_length > 0.0) CS%IMax_decay = 1.0/decay_length
-    call get_param(param_file, mod, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
+    call get_param(param_file, mdl, "BBL_MIXING_AS_MAX", CS%BBL_mixing_as_max, &
                  "If true, take the maximum of the diffusivity from the \n"//&
                  "BBL mixing and the other diffusivities. Otherwise, \n"//&
                  "diffusiviy from the BBL_mixing is simply added.", &
                  default=.true.)
-    call get_param(param_file, mod, "USE_LOTW_BBL_DIFFUSIVITY", CS%use_LOTW_BBL_diffusivity, &
+    call get_param(param_file, mdl, "USE_LOTW_BBL_DIFFUSIVITY", CS%use_LOTW_BBL_diffusivity, &
                  "If true, uses a simple, imprecise but non-coordinate dependent, model\n"//&
                  "of BBL mixing diffusivity based on Law of the Wall. Otherwise, uses\n"//&
                  "the original BBL scheme.", default=.false.)
     if (CS%use_LOTW_BBL_diffusivity) then
-      call get_param(param_file, mod, "LOTW_BBL_USE_OMEGA", CS%LOTW_BBL_use_omega, &
+      call get_param(param_file, mdl, "LOTW_BBL_USE_OMEGA", CS%LOTW_BBL_use_omega, &
                  "If true, use the maximum of Omega and N for the TKE to diffusion\n"//&
                  "calculation. Otherwise, N is N.", default=.true.)
     endif
@@ -2664,38 +2664,38 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
        'Bottom Boundary Layer Diffusivity', 'meter2 sec-1')
-  call get_param(param_file, mod, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
+  call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
                  "calculates Kd/TKE and bounds based on exact energetics/n"//&
                  "for an isopycnal layer-formulation.", &
                  default=.false.)
 
-  call get_param(param_file, mod, "BRYAN_LEWIS_DIFFUSIVITY", &
+  call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", &
                                 CS%Bryan_Lewis_diffusivity, &
                  "If true, use a Bryan & Lewis (JGR 1979) like tanh \n"//&
                  "profile of background diapycnal diffusivity with depth.", &
                  default=.false.)
   if (CS%Bryan_Lewis_diffusivity) then
-    call get_param(param_file, mod, "KD_BRYAN_LEWIS_DEEP", &
+    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_DEEP", &
                                   CS%Kd_Bryan_Lewis_deep, &
                  "The abyssal value of a Bryan-Lewis diffusivity profile. \n"//&
                  "KD_BRYAN_LEWIS_DEEP is only used if \n"//&
                  "BRYAN_LEWIS_DIFFUSIVITY is true.", units="m2 s-1", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "KD_BRYAN_LEWIS_SURFACE", &
+    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_SURFACE", &
                                   CS%Kd_Bryan_Lewis_surface, &
                  "The surface value of a Bryan-Lewis diffusivity profile. \n"//&
                  "KD_BRYAN_LEWIS_SURFACE is only used if \n"//&
                  "BRYAN_LEWIS_DIFFUSIVITY is true.", units="m2 s-1", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "BRYAN_LEWIS_DEPTH_CENT", &
+    call get_param(param_file, mdl, "BRYAN_LEWIS_DEPTH_CENT", &
                                   CS%Bryan_Lewis_depth_cent, &
                  "The depth about which the transition in the Bryan-Lewis \n"//&
                  "profile is centered. BRYAN_LEWIS_DEPTH_CENT is only \n"//&
                  "used if BRYAN_LEWIS_DIFFUSIVITY is true.", units="m", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "BRYAN_LEWIS_WIDTH_TRANS", &
+    call get_param(param_file, mdl, "BRYAN_LEWIS_WIDTH_TRANS", &
                                   CS%Bryan_Lewis_width_trans, &
                  "The width of the transition in the Bryan-Lewis \n"//&
                  "profile. BRYAN_LEWIS_WIDTH_TRANS is only \n"//&
@@ -2703,12 +2703,12 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  fail_if_missing=.true.)
   endif
 
-  call get_param(param_file, mod, "HENYEY_IGW_BACKGROUND", &
+  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", &
                                 CS%Henyey_IGW_background, &
                  "If true, use a latitude-dependent scaling for the near \n"//&
                  "surface background diffusivity, as described in \n"//&
                  "Harrison & Hallberg, JPO 2008.", default=.false.)
-  call get_param(param_file, mod, "HENYEY_IGW_BACKGROUND_NEW", &
+  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", &
                                 CS%Henyey_IGW_background_new, &
                  "If true, use a better latitude-dependent scaling for the\n"//&
                  "background diffusivity, as described in \n"//&
@@ -2717,48 +2717,48 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "set_diffusivity_init: HENYEY_IGW_BACKGROUND and HENYEY_IGW_BACKGROUND_NEW "// &
                  "are mutually exclusive. Set only one or none.")
   if (CS%Henyey_IGW_background) &
-    call get_param(param_file, mod, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
+    call get_param(param_file, mdl, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
                   "The ratio of the typical Buoyancy frequency to twice \n"//&
                   "the Earth's rotation period, used with the Henyey \n"//&
                   "scaling from the mixing.", units="nondim", default=20.0)
-  call get_param(param_file, mod, "N2_FLOOR_IOMEGA2", CS%N2_FLOOR_IOMEGA2, &
+  call get_param(param_file, mdl, "N2_FLOOR_IOMEGA2", CS%N2_FLOOR_IOMEGA2, &
                   "The floor applied to N2(k) scaled by Omega^2:\n"//&
                   "\tIf =0., N2(k) is simply positive definite.\n"//&
                   "\tIf =1., N2(k) > Omega^2 everywhere.", units="nondim", &
                   default=1.0)
 
-  call get_param(param_file, mod, "KD_TANH_LAT_FN", &
+  call get_param(param_file, mdl, "KD_TANH_LAT_FN", &
                                   CS%Kd_tanh_lat_fn, &
                  "If true, use a tanh dependence of Kd_sfc on latitude, \n"//&
                  "like CM2.1/CM2M.  There is no physical justification \n"//&
                  "for this form, and it can not be used with \n"//&
                  "HENYEY_IGW_BACKGROUND.", default=.false.)
   if (CS%Kd_tanh_lat_fn) &
-    call get_param(param_file, mod, "KD_TANH_LAT_SCALE", &
+    call get_param(param_file, mdl, "KD_TANH_LAT_SCALE", &
                                   CS%Kd_tanh_lat_scale, &
                  "A nondimensional scaling for the range ofdiffusivities \n"//&
                  "with KD_TANH_LAT_FN. Valid values are in the range of \n"//&
                  "-2 to 2; 0.4 reproduces CM2M.", units="nondim", default=0.0)
 
-  call get_param(param_file, mod, "KV", CS%Kv, &
+  call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
-  call get_param(param_file, mod, "KD", CS%Kd, &
+  call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
                  "interior. Zero or the molecular value, ~1e-7 m2 s-1, \n"//&
                  "may be used.", units="m2 s-1", fail_if_missing=.true.)
-  call get_param(param_file, mod, "KD_MIN", CS%Kd_min, &
+  call get_param(param_file, mdl, "KD_MIN", CS%Kd_min, &
                  "The minimum diapycnal diffusivity.", &
                  units="m2 s-1", default=0.01*CS%Kd)
-  call get_param(param_file, mod, "KD_MAX", CS%Kd_max, &
+  call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
                  "The maximum permitted increment for the diapycnal \n"//&
                  "diffusivity from TKE-based parameterizations, or a \n"//&
                  "negative value for no limit.", units="m2 s-1", default=-1.0)
   if (CS%simple_TKE_to_Kd .and. CS%Kd_max<=0.) call MOM_error(FATAL, &
          "set_diffusivity_init: To use SIMPLE_TKE_TO_KD, KD_MAX must be set to >0.")
-  call get_param(param_file, mod, "KD_ADD", CS%Kd_add, &
+  call get_param(param_file, mdl, "KD_ADD", CS%Kd_add, &
                  "A uniform diapycnal diffusivity that is added \n"//&
                  "everywhere without any filtering or scaling.", &
                  units="m2 s-1", default=0.0)
@@ -2768,32 +2768,32 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   if (CS%bulkmixedlayer) then
     ! Check that Kdml is not set when using bulk mixed layer
-    call get_param(param_file, mod, "KDML", CS%Kdml, default=-1.)
+    call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
     if (CS%Kdml>0.) call MOM_error(FATAL, &
                  "set_diffusivity_init: KDML cannot be set when using"// &
                  "bulk mixed layer.")
     CS%Kdml = CS%Kd ! This is not used with a bulk mixed layer, but also
                     ! cannot be a NaN.
   else
-    call get_param(param_file, mod, "KDML", CS%Kdml, &
+    call get_param(param_file, mdl, "KDML", CS%Kdml, &
                  "If BULKMIXEDLAYER is false, KDML is the elevated \n"//&
                  "diapycnal diffusivity in the topmost HMIX of fluid. \n"//&
                  "KDML is only used if BULKMIXEDLAYER is false.", &
                  units="m2 s-1", default=CS%Kd)
-    call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
+    call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   endif
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
 
-  call get_param(param_file, mod, "INT_TIDE_DISSIPATION", CS%Int_tide_dissipation, &
+  call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%Int_tide_dissipation, &
                  "If true, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=.false.)
   if (CS%Int_tide_dissipation) then
-    call get_param(param_file, mod, "INT_TIDE_PROFILE", tmpstr, &
+    call get_param(param_file, mdl, "INT_TIDE_PROFILE", tmpstr, &
                  "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
                  "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
@@ -2811,13 +2811,13 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     end select
   endif
 
-  call get_param(param_file, mod, "LEE_WAVE_DISSIPATION", CS%Lee_wave_dissipation, &
+  call get_param(param_file, mdl, "LEE_WAVE_DISSIPATION", CS%Lee_wave_dissipation, &
                  "If true, use an lee wave driven dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of Nikurashin \n"//&
                  "(2010) and using the St. Laurent et al. (2002) \n"//&
                  "and Simmons et al. (2004) vertical profile", default=.false.)
   if (CS%lee_wave_dissipation) then
-    call get_param(param_file, mod, "LEE_WAVE_PROFILE", tmpstr, &
+    call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
                  "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
                  "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
@@ -2835,7 +2835,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     end select
   endif
 
-  call get_param(param_file, mod, "INT_TIDE_LOWMODE_DISSIPATION", CS%Lowmode_itidal_dissipation, &
+  call get_param(param_file, mdl, "INT_TIDE_LOWMODE_DISSIPATION", CS%Lowmode_itidal_dissipation, &
                  "If true, consider mixing due to breaking low modes that \n"//&
                  "have been remotely generated; as with itidal drag on the \n"//&
                  "barotropic tide, use an internal tidal dissipation scheme to \n"//&
@@ -2844,52 +2844,52 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
       (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09))) then
-    call get_param(param_file, mod, "NU_POLZIN", CS%Nu_Polzin, &
+    call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
                  "vertical scale of decay for the tidal energy dissipation.", &
                  units="nondim", default=0.0697)
-    call get_param(param_file, mod, "NBOTREF_POLZIN", CS%Nbotref_Polzin, &
+    call get_param(param_file, mdl, "NBOTREF_POLZIN", CS%Nbotref_Polzin, &
                  "When the Polzin decay profile is used, this is the \n"//&
                  "Rreference value of the buoyancy frequency at the ocean \n"//&
                  "bottom in the Polzin formulation for the vertical \n"//&
                  "scale of decay for the tidal energy dissipation.", &
                  units="s-1", default=9.61e-4)
-    call get_param(param_file, mod, "POLZIN_DECAY_SCALE_FACTOR", &
+    call get_param(param_file, mdl, "POLZIN_DECAY_SCALE_FACTOR", &
                  CS%Polzin_decay_scale_factor, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "scale factor for the vertical scale of decay of the tidal \n"//&
                  "energy dissipation.", default=1.0, units="nondim")
-    call get_param(param_file, mod, "POLZIN_SCALE_MAX_FACTOR", &
+    call get_param(param_file, mdl, "POLZIN_SCALE_MAX_FACTOR", &
                  CS%Polzin_decay_scale_max_factor, &
                  "When the Polzin decay profile is used, this is a factor \n"//&
                  "to limit the vertical scale of decay of the tidal \n"//&
                  "energy dissipation to POLZIN_DECAY_SCALE_MAX_FACTOR \n"//&
                  "times the depth of the ocean.", units="nondim", default=1.0)
-    call get_param(param_file, mod, "POLZIN_MIN_DECAY_SCALE", CS%Polzin_min_decay_scale, &
+    call get_param(param_file, mdl, "POLZIN_MIN_DECAY_SCALE", CS%Polzin_min_decay_scale, &
                  "When the Polzin decay profile is used, this is the \n"//&
                  "minimum vertical decay scale for the vertical profile\n"//&
                  "of internal tide dissipation with the Polzin (2009) formulation", &
                  units="m", default=0.0)
   endif
-  call get_param(param_file, mod, "USER_CHANGE_DIFFUSIVITY", CS%user_change_diff, &
+  call get_param(param_file, mdl, "USER_CHANGE_DIFFUSIVITY", CS%user_change_diff, &
                  "If true, call user-defined code to change the diffusivity.", &
                  default=.false.)
 
-  call get_param(param_file, mod, "DISSIPATION_MIN", CS%dissip_min, &
+  call get_param(param_file, mdl, "DISSIPATION_MIN", CS%dissip_min, &
                  "The minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor).", units="W m-3", default=0.0)
-  call get_param(param_file, mod, "DISSIPATION_N0", CS%dissip_N0, &
+  call get_param(param_file, mdl, "DISSIPATION_N0", CS%dissip_N0, &
                  "The intercept when N=0 of the N-dependent expression \n"//&
                  "used to set a minimum dissipation by which to determine \n"//&
                  "a lower bound of Kd (a floor): A in eps_min = A + B*N.", &
                  units="W m-3", default=0.0)
-  call get_param(param_file, mod, "DISSIPATION_N1", CS%dissip_N1, &
+  call get_param(param_file, mdl, "DISSIPATION_N1", CS%dissip_N1, &
                  "The coefficient multiplying N, following Gargett, used to \n"//&
                  "set a minimum dissipation by which to determine a lower \n"//&
                  "bound of Kd (a floor): B in eps_min = A + B*N", &
                  units="J m-3", default=0.0)
-  call get_param(param_file, mod, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
+  call get_param(param_file, mdl, "DISSIPATION_KD_MIN", CS%dissip_Kd_min, &
                  "The minimum vertical diffusivity applied as a floor.", &
                  units="m2 s-1", default=0.0)
 
@@ -2900,19 +2900,19 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     CS%dissip_N2 = CS%dissip_Kd_min * GV%Rho0 / CS%FluxRi_max
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
-    call get_param(param_file, mod, "INT_TIDE_DECAY_SCALE", CS%Int_tide_decay_scale, &
+    call get_param(param_file, mdl, "INT_TIDE_DECAY_SCALE", CS%Int_tide_decay_scale, &
                  "The decay scale away from the bottom for tidal TKE with \n"//&
                  "the new coding when INT_TIDE_DISSIPATION is used.", &
                  units="m", default=0.0)
-    call get_param(param_file, mod, "MU_ITIDES", CS%Mu_itides, &
+    call get_param(param_file, mdl, "MU_ITIDES", CS%Mu_itides, &
                  "A dimensionless turbulent mixing efficiency used with \n"//&
                  "INT_TIDE_DISSIPATION, often 0.2.", units="nondim", default=0.2)
-    call get_param(param_file, mod, "GAMMA_ITIDES", CS%Gamma_itides, &
+    call get_param(param_file, mdl, "GAMMA_ITIDES", CS%Gamma_itides, &
                  "The fraction of the internal tidal energy that is \n"//&
                  "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
-    call get_param(param_file, mod, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
+    call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
                  "Turn off internal tidal dissipation when the total \n"//&
                  "ocean depth is less than this value.", units="m", default=0.0)
 
@@ -2921,43 +2921,43 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call safe_alloc_ptr(CS%TKE_itidal,isd,ied,jsd,jed)
     call safe_alloc_ptr(CS%mask_itidal,isd,ied,jsd,jed) ; CS%mask_itidal(:,:) = 1.0
 
-    call get_param(param_file, mod, "KAPPA_ITIDES", CS%kappa_itides, &
+    call get_param(param_file, mdl, "KAPPA_ITIDES", CS%kappa_itides, &
                  "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                  "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                  units="m-1", default=8.e-4*atan(1.0))
 
-    call get_param(param_file, mod, "UTIDE", CS%utide, &
+    call get_param(param_file, mdl, "UTIDE", CS%utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                  units="m s-1", default=0.0)
     call safe_alloc_ptr(CS%tideamp,is,ie,js,je) ; CS%tideamp(:,:) = CS%utide
 
-    call get_param(param_file, mod, "KAPPA_H2_FACTOR", CS%kappa_h2_factor, &
+    call get_param(param_file, mdl, "KAPPA_H2_FACTOR", CS%kappa_h2_factor, &
                  "A scaling factor for the roughness amplitude with n"//&
                  "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
-    call get_param(param_file, mod, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
+    call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                  "The maximum internal tide energy source availble to mix \n"//&
                  "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                  units="W m-2",  default=1.0e3)
 
-    call get_param(param_file, mod, "READ_TIDEAMP", read_tideamp, &
+    call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                  "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
     if (read_tideamp) then
-      call get_param(param_file, mod, "TIDEAMP_FILE", tideamp_file, &
+      call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                  "The path to the file containing the spatially varying \n"//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
-      call log_param(param_file, mod, "INPUTDIR/TIDEAMP_FILE", filename)
+      call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
       call read_data(filename, 'tideamp', CS%tideamp, &
                      domain=G%domain%mpp_domain, timelevel=1)
     endif
 
-    call get_param(param_file, mod, "H2_FILE", h2_file, &
+    call get_param(param_file, mdl, "H2_FILE", h2_file, &
                  "The path to the file containing the sub-grid-scale \n"//&
                  "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
                  fail_if_missing=.true.)
     filename = trim(CS%inputdir) // trim(h2_file)
-    call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
+    call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
     call read_data(filename, 'h2', CS%h2, domain=G%domain%mpp_domain, &
                    timelevel=1)
 
@@ -2984,28 +2984,28 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
   if (CS%Lee_wave_dissipation) then
 
-    call get_param(param_file, mod, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
+    call get_param(param_file, mdl, "NIKURASHIN_TKE_INPUT_FILE",Niku_TKE_input_file, &
                  "The path to the file containing the TKE input from lee \n"//&
                  "wave driven mixing. Used with LEE_WAVE_DISSIPATION.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "NIKURASHIN_SCALE",Niku_scale, &
+    call get_param(param_file, mdl, "NIKURASHIN_SCALE",Niku_scale, &
                  "A non-dimensional factor by which to scale the lee-wave \n"//&
                  "driven TKE input. Used with LEE_WAVE_DISSIPATION.", &
                  units="nondim", default=1.0)
 
     filename = trim(CS%inputdir) // trim(Niku_TKE_input_file)
-    call log_param(param_file, mod, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je); CS%TKE_Niku(:,:) = 0.0
     call read_data(filename, 'TKE_input', CS%TKE_Niku, &
                    domain=G%domain%mpp_domain, timelevel=1 ) ! ??? timelevel -aja
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
-    call get_param(param_file, mod, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
+    call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
                  "The fraction of the lee wave energy that is dissipated \n"//&
                  "locally with LEE_WAVE_DISSIPATION.", units="nondim", &
                  default=0.3333)
-    call get_param(param_file, mod, "DECAY_SCALE_FACTOR_LEE",CS%Decay_scale_factor_lee, &
+    call get_param(param_file, mdl, "DECAY_SCALE_FACTOR_LEE",CS%Decay_scale_factor_lee, &
                  "Scaling for the vertical decay scaleof the local \n"//&
                  "dissipation of lee waves dissipation.", units="nondim", &
                  default=1.0)
@@ -3099,18 +3099,18 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     endif
   endif
 
-  call get_param(param_file, mod, "DOUBLE_DIFFUSION", CS%double_diffusion, &
+  call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
                  default=.false.)
   if (CS%double_diffusion) then
-    call get_param(param_file, mod, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
+    call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
                  "Maximum density ratio for salt fingering regime.", &
                  default=2.55, units="nondim")
-    call get_param(param_file, mod, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
+    call get_param(param_file, mdl, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
                  "Maximum salt diffusivity for salt fingering regime.", &
                  default=1.e-4, units="m2 s-1")
-    call get_param(param_file, mod, "KV_MOLECULAR", CS%Kv_molecular, &
+    call get_param(param_file, mdl, "KV_MOLECULAR", CS%Kv_molecular, &
                  "Molecular viscosity for calculation of fluxes under \n"//&
                  "double-diffusive convection.", default=1.5e-6, units="m2 s-1")
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.

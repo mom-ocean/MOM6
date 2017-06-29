@@ -183,7 +183,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   real :: Rho_0, maxvel
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
+  character(len=40)  :: mdl = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
 
@@ -194,42 +194,42 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "CALCULATE_APE", CS%do_APE_calc, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CALCULATE_APE", CS%do_APE_calc, &
                  "If true, calculate the available potential energy of \n"//&
                  "the interfaces.  Setting this to false reduces the \n"//&
                  "memory footprint of high-PE-count models dramatically.", &
                  default=.true.)
-  call get_param(param_file, mod, "WRITE_STOCKS", CS%write_stocks, &
+  call get_param(param_file, mdl, "WRITE_STOCKS", CS%write_stocks, &
                  "If true, write the integrated tracer amounts to stdout \n"//&
                  "when the energy files are written.", default=.true.)
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "DT", CS%dt, &
+  call get_param(param_file, mdl, "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "MAXTRUNC", CS%maxtrunc, &
+  call get_param(param_file, mdl, "MAXTRUNC", CS%maxtrunc, &
                  "The run will be stopped, and the day set to a very \n"//&
                  "large value if the velocity is truncated more than \n"//&
                  "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 \n"//&
                  "to stop if there is any truncation of velocities.", &
                  units="truncations save_interval-1", default=0)
 
-  call get_param(param_file, mod, "MAX_ENERGY", CS%max_Energy, &
+  call get_param(param_file, mdl, "MAX_ENERGY", CS%max_Energy, &
                  "The maximum permitted average energy per unit mass; the \n"//&
                  "model will be stopped if there is more energy than \n"//&
                  "this.  If zero or negative, this is set to 10*MAXVEL^2.", &
                  units="m2 s-2", default=0.0)
   if (CS%max_Energy <= 0.0) then
-    call get_param(param_file, mod, "MAXVEL", maxvel, &
+    call get_param(param_file, mdl, "MAXVEL", maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
-    call log_param (param_file, mod, "MAX_ENERGY as used", CS%max_Energy)
+    call log_param (param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
-  call get_param(param_file, mod, "ENERGYFILE", energyfile, &
+  call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
                  "summed diagnostics.", default="ocean.stats")
 
@@ -240,15 +240,15 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   end if
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
-  call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
+  call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)
 #ifdef STATSLABEL
   CS%energyfile = trim(CS%energyfile)//"."//trim(adjustl(STATSLABEL))
 #endif
 
-  call get_param(param_file, mod, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
+  call get_param(param_file, mdl, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
                  "If true, use dates (not times) in messages to stdout", &
                  default=.true.)
-  call get_param(param_file, mod, "TIMEUNIT", CS%Timeunit, &
+  call get_param(param_file, mdl, "TIMEUNIT", CS%Timeunit, &
                  "The time unit in seconds a number of input fields", &
                  units="s", default=86400.0)
   if (CS%Timeunit < 0.0) CS%Timeunit = 86400.0
@@ -256,15 +256,15 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
 
   if (CS%do_APE_calc) then
-    call get_param(param_file, mod, "READ_DEPTH_LIST", CS%read_depth_list, &
+    call get_param(param_file, mdl, "READ_DEPTH_LIST", CS%read_depth_list, &
                    "Read the depth list from a file if it exists or \n"//&
                    "create that file otherwise.", default=.false.)
-    call get_param(param_file, mod, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
+    call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", units="m", &
                    default=1.0E-10)
     if (CS%read_depth_list) then
-      call get_param(param_file, mod, "DEPTH_LIST_FILE", CS%depth_list_file, &
+      call get_param(param_file, mdl, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
       if (scan(CS%depth_list_file,'/') == 0) &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
@@ -1260,39 +1260,39 @@ subroutine read_depth_list(G, CS, filename)
 
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
-  character(len=32) :: mod
+  character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
 
-  mod = "MOM_sum_output read_depth_list:"
+  mdl = "MOM_sum_output read_depth_list:"
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,mod//" Difficulties opening "//trim(filename)// &
+    call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))
   endif
 
   var_name = "depth"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
   status = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndim, dimids=var_dim_ids)
   if (status /= NF90_NOERR) then
-    call MOM_ERROR(FATAL,mod//" cannot inquire about "//trim(var_msg)//&
+    call MOM_ERROR(FATAL,mdl//" cannot inquire about "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   elseif (ndim > 1) then
-    call MOM_ERROR(FATAL,mod//" "//trim(var_msg)//&
+    call MOM_ERROR(FATAL,mdl//" "//trim(var_msg)//&
          " has too many or too few dimensions.")
   endif
 
   ! Get the length of the list.
   status = NF90_INQUIRE_DIMENSION(ncid, var_dim_ids(1), len=list_size)
-  if (status /= NF90_NOERR) call MOM_ERROR(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_ERROR(FATAL,mdl// &
         " cannot inquire about dimension(1) of "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1301,7 +1301,7 @@ subroutine read_depth_list(G, CS, filename)
   allocate(tmp(list_size))
 
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1310,11 +1310,11 @@ subroutine read_depth_list(G, CS, filename)
   var_name = "area"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1323,18 +1323,18 @@ subroutine read_depth_list(G, CS, filename)
   var_name = "vol_below"
   var_msg = trim(var_name)//" in "//trim(filename)
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
   do k=1,list_size ; CS%DL(k)%vol_below = tmp(k) ; enddo
 
   status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, mod// &
+  if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
     " Difficulties closing "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
 
   deallocate(tmp)

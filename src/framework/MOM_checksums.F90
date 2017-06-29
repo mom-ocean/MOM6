@@ -1467,9 +1467,9 @@ subroutine MOM_checksums_init(param_file)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_checksums" ! This module's name.
+  character(len=40)  :: mdl = "MOM_checksums" ! This module's name.
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mdl, version)
 
 end subroutine MOM_checksums_init
 
