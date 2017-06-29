@@ -41,7 +41,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mod = "seamount_initialization" ! This module's name.
+character(len=40) :: mdl = "seamount_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -68,14 +68,14 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
   integer   :: i, j
   real      :: x, y, delta, Lx, rLx, Ly, rLy
 
-  call get_param(param_file,mod,"SEAMOUNT_DELTA",delta, &
+  call get_param(param_file, mdl,"SEAMOUNT_DELTA",delta, &
                  "Non-dimensional height of seamount.", &
                  units="non-dim", default=0.5)
-  call get_param(param_file,mod,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
+  call get_param(param_file, mdl,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
                  "Length scale of seamount in x-direction.\n"//&
                  "Set to zero make topography uniform in the x-direction.", &
                  units="Same as x,y", default=20.)
-  call get_param(param_file,mod,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
+  call get_param(param_file, mdl,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
                  "Length scale of seamount in y-direction.\n"//&
                  "Set to zero make topography uniform in the y-direction.", &
                  units="Same as x,y", default=0.)
@@ -125,10 +125,10 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer',&
                  units='m', default=1.0e-3, do_not_log=just_read)
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   ! WARNING: this routine specifies the interface heights so that the last layer
@@ -145,11 +145,11 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file,mod,"INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
-    call get_param(param_file,mod,"INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
-    call get_param(param_file, mod, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-    call get_param(param_file, mod, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-    call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mdl,"INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
+    call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
+    call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
+    call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
     if (just_read) return ! All run-time parameters have been read, so return.
 
     do K=1,nz+1
@@ -227,32 +227,32 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file,mod,"INITIAL_DENSITY_PROFILE", density_profile, &
+  call get_param(param_file, mdl,"INITIAL_DENSITY_PROFILE", density_profile, &
                  'Initial profile shape. Valid values are "linear", "parabolic"\n'// &
                  'and "exponential".', default='linear', do_not_log=just_read)
-  call get_param(param_file,mod,"INITIAL_SSS", S_surf, &
+  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  'Initial surface salinity', units='1e-3', default=34., do_not_log=just_read)
-  call get_param(param_file,mod,"INITIAL_SST", T_surf, &
+  call get_param(param_file, mdl,"INITIAL_SST", T_surf, &
                  'Initial surface temperature', units='C', default=0., do_not_log=just_read)
-  call get_param(param_file,mod,"INITIAL_S_RANGE", S_range, &
+  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  'Initial salinity range (bottom - surface)', units='1e-3', &
                  default=2., do_not_log=just_read)
-  call get_param(param_file,mod,"INITIAL_T_RANGE", T_range, &
+  call get_param(param_file, mdl,"INITIAL_T_RANGE", T_range, &
                  'Initial temperature range (bottom - surface)', units='C', &
                  default=0., do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
       ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
-      call get_param(param_file, mod, "T_REF", T_ref, default=10.0, do_not_log=.true.)
-      call get_param(param_file, mod, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
-      call get_param(param_file, mod, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
-      call get_param(param_file, mod, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-      call get_param(param_file, mod, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-      call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
-      call get_param(param_file, mod, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
+      call get_param(param_file, mdl, "T_REF", T_ref, default=10.0, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
+      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
       if (just_read) return ! All run-time parameters have been read, so return.
 
       ! Emulate the T,S used in the "ts_range" coordinate configuration code

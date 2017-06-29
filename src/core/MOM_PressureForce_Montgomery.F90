@@ -847,7 +847,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   logical :: use_temperature, use_EOS
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod   ! This module's name.
+  character(len=40)  :: mdl   ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "PressureForce_init called with an associated "// &
@@ -860,17 +860,17 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
     if (associated(tides_CSp)) CS%tides_CSp => tides_CSp
   endif
 
-  mod = "MOM_PressureForce_Mont"
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  mdl = "MOM_PressureForce_Mont"
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "TIDES", CS%tides, &
+  call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  call get_param(param_file, mod, "USE_EOS", use_EOS, default=.true., &
+  call get_param(param_file, mdl, "USE_EOS", use_EOS, default=.true., &
                  do_not_log=.true.) ! Input for diagnostic use only.
 
   if (use_EOS) then
@@ -896,7 +896,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   CS%GFS_scale = 1.0
   if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
-  call log_param(param_file, mod, "GFS / G_EARTH", CS%GFS_scale)
+  call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
 
 end subroutine PressureForce_Mont_init
 

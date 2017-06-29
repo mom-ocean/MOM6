@@ -1145,7 +1145,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  character(len=40)  :: mod = "MOM_diagnostics" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   real :: omega, f2_min
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1166,12 +1166,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
                  "The lower fraction of water column over which N2 is limited as monotonic\n"// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
                  units='nondim', default=0.)
-  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
+  call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
                  "The depth below which N2 is limited as monotonic for the\n"// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', default=-1.)

@@ -20,7 +20,7 @@ public dense_water_initialize_topography
 public dense_water_initialize_TS
 public dense_water_initialize_sponges
 
-character(len=40) :: mod = "dense_water_initialization"
+character(len=40) :: mdl = "dense_water_initialization"
 
 real, parameter :: default_sill  = 0.2 !< Default depth of the sill [nondim]
 real, parameter :: default_shelf = 0.4 !< Default depth of the shelf [nondim]
@@ -40,7 +40,7 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
   integer :: i, j
   real :: x
 
-  call get_param(param_file, mod, "DENSE_WATER_DOMAIN_PARAMS", domain_params, &
+  call get_param(param_file, mdl, "DENSE_WATER_DOMAIN_PARAMS", domain_params, &
        "Fractional widths of all the domain sections for the dense water experiment.\n"//&
        "As a 5-element vector:\n"//&
        "  - open ocean, the section at maximum depth\n"//&
@@ -49,10 +49,10 @@ subroutine dense_water_initialize_topography(D, G, param_file, max_depth)
        "  - upslope, the upward slope accumulating dense water\n"//&
        "  - the shelf in the dense formation region.", &
        units="nondim", fail_if_missing=.true.)
-  call get_param(param_file, mod, "DENSE_WATER_SILL_DEPTH", sill_frac, &
+  call get_param(param_file, mdl, "DENSE_WATER_SILL_DEPTH", sill_frac, &
        "Depth of the sill separating downslope from upslope, as fraction of basin depth.", &
        units="nondim", default=default_sill)
-  call get_param(param_file, mod, "DENSE_WATER_SHELF_DEPTH", shelf_frac, &
+  call get_param(param_file, mdl, "DENSE_WATER_SHELF_DEPTH", shelf_frac, &
        "Depth of the shelf region accumulating dense water for overflow, as fraction of basin depth.", &
        units="nondim", default=default_shelf)
 
@@ -108,13 +108,13 @@ subroutine dense_water_initialize_TS(G, GV, param_file, eqn_of_state, T, S, h, j
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mod, "DENSE_WATER_MLD", mld, &
+  call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, &
        "Depth of unstratified mixed layer as a fraction of the water column.", &
        units="nondim", default=default_mld, do_not_log=just_read)
 
-  call get_param(param_file, mod, "S_REF", S_ref, do_not_log=.true.)
-  call get_param(param_file, mod, "S_RANGE", S_range, do_not_log=.true.)
-  call get_param(param_file, mod, "T_REF", T_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_RANGE", S_range, do_not_log=.true.)
+  call get_param(param_file, mdl, "T_REF", T_ref, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -166,29 +166,29 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
 
   nz = GV%ke
 
-  call get_param(param_file, mod, "DENSE_WATER_WEST_SPONGE_TIME_SCALE", west_sponge_time_scale, &
+  call get_param(param_file, mdl, "DENSE_WATER_WEST_SPONGE_TIME_SCALE", west_sponge_time_scale, &
        "The time scale on the west (outflow) of the domain for restoring. If zero, the sponge is disabled.", &
        units="s", default=0.)
-  call get_param(param_file, mod, "DENSE_WATER_WEST_SPONGE_WIDTH", west_sponge_width, &
+  call get_param(param_file, mdl, "DENSE_WATER_WEST_SPONGE_WIDTH", west_sponge_width, &
        "The fraction of the domain in which the western (outflow) sponge is active.", &
        units="nondim", default=0.1)
-  call get_param(param_file, mod, "DENSE_WATER_EAST_SPONGE_TIME_SCALE", east_sponge_time_scale, &
+  call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_TIME_SCALE", east_sponge_time_scale, &
        "The time scale on the east (outflow) of the domain for restoring. If zero, the sponge is disabled.", &
        units="s", default=0.)
-  call get_param(param_file, mod, "DENSE_WATER_EAST_SPONGE_WIDTH", east_sponge_width, &
+  call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_WIDTH", east_sponge_width, &
        "The fraction of the domain in which the eastern (outflow) sponge is active.", &
        units="nondim", default=0.1)
 
-  call get_param(param_file, mod, "DENSE_WATER_EAST_SPONGE_SALT", S_dense, &
+  call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_SALT", S_dense, &
        "Salt anomaly of the dense water being formed in the overflow region.", &
        units="1e-3", default=4.0)
 
-  call get_param(param_file, mod, "DENSE_WATER_MLD", mld, default=default_mld, do_not_log=.true.)
-  call get_param(param_file, mod, "DENSE_WATER_SILL_HEIGHT", sill_height, default=default_sill, do_not_log=.true.)
+  call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, default=default_mld, do_not_log=.true.)
+  call get_param(param_file, mdl, "DENSE_WATER_SILL_HEIGHT", sill_height, default=default_sill, do_not_log=.true.)
 
-  call get_param(param_file, mod, "S_REF", S_ref, do_not_log=.true.)
-  call get_param(param_file, mod, "S_RANGE", S_range, do_not_log=.true.)
-  call get_param(param_file, mod, "T_REF", T_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_REF", S_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "S_RANGE", S_range, do_not_log=.true.)
+  call get_param(param_file, mdl, "T_REF", T_ref, do_not_log=.true.)
 
   ! no active sponges
   if (west_sponge_time_scale <= 0. .and. east_sponge_time_scale <= 0.) return

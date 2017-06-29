@@ -374,7 +374,7 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  character(len=40)  :: mod = "MOM_geothermal"  ! module name
+  character(len=40)  :: mdl = "MOM_geothermal"  ! module name
   character(len=200) :: inputdir, geo_file, filename, geotherm_var
   real :: scale
   integer :: i, j, isd, ied, jsd, jed, id
@@ -390,8 +390,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
   CS%Time => Time
 
   ! write parameters to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "GEOTHERMAL_SCALE", scale, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "GEOTHERMAL_SCALE", scale, &
                  "The constant geothermal heat flux, a rescaling \n"//&
                  "factor for the heat flux read from GEOTHERMAL_FILE, or \n"//&
                  "0 to disable the geothermal heating.", &
@@ -401,13 +401,13 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
 
   call safe_alloc_ptr(CS%geo_heat, isd, ied, jsd, jed) ; CS%geo_heat(:,:) = 0.0
 
-  call get_param(param_file, mod, "GEOTHERMAL_FILE", geo_file, &
+  call get_param(param_file, mdl, "GEOTHERMAL_FILE", geo_file, &
                  "The file from which the geothermal heating is to be \n"//&
                  "read, or blank to use a constant heating rate.", default=" ")
-  call get_param(param_file, mod, "GEOTHERMAL_THICKNESS", CS%geothermal_thick, &
+  call get_param(param_file, mdl, "GEOTHERMAL_THICKNESS", CS%geothermal_thick, &
                  "The thickness over which to apply geothermal heating.", &
                  units="m", default=0.1)
-  call get_param(param_file, mod, "GEOTHERMAL_DRHO_DT_INPLACE", CS%dRcv_dT_inplace, &
+  call get_param(param_file, mdl, "GEOTHERMAL_DRHO_DT_INPLACE", CS%dRcv_dT_inplace, &
                  "The value of drho_dT above which geothermal heating \n"//&
                  "simply heats water in place instead of moving it between \n"//&
                  "isopycnal layers.  This must be negative.", &
@@ -416,11 +416,11 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
          "GEOTHERMAL_DRHO_DT_INPLACE must be negative.")
 
   if (len_trim(geo_file) >= 1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     filename = trim(inputdir)//trim(geo_file)
-    call log_param(param_file, mod, "INPUTDIR/GEOTHERMAL_FILE", filename)
-    call get_param(param_file, mod, "GEOTHERMAL_VARNAME", geotherm_var, &
+    call log_param(param_file, mdl, "INPUTDIR/GEOTHERMAL_FILE", filename)
+    call get_param(param_file, mdl, "GEOTHERMAL_VARNAME", geotherm_var, &
                  "The name of the geothermal heating variable in \n"//&
                  "GEOTHERMAL_FILE.", default="geo_heat")
     call read_data(filename, trim(geotherm_var), CS%geo_heat, &

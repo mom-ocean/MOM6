@@ -1128,7 +1128,7 @@ subroutine register_restarts_dyn_legacy_split(HI, GV, param_file, CS, restart_CS
 !  (inout)   vh - The meridional volume or mass transport, in m3 s-1 or kg s-1.
 
   type(vardesc) :: vd
-  character(len=40)  :: mod = "MOM_dynamics_legacy_split" ! This module's name.
+  character(len=40)  :: mdl = "MOM_dynamics_legacy_split" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: adiabatic, flux_BT_coupling, readjust_BT_trans
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -1312,7 +1312,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
   !   This subroutine initializes any variables that are specific to this time
   ! stepping scheme, including the cpu clocks.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
-  character(len=40)  :: mod = "MOM_dynamics_legacy_split" ! This module's name.
+  character(len=40)  :: mdl = "MOM_dynamics_legacy_split" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: adiabatic, use_tides, debug_truncations
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1332,9 +1332,9 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "TIDES", use_tides, &
+  call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  call get_param(param_file, mod, "BE", CS%be, &
+  call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting \n"//&
                  "of a  2nd-order Runga-Kutta baroclinic time stepping \n"//&
                  "scheme (0.5) and a backward Euler scheme (1) that is \n"//&
@@ -1342,7 +1342,7 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
                  "from 0.5 to 1, but instability may occur near 0.5. \n"//&
                  "BE is also applicable if SPLIT is false and USE_RK2 \n"//&
                  "is true.", units="nondim", default=0.6)
-  call get_param(param_file, mod, "BEGW", CS%begw, &
+  call get_param(param_file, mdl, "BEGW", CS%begw, &
                  "If SPLIT is true, BEGW is a number from 0 to 1 that \n"//&
                  "controls the extent to which the treatment of gravity \n"//&
                  "waves is forward-backward (0) or simulated backward \n"//&
@@ -1351,29 +1351,29 @@ subroutine initialize_dyn_legacy_split(u, v, h, uh, vh, eta, Time, G, GV, param_
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
 
-  call get_param(param_file, mod, "FLUX_BT_COUPLING", CS%flux_BT_coupling, &
+  call get_param(param_file, mdl, "FLUX_BT_COUPLING", CS%flux_BT_coupling, &
                  "If true, use mass fluxes to ensure consistency between \n"//&
                  "the baroclinic and barotropic modes. This is only used \n"//&
                  "if SPLIT is true.", default=.false.)
-  call get_param(param_file, mod, "READJUST_BT_TRANS", CS%readjust_BT_trans, &
+  call get_param(param_file, mdl, "READJUST_BT_TRANS", CS%readjust_BT_trans, &
                  "If true, make a barotropic adjustment to the layer \n"//&
                  "velocities after the thermodynamic part of the step \n"//&
                  "to ensure that the interaction between the thermodynamics \n"//&
                  "and the continuity solver do not change the barotropic \n"//&
                  "transport.  This is only used if FLUX_BT_COUPLING and \n"//&
                  "SPLIT are true.", default=.false.)
-  call get_param(param_file, mod, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
+  call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
                  "If true, provide the bottom stress calculated by the \n"//&
                  "vertical viscosity to the barotropic solver.", default=.false.)
-  call get_param(param_file, mod, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
+  call get_param(param_file, mdl, "BT_USE_LAYER_FLUXES", CS%BT_use_layer_fluxes, &
                  "If true, use the summed layered fluxes plus an \n"//&
                  "adjustment due to the change in the barotropic velocity \n"//&
                  "in the barotropic continuity equation.", default=.true.)
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "ADIABATIC", adiabatic, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., do_not_log=.true.)
   if (.not.CS%flux_BT_coupling .or. adiabatic) CS%readjust_BT_trans = .false.
-  call get_param(param_file, mod, "DEBUG_TRUNCATIONS", debug_truncations, &
+  call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0

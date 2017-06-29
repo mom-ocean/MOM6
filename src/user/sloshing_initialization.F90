@@ -45,7 +45,7 @@ public sloshing_initialize_topography
 public sloshing_initialize_thickness
 public sloshing_initialize_temperature_salinity
 
-character(len=40)  :: mod = "sloshing_initialization" ! This module's name.
+character(len=40)  :: mdl = "sloshing_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -226,23 +226,23 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   real    :: deltah
   real    :: xi0, xi1
   logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's
+  character(len=40)  :: mdl = "initialize_temp_salt_linear" ! This subroutine's
                                                             ! name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference value for salinity', &
+  call get_param(param_file, mdl,"S_REF",S_ref,'Reference value for salinity', &
                  units='1e-3', fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"T_REF",T_ref,'Refernce value for temperature', &
+  call get_param(param_file, mdl,"T_REF",T_ref,'Refernce value for temperature', &
                  units='C', fail_if_missing=.not.just_read, do_not_log=just_read)
 
   ! The default is to assume an increase by 2 for the salinity and a uniform
   ! temperature
-  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range.', &
+  call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range.', &
                  units='1e-3', default=2.0, do_not_log=just_read)
-  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range', &
+  call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range', &
                  units='C', default=0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.

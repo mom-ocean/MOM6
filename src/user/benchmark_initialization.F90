@@ -57,15 +57,15 @@ subroutine benchmark_initialize_topography(D, G, param_file, max_depth)
   real :: x, y
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "benchmark_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   PI = 4.0*atan(1.0)
@@ -125,7 +125,7 @@ subroutine benchmark_initialize_thickness(h, G, GV, param_file, eqn_of_state, &
                      ! interface temperature for a given z and its derivative.
   real :: pi, z
   logical :: just_read
-  character(len=40)  :: mod = "benchmark_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "benchmark_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -244,7 +244,7 @@ subroutine benchmark_init_temperature_salinity(T, S, G, GV, param_file, &
   real :: SST       !  The initial sea surface temperature, in deg C.
   real :: lat
   logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mod = "benchmark_init_temperature_salinity" ! This subroutine's name.
+  character(len=40)  :: mdl = "benchmark_init_temperature_salinity" ! This subroutine's name.
   integer :: i, j, k, k1, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

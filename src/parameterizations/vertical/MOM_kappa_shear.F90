@@ -109,7 +109,7 @@ type, public :: Kappa_shear_CS ; private
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
-  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
 
 #undef  DEBUG
 #undef  ADD_DIAGNOSTICS
@@ -1680,77 +1680,77 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   ! subgridscale inhomogeneity into account.
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
     "Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008")
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_init, &
+  call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_init, &
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
                  "shear mixing parameterization.", default=.false.)
-  call get_param(param_file, mod, "RINO_CRIT", CS%RiNo_crit, &
+  call get_param(param_file, mdl, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)
-  call get_param(param_file, mod, "SHEARMIX_RATE", CS%Shearmix_rate, &
+  call get_param(param_file, mdl, "SHEARMIX_RATE", CS%Shearmix_rate, &
                  "A nondimensional rate scale for shear-driven entrainment.\n"//&
                  "Jackson et al find values in the range of 0.085-0.089.", &
                  units="nondim", default=0.089)
-  call get_param(param_file, mod, "MAX_RINO_IT", CS%max_RiNo_it, &
+  call get_param(param_file, mdl, "MAX_RINO_IT", CS%max_RiNo_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the Richardson number driven mixing.", &
                  units="nondim", default=50)
-  call get_param(param_file, mod, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
-  call get_param(param_file, mod, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
+  call get_param(param_file, mdl, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
+  call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the \n"//&
                  "density and shear profiles before solving for the \n"//&
                  "diffusivities. Defaults to value of KD.", units="m2 s-1", default=KD_normal)
-  call get_param(param_file, mod, "FRI_CURVATURE", CS%FRi_curvature, &
+  call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the \n"//&
                  "Richardson number in the kappa source term in the \n"//&
                  "Jackson et al. scheme.", units="nondim", default=-0.97)
-  call get_param(param_file, mod, "TKE_N_DECAY_CONST", CS%C_N, &
+  call get_param(param_file, mdl, "TKE_N_DECAY_CONST", CS%C_N, &
                  "The coefficient for the decay of TKE due to \n"//&
                  "stratification (i.e. proportional to N*tke). \n"//&
                  "The values found by Jackson et al. are 0.24-0.28.", &
                  units="nondim", default=0.24)
-!  call get_param(param_file, mod, "LAYER_KAPPA_STAGGER", CS%layer_stagger, &
+!  call get_param(param_file, mdl, "LAYER_KAPPA_STAGGER", CS%layer_stagger, &
 !                 default=.false.)
-  call get_param(param_file, mod, "TKE_SHEAR_DECAY_CONST", CS%C_S, &
+  call get_param(param_file, mdl, "TKE_SHEAR_DECAY_CONST", CS%C_S, &
                  "The coefficient for the decay of TKE due to shear (i.e. \n"//&
                  "proportional to |S|*tke). The values found by Jackson \n"//&
                  "et al. are 0.14-0.12.", units="nondim", default=0.14)
-  call get_param(param_file, mod, "KAPPA_BUOY_SCALE_COEF", CS%lambda, &
+  call get_param(param_file, mdl, "KAPPA_BUOY_SCALE_COEF", CS%lambda, &
                  "The coefficient for the buoyancy length scale in the \n"//&
                  "kappa equation.  The values found by Jackson et al. are \n"//&
                  "in the range of 0.81-0.86.", units="nondim", default=0.82)
-  call get_param(param_file, mod, "KAPPA_N_OVER_S_SCALE_COEF2", CS%lambda2_N_S, &
+  call get_param(param_file, mdl, "KAPPA_N_OVER_S_SCALE_COEF2", CS%lambda2_N_S, &
                  "The square of the ratio of the coefficients of the \n"//&
                  "buoyancy and shear scales in the diffusivity equation, \n"//&
                  "Set this to 0 (the default) to eliminate the shear scale. \n"//&
                  "This is only used if USE_JACKSON_PARAM is true.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
+  call get_param(param_file, mdl, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
                  "The fractional error in kappa that is tolerated. \n"//&
                  "Iteration stops when changes between subsequent \n"//&
                  "iterations are smaller than this everywhere in a \n"//&
                  "column.  The peak diffusivities usually converge most \n"//&
                  "rapidly, and have much smaller errors than this.", &
                  units="nondim", default=0.1)
-  call get_param(param_file, mod, "TKE_BACKGROUND", CS%TKE_bg, &
+  call get_param(param_file, mdl, "TKE_BACKGROUND", CS%TKE_bg, &
                  "A background level of TKE used in the first iteration \n"//&
                  "of the kappa equation.  TKE_BACKGROUND could be 0.", &
                  units="m2 s-2", default=0.0)
-  call get_param(param_file, mod, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
+  call get_param(param_file, mdl, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
                  "If true, massless layers are merged with neighboring \n"//&
                  "massive layers in this calculation.  The default is \n"//&
                  "true and I can think of no good reason why it should \n"//&
                  "be false. This is only used if USE_JACKSON_PARAM is true.", &
                  default=.true.)
-  call get_param(param_file, mod, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
+  call get_param(param_file, mdl, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the time-averaged diffusivity.", units="nondim", &
                  default=13)
-  call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
+  call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
                  "instability.", units="nondim", default=1.0, do_not_log=.true.)
-  call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&
                  "be used in single-column mode!", default=.false.)
@@ -1762,7 +1762,7 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
 
   CS%nkml = 1
   if (GV%nkml>0) then
-    call get_param(param_file, mod, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
+    call get_param(param_file, mdl, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
                  "If true, combine the mixed layers together before \n"//&
                  "solving the kappa-shear equations.", default=.true.)
     if (merge_mixedlayer) CS%nkml = GV%nkml
@@ -1791,7 +1791,7 @@ logical function kappa_shear_is_used(param_file)
 !   This function allows other modules to know whether this parameterization will
 ! be used without needing to duplicate the log entry.
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
+  call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log = .true.)
 end function kappa_shear_is_used
 

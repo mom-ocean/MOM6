@@ -101,7 +101,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_sponge"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
   real, dimension(SZIB_(G),SZJ_(G),nz_data) :: data_hu !< thickness at u points
   real, dimension(SZI_(G),SZJB_(G),nz_data) :: data_hv !< thickness at v points
@@ -117,8 +117,8 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
   endif
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SPONGE", use_sponge, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SPONGE", use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
@@ -127,16 +127,16 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
 
   allocate(CS)
 
-  call get_param(param_file, mod, "SPONGE_UV", CS%sponge_uv, &
+  call get_param(param_file, mdl, "SPONGE_UV", CS%sponge_uv, &
                  "Apply sponges in u and v, in addition to tracers.", &
                  default=.false.)
 
-  call get_param(param_file, mod, "REMAPPING_SCHEME", remapScheme, &
+  call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
                  "This sets the reconstruction scheme used \n"//&
                  " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
 
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
+  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
                  "When defined, a proper high-order reconstruction \n"//&
                  "scheme is used within boundary cells rather \n"// &
                  "than PCM. E.g., if PPM is used for remapping, a \n" //&
@@ -187,7 +187,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
 ! Call the constructor for remapping control structure
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation)
 
-  call log_param(param_file, mod, "!Total sponge columns at h points", total_sponge_cols, &
+  call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.")
 
   if (CS%sponge_uv) then
@@ -225,7 +225,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
      endif
      total_sponge_cols_u = CS%num_col_u
      call sum_across_PEs(total_sponge_cols_u)
-     call log_param(param_file, mod, "!Total sponge columns at u points", total_sponge_cols_u, &
+     call log_param(param_file, mdl, "!Total sponge columns at u points", total_sponge_cols_u, &
                  "The total number of columns where sponges are applied at u points.")
 
      ! v points
@@ -262,7 +262,7 @@ subroutine initialize_ALE_sponge(Iresttime, data_h, nz_data, G, param_file, CS)
      endif
      total_sponge_cols_v = CS%num_col_v
      call sum_across_PEs(total_sponge_cols_v)
-     call log_param(param_file, mod, "!Total sponge columns at v points", total_sponge_cols_v, &
+     call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
                  "The total number of columns where sponges are applied at v points.")
   endif
 

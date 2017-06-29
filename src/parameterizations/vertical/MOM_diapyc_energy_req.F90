@@ -1305,7 +1305,7 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_diapyc_energy_req" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diapyc_energy_req" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(CS)) then ; allocate(CS)
@@ -1315,14 +1315,14 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
                  "A scaling factor for the diapycnal diffusivity used in \n"//&
                  "testing the energy requirements.", default=1.0, units="nondim")
-  call get_param(param_file, mod, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
+  call get_param(param_file, mdl, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
                  "A scaling factor for the column height change correction \n"//&
                  "used in testing the energy requirements.", default=1.0, units="nondim")
-  call get_param(param_file, mod, "ENERGY_REQ_USE_TEST_PROFILE", &
+  call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", &
                  CS%use_test_Kh_profile, &
                  "If true, use the internal test diffusivity profile in \n"//&
                  "place of any that might be passed in as an argument.", default=.false.)

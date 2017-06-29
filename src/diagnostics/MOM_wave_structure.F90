@@ -774,7 +774,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
 !                  for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_wave_structure"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_wave_structure"  ! This module's name.
   integer :: isd, ied, jsd, jed, nz
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
@@ -785,9 +785,9 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
     return
   else ; allocate(CS) ; endif
 
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                  "X Location of generation site for internal tide", default=1.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                  "Y Location of generation site for internal tide", default=1.)
 
   CS%diag => diag
@@ -803,7 +803,7 @@ subroutine wave_structure_init(Time, G, param_file, diag, CS)
   allocate(CS%num_intfaces(isd:ied,jsd:jed))
 
   ! Write all relevant parameters to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
 end subroutine wave_structure_init
 

@@ -25,12 +25,12 @@ subroutine register_obsolete_diagnostics(param_file, diag)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "MOM_obsolete_diagnostics"  !< This module's name.
+  character(len=40)  :: mdl = "MOM_obsolete_diagnostics"  !< This module's name.
   logical :: foundEntry, causeFatal
   integer :: errType
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "OBSOLETE_DIAGNOSTIC_IS_FATAL", causeFatal,              &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "OBSOLETE_DIAGNOSTIC_IS_FATAL", causeFatal,              &
                  "If an obsolete diagnostic variable appears in the diag_table\n"//        &
                  "then cause a FATAL error rather than issue a WARNING.", default=.true.)
 

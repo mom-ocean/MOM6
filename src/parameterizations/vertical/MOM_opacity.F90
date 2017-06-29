@@ -497,7 +497,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=240) :: filename
   character(len=200) :: tmpstr
-  character(len=40)  :: mod = "MOM_opacity"
+  character(len=40)  :: mdl = "MOM_opacity"
   character(len=40)  :: bandnum, shortname
   character(len=200) :: longname
   character(len=40)  :: scheme_string
@@ -516,17 +516,17 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
   CS%tracer_flow_CSp => tracer_flow
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
 ! parameters for CHL_A routines
-  call get_param(param_file, mod, "VAR_PEN_SW", CS%var_pen_sw, &
+  call get_param(param_file, mdl, "VAR_PEN_SW", CS%var_pen_sw, &
                  "If true, use one of the CHL_A schemes specified by \n"//&
                  "OPACITY_SCHEME to determine the e-folding depth of \n"//&
                  "incoming short wave radiation.", default=.false.)
 
   CS%opacity_scheme = NO_SCHEME ; scheme_string = ""
   if (CS%var_pen_sw) then
-    call get_param(param_file, mod, "OPACITY_SCHEME", tmpstr, &
+    call get_param(param_file, mdl, "OPACITY_SCHEME", tmpstr, &
                  "This character string specifies how chlorophyll \n"//&
                  "concentrations are translated into opacities. Currently \n"//&
                  "valid options include:\n"//&
@@ -552,27 +552,27 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       CS%opacity_scheme = MANIZZA_05 ; scheme_string = MANIZZA_05_STRING
     endif
 
-    call get_param(param_file, mod, "CHL_FROM_FILE", CS%chl_from_file, &
+    call get_param(param_file, mdl, "CHL_FROM_FILE", CS%chl_from_file, &
                  "If true, chl_a is read from a file.", default=.true.)
     if (CS%chl_from_file) then
       call time_interp_external_init()
 
-      call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
-      call get_param(param_file, mod, "CHL_FILE", CS%chl_file, &
+      call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+      call get_param(param_file, mdl, "CHL_FILE", CS%chl_file, &
                  "CHL_FILE is the file containing chl_a concentrations in \n"//&
                  "the variable CHL_A. It is used when VAR_PEN_SW and \n"//&
                  "CHL_FROM_FILE are true.", fail_if_missing=.true.)
 
       filename = trim(slasher(inputdir))//trim(CS%chl_file)
-      call log_param(param_file, mod, "INPUTDIR/CHL_FILE", filename)
+      call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", filename)
       CS%sbc_chl = init_external_field(filename,'CHL_A',domain=G%Domain%mpp_domain)
     endif
 
-    call get_param(param_file, mod, "BLUE_FRAC_SW", CS%blue_frac, &
+    call get_param(param_file, mdl, "BLUE_FRAC_SW", CS%blue_frac, &
                  "The fraction of the penetrating shortwave radiation \n"//&
                  "that is in the blue band.", default=0.5, units="nondim")
   else
-    call get_param(param_file, mod, "EXP_OPACITY_SCHEME", tmpstr, &
+    call get_param(param_file, mdl, "EXP_OPACITY_SCHEME", tmpstr, &
                  "This character string specifies which exponential \n"//&
                  "opacity scheme to utilize. Currently \n"//&
                  "valid options include:\n"//&
@@ -589,17 +589,17 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       end select
       call MOM_mesg('opacity_init: opacity scheme set to "'//trim(tmpstr)//'".', 5)
     endif
-    call get_param(param_file, mod, "PEN_SW_SCALE", CS%pen_sw_scale, &
+    call get_param(param_file, mdl, "PEN_SW_SCALE", CS%pen_sw_scale, &
                  "The vertical absorption e-folding depth of the \n"//&
                  "penetrating shortwave radiation.", units="m", default=0.0)
     !BGR/ Added for opacity_scheme==double_exp read in 2nd exp-decay and fraction
     if (CS%Opacity_scheme == DOUBLE_EXP ) then
-      call get_param(param_file, mod, "PEN_SW_SCALE_2ND", CS%pen_sw_scale_2nd, &
+      call get_param(param_file, mdl, "PEN_SW_SCALE_2ND", CS%pen_sw_scale_2nd, &
                  "The (2nd) vertical absorption e-folding depth of the \n"//&
                  "penetrating shortwave radiation \n"//&
                  "(use if SW_EXP_MODE==double.)",&
                  units="m", default=0.0)
-      call get_param(param_file, mod, "SW_1ST_EXP_RATIO", CS%sw_1st_exp_ratio, &
+      call get_param(param_file, mdl, "SW_1ST_EXP_RATIO", CS%sw_1st_exp_ratio, &
                  "The fraction of 1st vertical absorption e-folding depth \n"//&
                  "penetrating shortwave radiation if SW_EXP_MODE==double.",&
                   units="m", default=0.0)
@@ -608,12 +608,12 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
       CS%pen_sw_scale_2nd = 0.0
       CS%sw_1st_exp_ratio = 1.0
     endif
-    call get_param(param_file, mod, "PEN_SW_FRAC", CS%pen_sw_frac, &
+    call get_param(param_file, mdl, "PEN_SW_FRAC", CS%pen_sw_frac, &
                  "The fraction of the shortwave radiation that penetrates \n"//&
                  "below the surface.", units="nondim", default=0.0)
 
   endif
-  call get_param(param_file, mod, "PEN_SW_NBANDS", optics%nbands, &
+  call get_param(param_file, mdl, "PEN_SW_NBANDS", optics%nbands, &
                  "The number of bands of penetrating shortwave radiation.", &
                  default=1)
   if (CS%Opacity_scheme == DOUBLE_EXP ) then
@@ -647,7 +647,7 @@ subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
     endif
   endif
 
-  call get_param(param_file, mod, "OPACITY_LAND_VALUE", CS%opacity_land_value, &
+  call get_param(param_file, mdl, "OPACITY_LAND_VALUE", CS%opacity_land_value, &
                  "The value to use for opacity over land. The default is \n"//&
                  "10 m-1 - a value for muddy water.", units="m-1", default=10.0)
 

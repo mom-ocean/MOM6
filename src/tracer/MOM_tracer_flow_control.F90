@@ -146,7 +146,7 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_flow_control" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_flow_control" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "call_tracer_register called with an associated "// &
@@ -155,41 +155,41 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "USE_USER_TRACER_EXAMPLE", &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "USE_USER_TRACER_EXAMPLE", &
                                 CS%use_USER_tracer_example, &
                  "If true, use the USER_tracer_example tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_DOME_TRACER", CS%use_DOME_tracer, &
+  call get_param(param_file, mdl, "USE_DOME_TRACER", CS%use_DOME_tracer, &
                  "If true, use the DOME_tracer tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_ISOMIP_TRACER", CS%use_ISOMIP_tracer, &
+  call get_param(param_file, mdl, "USE_ISOMIP_TRACER", CS%use_ISOMIP_tracer, &
                  "If true, use the ISOMIP_tracer tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_IDEAL_AGE_TRACER", CS%use_ideal_age, &
+  call get_param(param_file, mdl, "USE_IDEAL_AGE_TRACER", CS%use_ideal_age, &
                  "If true, use the ideal_age_example tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_REGIONAL_DYES", CS%use_regional_dyes, &
+  call get_param(param_file, mdl, "USE_REGIONAL_DYES", CS%use_regional_dyes, &
                  "If true, use the regional_dyes tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_OIL_TRACER", CS%use_oil, &
+  call get_param(param_file, mdl, "USE_OIL_TRACER", CS%use_oil, &
                  "If true, use the oil_tracer tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_ADVECTION_TEST_TRACER", CS%use_advection_test_tracer, &
+  call get_param(param_file, mdl, "USE_ADVECTION_TEST_TRACER", CS%use_advection_test_tracer, &
                  "If true, use the advection_test_tracer tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_OCMIP2_CFC", CS%use_OCMIP2_CFC, &
+  call get_param(param_file, mdl, "USE_OCMIP2_CFC", CS%use_OCMIP2_CFC, &
                  "If true, use the MOM_OCMIP2_CFC tracer package.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_generic_tracer", &
+  call get_param(param_file, mdl, "USE_generic_tracer", &
                                 CS%use_MOM_generic_tracer, &
                  "If true and _USE_GENERIC_TRACER is defined as a \n"//&
                  "preprocessor macro, use the MOM_generic_tracer packages.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_PSEUDO_SALT_TRACER", CS%use_pseudo_salt_tracer, &
+  call get_param(param_file, mdl, "USE_PSEUDO_SALT_TRACER", CS%use_pseudo_salt_tracer, &
                  "If true, use the pseudo salt tracer, typically run as a diagnostic.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_BOUNDARY_IMPULSE_TRACER", CS%use_boundary_impulse_tracer, &
+  call get_param(param_file, mdl, "USE_BOUNDARY_IMPULSE_TRACER", CS%use_boundary_impulse_tracer, &
                  "If true, use the boundary impulse tracer.", &
                  default=.false.)
 

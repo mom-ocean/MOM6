@@ -27,7 +27,7 @@ public DOME2d_initialize_thickness
 public DOME2d_initialize_temperature_salinity
 public DOME2d_initialize_sponges
 
-character(len=40) :: mod = "DOME2D_initialization" !< This module's name.
+character(len=40) :: mdl = "DOME2D_initialization" !< This module's name.
 
 contains
 
@@ -46,14 +46,14 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  'Width of shelf, as fraction of domain, in 2d DOME configuration.', &
                  units='nondim',default=0.1)
-  call get_param(param_file, mod, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
+  call get_param(param_file, mdl, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
                  'Width of deep ocean basin, as fraction of domain, in 2d DOME configuration.', &
                  units='nondim',default=0.3)
-  call get_param(param_file, mod, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  'Depth of shelf, as fraction of basin depth, in 2d DOME configuration.', &
                  units='nondim',default=0.2)
 
@@ -115,15 +115,15 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, DOME2d_initialize_thickness: setting thickness")
 
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                  default=1.e-3, do_not_log=.true.)
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  default=0.1, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
+  call get_param(param_file, mdl, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
                  default=0.3, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -243,21 +243,21 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  default=0.1, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
+  call get_param(param_file, mdl, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
                  default=0.3, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3', &
+  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity',units='1e-3', &
                 fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"T_REF",T_ref,'Refernce temperature',units='C', &
+  call get_param(param_file, mdl,"T_REF",T_ref,'Refernce temperature',units='C', &
                 fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range', &
+  call get_param(param_file, mdl,"S_RANGE",S_range,'Initial salinity range', &
                 units='1e-3', default=2.0, do_not_log=just_read)
-  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range', &
+  call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range', &
                 units='1e-3', default=0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -376,19 +376,19 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call get_param(param_file, mod, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
+  call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_TIME_SCALE", dome2d_west_sponge_time_scale, &
                  'The time-scale on the west edge of the domain for restoring T/S\n' //&
                  'in the sponge. If zero, the western sponge is disabled', &
                  units='s', default=0.)
-  call get_param(param_file, mod, "DOME2D_EAST_SPONGE_TIME_SCALE", dome2d_east_sponge_time_scale, &
+  call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_TIME_SCALE", dome2d_east_sponge_time_scale, &
                  'The time-scale on the east edge of the domain for restoring T/S\n' //&
                  'in the sponge. If zero, the eastern sponge is disabled', &
                  units='s', default=0.)
-  call get_param(param_file, mod, "DOME2D_WEST_SPONGE_WIDTH", dome2d_west_sponge_width, &
+  call get_param(param_file, mdl, "DOME2D_WEST_SPONGE_WIDTH", dome2d_west_sponge_width, &
                  'The fraction of the domain in which the western sponge for restoring T/S\n' //&
                  'is active.', &
                  units='nondim', default=0.1)
-  call get_param(param_file, mod, "DOME2D_EAST_SPONGE_WIDTH", dome2d_east_sponge_width, &
+  call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_WIDTH", dome2d_east_sponge_width, &
                  'The fraction of the domain in which the eastern sponge for restoring T/S\n' //&
                  'is active.', &
                  units='nondim', default=0.1)
@@ -401,16 +401,16 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
   if (associated(ACSp)) call MOM_error(FATAL, &
      "DOME2d_initialize_sponges called with an associated ALE-sponge control structure.")
 
-  call get_param(param_file, mod, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_WIDTH", dome2d_width_bay, &
                  default=0.1, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
+  call get_param(param_file, mdl, "DOME2D_BASIN_WIDTH", dome2d_width_bottom, &
                  default=0.3, do_not_log=.true.)
-  call get_param(param_file, mod, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
+  call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  default=0.2, do_not_log=.true.)
-  call get_param(param_file,mod,"S_REF",S_ref)
-  call get_param(param_file,mod,"T_REF",T_ref)
-  call get_param(param_file,mod,"S_RANGE",S_range,default=2.0)
-  call get_param(param_file,mod,"T_RANGE",T_range,default=0.0)
+  call get_param(param_file, mdl,"S_REF",S_ref)
+  call get_param(param_file, mdl,"T_REF",T_ref)
+  call get_param(param_file, mdl,"S_RANGE",S_range,default=2.0)
+  call get_param(param_file, mdl,"T_RANGE",T_range,default=0.0)
 
 
   ! Set the inverse damping rate as a function of position
