@@ -101,7 +101,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "boundary_impulse_tracer" ! This module's name.
+  character(len=40)  :: mdl = "boundary_impulse_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying boundary_impulse
@@ -119,13 +119,13 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "IMPULSE_SOURCE_TIME", CS%remaining_source_time, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "IMPULSE_SOURCE_TIME", CS%remaining_source_time, &
                  "Length of time for the boundary tracer to be injected\n"//&
                  "into the mixed layer. After this time has elapsed, the\n"//&
                  "surface becomes a sink for the boundary impulse tracer.", &
                  default=31536000.0)
-  call get_param(param_file, mod, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+  call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
                  "it is a fatal error if the tracers are not found in the \n"//&
@@ -139,7 +139,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     CS%tr_desc(m) = var_desc(trim("boundary_impulse"), "kg", &
-        "Boundary impulse tracer", caller=mod)
+        "Boundary impulse tracer", caller=mdl)
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_boundary_impulse_tracer")
     ! Register the tracer for the restart file.
@@ -160,7 +160,7 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   rem_time_ptr => CS%remaining_source_time
   call register_restart_field(rem_time_ptr,                                                                 &
                               var_desc(trim("bir_remain_time"), "s", "Remaining time to apply BIR source",  &
-                                             hor_grid = "1", z_grid = "1", caller=mod),                     &
+                                             hor_grid = "1", z_grid = "1", caller=mdl),                     &
                               .not. CS%tracers_may_reinit, restart_CS)
 
   CS%tr_Reg => tr_Reg

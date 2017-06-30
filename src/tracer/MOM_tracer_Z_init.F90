@@ -79,7 +79,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_Z_init" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_Z_init" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   real, allocatable, dimension(:,:,:) :: &
@@ -327,33 +327,33 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
 !                          missing value, and if so return true.
 !  (inout)   missing - The missing value, if one has been found.
 
-  character(len=32) :: mod
+  character(len=32) :: mdl
   character(len=120) :: dim_name, edge_name, tr_msg, dim_msg
   logical :: monotonic
   integer :: ncid, status, intid, tr_id, layid, k
   integer :: nz_edge, ndim, tr_dim_ids(NF90_MAX_VAR_DIMS)
 
-  mod = "MOM_tracer_Z_init read_Z_edges: "
+  mdl = "MOM_tracer_Z_init read_Z_edges: "
   tr_msg = trim(tr_name)//" in "//trim(filename)
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mod//" Difficulties opening "//trim(filename)//&
+    call MOM_error(WARNING,mdl//" Difficulties opening "//trim(filename)//&
         " - "//trim(NF90_STRERROR(status)))
     nz_out = -1 ; return
   endif
 
   status = NF90_INQ_VARID(ncid, tr_name, tr_id)
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mod//" Difficulties finding variable "//&
+    call MOM_error(WARNING,mdl//" Difficulties finding variable "//&
         trim(tr_msg)//" - "//trim(NF90_STRERROR(status)))
     nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
   endif
   status = NF90_INQUIRE_VARIABLE(ncid, tr_id, ndims=ndim, dimids=tr_dim_ids)
   if (status /= NF90_NOERR) then
-    call MOM_ERROR(WARNING,mod//" cannot inquire about "//trim(tr_msg))
+    call MOM_ERROR(WARNING,mdl//" cannot inquire about "//trim(tr_msg))
   elseif ((ndim < 3) .or. (ndim > 4)) then
-    call MOM_ERROR(WARNING,mod//" "//trim(tr_msg)//&
+    call MOM_ERROR(WARNING,mdl//" "//trim(tr_msg)//&
          " has too many or too few dimensions.")
     nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
   endif
@@ -367,28 +367,28 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   ! Get the axis name and length.
   status = NF90_INQUIRE_DIMENSION(ncid, tr_dim_ids(3), dim_name, len=nz_out)
   if (status /= NF90_NOERR) then
-    call MOM_ERROR(WARNING,mod//" cannot inquire about dimension(3) of "//&
+    call MOM_ERROR(WARNING,mdl//" cannot inquire about dimension(3) of "//&
                     trim(tr_msg))
   endif
 
   dim_msg = trim(dim_name)//" in "//trim(filename)
   status = NF90_INQ_VARID(ncid, dim_name, layid)
   if (status /= NF90_NOERR) then
-    call MOM_error(WARNING,mod//" Difficulties finding variable "//&
+    call MOM_error(WARNING,mdl//" Difficulties finding variable "//&
         trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
     nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
   endif
   ! Find out if the Z-axis has an edges attribute
   status = NF90_GET_ATT(ncid, layid, "edges", edge_name)
   if (status /= NF90_NOERR) then
-    call MOM_mesg(mod//" "//trim(dim_msg)//&
+    call MOM_mesg(mdl//" "//trim(dim_msg)//&
          " has no readable edges attribute - "//trim(NF90_STRERROR(status)))
     has_edges = .false.
   else
     has_edges = .true.
     status = NF90_INQ_VARID(ncid, edge_name, intid)
     if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mod//" Difficulties finding edge variable "//&
+      call MOM_error(WARNING,mdl//" Difficulties finding edge variable "//&
           trim(edge_name)//" in "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
       has_edges = .false.
     endif
@@ -404,21 +404,21 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
     dim_msg = trim(edge_name)//" in "//trim(filename)
     status = NF90_GET_VAR(ncid, intid, z_edges)
     if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mod//" Difficulties reading variable "//&
+      call MOM_error(WARNING,mdl//" Difficulties reading variable "//&
           trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
       nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
     endif
   else
     status = NF90_GET_VAR(ncid, layid, z_edges)
     if (status /= NF90_NOERR) then
-      call MOM_error(WARNING,mod//" Difficulties reading variable "//&
+      call MOM_error(WARNING,mdl//" Difficulties reading variable "//&
           trim(dim_msg)//" - "//trim(NF90_STRERROR(status)))
       nz_out = -1 ; status = NF90_CLOSE(ncid) ; return
     endif
   endif
 
   status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, mod// &
+  if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
     " Difficulties closing "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
 
   ! z_edges should be montonically decreasing with our sign convention.
@@ -430,7 +430,7 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
   monotonic = .true.
   do k=2,nz_edge ; if (z_edges(k) >= z_edges(k-1)) monotonic = .false. ; enddo
   if (.not.monotonic) &
-    call MOM_error(WARNING,mod//" "//trim(dim_msg)//" is not monotonic.")
+    call MOM_error(WARNING,mdl//" "//trim(dim_msg)//" is not monotonic.")
 
 end subroutine read_Z_edges
 

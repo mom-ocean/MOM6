@@ -72,7 +72,7 @@ type, public :: mixedlayer_restrat_CS ; private
 
 end type mixedlayer_restrat_CS
 
-character(len=40)  :: mod = "MOM_mixed_layer_restrat" !< This module's name.
+character(len=40)  :: mdl = "MOM_mixed_layer_restrat" !< This module's name.
 
 contains
 
@@ -751,8 +751,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   character(len=48)  :: flux_units
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              "If true, a density-gradient dependent re-stratifying \n"//&
              "flow is imposed in the mixed layer. Can be used in ALE mode\n"//&
              "without restriction but in layer mode can only be used if\n"//&
@@ -771,8 +771,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   CS%MLE_use_PBL_MLD = .false.
   CS%MLE_MLD_stretch = -9.e9
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
-  call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF", CS%ml_restrat_coef, &
              "A nondimensional coefficient that is proportional to \n"//&
              "the ratio of the deformation radius to the dominant \n"//&
              "lengthscale of the submesoscale mixed layer \n"//&
@@ -784,40 +784,40 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
   ! The old implementation only works for the layer model with nkml>0.
   if (GV%nkml==0) then
-    call get_param(param_file, mod, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
+    call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
              "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
              "of the MLE restratification parameterization.", units="nondim", default=0.0)
   ! We use GV%nkml to distinguish between the old and new implementation of MLE.
-    call get_param(param_file, mod, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
+    call get_param(param_file, mdl, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer\n"//&
              "depth provided by the active PBL parameterization. If false,\n"//&
              "MLE will estimate a MLD based on a density difference with the\n"//&
              "surface using the parameter MLE_DENSITY_DIFF.", default=.false.)
-    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+    call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
              "The time-scale for a running-mean filter applied to the mixed-layer\n"//&
              "depth used in the MLE restratification parameterization. When\n"//&
              "the MLD deepens below the current running-mean the running-mean\n"//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
-    call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+    call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
              "The time-scale for a running-mean filter applied to the filtered\n"//&
              "mixed-layer depth used in a second MLE restratification parameterization.\n"//&
              "When the MLD deepens below the current running-mean the running-mean\n"//&
              "is instantaneously set to the current MLD.", units="s", default=0.)
     if (.not. CS%MLE_use_PBL_MLD) then
-      call get_param(param_file, mod, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
+      call get_param(param_file, mdl, "MLE_DENSITY_DIFF", CS%MLE_density_diff, &
              "Density difference used to detect the mixed-layer\n"//&
              "depth used for the mixed-layer eddy parameterization\n"//&
              "by Fox-Kemper et al. (2010)", units="kg/m3", default=0.03)
     endif
-    call get_param(param_file, mod, "MLE_TAIL_DH", CS%MLE_tail_dh, &
+    call get_param(param_file, mdl, "MLE_TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification\n"//&
              "depth used for a smoother stream function at the base of\n"//&
              "the mixed-layer.", units="nondim", default=0.0)
-    call get_param(param_file, mod, "MLE_MLD_STRETCH", CS%MLE_MLD_stretch, &
+    call get_param(param_file, mdl, "MLE_MLD_STRETCH", CS%MLE_MLD_stretch, &
              "A scaling coefficient for stretching/shrinking the MLD\n"//&
              "used in the MLE scheme. This simply multiplies MLD wherever used.",&
              units="nondim", default=1.0)
-    call get_param(param_file, mod, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
+    call get_param(param_file, mdl, "MLE_USE_MLD_AVE_BUG", CS%MLE_use_MLD_ave_bug, &
              "If true, do not account for MLD mismatch to interface positions.",&
              default=.false.)
   endif
@@ -867,7 +867,7 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
   logical :: mixedlayer_restrat_init
 
   ! Check to see if this module will be used
-  call get_param(param_file, mod, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
+  call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
              default=.false., do_not_log=.true.)
   if (.not. mixedlayer_restrat_init) return
 
@@ -876,9 +876,9 @@ subroutine mixedlayer_restrat_register_restarts(HI, param_file, CS, restart_CS)
        "mixedlayer_restrat_register_restarts called with an associated control structure.")
   allocate(CS)
 
-  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
+  call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME", CS%MLE_MLD_decay_time, &
                  default=0., do_not_log=.true.)
-  call get_param(param_file, mod, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
+  call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
                  default=0., do_not_log=.true.)
   if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0.) then
     ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.

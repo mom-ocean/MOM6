@@ -583,7 +583,7 @@ subroutine register_restarts_dyn_unsplit(HI, GV, param_file, CS, restart_CS)
 !  (inout)   restart_CS - A pointer to the restart control structure.
 
   type(vardesc) :: vd
-  character(len=40)  :: mod = "MOM_dynamics_unsplit" ! This module's name.
+  character(len=40)  :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -695,7 +695,7 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
-  character(len=40) :: mod = "MOM_dynamics_unsplit" ! This module's name.
+  character(len=40) :: mdl = "MOM_dynamics_unsplit" ! This module's name.
   character(len=48) :: thickness_units, flux_units
   logical :: use_tides
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
@@ -713,9 +713,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "TIDES", use_tides, &
+  call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed)) ; CS%taux_bot(:,:) = 0.0

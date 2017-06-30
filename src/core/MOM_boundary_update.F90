@@ -43,7 +43,7 @@ end type update_OBC_CS
 
 integer :: id_clock_pass
 
-character(len=40)  :: mod = "MOM_boundary_update" ! This module's name.
+character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -56,7 +56,7 @@ subroutine call_OBC_register(param_file, CS, OBC)
   type(param_file_type),     intent(in) :: param_file !< Parameter file to parse
   type(update_OBC_CS),       pointer    :: CS         !< Control structure for OBCs
   type(ocean_OBC_type),      pointer    :: OBC        !< Open boundary structure
-  character(len=40)  :: mod = "MOM_boundary_update" ! This module's name.
+  character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "call_OBC_register called with an associated "// &
@@ -64,18 +64,18 @@ subroutine call_OBC_register(param_file, CS, OBC)
     return
   else ; allocate(CS) ; endif
 
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "USE_FILE_OBC", CS%use_files, &
+  call get_param(param_file, mdl, "USE_FILE_OBC", CS%use_files, &
                  "If true, use external files for the open boundary.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_TIDAL_BAY_OBC", CS%use_tidal_bay, &
+  call get_param(param_file, mdl, "USE_TIDAL_BAY_OBC", CS%use_tidal_bay, &
                  "If true, use the tidal_bay open boundary.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_KELVIN_WAVE_OBC", CS%use_Kelvin, &
+  call get_param(param_file, mdl, "USE_KELVIN_WAVE_OBC", CS%use_Kelvin, &
                  "If true, use the Kelvin wave open boundary.", &
                  default=.false.)
-  call get_param(param_file, mod, "USE_SHELFWAVE_OBC", CS%use_shelfwave, &
+  call get_param(param_file, mdl, "USE_SHELFWAVE_OBC", CS%use_shelfwave, &
                  "If true, use the shelfwave open boundary.", &
                  default=.false.)
 
@@ -110,7 +110,7 @@ subroutine update_OBC_data(OBC, G, GV, tv, h, CS, Time)
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mod = "update_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "update_OBC_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke

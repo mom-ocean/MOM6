@@ -41,7 +41,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mod = "SCM_CVmix_tests" ! This module's name.
+character(len=40)  :: mdl = "SCM_CVmix_tests" ! This module's name.
 
 contains
 
@@ -75,23 +75,23 @@ subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  if (.not.just_read) call log_version(param_file, mod, version)
-  call get_param(param_file,mod,"SCM_TEMP_MLD",UpperLayerTempMLD, &
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl,"SCM_TEMP_MLD",UpperLayerTempMLD, &
                  'Initial temp mixed layer depth', units='m',default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_SALT_MLD",UpperLayerSaltMLD, &
+  call get_param(param_file, mdl,"SCM_SALT_MLD",UpperLayerSaltMLD, &
                  'Initial salt mixed layer depth', units='m',default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L1_SALT",UpperLayerSalt, &
+  call get_param(param_file, mdl,"SCM_L1_SALT",UpperLayerSalt, &
                  'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L1_TEMP",UpperLayerTemp, &
+  call get_param(param_file, mdl,"SCM_L1_TEMP",UpperLayerTemp, &
                  'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L2_SALT",LowerLayerSalt, &
+  call get_param(param_file, mdl,"SCM_L2_SALT",LowerLayerSalt, &
                  'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L2_TEMP",LowerLayerTemp, &
+  call get_param(param_file, mdl,"SCM_L2_TEMP",LowerLayerTemp, &
                  'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
+  call get_param(param_file, mdl,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
                  units='C/m', default=0.00, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
+  call get_param(param_file, mdl,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
                  units='PPT/m', default=0.00, do_not_log=just_read)
 
@@ -137,47 +137,47 @@ subroutine SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SCM_USE_WIND_STRESS",              &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SCM_USE_WIND_STRESS",              &
                  CS%UseWindStress, "Wind Stress switch "//            &
                  "used in the SCM CVmix surface forcing.",            &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_HEAT_FLUX",                &
+  call get_param(param_file, mdl, "SCM_USE_HEAT_FLUX",                &
                  CS%UseHeatFlux, "Heat flux switch "//                &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_EVAPORATION",              &
+  call get_param(param_file, mdl, "SCM_USE_EVAPORATION",              &
                  CS%UseEvaporation, "Evaporation switch "//           &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_DIURNAL_SW",               &
+  call get_param(param_file, mdl, "SCM_USE_DIURNAL_SW",               &
                  CS%UseDiurnalSW, "Diurnal sw radation switch "//     &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
   if (CS%UseWindStress) then
-    call get_param(param_file, mod, "SCM_TAU_X",                      &
+    call get_param(param_file, mdl, "SCM_TAU_X",                      &
                  CS%tau_x, "Constant X-dir wind stress "//            &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='N/m2', fail_if_missing=.true.)
-    call get_param(param_file, mod, "SCM_TAU_Y",                      &
+    call get_param(param_file, mdl, "SCM_TAU_Y",                      &
                  CS%tau_y, "Constant y-dir wind stress "//            &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='N/m2', fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
-    call get_param(param_file, mod, "SCM_HEAT_FLUX",                  &
+    call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
                  CS%surf_HF, "Constant surface heat flux "//          &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m K/s', fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
-    call get_param(param_file, mod, "SCM_EVAPORATION",                &
+    call get_param(param_file, mdl, "SCM_EVAPORATION",                &
                  CS%surf_evap, "Constant surface evaporation "//      &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m/s', fail_if_missing=.true.)
   endif
   if (CS%UseDiurnalSW) then
-    call get_param(param_file, mod, "SCM_DIURNAL_SW_MAX",             &
+    call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
                  CS%Max_sw, "Maximum diurnal sw radiation "//         &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m K/s', fail_if_missing=.true.)

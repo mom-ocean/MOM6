@@ -39,7 +39,7 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mod = "SCM_idealized_hurricane" ! This module's name.
+character(len=40)  :: mdl = "SCM_idealized_hurricane" ! This module's name.
 
 contains
 
@@ -65,16 +65,16 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  if (.not.just_read) call log_version(param_file, mod, version)
-  call get_param(param_file,mod,"SCM_S_REF",S_ref, &
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl,"SCM_S_REF",S_ref, &
                  'Reference salinity', units='1e-3',default=35.0, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_SST_REF",SST_ref, &
+  call get_param(param_file, mdl,"SCM_SST_REF",SST_ref, &
                  'Reference surface temperature', units='C', &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_DTDZ",dTdZ,                         &
+  call get_param(param_file, mdl,"SCM_DTDZ",dTdZ,                         &
                  'Initial temperature stratification below mixed layer', &
                  units='C/m', fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"SCM_MLD",MLD, &
+  call get_param(param_file, mdl,"SCM_MLD",MLD, &
                  'Initial mixed layer depth', units='m', &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 
@@ -110,36 +110,36 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SCM_RHO_AIR", CS%rho_a,            &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SCM_RHO_AIR", CS%rho_a,            &
                  "Air density "//                                     &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='kg/m3', default=1.2)
-  call get_param(param_file, mod, "SCM_AMBIENT_PRESSURE", CS%p_n,     &
+  call get_param(param_file, mdl, "SCM_AMBIENT_PRESSURE", CS%p_n,     &
                  "Ambient pressure "//                                &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='Pa', default=101200.)
-  call get_param(param_file, mod, "SCM_CENTRAL_PRESSURE", CS%p_c,     &
+  call get_param(param_file, mdl, "SCM_CENTRAL_PRESSURE", CS%p_c,     &
                  "Central pressure "//                                &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='Pa', default=96800.)
-  call get_param(param_file, mod, "SCM_RADIUS_MAX_WINDS", CS%r_max,   &
+  call get_param(param_file, mdl, "SCM_RADIUS_MAX_WINDS", CS%r_max,   &
                  "Radius of maximum winds "//                         &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m', default=50.e3)
-  call get_param(param_file, mod, "SCM_MAX_WIND_SPEED", CS%U_max,     &
+  call get_param(param_file, mdl, "SCM_MAX_WIND_SPEED", CS%U_max,     &
                  "Maximum wind speed "//                              &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=65.)
-  call get_param(param_file, mod, "SCM_YY", CS%YY,     &
+  call get_param(param_file, mdl, "SCM_YY", CS%YY,     &
                  "Y distance of station "//                           &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m', default=50.e3)
-  call get_param(param_file, mod, "SCM_TRAN_SPEED", CS%TRAN_SPEED,     &
+  call get_param(param_file, mdl, "SCM_TRAN_SPEED", CS%TRAN_SPEED,     &
                  "Translation speed of hurricane"//                   &
                  "used in the SCM idealized hurricane wind profile.", &
                  units='m/s', default=5.0)
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
@@ -148,7 +148,7 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
   ! The following parameter is a model run-time parameter which is used
   ! and logged elsewhere and so should not be logged here. The default
   ! value should be consistent with the rest of the model.
-  call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+  call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.00, do_not_log=.true.)
 

@@ -37,11 +37,11 @@ subroutine MOM_shared_init_init(PF)
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
 
-  character(len=40)  :: mod = "MOM_shared_initialization" ! This module's name.
+  character(len=40)  :: mdl = "MOM_shared_initialization" ! This module's name.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  call log_version(PF, mod, version, &
+  call log_version(PF, mdl, version, &
    "Sharable code to initialize time-invariant fields, like bathymetry and Coriolis parameters.")
 
 end subroutine MOM_shared_init_init
@@ -57,11 +57,11 @@ subroutine MOM_initialize_rotation(f, G, PF)
 ! This is a separate subroutine so that it can be made public and shared with
 ! the ice-sheet code or other components.
 ! Set up the Coriolis parameter, f, either analytically or from file.
-  character(len=40)  :: mod = "MOM_initialize_rotation" ! This subroutine's name.
+  character(len=40)  :: mdl = "MOM_initialize_rotation" ! This subroutine's name.
   character(len=200) :: config
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
-  call get_param(PF, mod, "ROTATION", config, &
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+  call get_param(PF, mdl, "ROTATION", config, &
                  "This specifies how the Coriolis parameter is specified: \n"//&
                  " \t 2omegasinlat - Use twice the planetary rotation rate \n"//&
                  " \t\t times the sine of latitude.\n"//&
@@ -76,7 +76,7 @@ subroutine MOM_initialize_rotation(f, G, PF)
     case default ; call MOM_error(FATAL,"MOM_initialize: "// &
       "Unrecognized rotation setup "//trim(config))
   end select
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine MOM_initialize_rotation
 
 !> Calculates the components of grad f (Coriolis parameter)
@@ -135,21 +135,21 @@ subroutine initialize_topography_from_file(D, G, param_file)
   ! Local variables
   character(len=200) :: filename, topo_file, inputdir ! Strings for file/path
   character(len=200) :: topo_varname                  ! Variable name in file
-  character(len=40)  :: mod = "initialize_topography_from_file" ! This subroutine's name.
+  character(len=40)  :: mdl = "initialize_topography_from_file" ! This subroutine's name.
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-  call get_param(param_file, mod, "TOPO_FILE", topo_file, &
+  call get_param(param_file, mdl, "TOPO_FILE", topo_file, &
                  "The file from which the bathymetry is read.", &
                  default="topog.nc")
-  call get_param(param_file, mod, "TOPO_VARNAME", topo_varname, &
+  call get_param(param_file, mdl, "TOPO_VARNAME", topo_varname, &
                  "The name of the bathymetry variable in TOPO_FILE.", &
                  default="depth")
 
   filename = trim(inputdir)//trim(topo_file)
-  call log_param(param_file, mod, "INPUTDIR/TOPO_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/TOPO_FILE", filename)
 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
@@ -165,7 +165,7 @@ subroutine initialize_topography_from_file(D, G, param_file)
 
   call apply_topography_edits_from_file(D, G, param_file)
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_topography_from_file
 
 !> Applies a list of topography overrides read from a netcdf file
@@ -177,16 +177,16 @@ subroutine apply_topography_edits_from_file(D, G, param_file)
 
   ! Local variables
   character(len=200) :: topo_edits_file, inputdir ! Strings for file/path
-  character(len=40)  :: mod = "apply_topography_edits_from_file" ! This subroutine's name.
+  character(len=40)  :: mdl = "apply_topography_edits_from_file" ! This subroutine's name.
   integer :: n_edits, n, ashape(5), i, j, ncid, id, ncstatus, iid, jid, zid
   integer, dimension(:), allocatable :: ig, jg
   real, dimension(:), allocatable :: new_depth
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-  call get_param(param_file, mod, "TOPO_EDITS_FILE", topo_edits_file, &
+  call get_param(param_file, mdl, "TOPO_EDITS_FILE", topo_edits_file, &
                  "The file from which to read a list of i,j,z topography overrides.", &
                  default="")
 
@@ -276,7 +276,7 @@ subroutine apply_topography_edits_from_file(D, G, param_file)
 
   deallocate( ig, jg, new_depth )
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine apply_topography_edits_from_file
 
 !> initialize the bathymetry based on one of several named idealized configurations
@@ -306,38 +306,38 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
   real :: Dedge                ! The depth in m at the basin edge.  !
 ! real :: south_lat, west_lon, len_lon, len_lat, Rad_earth
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  character(len=40)  :: mod = "initialize_topography_named" ! This subroutine's name.
+  character(len=40)  :: mdl = "initialize_topography_named" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
   call MOM_mesg("  MOM_shared_initialization.F90, initialize_topography_named: "//&
                  "TOPO_CONFIG = "//trim(topog_config), 5)
 
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
   if (max_depth<=0.) call MOM_error(FATAL,"initialize_topography_named: "// &
       "MAXIMUM_DEPTH has a non-sensical value! Was it set?")
 
   if (trim(topog_config) /= "flat") then
-    call get_param(param_file, mod, "EDGE_DEPTH", Dedge, &
+    call get_param(param_file, mdl, "EDGE_DEPTH", Dedge, &
                    "The depth at the edge of one of the named topographies.", &
                    units="m", default=100.0)
-!   call get_param(param_file, mod, "SOUTHLAT", south_lat, &
+!   call get_param(param_file, mdl, "SOUTHLAT", south_lat, &
 !                  "The southern latitude of the domain.", units="degrees", &
 !                  fail_if_missing=.true.)
-!   call get_param(param_file, mod, "LENLAT", len_lat, &
+!   call get_param(param_file, mdl, "LENLAT", len_lat, &
 !                  "The latitudinal length of the domain.", units="degrees", &
 !                  fail_if_missing=.true.)
-!   call get_param(param_file, mod, "WESTLON", west_lon, &
+!   call get_param(param_file, mdl, "WESTLON", west_lon, &
 !                  "The western longitude of the domain.", units="degrees", &
 !                  default=0.0)
-!   call get_param(param_file, mod, "LENLON", len_lon, &
+!   call get_param(param_file, mdl, "LENLON", len_lon, &
 !                  "The longitudinal length of the domain.", units="degrees", &
 !                  fail_if_missing=.true.)
-!   call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
+!   call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
 !                  "The radius of the Earth.", units="m", default=6.378e6)
-    call get_param(param_file, mod, "TOPOG_SLOPE_SCALE", expdecay, &
+    call get_param(param_file, mdl, "TOPOG_SLOPE_SCALE", expdecay, &
                    "The exponential decay scale used in defining some of \n"//&
                    "the named topographies.", units="m", default=400000.0)
   endif
@@ -390,7 +390,7 @@ subroutine initialize_topography_named(D, G, param_file, topog_config, max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
   enddo ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_topography_named
 ! -----------------------------------------------------------------------------
 
@@ -410,18 +410,18 @@ subroutine limit_topography(D, G, param_file, max_depth)
 
 ! This subroutine ensures that    min_depth < D(x,y) < max_depth
   integer :: i, j
-  character(len=40)  :: mod = "limit_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "limit_topography" ! This subroutine's name.
   real :: min_depth, mask_depth
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "If MASKING_DEPTH is unspecified, then anything shallower than\n"//&
                  "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out.\n"//&
                  "If MASKING_DEPTH is specified, then all depths shallower than\n"//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
                  units="m", default=0.0)
-  call get_param(param_file, mod, "MASKING_DEPTH", mask_depth, &
+  call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask the ocean as land.", units="m", &
                  default=-9999.0, do_not_log=.true.)
 
@@ -440,7 +440,7 @@ subroutine limit_topography(D, G, param_file, max_depth)
     enddo ; enddo
   endif
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine limit_topography
 ! -----------------------------------------------------------------------------
 
@@ -454,11 +454,11 @@ subroutine set_rotation_planetary(f, G, param_file)
 !     (in)   param_file - parameter file type
 
 ! This subroutine sets up the Coriolis parameter for a sphere
-  character(len=30) :: mod = "set_rotation_planetary" ! This subroutine's name.
+  character(len=30) :: mdl = "set_rotation_planetary" ! This subroutine's name.
   integer :: I, J
   real    :: PI, omega
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
   call get_param(param_file, "set_rotation_planetary", "OMEGA", omega, &
                  "The rotation rate of the earth.", units="s-1", &
@@ -469,7 +469,7 @@ subroutine set_rotation_planetary(f, G, param_file)
     f(I,J) = ( 2.0 * omega ) * sin( ( PI * G%geoLatBu(I,J) ) / 180.)
   enddo ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_rotation_planetary
 ! -----------------------------------------------------------------------------
 
@@ -485,23 +485,23 @@ subroutine set_rotation_beta_plane(f, G, param_file)
 ! This subroutine sets up the Coriolis parameter for a beta-plane
   integer :: I, J
   real    :: f_0, beta, y_scl, Rad_Earth, PI
-  character(len=40)  :: mod = "set_rotation_beta_plane" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
   character(len=200) :: axis_units
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "F_0", f_0, &
+  call get_param(param_file, mdl, "F_0", f_0, &
                  "The reference value of the Coriolis parameter with the \n"//&
                  "betaplane option.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "BETA", beta, &
+  call get_param(param_file, mdl, "BETA", beta, &
                  "The northward gradient of the Coriolis parameter with \n"//&
                  "the betaplane option.", units="m-1 s-1", default=0.0)
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, default="degrees")
+  call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
   select case (axis_units(1:1))
     case ("d")
-      call get_param(param_file, mod, "RAD_EARTH", Rad_Earth, &
+      call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth, &
                    "The radius of the Earth.", units="m", default=6.378e6)
       y_scl = Rad_Earth/PI
     case ("k"); y_scl = 1.E3
@@ -515,7 +515,7 @@ subroutine set_rotation_beta_plane(f, G, param_file)
     f(I,J) = f_0 + beta * ( G%geoLatBu(I,J) * y_scl )
   enddo ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_rotation_beta_plane
 
 !> initialize_grid_rotation_angle initializes the arrays with the sine and
@@ -680,7 +680,7 @@ subroutine reset_face_lengths_file(G, param_file)
 ! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
-  character(len=40)  :: mod = "reset_face_lengths_file" ! This subroutine's name.
+  character(len=40)  :: mdl = "reset_face_lengths_file" ! This subroutine's name.
   character(len=256) :: mesg    ! Message for error messages.
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -688,15 +688,15 @@ subroutine reset_face_lengths_file(G, param_file)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   ! These checks apply regardless of the chosen option.
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "CHANNEL_WIDTH_FILE", chan_file, &
+  call get_param(param_file, mdl, "CHANNEL_WIDTH_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
                  default="ocean_geometry.nc")
-  call get_param(param_file,  mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(inputdir)//trim(chan_file)
-  call log_param(param_file, mod, "INPUTDIR/CHANNEL_WIDTH_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/CHANNEL_WIDTH_FILE", filename)
 
   if (is_root_pe()) then ; if (.not.file_exists(filename)) &
     call MOM_error(FATAL," reset_face_lengths_file: Unable to open "//&
@@ -734,7 +734,7 @@ subroutine reset_face_lengths_file(G, param_file)
     if (G%areaCv(i,J) > 0.0) G%IareaCv(i,J) = G%mask2dCv(i,J) / G%areaCv(i,J)
   enddo ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine reset_face_lengths_file
 ! -----------------------------------------------------------------------------
 
@@ -751,7 +751,7 @@ subroutine reset_face_lengths_list(G, param_file)
   character(len=120), pointer, dimension(:) :: lines => NULL()
   character(len=120) :: line
   character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
-  character(len=40)  :: mod = "reset_face_lengths_list" ! This subroutine's name.
+  character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
   real, pointer, dimension(:,:) :: &
     u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
   real, pointer, dimension(:) :: &
@@ -768,16 +768,16 @@ subroutine reset_face_lengths_list(G, param_file)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  call callTree_enter(trim(mod)//"(), MOM_shared_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
 
-  call get_param(param_file, mod, "CHANNEL_LIST_FILE", chan_file, &
+  call get_param(param_file, mdl, "CHANNEL_LIST_FILE", chan_file, &
                  "The file from which the list of narrowed channels is read.", &
                  default="MOM_channel_list")
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(inputdir)//trim(chan_file)
-  call log_param(param_file, mod, "INPUTDIR/CHANNEL_LIST_FILE", filename)
-  call get_param(param_file, mod, "CHANNEL_LIST_360_LON_CHECK", check_360, &
+  call log_param(param_file, mdl, "INPUTDIR/CHANNEL_LIST_FILE", filename)
+  call get_param(param_file, mdl, "CHANNEL_LIST_360_LON_CHECK", check_360, &
                  "If true, the channel configuration list works for any \n"//&
                  "longitudes in the range of -360 to 360.", default=.true.)
 
@@ -941,7 +941,7 @@ subroutine reset_face_lengths_list(G, param_file)
     deallocate(v_lat) ; deallocate(v_lon) ; deallocate(v_width)
   endif
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine reset_face_lengths_list
 ! -----------------------------------------------------------------------------
 
@@ -1078,7 +1078,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
 !                         model parameter values.
 !  (in)      directory - The directory into which to place the file.
   character(len=240) :: filepath
-  character(len=40)  :: mod = "write_ocean_geometry_file"
+  character(len=40)  :: mdl = "write_ocean_geometry_file"
   integer, parameter :: nFlds=23
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
@@ -1148,7 +1148,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   out_v(:,:) = 0.0
   out_q(:,:) = 0.0
 
-  call get_param(param_file, mod, "PARALLEL_RESTARTFILES", multiple_files, &
+  call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
                  "If true, each processor writes its own restart file, \n"//&
                  "otherwise a single restart file is generated", &
                  default=.false.)

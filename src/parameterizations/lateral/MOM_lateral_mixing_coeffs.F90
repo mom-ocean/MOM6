@@ -738,7 +738,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   logical :: Resoln_use_ebt, khth_use_ebt_struct
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_lateral_mixing_coeffs" ! This module's name.
+  character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -753,44 +753,44 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
   !   This first set of parameters are read into local variables first, in case
   ! the control structure should not be allocated.
-  call get_param(param_file, mod, "USE_VARIABLE_MIXING", use_variable_mixing,&
+  call get_param(param_file, mdl, "USE_VARIABLE_MIXING", use_variable_mixing,&
                  "If true, the variable mixing code will be called.  This \n"//&
                  "allows diagnostics to be created even if the scheme is \n"//&
                  "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, \n"//&
                  "this is set to true regardless of what is in the \n"//&
                  "parameter file.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KH", Resoln_scaled_Kh, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KH", Resoln_scaled_Kh, &
                  "If true, the Laplacian lateral viscosity is scaled away \n"//&
                  "when the first baroclinic deformation radius is well \n"//&
                  "resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KHTH", Resoln_scaled_KhTh, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", Resoln_scaled_KhTh, &
                  "If true, the interface depth diffusivity is scaled away \n"//&
                  "when the first baroclinic deformation radius is well \n"//&
                  "resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KHTR", Resoln_scaled_KhTr, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KHTR", Resoln_scaled_KhTr, &
                  "If true, the epipycnal tracer diffusivity is scaled \n"//&
                  "away when the first baroclinic deformation radius is \n"//&
                  "well resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_USE_EBT", Resoln_use_ebt, &
+  call get_param(param_file, mdl, "RESOLN_USE_EBT", Resoln_use_ebt, &
                  "If true, uses the equivalent barotropic wave speed instead\n"//&
                  "of first baroclinic wave for calculating the resolution fn.",&
                  default=.false.)
-  call get_param(param_file, mod, "KHTH_USE_EBT_STRUCT", khth_use_ebt_struct, &
+  call get_param(param_file, mdl, "KHTH_USE_EBT_STRUCT", khth_use_ebt_struct, &
                  "If true, uses the equivalent barotropic structure\n"//&
                  "as the vertical structure of thickness diffusivity.",&
                  default=.false.)
-  call get_param(param_file, mod, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
-  call get_param(param_file, mod, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the epipycnal tracer diffusivity", units="nondim", &
                  default=0.0)
-  call get_param(param_file, mod, "USE_STORED_SLOPES", use_stored_slopes,&
+  call get_param(param_file, mdl, "USE_STORED_SLOPES", use_stored_slopes,&
                  "If true, the isopycnal slopes are calculated once and\n"//&
                  "stored for re-use. This uses more memory but avoids calling\n"//&
                  "the equation of state more times than should be necessary.", &
@@ -808,12 +808,12 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%khth_use_ebt_struct = khth_use_ebt_struct
     CS%use_variable_mixing = use_variable_mixing
     CS%use_stored_slopes = use_stored_slopes
-    call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
+    call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   else
     return
   endif
   if (Resoln_use_ebt .or. khth_use_ebt_struct) then
-    call get_param(param_file, mod, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
+    call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification\n"//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
                  units='m', default=2000.)
@@ -822,7 +822,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
   if (use_variable_mixing) then
-    call get_param(param_file, mod, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
+    call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
           "If non-zero, is an upper bound on slopes used in the\n"//       &
           "Visbeck formula for diffusivity. This does not affect the\n"//  &
           "isopycnal slope calculation used within thickness diffusion.",  &
@@ -833,7 +833,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   if (CS%use_stored_slopes) then
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
-    call get_param(param_file, mod, "KD_SMOOTH", CS%kappa_smooth, &
+    call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
                  default=1.0e-6)
@@ -847,11 +847,11 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     call MOM_mesg("VarMix_init: memory allocated for use_variable_mixing", 5)
 
   ! More run-time parameters
-    call get_param(param_file, mod, "VARMIX_KTOP", CS%VarMix_Ktop, &
+    call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
                  "The layer number at which to start vertical integration \n"//&
                  "of S*N for purposes of finding the Eady growth rate.", &
                  units="nondim", default=2)
-    call get_param(param_file, mod, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
+    call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
                  "The fixed length scale in the Visbeck formula.", units="m", &
                  default=0.0)
 
@@ -901,36 +901,36 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
        'Ratio between deformation radius and grid spacing', 'Nondim')
 
-    call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
+    call get_param(param_file, mdl, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
                  "A coefficient that determines how KhTh is scaled away if \n"//&
                  "RESOLN_SCALED_... is true, as \n"//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).", &
                  units="nondim", default=1.0)
-    call get_param(param_file, mod, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
+    call get_param(param_file, mdl, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
                  "The power of dx/Ld in the Kh resolution function.  Any \n"//&
                  "positive integer may be used, although even integers \n"//&
                  "are more efficient to calculate.  Setting this greater \n"//&
                  "than 100 results in a step-function being used.", &
                  units="nondim", default=2)
-    call get_param(param_file, mod, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
+    call get_param(param_file, mdl, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
                  "A coefficient that determines how Kh is scaled away if \n"//&
                  "RESOLN_SCALED_... is true, as \n"//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).\n"//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_coef_khth)
-    call get_param(param_file, mod, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
+    call get_param(param_file, mdl, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
                  "The power of dx/Ld in the Kh resolution function.  Any \n"//&
                  "positive integer may be used, although even integers \n"//&
                  "are more efficient to calculate.  Setting this greater \n"//&
                  "than 100 results in a step-function being used.\n"//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_fn_power_khth)
-    call get_param(param_file, mod, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
+    call get_param(param_file, mdl, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
                  "If true, interpolate the resolution function to the \n"//&
                  "velocity points from the thickness points; otherwise \n"//&
                  "interpolate the wave speed and calculate the resolution \n"//&
                  "function independently at each point.", default=.true.)
-    call get_param(param_file, mod, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
+    call get_param(param_file, mdl, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
                  "If true, then retain a legacy bug in the calculation of weights \n"//&
                  "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
                  "for layer thicknesses. In addition, masking at coastlines was not \n"//&
@@ -944,7 +944,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
-    call get_param(param_file, mod, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
+    call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
                  "If true, uses Gill's definition of the baroclinic\n"//&
                  "equatorial deformation radius, otherwise, if false, use\n"//&
                  "Pedlosky's definition. These definitions differ by a factor\n"//&

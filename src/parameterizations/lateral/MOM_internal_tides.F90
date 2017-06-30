@@ -2330,7 +2330,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
+  character(len=40)  :: mdl = "MOM_internal_tides" ! This module's name.
   character(len=16), dimension(8) :: freq_name
   character(len=40)  :: var_name
   character(len=160) :: var_descript
@@ -2388,18 +2388,18 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   CS%Time => Time ! direct a pointer to the current model time target
 
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
                  CS%inputdir = slasher(CS%inputdir)
 
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "INTERNAL_TIDE_FREQS", num_freq, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_FREQS", num_freq, &
                  "The number of distinct internal tide frequency bands \n"//&
                  "that will be calculated.", default=1)
-  call get_param(param_file, mod, "INTERNAL_TIDE_MODES", num_mode, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_MODES", num_mode, &
                  "The number of distinct internal tide modes \n"//&
                  "that will be calculated.", default=1)
-  call get_param(param_file, mod, "INTERNAL_TIDE_ANGLES", num_angle, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ANGLES", num_angle, &
                  "The number of angular resolution bands for the internal \n"//&
                  "tide calculations.", default=24)
 
@@ -2429,17 +2429,17 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
                  "The rate at which internal tide energy is lost to the \n"//&
                  "interior ocean internal wave field.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
                  "If true, use the ratio of the open face lengths to the \n"//&
                  "tracer cell areas when estimating CFL numbers in the \n"//&
                  "internal tide code.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
                  "If true, internal tide ray-tracing advection uses a \n"//&
                  " corner-advection scheme rather than PPM.\n", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
                  "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
                  "(arithmetic mean) interpolation of the edge values. \n"//&
                  "This may give better PV conservation propterties. While \n"//&
@@ -2447,44 +2447,44 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                  "solver itself in the strongly advective limit, it does \n"//&
                  "not reduce the overall order of accuracy of the dynamic \n"//&
                  "core.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_UPWIND_1ST", CS%upwind_1st, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_UPWIND_1ST", CS%upwind_1st, &
                  "If true, the internal tide ray-tracing advection uses \n"//&
                  "1st-order upwind advection.  This scheme is highly \n"//&
                  "continuity solver.  This scheme is highly \n"//&
                  "diffusive but may be useful for debugging.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_BACKGROUND_DRAG", &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", &
                  CS%apply_background_drag, "If true, the internal tide \n"//&
                  "ray-tracing advection uses a background drag term as a sink.",&
                  default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
                  "If true, the internal tide ray-tracing advection uses \n"//&
                  "a quadratic bottom drag term as a sink.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
                  "If true, apply wave breaking as a sink.", &
                  default=.false.)
-  call get_param(param_file, mod, "CDRAG", CS%cdrag, &
+  call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of \n"//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
-  call get_param(param_file, mod, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
                  "If positive, only one angular band of the internal tides \n"//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
-  call get_param(param_file, mod, "USE_PPM_ANGULAR", CS%use_PPMang, &
+  call get_param(param_file, mdl, "USE_PPM_ANGULAR", CS%use_PPMang, &
                  "If true, use PPM for advection of energy in angular  \n"//&
                  "space.", default=.false.)
-  call get_param(param_file, mod, "GAMMA_ITIDES", CS%q_itides, &
+  call get_param(param_file, mdl, "GAMMA_ITIDES", CS%q_itides, &
                  "The fraction of the internal tidal energy that is \n"//&
                  "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
-    call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
+    call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
-  call get_param(param_file, mod, "KAPPA_H2_FACTOR", kappa_h2_factor, &
+  call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
                "A scaling factor for the roughness amplitude with n"//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
@@ -2506,12 +2506,12 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
-  call get_param(param_file, mod, "H2_FILE", h2_file, &
+  call get_param(param_file, mdl, "H2_FILE", h2_file, &
           "The path to the file containing the sub-grid-scale \n"//&
           "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
-  call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, timelevel=1)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
@@ -2523,12 +2523,12 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   enddo; enddo
 
   ! Read in prescribed coast/ridge/shelf angles from file
-  call get_param(param_file, mod, "REFL_ANGLE_FILE", refl_angle_file, &
+  call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
                "The path to the file containing the local angle of \n"//&
                "the coastline/ridge/shelf with respect to the equator.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_ANGLE_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
   call read_data(filename, 'refl_angle', CS%refl_angle, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2539,11 +2539,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   call pass_var(CS%refl_angle,G%domain)
 
   ! Read in prescribed partial reflection coefficients from file
-  call get_param(param_file, mod, "REFL_PREF_FILE", refl_pref_file, &
+  call get_param(param_file, mdl, "REFL_PREF_FILE", refl_pref_file, &
                "The path to the file containing the reflection coefficients.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_pref_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_PREF_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
   call read_data(filename, 'refl_pref', CS%refl_pref, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2563,11 +2563,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   enddo
 
   ! Read in double-reflective (ridge) tags from file
-  call get_param(param_file, mod, "REFL_DBL_FILE", refl_dbl_file, &
+  call get_param(param_file, mdl, "REFL_DBL_FILE", refl_dbl_file, &
                "The path to the file containing the double-reflective ridge tags.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_DBL_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
   call read_data(filename, 'refl_dbl', ridge_temp, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2581,11 +2581,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine
   ! defined in MOM_fixed_initialization.F90 (BDM)
-  !call get_param(param_file, mod, "LAND_MASK_FILE", land_mask_file, &
+  !call get_param(param_file, mdl, "LAND_MASK_FILE", land_mask_file, &
   !             "The path to the file containing the land mask.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(land_mask_file)
-  !call log_param(param_file, mod, "INPUTDIR/LAND_MASK_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/LAND_MASK_FILE", filename)
   !G%mask2dCu(:,:) = 1 ; G%mask2dCv(:,:) = 1 ; G%mask2dT(:,:)  = 1
   !call read_data(filename, 'land_mask', G%mask2dCu, &
   !               domain=G%domain%mpp_domain, timelevel=1)
@@ -2598,31 +2598,31 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   !call pass_var(G%mask2dT,G%domain)
 
   ! Read in prescribed partial east face blockages from file (if overwriting -BDM)
-  !call get_param(param_file, mod, "dy_Cu_FILE", dy_Cu_file, &
+  !call get_param(param_file, mdl, "dy_Cu_FILE", dy_Cu_file, &
   !             "The path to the file containing the east face blockages.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(dy_Cu_file)
-  !call log_param(param_file, mod, "INPUTDIR/dy_Cu_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/dy_Cu_FILE", filename)
   !G%dy_Cu(:,:) = 0.0
   !call read_data(filename, 'dy_Cu', G%dy_Cu, &
   !               domain=G%domain%mpp_domain, timelevel=1)
   !call pass_var(G%dy_Cu,G%domain)
 
   ! Read in prescribed partial north face blockages from file (if overwriting -BDM)
-  !call get_param(param_file, mod, "dx_Cv_FILE", dx_Cv_file, &
+  !call get_param(param_file, mdl, "dx_Cv_FILE", dx_Cv_file, &
   !             "The path to the file containing the north face blockages.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(dx_Cv_file)
-  !call log_param(param_file, mod, "INPUTDIR/dx_Cv_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/dx_Cv_FILE", filename)
   !G%dx_Cv(:,:) = 0.0
   !call read_data(filename, 'dx_Cv', G%dx_Cv, &
   !               domain=G%domain%mpp_domain, timelevel=1)
   !call pass_var(G%dx_Cv,G%domain)
 
   ! For debugging - delete later
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                 "X Location of generation site for internal tide", default=1.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                 "Y Location of generation site for internal tide", default=1.)
 
   ! Register maps of reflection parameters

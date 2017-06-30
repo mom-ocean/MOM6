@@ -24,7 +24,7 @@ implicit none ; private
 
 public MOM_initialize_coord
 
-character(len=40) :: mod = "MOM_coord_initialization" ! This module's name.
+character(len=40) :: mdl = "MOM_coord_initialization" ! This module's name.
 
 contains
 
@@ -52,11 +52,11 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
   nz = GV%ke
 
   call callTree_enter("MOM_initialize_coord(), MOM_coord_initialization.F90")
-  call log_version(PF, mod, version, "")
-  call get_param(PF, mod, "DEBUG", debug, default=.false.)
+  call log_version(PF, mdl, version, "")
+  call get_param(PF, mdl, "DEBUG", debug, default=.false.)
 
 ! Set-up the layer densities, GV%Rlay, and reduced gravities, GV%g_prime.
-  call get_param(PF, mod, "COORD_CONFIG", config, &
+  call get_param(PF, mdl, "COORD_CONFIG", config, &
                  "This specifies how layers are to be defined: \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
@@ -128,16 +128,16 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, param_file)
 ! reduced gravities (g).                                             !
   real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
-  character(len=40)  :: mod = "set_coord_from_gprime" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_gprime" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "GFS" , g_fs, &
+  call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
-  call get_param(param_file, mod, "GINT", g_int, &
+  call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true.)
 
@@ -146,7 +146,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, param_file)
   Rlay(1) = GV%Rho0
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 
 end subroutine set_coord_from_gprime
 ! -----------------------------------------------------------------------------
@@ -167,19 +167,19 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, param_file)
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   real :: Rlay_Ref! The surface layer's target density, in kg m-3.
   real :: RLay_range ! The range of densities, in kg m-3.
-  character(len=40)  :: mod = "set_coord_from_layer_density" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_layer_density" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
-  call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
+  call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for layer 1.", &
                  units="kg m-3", default=GV%Rho0)
-  call get_param(param_file, mod, "DENSITY_RANGE", Rlay_range, &
+  call get_param(param_file, mdl, "DENSITY_RANGE", Rlay_range, &
                  "The range of reference potential densities in the layers.", &
                  units="kg m-3", default=2.0)
 
@@ -193,7 +193,7 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, param_file)
      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_layer_density
 ! -----------------------------------------------------------------------------
 
@@ -219,21 +219,21 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, param_file, eqn_of_state, &
   real :: S_ref   ! Reference salinity
   real :: g_int   ! Reduced gravities across the internal interfaces, in m s-2.
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
-  character(len=40)  :: mod = "set_coord_from_TS_ref" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_TS_ref" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "T_REF", T_Ref, &
+  call get_param(param_file, mdl, "T_REF", T_Ref, &
                  "The initial temperature of the lightest layer.", units="degC", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "S_REF", S_Ref, &
+  call get_param(param_file, mdl, "S_REF", S_Ref, &
                  "The initial salinities.", units="PSU", default=35.0)
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
-  call get_param(param_file, mod, "GINT", g_int, &
+  call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true.)
                                       !
@@ -249,7 +249,7 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, param_file, eqn_of_state, &
 !    These statements set the layer densities.                       !
   do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_ref
 ! -----------------------------------------------------------------------------
 
@@ -274,22 +274,22 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
   real, dimension(GV%ke) :: T0, S0,  Pref
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   integer :: k, nz
-  character(len=40)  :: mod = "set_coord_from_TS_profile" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_TS_profile" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
-  call get_param(param_file, mod, "COORD_FILE", coord_file, &
+  call get_param(param_file, mdl, "COORD_FILE", coord_file, &
                  "The file from which the coordinate temperatures and \n"//&
                  "salnities are read.", fail_if_missing=.true.)
 
-  call get_param(param_file,  mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   filename = trim(slasher(inputdir))//trim(coord_file)
-  call log_param(param_file, mod, "INPUTDIR/COORD_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
 
   call read_data(filename,"PTEMP",T0(:))
   call read_data(filename,"SALT",S0(:))
@@ -302,7 +302,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
   call calculate_density(T0, S0, Pref, Rlay, 1,nz,eqn_of_state)
   do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_profile
 ! -----------------------------------------------------------------------------
 
@@ -334,38 +334,38 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   real :: a1, frac_dense, k_frac
   integer :: k, nz, k_light
-  character(len=40)  :: mod = "set_coord_from_TS_range" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_TS_range" ! This subroutine's name.
   character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "T_REF", T_Ref, &
+  call get_param(param_file, mdl, "T_REF", T_Ref, &
                  "The default initial temperatures.", units="degC", default=10.0)
-  call get_param(param_file, mod, "TS_RANGE_T_LIGHT", T_Light, &
+  call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_Light, &
                  "The initial temperature of the lightest layer when \n"//&
                  "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref)
-  call get_param(param_file, mod, "TS_RANGE_T_DENSE", T_Dense, &
+  call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_Dense, &
                  "The initial temperature of the densest layer when \n"//&
                  "COORD_CONFIG is set to ts_range.", units="degC", default=T_Ref)
 
-  call get_param(param_file, mod, "S_REF", S_Ref, &
+  call get_param(param_file, mdl, "S_REF", S_Ref, &
                  "The default initial salinities.", units="PSU", default=35.0)
-  call get_param(param_file, mod, "TS_RANGE_S_LIGHT", S_Light, &
+  call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_Light, &
                  "The initial lightest salinities when COORD_CONFIG \n"//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
-  call get_param(param_file, mod, "TS_RANGE_S_DENSE", S_Dense, &
+  call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_Dense, &
                  "The initial densest salinities when COORD_CONFIG \n"//&
                  "is set to ts_range.", default = S_Ref, units="PSU")
 
-  call get_param(param_file, mod, "TS_RANGE_RESOLN_RATIO", res_rat, &
+  call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
                  "The ratio of density space resolution in the densest \n"//&
                  "part of the range to that in the lightest part of the \n"//&
                  "range when COORD_CONFIG is set to ts_range. Values \n"//&
                  "greater than 1 increase the resolution of the denser water.",&
                  default=1.0, units="nondim")
 
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
 
@@ -390,7 +390,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
   enddo
   do k=2,nz; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)); enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_range
 ! -----------------------------------------------------------------------------
 
@@ -409,26 +409,26 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, param_file)
 ! reduced gravities (g).                                             !
   real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
   integer :: k, nz
-  character(len=40)  :: mod = "set_coord_from_file" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
   character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
-  call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-  call get_param(param_file, mod, "COORD_FILE", coord_file, &
+  call get_param(param_file, mdl, "COORD_FILE", coord_file, &
                  "The file from which the coordinate densities are read.", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "COORD_VAR", coord_var, &
+  call get_param(param_file, mdl, "COORD_VAR", coord_var, &
                  "The variable in COORD_FILE that is to be used for the \n"//&
                  "coordinate densities.", default="Layer")
   filename = trim(inputdir)//trim(coord_file)
-  call log_param(param_file, mod, "INPUTDIR/COORD_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_file: Unable to open "//trim(filename))
 
@@ -441,7 +441,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, param_file)
        trim(filename))
   endif ; enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_file
 ! -----------------------------------------------------------------------------
 
@@ -461,20 +461,20 @@ subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
 ! reference surface layer density and spanning a range of densities
 ! to the bottom defined by the parameter RLAY_RANGE
 ! (defaulting to 2.0 if not defined)
-  character(len=40)  :: mod = "set_coord_linear" ! This subroutine
+  character(len=40)  :: mdl = "set_coord_linear" ! This subroutine
   real :: Rlay_ref, Rlay_range, g_fs
   integer :: k, nz
   nz = GV%ke
 
-  call callTree_enter(trim(mod)//"(), MOM_coord_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
 
-  call get_param(param_file, mod, "LIGHTEST_DENSITY", Rlay_Ref, &
+  call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
                  "The reference potential density used for the surface \n"// &
                  "interface.", units="kg m-3", default=GV%Rho0)
-  call get_param(param_file, mod, "DENSITY_RANGE", Rlay_range, &
+  call get_param(param_file, mdl, "DENSITY_RANGE", Rlay_range, &
                  "The range of reference potential densities across \n"// &
                  "all interfaces.", units="kg m-3", default=2.0)
-  call get_param(param_file, mod, "GFS", g_fs, &
+  call get_param(param_file, mdl, "GFS", g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth)
 
@@ -490,7 +490,7 @@ subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
   enddo
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_linear
 
 ! -----------------------------------------------------------------------------

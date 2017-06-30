@@ -240,9 +240,9 @@ subroutine write_user_log(param_file)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "user_initialization" ! This module's name.
+  character(len=40)  :: mdl = "user_initialization" ! This module's name.
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mdl, version)
   first_call = .false.
 
 end subroutine write_user_log
