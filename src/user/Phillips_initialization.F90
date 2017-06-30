@@ -65,7 +65,7 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
   logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mod = "Phillips_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -75,14 +75,14 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  if (.not.just_read) call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &
                  default = 0.5, do_not_log=just_read)
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -145,19 +145,19 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_param
   real :: velocity_amplitude, pi
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mod = "Phillips_initialize_velocity" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  if (.not.just_read) call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
                  "The magnitude of the initial velocity perturbation.", &
                  units="m s-1", default=0.001, do_not_log=just_read)
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -229,7 +229,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
-  character(len=40)  :: mod = "Phillips_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   logical, save :: first_call = .true.
@@ -240,19 +240,19 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
   eta_im(:,:) = 0.0 ; Idamp_im(:) = 0.0
 
-  if (first_call) call log_version(param_file, mod, version)
+  if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.
-  call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
+  call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &
                  default = 0.5)
-  call get_param(param_file, mod, "SPONGE_RATE", damp_rate, &
+  call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", units="s-1", &
                  default = 1.0/(10.0*86400.0))
 
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.true.)
@@ -305,13 +305,13 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je
-  character(len=40)  :: mod = "Phillips_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_topography" ! This subroutine's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   PI = 4.0*atan(1.0)
 
-  call get_param(param_file, mod, "PHILLIPS_HTOP", Htop,             &
+  call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop,             &
                  "The maximum height of the topography.", units="m", &
                  fail_if_missing=.true.)
 ! Htop=0.375*G%max_depth     ! max height of topog. above max_depth

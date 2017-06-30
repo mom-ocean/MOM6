@@ -828,7 +828,7 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
 !                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_PointAccel" ! This module's name.
+  character(len=40)  :: mdl = "MOM_PointAccel" ! This module's name.
 
   if (associated(CS)) return
   allocate(CS)
@@ -842,18 +842,18 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%v_av => MIS%v_av; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "U_TRUNC_FILE", CS%u_trunc_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to the file where the accelerations \n"//&
                  "leading to zonal velocity truncations are written. \n"//&
                  "Leave this empty for efficiency if this diagnostic is \n"//&
                  "not needed.", default="")
-  call get_param(param_file, mod, "V_TRUNC_FILE", CS%v_trunc_file, &
+  call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to the file where the accelerations \n"//&
                  "leading to meridional velocity truncations are written. \n"//&
                  "Leave this empty for efficiency if this diagnostic is \n"//&
                  "not needed.", default="")
-  call get_param(param_file, mod, "MAX_TRUNC_FILE_SIZE_PER_PE", CS%max_writes, &
+  call get_param(param_file, mdl, "MAX_TRUNC_FILE_SIZE_PER_PE", CS%max_writes, &
                  "The maximum number of colums of truncations that any PE \n"//&
                  "will write out during a run.", default=50)
 
@@ -862,8 +862,8 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
       CS%u_trunc_file = trim(dirs%output_directory)//trim(CS%u_trunc_file)
     if (len_trim(CS%v_trunc_file) > 0) &
       CS%v_trunc_file = trim(dirs%output_directory)//trim(CS%v_trunc_file)
-    call log_param(param_file, mod, "output_dir/U_TRUNC_FILE", CS%u_trunc_file)
-    call log_param(param_file, mod, "output_dir/V_TRUNC_FILE", CS%v_trunc_file)
+    call log_param(param_file, mdl, "output_dir/U_TRUNC_FILE", CS%u_trunc_file)
+    call log_param(param_file, mdl, "output_dir/V_TRUNC_FILE", CS%v_trunc_file)
   endif
   CS%u_file = -1 ; CS%v_file = -1 ; CS%cols_written = 0
 

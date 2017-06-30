@@ -1091,7 +1091,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                       !! as monotonic for the purposes of calculating vertical modal structure.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_speed_init called with an "// &
@@ -1100,7 +1100,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   else ; allocate(CS) ; endif
 
   ! Write all relevant parameters to the model log.
-  call log_version(mod, version)
+  call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
 

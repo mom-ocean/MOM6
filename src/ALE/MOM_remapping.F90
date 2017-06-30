@@ -54,7 +54,7 @@ integer, parameter  :: INTEGRATION_PLM = 1  !< Piecewise Linear Method
 integer, parameter  :: INTEGRATION_PPM = 3  !< Piecewise Parabolic Method
 integer, parameter  :: INTEGRATION_PQM = 5  !< Piecewise Quartic Method
 
-character(len=40)  :: mod = "MOM_remapping" !< This module's name.
+character(len=40)  :: mdl = "MOM_remapping" !< This module's name.
 
 !> Documentation for external callers
 character(len=256), public :: remappingSchemesDoc = &

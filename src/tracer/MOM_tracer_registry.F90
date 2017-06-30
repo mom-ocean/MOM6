@@ -297,14 +297,14 @@ subroutine tracer_registry_init(param_file, Reg)
   integer, save :: init_calls = 0
 
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_registry" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(Reg)) then ; allocate(Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then

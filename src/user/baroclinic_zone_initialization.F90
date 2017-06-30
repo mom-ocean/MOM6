@@ -13,7 +13,7 @@ implicit none ; private
 #include "version_variable.h"
 
 ! Private (module-wise) parameters
-character(len=40) :: mod = "baroclinic_zone_initialization" !< This module's name.
+character(len=40) :: mdl = "baroclinic_zone_initialization" !< This module's name.
 
 public baroclinic_zone_init_temperature_salinity
 
@@ -40,25 +40,25 @@ subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (.not.just_read) &
-    call log_version(param_file, mod, version, 'Initialization of an analytic baroclinic zone')
+    call log_version(param_file, mdl, version, 'Initialization of an analytic baroclinic zone')
   call openParameterBlock(param_file,'BCZIC')
-  call get_param(param_file ,mod, "S_REF", S_ref, 'Reference salinity', units='ppt', &
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', units='ppt', &
                  default=35., do_not_log=just_read)
-  call get_param(param_file,mod,"DSDZ",dSdz,'Salinity stratification',units='ppt/m', &
+  call get_param(param_file, mdl,"DSDZ",dSdz,'Salinity stratification',units='ppt/m', &
                  default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"DELTA_S",delta_S,'Salinity difference across baroclinic zone', &
+  call get_param(param_file, mdl,"DELTA_S",delta_S,'Salinity difference across baroclinic zone', &
                  units='ppt', default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"DSDX",dSdx,'Meridional salinity difference', &
+  call get_param(param_file, mdl,"DSDX",dSdx,'Meridional salinity difference', &
                  units='ppt/'//trim(G%x_axis_units), default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C', &
+  call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C', &
                  default=10., do_not_log=just_read)
-  call get_param(param_file,mod,"DTDZ",dTdz,'Temperature stratification',units='C/m', &
+  call get_param(param_file, mdl,"DTDZ",dTdz,'Temperature stratification',units='C/m', &
                  default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"DELTA_T",delta_T,'Temperature difference across baroclinic zone', &
+  call get_param(param_file, mdl,"DELTA_T",delta_T,'Temperature difference across baroclinic zone', &
                  units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"DTDX",dTdx,'Meridional temperature difference', &
+  call get_param(param_file, mdl,"DTDX",dTdx,'Meridional temperature difference', &
                  units='C/'//trim(G%x_axis_units), default=0.0, do_not_log=just_read)
-  call get_param(param_file,mod,"L_ZONE",L_zone,'Width of baroclinic zone', &
+  call get_param(param_file, mdl,"L_ZONE",L_zone,'Width of baroclinic zone', &
                  units=G%x_axis_units, default=0.5*G%len_lat, do_not_log=just_read)
   call closeParameterBlock(param_file)
 

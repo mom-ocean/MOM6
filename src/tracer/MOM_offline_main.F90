@@ -1222,7 +1222,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
   type(ocean_grid_type),      pointer, intent(in)     :: G
   type(verticalGrid_type),    pointer, intent(in)     :: GV
 
-  character(len=40)  :: mod = "offline_transport"
+  character(len=40)  :: mdl = "offline_transport"
   character(len=20)  :: redistribute_method
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1240,35 +1240,35 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     return
   endif
   allocate(CS)
-  call log_version(param_file,mod,version, "This module allows for tracers to be run offline")
+  call log_version(param_file, mdl,version, "This module allows for tracers to be run offline")
 
   ! Parse MOM_input for offline control
-  call get_param(param_file, mod, "OFFLINEDIR", CS%offlinedir, &
+  call get_param(param_file, mdl, "OFFLINEDIR", CS%offlinedir, &
     "Input directory where the offline fields can be found",  fail_if_missing = .true.)
-  call get_param(param_file, mod, "OFF_SUM_FILE", CS%sum_file, &
+  call get_param(param_file, mdl, "OFF_SUM_FILE", CS%sum_file, &
     "Filename where the accumulated fields can be found",     fail_if_missing = .true.)
-  call get_param(param_file, mod, "OFF_SNAP_FILE", CS%snap_file, &
+  call get_param(param_file, mdl, "OFF_SNAP_FILE", CS%snap_file, &
     "Filename where snapshot fields can be found",            fail_if_missing = .true.)
-  call get_param(param_file, mod, "OFF_MEAN_FILE", CS%mean_file, &
+  call get_param(param_file, mdl, "OFF_MEAN_FILE", CS%mean_file, &
     "Filename where averaged fields can be found",            fail_if_missing = .true.)
-  call get_param(param_file, mod, "OFF_SURF_FILE", CS%surf_file, &
+  call get_param(param_file, mdl, "OFF_SURF_FILE", CS%surf_file, &
     "Filename where averaged fields can be found",            fail_if_missing = .true.)
-  call get_param(param_file, mod, "NUMTIME", CS%numtime, &
+  call get_param(param_file, mdl, "NUMTIME", CS%numtime, &
     "Number of timelevels in offline input files",            fail_if_missing = .true.)
-  call get_param(param_file, mod, "NK_INPUT", CS%nk_input, &
+  call get_param(param_file, mdl, "NK_INPUT", CS%nk_input, &
     "Number of vertical levels in offline input files", default = nz)
-  call get_param(param_file, mod, "DT_OFFLINE", CS%dt_offline, &
+  call get_param(param_file, mdl, "DT_OFFLINE", CS%dt_offline, &
     "Length of time between reading in of input fields",      fail_if_missing = .true.)
-  call get_param(param_file, mod, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
+  call get_param(param_file, mdl, "DT_OFFLINE_VERTICAL", CS%dt_offline_vertical, &
     "Length of the offline timestep for tracer column sources/sinks\n" //&
     "This should be set to the length of the coupling timestep for \n" //&
     "tracers which need shortwave fluxes",                    fail_if_missing = .true.)
-  call get_param(param_file, mod, "START_INDEX", CS%start_index, &
+  call get_param(param_file, mdl, "START_INDEX", CS%start_index, &
     "Which time index to start from", default=1)
-  call get_param(param_file, mod, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
+  call get_param(param_file, mdl, "FIELDS_ARE_OFFSET", CS%fields_are_offset, &
     "True if the time-averaged fields and snapshot fields\n"//&
     "are offset by one time level", default=.false.)
-  call get_param(param_file, mod, "REDISTRIBUTE_METHOD", redistribute_method, &
+  call get_param(param_file, mdl, "REDISTRIBUTE_METHOD", redistribute_method, &
     "Redistributes any remaining horizontal fluxes throughout\n"    //&
     "the rest of water column. Options are 'barotropic' which\n"    //&
     "evenly distributes flux throughout the entire water column,\n" //&
@@ -1276,39 +1276,39 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
     "each layer above, both which first applies upwards and then\n" //&
     "barotropic, and 'none' which does no redistribution", &
     default='barotropic')
-  call get_param(param_file, mod, "NUM_OFF_ITER", CS%num_off_iter, &
+  call get_param(param_file, mdl, "NUM_OFF_ITER", CS%num_off_iter, &
     "Number of iterations to subdivide the offline tracer advection and diffusion", &
     default = 60)
-  call get_param(param_file, mod, "OFF_ALE_MOD", CS%off_ale_mod, &
+  call get_param(param_file, mdl, "OFF_ALE_MOD", CS%off_ale_mod, &
     "Sets how many horizontal advection steps are taken before an ALE\n" //&
     "remapping step is done. 1 would be x->y->ALE, 2 would be"           //&
     "x->y->x->y->ALE", default = 1)
-  call get_param(param_file, mod, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
+  call get_param(param_file, mdl, "PRINT_ADV_OFFLINE", CS%print_adv_offline, &
     "Print diagnostic output every advection subiteration",default=.false.)
-  call get_param(param_file, mod, "SKIP_DIFFUSION_OFFLINE", CS%skip_diffusion, &
+  call get_param(param_file, mdl, "SKIP_DIFFUSION_OFFLINE", CS%skip_diffusion, &
     "Do not do horizontal diffusion",default=.false.)
-  call get_param(param_file, mod, "READ_SW", CS%read_sw, &
+  call get_param(param_file, mdl, "READ_SW", CS%read_sw, &
     "Read in shortwave radiation field instead of using values from the coupler"//&
     "when in offline tracer mode",default=.false.)
-  call get_param(param_file, mod, "READ_MLD", CS%read_mld, &
+  call get_param(param_file, mdl, "READ_MLD", CS%read_mld, &
     "Read in mixed layer depths for tracers which exchange with the atmosphere"//&
     "when in offline tracer mode",default=.false.)
-  call get_param(param_file, mod, "MLD_VAR_NAME", CS%mld_var_name, &
+  call get_param(param_file, mdl, "MLD_VAR_NAME", CS%mld_var_name, &
     "Name of the variable containing the depth of active mixing",&
     default='ePBL_h_ML')
-  call get_param(param_file, mod, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
+  call get_param(param_file, mdl, "OFFLINE_ADD_DIURNAL_SW", CS%diurnal_sw, &
     "Adds a synthetic diurnal cycle in the same way that the ice\n" // &
     "model would have when time-averaged fields of shortwave\n"    // &
     "radiation are read in", default=.false.)
-  call get_param(param_file, mod, "KD_MAX", CS%Kd_max, &
+  call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
     "The maximum permitted increment for the diapycnal \n"//&
     "diffusivity from TKE-based parameterizations, or a \n"//&
     "negative value for no limit.", units="m2 s-1", default=-1.0)
-  call get_param(param_file, mod, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
+  call get_param(param_file, mdl, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
     "How much remaining transport before the main offline advection\n"// &
     "is exited. The default value corresponds to about 1 meter of\n"  // &
     "difference in a grid cell", default = 1.e9)
-  call get_param(param_file, mod, "READ_ALL_TS_UVH", CS%read_all_ts_uvh,  &
+  call get_param(param_file, mdl, "READ_ALL_TS_UVH", CS%read_all_ts_uvh,  &
     "Reads all time levels of a subset of the fields necessary to run \n"    //      &
     "the model offline. This can require a large amount of memory\n"//      &
     "and will make initialization very slow. However, for offline\n"//      &

@@ -1673,7 +1673,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_thickness_diffuse" ! This module's name.
+  character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
   character(len=48)  :: flux_units
   real :: omega, strat_floor
 
@@ -1686,70 +1686,70 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "THICKNESSDIFFUSE", CS%thickness_diffuse, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "THICKNESSDIFFUSE", CS%thickness_diffuse, &
                  "If true, interface heights are diffused with a \n"//&
                  "coefficient of KHTH.", default=.false.)
-  call get_param(param_file, mod, "KHTH", CS%Khth, &
+  call get_param(param_file, mdl, "KHTH", CS%Khth, &
                  "The background horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
-  call get_param(param_file, mod, "KHTH_MIN", CS%KHTH_Min, &
+  call get_param(param_file, mdl, "KHTH_MIN", CS%KHTH_Min, &
                  "The minimum horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTH_MAX", CS%KHTH_Max, &
+  call get_param(param_file, mdl, "KHTH_MAX", CS%KHTH_Max, &
                  "The maximum horizontal thickness diffusivity.", &
                  units = "m2 s-1", default=0.0)
-  call get_param(param_file, mod, "KHTH_MAX_CFL", CS%max_Khth_CFL, &
+  call get_param(param_file, mdl, "KHTH_MAX_CFL", CS%max_Khth_CFL, &
                  "The maximum value of the local diffusive CFL ratio that \n"//&
                  "is permitted for the thickness diffusivity. 1.0 is the \n"//&
                  "marginally unstable value in a pure layered model, but \n"//&
                  "much smaller numbers (e.g. 0.1) seem to work better for \n"//&
                  "ALE-based models.", units = "nondimensional", default=0.8)
   if (CS%max_Khth_CFL < 0.0) CS%max_Khth_CFL = 0.0
-  call get_param(param_file, mod, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
+  call get_param(param_file, mdl, "DETANGLE_INTERFACES", CS%detangle_interfaces, &
                  "If defined add 3-d structured enhanced interface height \n"//&
                  "diffusivities to horizonally smooth jagged layers.", &
                  default=.false.)
   CS%detangle_time = 0.0
   if (CS%detangle_interfaces) &
-    call get_param(param_file, mod, "DETANGLE_TIMESCALE", CS%detangle_time, &
+    call get_param(param_file, mdl, "DETANGLE_TIMESCALE", CS%detangle_time, &
                  "A timescale over which maximally jagged grid-scale \n"//&
                  "thickness variations are suppressed.  This must be \n"//&
                  "longer than DT, or 0 to use DT.", units = "s", default=0.0)
-  call get_param(param_file, mod, "KHTH_SLOPE_MAX", CS%slope_max, &
+  call get_param(param_file, mdl, "KHTH_SLOPE_MAX", CS%slope_max, &
                  "A slope beyond which the calculated isopycnal slope is \n"//&
                  "not reliable and is scaled away.", units="nondim", default=0.01)
-  call get_param(param_file, mod, "KD_SMOOTH", CS%kappa_smooth, &
+  call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
                  default=1.0e-6)
-  call get_param(param_file, mod, "KHTH_USE_FGNV_STREAMFUNCTION", CS%use_FGNV_streamfn, &
+  call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", CS%use_FGNV_streamfn, &
                  "If true, use the streamfunction formulation of\n"//    &
                  "Ferrari et al., 2010, which effectively emphasizes\n"//&
                  "graver vertical modes by smoothing in the vertical.",  &
                  default=.false.)
-  call get_param(param_file, mod, "FGNV_FILTER_SCALE", CS%FGNV_scale, &
+  call get_param(param_file, mdl, "FGNV_FILTER_SCALE", CS%FGNV_scale, &
                  "A coefficient scaling the vertical smoothing term in the\n"//&
                  "Ferrari et al., 2010, streamfunction formulation.", &
                  default=1., do_not_log=.not.CS%use_FGNV_streamfn)
-  call get_param(param_file, mod, "FGNV_C_MIN", CS%FGNV_c_min, &
+  call get_param(param_file, mdl, "FGNV_C_MIN", CS%FGNV_c_min, &
                  "A minium wave speed used in the Ferrari et al., 2010,\n"//&
                  "streamfunction formulation.", &
                  default=0., units="m s-1", do_not_log=.not.CS%use_FGNV_streamfn)
-  call get_param(param_file, mod, "FGNV_STRAT_FLOOR", strat_floor, &
+  call get_param(param_file, mdl, "FGNV_STRAT_FLOOR", strat_floor, &
                  "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010,\n"//&
                  "streamfunction formulation, expressed as a fraction of planetary\n"//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
-  call get_param(param_file, mod, "OMEGA",omega, &
+  call get_param(param_file, mdl, "OMEGA",omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5, do_not_log=.not.CS%use_FGNV_streamfn)
   if (CS%use_FGNV_streamfn) CS%N2_floor = (strat_floor*omega)**2
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
 
 

@@ -56,7 +56,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   logical :: just_read
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "circle_obcs_initialization"   ! This module's name.
+  character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -66,9 +66,9 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   if (.not.just_read) &
     call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)
 
-  if (.not.just_read) call log_version(param_file, mod, version, "")
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Parameters read by cartesian grid initialization
-  call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
+  call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%x_axis_units, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)

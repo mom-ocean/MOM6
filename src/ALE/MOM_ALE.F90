@@ -142,7 +142,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
 
   ! Local variables
   real, dimension(:), allocatable :: dz
-  character(len=40)               :: mod = "MOM_ALE" ! This module's name.
+  character(len=40)               :: mdl = "MOM_ALE" ! This module's name.
   character(len=80)               :: string ! Temporary strings
   real                            :: filter_shallow_depth, filter_deep_depth
   logical                         :: check_reconstruction
@@ -163,7 +163,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
   ! should be used within boundary cells
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
+  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
                  CS%boundary_extrapolation_for_pressure, &
                  "When defined, the reconstruction is extrapolated\n"//&
                  "within boundary cells rather than assume PCM for the.\n"//&
@@ -172,7 +172,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  "boundary cells.", default=.true.)
 
   ! --- PRESSURE GRADIENT CALCULATION ---
-  call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
+  call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", &
                  CS%reconstructForPressure , &
                  "If True, use vertical reconstruction of T/S within\n"//&
                  "the integrals of teh FV pressure gradient calculation.\n"//&
@@ -180,14 +180,14 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  "By default, this is True when using ALE and False otherwise.", &
                  default=.true. )
 
-  call get_param(param_file, mod, "PRESSURE_RECONSTRUCTION_SCHEME", &
+  call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", &
                  CS%pressureReconstructionScheme, &
                  "Type of vertical reconstruction of T/S to use in integrals\n"//&
                  "within the FV pressure gradient calculation."//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
 
-  call get_param(param_file, mod, "REMAP_UV_USING_OLD_ALG", &
+  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
                  CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for\n"//&
                  "remapping u and v. If false, uses the new method that remaps\n"//&
@@ -195,23 +195,23 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  default=.true.)
 
   ! Initialize and configure regridding
-  call ALE_initRegridding( GV, max_depth, param_file, mod, CS%regridCS)
+  call ALE_initRegridding( GV, max_depth, param_file, mdl, CS%regridCS)
 
   ! Initialize and configure remapping
-  call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
+  call get_param(param_file, mdl, "REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used\n"//&
                  "for vertical remapping for all variables.\n"//&
                  "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
-  call get_param(param_file, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
+  call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
                  "If true, cell-by-cell reconstructions are checked for\n"//&
                  "consistency and if non-monotonicty or an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
-  call get_param(param_file, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
+  call get_param(param_file, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
                  "If true, the results of remapping are checked for\n"//&
                  "conservation and new extrema and if an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
-  call get_param(param_file, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+  call get_param(param_file, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
                  "If true, the values on the intermediate grid used for remapping\n"//&
                  "are forced to be bounded, which might not be the case due to\n"//&
                  "round off.", default=.false.)
@@ -221,29 +221,29 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell)
 
-  call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
+  call get_param(param_file, mdl, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
                  "If true, applies regridding and remapping immediately after\n"//&
                  "initialization so that the state is ALE consistent. This is a\n"//&
                  "legacy step and should not be needed if the initialization is\n"//&
                  "consistent with the coordinate mode.", default=.true.)
 
-  call get_param(param_file, mod, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
+  call get_param(param_file, mdl, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
                  "The time-scale used in blending between the current (old) grid\n"//&
                  "and the target (new) grid. A short time-scale favors the target\n"//&
                  "grid (0. or anything less than DT_THERM) has no memory of the old\n"//&
                  "grid. A very long time-scale makes the model more Lagrangian.", &
                  units="s", default=0.)
-  call get_param(param_file, mod, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
+  call get_param(param_file, mdl, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
                  "The depth above which no time-filtering is applied. Above this depth\n"//&
                  "final grid exactly matches the target (new) grid.", units="m", default=0.)
-  call get_param(param_file, mod, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
+  call get_param(param_file, mdl, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
                  "The depth below which full time-filtering is applied with time-scale\n"//&
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
                                       depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
-  call get_param(param_file, mod, "REGRID_USE_OLD_DIRECTION", local_logical, &
+  call get_param(param_file, mdl, "REGRID_USE_OLD_DIRECTION", local_logical, &
                  "If true, the regridding ntegrates upwards from the bottom for\n"//&
                  "interface positions, much as the main model does. If false\n"//&
                  "regridding integrates downward, consistant with the remapping\n"//&
@@ -1184,22 +1184,22 @@ integer function pressureReconstructionScheme(CS)
 end function pressureReconstructionScheme
 
 !> Initializes regridding for the main ALE algorithm
-subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
+subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
   real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
-  character(len=*),        intent(in)  :: mod        !< Name of calling module
+  character(len=*),        intent(in)  :: mdl        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
   ! Local variables
   character(len=30) :: coord_mode
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coord_mode, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", coord_mode, &
                  "Coordinate mode for vertical regridding.\n"//&
                  "Choose among the following possibilities:\n"//&
                  trim(regriddingCoordinateModeDoc), &
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
 
-  call initialize_regridding(regridCS, GV, max_depth, param_file, mod, coord_mode, '', '')
+  call initialize_regridding(regridCS, GV, max_depth, param_file, mdl, coord_mode, '', '')
 
 end subroutine ALE_initRegridding
 

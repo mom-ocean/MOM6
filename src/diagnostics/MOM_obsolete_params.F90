@@ -20,7 +20,7 @@ contains
 subroutine find_obsolete_params(param_file)
   type(param_file_type), intent(in) :: param_file !< Structure containing parameter file data.
   ! Local variables
-  character(len=40)  :: mod = "find_obsolete_params" ! This module's name.
+  character(len=40)  :: mdl = "find_obsolete_params" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: test_int
@@ -190,7 +190,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
 
   ! Write the file version number to the model log.
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mdl, version)
 
 end subroutine find_obsolete_params
 

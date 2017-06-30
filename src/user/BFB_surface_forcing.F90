@@ -264,7 +264,7 @@ subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "BFB_surface_forcing" ! This module's name.
+  character(len=40)  :: mdl = "BFB_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "BFB_surface_forcing_init called with an associated "// &
@@ -275,45 +275,45 @@ subroutine BFB_surface_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
 
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "LFR_SLAT", CS%lfrslat, &
+  call get_param(param_file, mdl, "LFR_SLAT", CS%lfrslat, &
                  "Southern latitude where the linear forcing ramp begins.", &
                  units="degrees", default = 20.0)
-  call get_param(param_file, mod, "LFR_NLAT", CS%lfrnlat, &
+  call get_param(param_file, mdl, "LFR_NLAT", CS%lfrnlat, &
                  "Northern latitude where the linear forcing ramp ends.", &
                  units="degrees", default = 40.0)
-  call get_param(param_file, mod, "SST_S", CS%SST_s, &
+  call get_param(param_file, mdl, "SST_S", CS%SST_s, &
                  "SST at the southern edge of the linear forcing ramp.", &
                  units="C", default = 20.0)
-  call get_param(param_file, mod, "SST_N", CS%SST_n, &
+  call get_param(param_file, mdl, "SST_N", CS%SST_n, &
                  "SST at the northern edge of the linear forcing ramp.", &
                  units="C", default = 10.0)
-  call get_param(param_file, mod, "DRHO_DT", CS%drho_dt, &
+  call get_param(param_file, mdl, "DRHO_DT", CS%drho_dt, &
                  "The rate of change of density with temperature.", &
                  units="kg m-3 K-1", default = -0.2)
-  call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+  call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
 
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &

@@ -44,7 +44,7 @@ implicit none ; private
 ! Private (module-wise) parameters
 ! -----------------------------------------------------------------------------
 
-character(len=40) :: mod = "ISOMIP_initialization" ! This module's name.
+character(len=40) :: mdl = "ISOMIP_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
@@ -87,7 +87,7 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ISOMIP_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "ISOMIP_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -95,10 +95,10 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  ISOMIP_initialization.F90, ISOMIP_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "ISOMIP_2D",is_2D,'If true, use a 2D setup.', default=.false.)
+  call get_param(param_file, mdl, "ISOMIP_2D",is_2D,'If true, use a 2D setup.', default=.false.)
 
 ! The following variables should be transformed into runtime parameters?
   bmax=720.0; b0=-150.0; b2=-728.8; b4=343.91; b6=-50.57
@@ -183,21 +183,21 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   if (.not.just_read) &
     call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
 
-  call get_param(param_file,mod,"MIN_THICKNESS",min_thickness, &
+  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                  'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read)
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
 
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
-    call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur, &
+    call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
                    'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
-    call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, &
+    call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
                    'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
-    call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, &
+    call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
                    'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
-    call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot,&
+    call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot,&
                    'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
 
     if (just_read) return ! All run-time parameters have been read, so return.
@@ -298,15 +298,15 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mod, "ISOMIP_T_SUR",t_sur, &
+  call get_param(param_file, mdl, "ISOMIP_T_SUR",t_sur, &
                  'Temperature at the surface (interface)', default=-1.9, do_not_log=just_read)
-  call get_param(param_file, mod, "ISOMIP_S_SUR", s_sur, &
+  call get_param(param_file, mdl, "ISOMIP_S_SUR", s_sur, &
                  'Salinity at the surface (interface)',  default=33.8, do_not_log=just_read)
-  call get_param(param_file, mod, "ISOMIP_T_BOT", t_bot, &
+  call get_param(param_file, mdl, "ISOMIP_T_BOT", t_bot, &
                  'Temperature at the bottom (interface)', default=-1.9, do_not_log=just_read)
-  call get_param(param_file, mod, "ISOMIP_S_BOT", s_bot, &
+  call get_param(param_file, mdl, "ISOMIP_S_BOT", s_bot, &
                  'Salinity at the bottom (interface)', default=34.55, do_not_log=just_read)
 
   call calculate_density(t_sur,s_sur,0.0,rho_sur,eqn_of_state)
@@ -336,20 +336,20 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       enddo ; enddo
 
     case ( REGRIDDING_LAYER )
-     call get_param(param_file, mod, "FIT_SALINITY", fit_salin, &
+     call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the \n"//&
                  "salinity; otherwise take salinity and fit temperature.", &
                  default=.false., do_not_log=just_read)
-     call get_param(param_file, mod, "DRHO_DS", drho_dS1, &
+     call get_param(param_file, mdl, "DRHO_DS", drho_dS1, &
                  "Partial derivative of density with salinity.", &
                  units="kg m-3 PSU-1", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mod, "DRHO_DT", drho_dT1, &
+     call get_param(param_file, mdl, "DRHO_DT", drho_dT1, &
                  "Partial derivative of density with temperature.", &
                  units="kg m-3 K-1", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mod, "T_REF", T_Ref, &
+     call get_param(param_file, mdl, "T_REF", T_Ref, &
                  "A reference temperature used in initialization.", &
                  units="degC", fail_if_missing=.not.just_read, do_not_log=just_read)
-     call get_param(param_file, mod, "S_REF", S_Ref, &
+     call get_param(param_file, mdl, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", units="PSU", &
                  default=35.0, do_not_log=just_read)
      if (just_read) return ! All run-time parameters have been read, so return.
@@ -468,39 +468,39 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
   character(len=40) :: verticalCoordinate, filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir
 
-  character(len=40)  :: mod = "ISOMIP_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mdl = "ISOMIP_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call get_param(PF,mod,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
+  call get_param(PF, mdl,"MIN_THICKNESS",min_thickness,'Minimum layer thickness',units='m',default=1.e-3)
 
-  call get_param(PF,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(PF, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
 
-  call get_param(PF, mod, "ISOMIP_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
+  call get_param(PF, mdl, "ISOMIP_TNUDG", TNUDG, 'Nudging time scale for sponge layers (days)',  default=0.0)
 
-  call get_param(PF, mod, "T_REF", t_ref, 'Reference temperature',  default=10.0,&
+  call get_param(PF, mdl, "T_REF", t_ref, 'Reference temperature',  default=10.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mod, "S_REF", s_ref, 'Reference salinity',  default=35.0,&
+  call get_param(PF, mdl, "S_REF", s_ref, 'Reference salinity',  default=35.0,&
                  do_not_log=.true.)
 
-  call get_param(PF, mod, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.',  default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_SUR_SPONGE", s_sur, 'Surface salinity in sponge layer.',  default=s_ref)
 
-  call get_param(PF, mod, "ISOMIP_S_BOT_SPONGE", s_bot, 'Bottom salinity in sponge layer.',  default=s_ref)
+  call get_param(PF, mdl, "ISOMIP_S_BOT_SPONGE", s_bot, 'Bottom salinity in sponge layer.',  default=s_ref)
 
-  call get_param(PF, mod, "ISOMIP_T_SUR_SPONGE", t_sur, 'Surface temperature in sponge layer.',  default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_SUR_SPONGE", t_sur, 'Surface temperature in sponge layer.',  default=t_ref)
 
-  call get_param(PF, mod, "ISOMIP_T_BOT_SPONGE", t_bot, 'Bottom temperature in sponge layer.',  default=t_ref)
+  call get_param(PF, mdl, "ISOMIP_T_BOT_SPONGE", t_bot, 'Bottom temperature in sponge layer.',  default=t_ref)
 
   T(:,:,:) = 0.0 ; S(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; RHO(:,:,:) = 0.0
   S_range = s_sur - s_bot
   T_range = t_sur - t_bot
 
 !   Set up sponges for ISOMIP configuration
-  call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
    if (associated(CSp)) call MOM_error(FATAL, &
@@ -630,23 +630,23 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
 
   else ! layer mode
        ! 1) Read eta, salt and temp from IC file
-       call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+       call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
        inputdir = slasher(inputdir)
        ! GM: get two different files, one with temp and one with salt values
        ! this is work around to avoid having wrong values near the surface
        ! because of the FIT_SALINITY option. To get salt values right in the
        ! sponge, FIT_SALINITY=False. The oposite is true for temp. One can
        ! combined the *correct* temp and salt values in one file instead.
-       call get_param(PF, mod, "ISOMIP_SPONGE_FILE", state_file, &
+       call get_param(PF, mdl, "ISOMIP_SPONGE_FILE", state_file, &
                  "The name of the file with temps., salts. and interfaces to \n"// &
                  " damp toward.", fail_if_missing=.true.)
-       call get_param(PF, mod, "SPONGE_PTEMP_VAR", temp_var, &
+       call get_param(PF, mdl, "SPONGE_PTEMP_VAR", temp_var, &
                  "The name of the potential temperature variable in \n"//&
                  "SPONGE_STATE_FILE.", default="Temp")
-       call get_param(PF, mod, "SPONGE_SALT_VAR", salt_var, &
+       call get_param(PF, mdl, "SPONGE_SALT_VAR", salt_var, &
                  "The name of the salinity variable in \n"//&
                  "SPONGE_STATE_FILE.", default="Salt")
-       call get_param(PF, mod, "SPONGE_ETA_VAR", eta_var, &
+       call get_param(PF, mdl, "SPONGE_ETA_VAR", eta_var, &
                  "The name of the interface height variable in \n"//&
                  "SPONGE_STATE_FILE.", default="eta")
 

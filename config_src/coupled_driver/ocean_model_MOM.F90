@@ -220,7 +220,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   real :: G_Earth     ! The gravitational acceleration in m s-2.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
+  character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
@@ -246,22 +246,22 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "RESTART_CONTROL", OS%Restart_control, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "RESTART_CONTROL", OS%Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
                  "(bit 0) for a non-time-stamped file.  A restart file \n"//&
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
-  call get_param(param_file, mod, "TIMEUNIT", Time_unit, &
+  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
                  "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
-  call get_param(param_file, mod, "ENERGYSAVEDAYS",OS%energysavedays, &
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS",OS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(0,days=1), timeunit=Time_unit)
 
-  call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
+  call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the surface velocity field that is \n"//&
                  "returned to the coupler.  Valid values include \n"//&
@@ -272,38 +272,38 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
 
-  call get_param(param_file, mod, "RESTORE_SALINITY",OS%restore_salinity, &
+  call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
                  "toward specified values.", default=.false.)
-  call get_param(param_file, mod, "RESTORE_TEMPERATURE",OS%restore_temp, &
+  call get_param(param_file, mdl, "RESTORE_TEMPERATURE",OS%restore_temp, &
                  "If true, the coupled driver will add a  \n"//&
                  "heat flux that drives sea-surface temperauture \n"//&
                  "toward specified values.", default=.false.)
-  call get_param(param_file, mod, "RHO_0", Rho0, &
+  call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "G_EARTH", G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file, mod, "ICE_SHELF",  OS%use_ice_shelf, &
+  call get_param(param_file, mdl, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
 
-  call get_param(param_file, mod, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
+  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
 
   if (OS%icebergs_apply_rigid_boundary) then
-    call get_param(param_file, mod, "KV_ICEBERG",  OS%kv_iceberg, &
+    call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
                  "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
-    call get_param(param_file, mod, "DENSITY_ICEBERGS",  OS%density_iceberg, &
+    call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
                   "A typical density of icebergs.", units="kg m-3", default=917.0)
-    call get_param(param_file, mod, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
+    call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
-    call get_param(param_file, mod, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
+    call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
                  "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
                   "below berg are set to zero. Not applied for negative \n"//&
                  " values.", units="non-dim", default=-1.0)
@@ -881,7 +881,7 @@ subroutine ocean_model_flux_init(OS)
 
   integer :: dummy
   character(len=128) :: default_ice_restart_file, default_ocean_restart_file
-  character(len=40)  :: mod = "ocean_model_flux_init"  ! This module's name.
+  character(len=40)  :: mdl = "ocean_model_flux_init"  ! This module's name.
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
   logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
@@ -891,9 +891,9 @@ subroutine ocean_model_flux_init(OS)
 
   call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
 
-  call get_param(param_file, mod, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
+  call get_param(param_file, mdl, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
                  default=.false., do_not_log=.true.)
-  call get_param(param_file, mod, "USE_generic_tracer", use_MOM_generic_tracer,&
+  call get_param(param_file, mdl, "USE_generic_tracer", use_MOM_generic_tracer,&
                  default=.false., do_not_log=.true.)
 
   call close_param_file(param_file, quiet_close=.true.)

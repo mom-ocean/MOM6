@@ -53,7 +53,7 @@ subroutine external_gwave_initialize_thickness(h, G, param_file, just_read_param
   real :: ssh_anomaly_height ! Vertical height of ssh anomaly
   real :: ssh_anomaly_width ! Lateral width of anomaly
   logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mod = "external_gwave_initialize_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "external_gwave_initialize_thickness" ! This subroutine's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
@@ -66,11 +66,11 @@ subroutine external_gwave_initialize_thickness(h, G, param_file, just_read_param
   if (.not.just_read) &
     call MOM_mesg("  external_gwave_initialization.F90, external_gwave_initialize_thickness: setting thickness", 5)
 
-  if (.not.just_read) call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
                  "The vertical displacement of the SSH anomaly. ", units="m", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file, mod, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
+  call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
                  "The lateral width of the SSH anomaly. ", units="coordinate", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
 

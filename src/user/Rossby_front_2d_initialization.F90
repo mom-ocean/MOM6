@@ -22,7 +22,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 ! Private (module-wise) parameters
-character(len=40) :: mod = "Rossby_front_2d_initialization" !< This module's name.
+character(len=40) :: mdl = "Rossby_front_2d_initialization" !< This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -61,15 +61,15 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
   if (.not.just_read) &
     call MOM_mesg("Rossby_front_2d_initialization.F90, Rossby_front_initialize_thickness: setting thickness")
 
-  if (.not.just_read) call log_version(param_file, mod, version, "")
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Read parameters needed to set thickness
-  call get_param(param_file, mod, "MIN_THICKNESS", min_thickness, &
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
                  'Minimum layer thickness',units='m',default=1.e-3, do_not_log=just_read)
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mod, "T_RANGE", T_range, 'Initial temperature range', &
+  call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -132,13 +132,13 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, &
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity', units='1e-3', &
+  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity', units='1e-3', &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',&
+  call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C',&
                  fail_if_missing=.not.just_read, do_not_log=just_read)
-  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',&
+  call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range',&
                  units='C', default=0.0, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -185,11 +185,11 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
-  call get_param(param_file, mod, "T_RANGE", T_range, 'Initial temperature range', &
+  call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

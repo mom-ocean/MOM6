@@ -141,7 +141,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   logical :: FAIL_IF_MISSING = .true.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tidal_forcing" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
@@ -155,8 +155,8 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "TIDES", tides, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "TIDES", tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
   if (.not.tides) return
@@ -181,43 +181,43 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     CS%cos_struct(i,j,3) = (0.5-1.5*sin(lat_rad(i,j))**2)
   enddo ; enddo
 
-  call get_param(param_file, mod, "TIDE_M2", use_M2, &
+  call get_param(param_file, mdl, "TIDE_M2", use_M2, &
                  "If true, apply tidal momentum forcing at the M2 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_S2", use_S2, &
+  call get_param(param_file, mdl, "TIDE_S2", use_S2, &
                  "If true, apply tidal momentum forcing at the S2 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_N2", use_N2, &
+  call get_param(param_file, mdl, "TIDE_N2", use_N2, &
                  "If true, apply tidal momentum forcing at the N2 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_K2", use_K2, &
+  call get_param(param_file, mdl, "TIDE_K2", use_K2, &
                  "If true, apply tidal momentum forcing at the K2 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_K1", use_K1, &
+  call get_param(param_file, mdl, "TIDE_K1", use_K1, &
                  "If true, apply tidal momentum forcing at the K1 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_O1", use_O1, &
+  call get_param(param_file, mdl, "TIDE_O1", use_O1, &
                  "If true, apply tidal momentum forcing at the O1 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_P1", use_P1, &
+  call get_param(param_file, mdl, "TIDE_P1", use_P1, &
                  "If true, apply tidal momentum forcing at the P1 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_Q1", use_Q1, &
+  call get_param(param_file, mdl, "TIDE_Q1", use_Q1, &
                  "If true, apply tidal momentum forcing at the Q1 \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_MF", use_MF, &
+  call get_param(param_file, mdl, "TIDE_MF", use_MF, &
                  "If true, apply tidal momentum forcing at the MF \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
-  call get_param(param_file, mod, "TIDE_MM", use_MM, &
+  call get_param(param_file, mdl, "TIDE_MM", use_MM, &
                  "If true, apply tidal momentum forcing at the MM \n"//&
                  "frequency. This is only used if TIDES is true.", &
                  default=.false.)
@@ -237,21 +237,21 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
     return
   endif
 
-  call get_param(param_file, mod, "TIDAL_SAL_FROM_FILE", CS%tidal_sal_from_file, &
+  call get_param(param_file, mdl, "TIDAL_SAL_FROM_FILE", CS%tidal_sal_from_file, &
                  "If true, read the tidal self-attraction and loading \n"//&
                  "from input files, specified by TIDAL_INPUT_FILE. \n"//&
                  "This is only used if TIDES is true.", default=.false.)
-  call get_param(param_file, mod, "USE_PREVIOUS_TIDES", CS%use_prev_tides, &
+  call get_param(param_file, mdl, "USE_PREVIOUS_TIDES", CS%use_prev_tides, &
                  "If true, use the SAL from the previous iteration of the \n"//&
                  "tides to facilitate convergent iteration. \n"//&
                  "This is only used if TIDES is true.", default=.false.)
-  call get_param(param_file, mod, "TIDE_USE_SAL_SCALAR", CS%use_sal_scalar, &
+  call get_param(param_file, mdl, "TIDE_USE_SAL_SCALAR", CS%use_sal_scalar, &
                  "If true and TIDES is true, use the scalar approximation \n"//&
                  "when calculating self-attraction and loading.", &
                  default=.not.CS%tidal_sal_from_file)
   ! If it is being used, sal_scalar MUST be specified in param_file.
   if (CS%use_sal_scalar .or. CS%use_prev_tides) &
-    call get_param(param_file, mod, "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar, &
+    call get_param(param_file, mdl, "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar, &
                  "The constant of proportionality between sea surface \n"//&
                  "height (really it should be bottom pressure) anomalies \n"//&
                  "and bottom geopotential anomalies. This is only used if \n"//&
@@ -267,7 +267,7 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   do c=1,4*MAX_CONSTITUENTS ; tidal_input_files(c) = "" ; enddo
 
   if (CS%tidal_sal_from_file .or. CS%use_prev_tides) then
-    call get_param(param_file, mod, "TIDAL_INPUT_FILE", tidal_input_files, &
+    call get_param(param_file, mdl, "TIDAL_INPUT_FILE", tidal_input_files, &
                    "A list of input files for tidal information.",         &
                    default = "", fail_if_missing=.true.)
   endif
@@ -348,15 +348,15 @@ subroutine tidal_forcing_init(Time, G, param_file, CS)
   ! frequency, amplitude and initial phase of each constituent, and log the
   ! values that are actually used.
   do c=1,nc
-    call get_param(param_file, mod, "TIDE_"//trim(CS%const_name(c))//"_FREQ", CS%freq(c), &
+    call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_FREQ", CS%freq(c), &
                    "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. \n"//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="s-1", default=freq_def(c))
-    call get_param(param_file, mod, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
+    call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
                    "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. \n"//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="m", default=amp_def(c))
-    call get_param(param_file, mod, "TIDE_"//trim(CS%const_name(c))//"_PHASE_T0", CS%phase0(c), &
+    call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_PHASE_T0", CS%phase0(c), &
                    "Phase of the "//trim(CS%const_name(c))//" tidal constituent at time 0. \n"//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true.", units="radians", default=phase0_def(c))
