@@ -189,7 +189,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   if (do_online) then
       if (use_VarMix) then
     !$OMP parallel default(none) shared(is,ie,js,je,CS,VarMix,MEKE,Resoln_scaled, &
-    !$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y)                        &
+    !$OMP                               Kh_u,Kh_v,khdt_x,dt,G,khdt_y,use_Eady)    &
     !$OMP                       private(Kh_loc,Rd_dx)
     !$OMP do
         do j=js,je ; do I=is-1,ie
