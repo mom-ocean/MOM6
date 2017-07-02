@@ -1717,7 +1717,6 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
   type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
   type(forcing_diags),   intent(inout) :: handles  !< diagnostic id for diag_manager
 
-  real, dimension(SZI_(G),SZJ_(G)) :: sum
   integer :: i,j,is,ie,js,je
 
   call cpu_clock_begin(handles%id_clock_forcing)
@@ -1759,7 +1758,7 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
   type(forcing_diags),   intent(inout) :: handles   !< diagnostic ids
 
   ! local
-  real, dimension(SZI_(G),SZJ_(G)) :: sum
+  real, dimension(SZI_(G),SZJ_(G)) :: res
   real :: total_transport ! for diagnosing integrated boundary transport
   real :: ave_flux        ! for diagnosing averaged   boundary flux
   real :: C_p             ! seawater heat capacity (J/(deg K * kg))
@@ -1781,35 +1780,35 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     ! post the diagnostics for surface mass fluxes ==================================
 
     if (handles%id_prcme > 0 .or. handles%id_total_prcme > 0 .or. handles%id_prcme_ga > 0) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%lprec))       sum(:,:) = sum(:,:)+fluxes%lprec(:,:)
-      if (ASSOCIATED(fluxes%fprec))       sum(:,:) = sum(:,:)+fluxes%fprec(:,:)
+      res(:,:) = 0.0
+      if (ASSOCIATED(fluxes%lprec))       res(:,:) = res(:,:)+fluxes%lprec(:,:)
+      if (ASSOCIATED(fluxes%fprec))       res(:,:) = res(:,:)+fluxes%fprec(:,:)
       ! fluxes%cond is not needed because it is derived from %evap > 0
-      if (ASSOCIATED(fluxes%evap))        sum(:,:) = sum(:,:)+fluxes%evap(:,:)
-      if (ASSOCIATED(fluxes%lrunoff))     sum(:,:) = sum(:,:)+fluxes%lrunoff(:,:)
-      if (ASSOCIATED(fluxes%frunoff))     sum(:,:) = sum(:,:)+fluxes%frunoff(:,:)
-      if (ASSOCIATED(fluxes%vprec))       sum(:,:) = sum(:,:)+fluxes%vprec(:,:)
-      call post_data(handles%id_prcme, sum, diag)
+      if (ASSOCIATED(fluxes%evap))        res(:,:) = res(:,:)+fluxes%evap(:,:)
+      if (ASSOCIATED(fluxes%lrunoff))     res(:,:) = res(:,:)+fluxes%lrunoff(:,:)
+      if (ASSOCIATED(fluxes%frunoff))     res(:,:) = res(:,:)+fluxes%frunoff(:,:)
+      if (ASSOCIATED(fluxes%vprec))       res(:,:) = res(:,:)+fluxes%vprec(:,:)
+      call post_data(handles%id_prcme, res, diag)
       if(handles%id_total_prcme > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_prcme, total_transport, diag)
       endif
       if(handles%id_prcme_ga > 0) then
-        ave_flux = global_area_mean(sum,G)
+        ave_flux = global_area_mean(res,G)
         call post_data(handles%id_prcme_ga, ave_flux, diag)
       endif
     endif
 
     if(handles%id_net_massout > 0 .or. handles%id_total_net_massout > 0) then
-      sum(:,:) = 0.0
+      res(:,:) = 0.0
       do j=js,je ; do i=is,ie
-        if(fluxes%lprec(i,j) < 0.0) sum(i,j) = sum(i,j) + fluxes%lprec(i,j)
-        if(fluxes%vprec(i,j) < 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
-        if(fluxes%evap(i,j)  < 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
+        if(fluxes%lprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
+        if(fluxes%vprec(i,j) < 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
+        if(fluxes%evap(i,j)  < 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massout, sum, diag)
+      call post_data(handles%id_net_massout, res, diag)
       if(handles%id_total_net_massout > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massout, total_transport, diag)
       endif
     endif
@@ -1817,17 +1816,17 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if(handles%id_massout_flux > 0) call post_data(handles%id_massout_flux,fluxes%netMassOut,diag)
 
     if(handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
-      sum(:,:) = 0.0
+      res(:,:) = 0.0
       do j=js,je ; do i=is,ie
-        sum(i,j) = sum(i,j) + fluxes%fprec(i,j) + fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)
-        if(fluxes%lprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%lprec(i,j)
-        if(fluxes%vprec(i,j) > 0.0) sum(i,j) = sum(i,j) + fluxes%vprec(i,j)
+        res(i,j) = res(i,j) + fluxes%fprec(i,j) + fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)
+        if(fluxes%lprec(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%lprec(i,j)
+        if(fluxes%vprec(i,j) > 0.0) res(i,j) = res(i,j) + fluxes%vprec(i,j)
         ! fluxes%cond is not needed because it is derived from %evap > 0
-        if(fluxes%evap(i,j)  > 0.0) sum(i,j) = sum(i,j) + fluxes%evap(i,j)
+        if(fluxes%evap(i,j)  > 0.0) res(i,j) = res(i,j) + fluxes%evap(i,j)
       enddo ; enddo
-      call post_data(handles%id_net_massin, sum, diag)
+      call post_data(handles%id_net_massin, res, diag)
       if(handles%id_total_net_massin > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_massin, total_transport, diag)
       endif
     endif
@@ -1846,17 +1845,17 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     endif
 
     if ((handles%id_precip > 0) .and. ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
-      sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
-      call post_data(handles%id_precip, sum, diag)
+      res(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
+      call post_data(handles%id_precip, res, diag)
     endif
     if ((handles%id_total_precip > 0) .and. ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
-      sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
-      total_transport = global_area_integral(sum,G)
+      res(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
+      total_transport = global_area_integral(res,G)
       call post_data(handles%id_total_precip, total_transport, diag)
     endif
     if ((handles%id_precip_ga > 0) .and. ASSOCIATED(fluxes%lprec) .and. ASSOCIATED(fluxes%fprec)) then
-      sum(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
-      ave_flux = global_area_mean(sum,G)
+      res(:,:) = fluxes%lprec(:,:) + fluxes%fprec(:,:)
+      ave_flux = global_area_mean(res,G)
       call post_data(handles%id_precip_ga, ave_flux, diag)
     endif
 
@@ -1867,8 +1866,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_lprec, total_transport, diag)
     endif
     if ((handles%id_lprec_ga > 0) .and. ASSOCIATED(fluxes%lprec)) then
-      sum(:,:) = fluxes%lprec(:,:)
-      ave_flux = global_area_mean(sum,G)
+      res(:,:) = fluxes%lprec(:,:)
+      ave_flux = global_area_mean(res,G)
       call post_data(handles%id_lprec_ga, ave_flux, diag)
     endif
 
@@ -1879,8 +1878,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_fprec, total_transport, diag)
     endif
     if ((handles%id_fprec_ga > 0) .and. ASSOCIATED(fluxes%fprec)) then
-      sum(:,:) = fluxes%fprec(:,:)
-      ave_flux = global_area_mean(sum,G)
+      res(:,:) = fluxes%fprec(:,:)
+      ave_flux = global_area_mean(res,G)
       call post_data(handles%id_fprec_ga, ave_flux, diag)
     endif
 
@@ -1891,8 +1890,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
       call post_data(handles%id_total_vprec, total_transport, diag)
     endif
     if ((handles%id_vprec_ga > 0) .and. ASSOCIATED(fluxes%vprec)) then
-      sum(:,:) = fluxes%vprec(:,:)
-      ave_flux = global_area_mean(sum,G)
+      res(:,:) = fluxes%vprec(:,:)
+      ave_flux = global_area_mean(res,G)
       call post_data(handles%id_vprec_ga, ave_flux, diag)
     endif
 
@@ -1970,117 +1969,117 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     endif
 
     if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. handles%id_net_heat_coupler_ga > 0. ) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%LW))         sum(:,:) = sum(:,:) + fluxes%LW(:,:)
-      if (ASSOCIATED(fluxes%latent))     sum(:,:) = sum(:,:) + fluxes%latent(:,:)
-      if (ASSOCIATED(fluxes%sens))       sum(:,:) = sum(:,:) + fluxes%sens(:,:)
-      if (ASSOCIATED(fluxes%SW))         sum(:,:) = sum(:,:) + fluxes%SW(:,:)
-      call post_data(handles%id_net_heat_coupler, sum, diag)
+      res(:,:) = 0.0
+      if (ASSOCIATED(fluxes%LW))         res(:,:) = res(:,:) + fluxes%LW(:,:)
+      if (ASSOCIATED(fluxes%latent))     res(:,:) = res(:,:) + fluxes%latent(:,:)
+      if (ASSOCIATED(fluxes%sens))       res(:,:) = res(:,:) + fluxes%sens(:,:)
+      if (ASSOCIATED(fluxes%SW))         res(:,:) = res(:,:) + fluxes%SW(:,:)
+      call post_data(handles%id_net_heat_coupler, res, diag)
       if(handles%id_total_net_heat_coupler > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
       endif
       if(handles%id_net_heat_coupler_ga > 0) then
-        ave_flux = global_area_mean(sum,G)
+        ave_flux = global_area_mean(res,G)
         call post_data(handles%id_net_heat_coupler_ga, ave_flux, diag)
       endif
     endif
 
     if (handles%id_net_heat_surface > 0 .or. handles%id_total_net_heat_surface > 0 .or. handles%id_net_heat_surface_ga > 0. ) then
-      sum(:,:) = 0.0
-      if (ASSOCIATED(fluxes%LW))                   sum(:,:) = sum(:,:) + fluxes%LW(:,:)
-      if (ASSOCIATED(fluxes%latent))               sum(:,:) = sum(:,:) + fluxes%latent(:,:)
-      if (ASSOCIATED(fluxes%sens))                 sum(:,:) = sum(:,:) + fluxes%sens(:,:)
-      if (ASSOCIATED(fluxes%SW))                   sum(:,:) = sum(:,:) + fluxes%SW(:,:)
-      if (ASSOCIATED(state%frazil))                sum(:,:) = sum(:,:) + state%frazil(:,:) * I_dt
+      res(:,:) = 0.0
+      if (ASSOCIATED(fluxes%LW))                   res(:,:) = res(:,:) + fluxes%LW(:,:)
+      if (ASSOCIATED(fluxes%latent))               res(:,:) = res(:,:) + fluxes%latent(:,:)
+      if (ASSOCIATED(fluxes%sens))                 res(:,:) = res(:,:) + fluxes%sens(:,:)
+      if (ASSOCIATED(fluxes%SW))                   res(:,:) = res(:,:) + fluxes%SW(:,:)
+      if (ASSOCIATED(state%frazil))                res(:,:) = res(:,:) + state%frazil(:,:) * I_dt
     ! if (ASSOCIATED(state%TempXpme)) then
-    !    sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
+    !    res(:,:) = res(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
     ! else
-      if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-      if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
-      if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-      if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+      if (ASSOCIATED(fluxes%heat_content_lrunoff)) res(:,:) = res(:,:) + fluxes%heat_content_lrunoff(:,:)
+      if (ASSOCIATED(fluxes%heat_content_frunoff)) res(:,:) = res(:,:) + fluxes%heat_content_frunoff(:,:)
+      if (ASSOCIATED(fluxes%heat_content_lprec))   res(:,:) = res(:,:) + fluxes%heat_content_lprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_fprec))   res(:,:) = res(:,:) + fluxes%heat_content_fprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_vprec))   res(:,:) = res(:,:) + fluxes%heat_content_vprec(:,:)
+      if (ASSOCIATED(fluxes%heat_content_cond))    res(:,:) = res(:,:) + fluxes%heat_content_cond(:,:)
+      if (ASSOCIATED(fluxes%heat_content_massout)) res(:,:) = res(:,:) + fluxes%heat_content_massout(:,:)
     ! endif
-      if (ASSOCIATED(fluxes%heat_added))         sum(:,:) = sum(:,:) + fluxes%heat_added(:,:)
-      call post_data(handles%id_net_heat_surface, sum, diag)
+      if (ASSOCIATED(fluxes%heat_added))         res(:,:) = res(:,:) + fluxes%heat_added(:,:)
+      call post_data(handles%id_net_heat_surface, res, diag)
 
       if(handles%id_total_net_heat_surface > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
       endif
       if(handles%id_net_heat_surface_ga > 0) then
-        ave_flux = global_area_mean(sum,G)
+        ave_flux = global_area_mean(res,G)
         call post_data(handles%id_net_heat_surface_ga, ave_flux, diag)
       endif
     endif
 
     if (handles%id_heat_content_surfwater > 0 .or. handles%id_total_heat_content_surfwater > 0) then
-      sum(:,:) = 0.0
+      res(:,:) = 0.0
     ! if (ASSOCIATED(state%TempXpme)) then
-    !   sum(:,:) = sum(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
+    !   res(:,:) = res(:,:) + state%TempXpme(:,:) * fluxes%C_p * I_dt
     ! else
-        if (ASSOCIATED(fluxes%heat_content_lrunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
-        if (ASSOCIATED(fluxes%heat_content_frunoff)) sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
-        if (ASSOCIATED(fluxes%heat_content_lprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_fprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_vprec))   sum(:,:) = sum(:,:) + fluxes%heat_content_vprec(:,:)
-        if (ASSOCIATED(fluxes%heat_content_cond))    sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
-        if (ASSOCIATED(fluxes%heat_content_massout)) sum(:,:) = sum(:,:) + fluxes%heat_content_massout(:,:)
+        if (ASSOCIATED(fluxes%heat_content_lrunoff)) res(:,:) = res(:,:) + fluxes%heat_content_lrunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_frunoff)) res(:,:) = res(:,:) + fluxes%heat_content_frunoff(:,:)
+        if (ASSOCIATED(fluxes%heat_content_lprec))   res(:,:) = res(:,:) + fluxes%heat_content_lprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_fprec))   res(:,:) = res(:,:) + fluxes%heat_content_fprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_vprec))   res(:,:) = res(:,:) + fluxes%heat_content_vprec(:,:)
+        if (ASSOCIATED(fluxes%heat_content_cond))    res(:,:) = res(:,:) + fluxes%heat_content_cond(:,:)
+        if (ASSOCIATED(fluxes%heat_content_massout)) res(:,:) = res(:,:) + fluxes%heat_content_massout(:,:)
     ! endif
-      call post_data(handles%id_heat_content_surfwater, sum, diag)
+      call post_data(handles%id_heat_content_surfwater, res, diag)
       if(handles%id_total_heat_content_surfwater > 0) then
-        total_transport = global_area_integral(sum,G)
+        total_transport = global_area_integral(res,G)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
       endif
     endif
 
     ! for OMIP, hfrunoffds = heat content of liquid plus frozen runoff
     if (handles%id_hfrunoffds > 0) then
-      sum(:,:) = 0.0
+      res(:,:) = 0.0
       if(ASSOCIATED(fluxes%heat_content_lrunoff)) then
-        sum(:,:) = sum(:,:) + fluxes%heat_content_lrunoff(:,:)
+        res(:,:) = res(:,:) + fluxes%heat_content_lrunoff(:,:)
       endif
       if(ASSOCIATED(fluxes%heat_content_frunoff)) then
-        sum(:,:) = sum(:,:) + fluxes%heat_content_frunoff(:,:)
+        res(:,:) = res(:,:) + fluxes%heat_content_frunoff(:,:)
       endif
-      call post_data(handles%id_hfrunoffds, sum, diag)
+      call post_data(handles%id_hfrunoffds, res, diag)
     endif
 
     ! for OMIP, hfrainds = heat content of lprec + fprec + cond
     if (handles%id_hfrainds > 0) then
-      sum(:,:) = 0.0
+      res(:,:) = 0.0
       if(ASSOCIATED(fluxes%heat_content_lprec)) then
-        sum(:,:) = sum(:,:) + fluxes%heat_content_lprec(:,:)
+        res(:,:) = res(:,:) + fluxes%heat_content_lprec(:,:)
       endif
       if(ASSOCIATED(fluxes%heat_content_fprec)) then
-        sum(:,:) = sum(:,:) + fluxes%heat_content_fprec(:,:)
+        res(:,:) = res(:,:) + fluxes%heat_content_fprec(:,:)
       endif
       if(ASSOCIATED(fluxes%heat_content_cond)) then
-        sum(:,:) = sum(:,:) + fluxes%heat_content_cond(:,:)
+        res(:,:) = res(:,:) + fluxes%heat_content_cond(:,:)
       endif
-      call post_data(handles%id_hfrainds, sum, diag)
+      call post_data(handles%id_hfrainds, res, diag)
     endif
 
     if ((handles%id_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
-      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
-      call post_data(handles%id_LwLatSens, sum, diag)
+      res(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
+      call post_data(handles%id_LwLatSens, res, diag)
     endif
 
     if ((handles%id_total_LwLatSens > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
-      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
-      total_transport = global_area_integral(sum,G)
+      res(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
+      total_transport = global_area_integral(res,G)
       call post_data(handles%id_total_LwLatSens, total_transport, diag)
     endif
 
     if ((handles%id_LwLatSens_ga > 0) .and. ASSOCIATED(fluxes%lw) .and. &
          ASSOCIATED(fluxes%latent) .and. ASSOCIATED(fluxes%sens)) then
-      sum(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
-      ave_flux = global_area_mean(sum,G)
+      res(:,:) = (fluxes%lw(:,:) + fluxes%latent(:,:)) + fluxes%sens(:,:)
+      ave_flux = global_area_mean(res,G)
       call post_data(handles%id_LwLatSens_ga, ave_flux, diag)
     endif
 
