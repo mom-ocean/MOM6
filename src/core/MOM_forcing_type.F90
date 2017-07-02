@@ -273,7 +273,7 @@ contains
 subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                           &
                   DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW_forcing, nonpenSW)
+                  aggregate_FW_forcing, nonpenSW, skip_diags)
 
   type(ocean_grid_type),             intent(in)    :: G                        !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV                       !< ocean vertical grid structure
@@ -317,6 +317,8 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW                 !< non-downwelling SW; use in net_heat.
                                                                                !! Sum over SW bands when diagnosing nonpenSW.
                                                                                !! Units are (K * H).
+  logical, optional,                 intent(in)    :: skip_diags               !< If present and true, skip calculating
+                                                                               !! diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
@@ -326,7 +328,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
   real :: Irho0               ! 1.0 / Rho0
   real :: I_Cp                ! 1.0 / C_p
-
+  logical :: calculate_diags  ! Indicate to calculate/update diagnostic arrays
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
   Ih_limit  = 1.0 / DepthBeforeScalingFluxes
@@ -336,6 +338,8 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
   is = G%isc ; ie = G%iec ; nz = G%ke
 
+  calculate_diags = .true.
+  if (present(skip_diags)) calculate_diags = .not. skip_diags
 
   ! error checking
 
@@ -447,7 +451,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove lrunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
                      (GV%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
-      if (ASSOCIATED(tv%TempxPmE)) then
+      if (calculate_diags .and. ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_lrunoff(i,j) - fluxes%lrunoff(i,j)*T(i,1))
       endif
@@ -459,12 +463,11 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove frunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
                     (GV%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
-      if (ASSOCIATED(tv%TempxPmE)) then
+      if (calculate_diags .and. ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_frunoff(i,j) - fluxes%frunoff(i,j)*T(i,1))
       endif
     endif
-
 
 ! smg: new code
     ! add heat from all terms that may add mass to the ocean (K * H).
@@ -510,102 +513,110 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
-      fluxes%netSalt(i,j) = Net_salt(i)
     endif
+
     ! Diagnostics follow...
+    if (calculate_diags) then
 
-    ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
-    ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
-    if(ASSOCIATED(fluxes%heat_content_massin))  then
-      if (aggregate_FW_forcing) then
-        if (netMassInOut(i) > 0.0) then ! net is "in"
-          fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
-        else ! net is "out"
-          fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+      ! Store Net_salt for unknown reason?
+      if (ASSOCIATED(fluxes%salt_flux)) then
+        if (calculate_diags) fluxes%netSalt(i,j) = Net_salt(i)
+      endif
+
+      ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
+      ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
+      if (ASSOCIATED(fluxes%heat_content_massin))  then
+        if (aggregate_FW_forcing) then
+          if (netMassInOut(i) > 0.0) then ! net is "in"
+            fluxes%heat_content_massin(i,j) = -fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
+          else ! net is "out"
+            fluxes%heat_content_massin(i,j) = fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+          endif
+        else
+          fluxes%heat_content_massin(i,j) = 0.
         endif
-      else
-        fluxes%heat_content_massin(i,j) = 0.
       endif
-    endif
 
-    ! Initialize heat_content_massout that is diagnosed in mixedlayer_convection or
-    ! applyBoundaryFluxes such that the meaning is as the sum of all outgoing components.
-    if(ASSOCIATED(fluxes%heat_content_massout)) then
-      if (aggregate_FW_forcing) then
-        if (netMassInOut(i) > 0.0) then ! net is "in"
-          fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
-        else ! net is "out"
-          fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+      ! Initialize heat_content_massout that is diagnosed in mixedlayer_convection or
+      ! applyBoundaryFluxes such that the meaning is as the sum of all outgoing components.
+      if (ASSOCIATED(fluxes%heat_content_massout)) then
+        if (aggregate_FW_forcing) then
+          if (netMassInOut(i) > 0.0) then ! net is "in"
+            fluxes%heat_content_massout(i,j) = fluxes%C_p * netMassOut(i) * T(i,1) * GV%H_to_kg_m2 / dt
+          else ! net is "out"
+            fluxes%heat_content_massout(i,j) = -fluxes%C_p * ( netMassInout(i) - netMassOut(i) ) * T(i,1) * GV%H_to_kg_m2 / dt
+          endif
+        else
+          fluxes%heat_content_massout(i,j) = 0.0
         endif
-      else
-        fluxes%heat_content_massout(i,j) = 0.0
       endif
-    endif
 
-    ! smg: we should remove sea ice melt from lprec!!!
-    ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt.
-    ! When atmosphere does not provide heat of this precipitation, the ocean assumes
-    ! it enters the ocean at the SST.
-    ! fluxes%lprec < 0 means ocean loses mass via sea ice formation. As we do not yet know
-    ! the layer at which this mass is removed, we cannot compute it heat content. We must
-    ! wait until MOM_diabatic_driver.F90.
-    if(ASSOCIATED(fluxes%heat_content_lprec)) then
-      if (fluxes%lprec(i,j) > 0.0) then
-        fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*T(i,1)
-      else
-        fluxes%heat_content_lprec(i,j) = 0.0
+      ! smg: we should remove sea ice melt from lprec!!!
+      ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt.
+      ! When atmosphere does not provide heat of this precipitation, the ocean assumes
+      ! it enters the ocean at the SST.
+      ! fluxes%lprec < 0 means ocean loses mass via sea ice formation. As we do not yet know
+      ! the layer at which this mass is removed, we cannot compute it heat content. We must
+      ! wait until MOM_diabatic_driver.F90.
+      if (ASSOCIATED(fluxes%heat_content_lprec)) then
+        if (fluxes%lprec(i,j) > 0.0) then
+          fluxes%heat_content_lprec(i,j) = fluxes%C_p*fluxes%lprec(i,j)*T(i,1)
+        else
+          fluxes%heat_content_lprec(i,j) = 0.0
+        endif
       endif
-    endif
 
-    ! fprec SHOULD enter ocean at 0degC if atmos model does not provide fprec heat content.
-    ! However, we need to adjust netHeat above to reflect the difference between 0decC and SST
-    ! and until we do so fprec is treated like lprec and enters at SST. -AJA
-    if(ASSOCIATED(fluxes%heat_content_fprec)) then
-      if (fluxes%fprec(i,j) > 0.0) then
-        fluxes%heat_content_fprec(i,j) = fluxes%C_p*fluxes%fprec(i,j)*T(i,1)
-      else
-        fluxes%heat_content_fprec(i,j) = 0.0
+      ! fprec SHOULD enter ocean at 0degC if atmos model does not provide fprec heat content.
+      ! However, we need to adjust netHeat above to reflect the difference between 0decC and SST
+      ! and until we do so fprec is treated like lprec and enters at SST. -AJA
+      if (ASSOCIATED(fluxes%heat_content_fprec)) then
+        if (fluxes%fprec(i,j) > 0.0) then
+          fluxes%heat_content_fprec(i,j) = fluxes%C_p*fluxes%fprec(i,j)*T(i,1)
+        else
+          fluxes%heat_content_fprec(i,j) = 0.0
+        endif
       endif
-    endif
 
-    ! virtual precip associated with salinity restoring
-    ! vprec > 0 means add water to ocean, assumed to be at SST
-    ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
-    if(ASSOCIATED(fluxes%heat_content_vprec)) then
-      if (fluxes%vprec(i,j) > 0.0) then
-        fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)
-      else
-        fluxes%heat_content_vprec(i,j) = 0.0
+      ! virtual precip associated with salinity restoring
+      ! vprec > 0 means add water to ocean, assumed to be at SST
+      ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
+      if (ASSOCIATED(fluxes%heat_content_vprec)) then
+        if (fluxes%vprec(i,j) > 0.0) then
+          fluxes%heat_content_vprec(i,j) = fluxes%C_p*fluxes%vprec(i,j)*T(i,1)
+        else
+          fluxes%heat_content_vprec(i,j) = 0.0
+        endif
       endif
-    endif
 
-    ! fluxes%evap < 0 means ocean loses mass due to evaporation.
-    ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
-    ! since we do not know the precise layer that the water evaporates.  We therefore
-    ! compute fluxes%heat_content_massout at the relevant point inside MOM_diabatic_driver.F90.
-    ! fluxes%evap > 0 means ocean gains moisture via condensation.
-    ! Condensation is assumed to drop into the ocean at the SST, just like lprec.
-    if(ASSOCIATED(fluxes%heat_content_cond)) then
-      if (fluxes%evap(i,j) > 0.0) then
-        fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*T(i,1)
-      else
-        fluxes%heat_content_cond(i,j) = 0.0
+      ! fluxes%evap < 0 means ocean loses mass due to evaporation.
+      ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
+      ! since we do not know the precise layer that the water evaporates.  We therefore
+      ! compute fluxes%heat_content_massout at the relevant point inside MOM_diabatic_driver.F90.
+      ! fluxes%evap > 0 means ocean gains moisture via condensation.
+      ! Condensation is assumed to drop into the ocean at the SST, just like lprec.
+      if (ASSOCIATED(fluxes%heat_content_cond)) then
+        if (fluxes%evap(i,j) > 0.0) then
+          fluxes%heat_content_cond(i,j) = fluxes%C_p*fluxes%evap(i,j)*T(i,1)
+        else
+          fluxes%heat_content_cond(i,j) = 0.0
+        endif
       endif
-    endif
 
-    ! Liquid runoff enters ocean at SST if land model does not provide runoff heat content.
-    if (.not. useRiverHeatContent) then
-      if (ASSOCIATED(fluxes%lrunoff) .and. ASSOCIATED(fluxes%heat_content_lrunoff)) then
-        fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
+      ! Liquid runoff enters ocean at SST if land model does not provide runoff heat content.
+      if (.not. useRiverHeatContent) then
+        if (ASSOCIATED(fluxes%lrunoff) .and. ASSOCIATED(fluxes%heat_content_lrunoff)) then
+          fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
+        endif
       endif
-    endif
 
-    ! Icebergs enter ocean at SST if land model does not provide calving heat content.
-    if (.not. useCalvingHeatContent) then
-      if (ASSOCIATED(fluxes%frunoff) .and. ASSOCIATED(fluxes%heat_content_frunoff)) then
-        fluxes%heat_content_frunoff(i,j) = fluxes%C_p*fluxes%frunoff(i,j)*T(i,1)
+      ! Icebergs enter ocean at SST if land model does not provide calving heat content.
+      if (.not. useCalvingHeatContent) then
+        if (ASSOCIATED(fluxes%frunoff) .and. ASSOCIATED(fluxes%heat_content_frunoff)) then
+          fluxes%heat_content_frunoff(i,j) = fluxes%C_p*fluxes%frunoff(i,j)*T(i,1)
+        endif
       endif
-    endif
+
+    endif ! calculate_diags
 
   enddo ! i-loop
 
@@ -677,9 +688,7 @@ end subroutine extractFluxes2d
 !! extractFluxes routine allows us to get "stuf per time" rather than the time integrated
 !! fluxes needed in other routines that call extractFluxes.
 subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, &
-                                   buoyancyFlux, netHeatMinusSW, netSalt )
-
-
+                                   buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
   type(ocean_grid_type),                    intent(in)    :: G              !< ocean grid
   type(verticalGrid_type),                  intent(in)    :: GV             !< ocean vertical grid structure
   type(forcing),                            intent(inout) :: fluxes         !< surface fluxes
@@ -692,7 +701,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   real, dimension(SZI_(G),SZK_(G)+1),       intent(inout) :: buoyancyFlux   !< buoyancy flux (m^2/s^3)
   real, dimension(SZI_(G)),                 intent(inout) :: netHeatMinusSW !< surf Heat flux (K H/s)
   real, dimension(SZI_(G)),                 intent(inout) :: netSalt        !< surf salt flux (ppt H/s)
-
+  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip  calculating
+                                                                              !! diagnostics inside extractFluxes1d()
   ! local variables
   integer                                   :: nsw, start, npts, k
   real, parameter                           :: dt = 1.    ! to return a rate from extractFluxes1d
@@ -734,7 +744,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
   call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                                 &
                 depthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
-                netSalt, penSWbnd, tv, .false.)
+                netSalt, penSWbnd, tv, .false., skip_diags=skip_diags)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
@@ -767,7 +777,7 @@ end subroutine calculateBuoyancyFlux1d
 !> Calculates surface buoyancy flux by adding up the heat, FW and salt fluxes,
 !! for 2d arrays.  This is a wrapper for calculateBuoyancyFlux1d.
 subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
-                                   buoyancyFlux, netHeatMinusSW, netSalt)
+                                   buoyancyFlux, netHeatMinusSW, netSalt, skip_diags)
   type(ocean_grid_type),                      intent(in)    :: G              !< ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV             !< ocean vertical grid structure
   type(forcing),                              intent(inout) :: fluxes         !< surface fluxes
@@ -779,7 +789,8 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: buoyancyFlux   !< buoy flux (m^2/s^3)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netHeatMinusSW !< surf temp flux (K H)
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(inout) :: netSalt        !< surf salt flux (ppt H)
-
+  logical, optional,                          intent(in)    :: skip_diags     !< If present and true, skip  calculating
+                                                                              !! diagnostics inside extractFluxes1d()
   ! local variables
   real, dimension( SZI_(G) ) :: netT ! net temperature flux (K m/s)
   real, dimension( SZI_(G) ) :: netS ! net saln flux (ppt m/s)
@@ -791,7 +802,8 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
 !$OMP                                  netHeatMinusSW,netSalt)                     &
 !$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
-    call calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), netT, netS )
+    call calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), &
+                                 netT, netS, skip_diags=skip_diags)
     if (present(netHeatMinusSW)) netHeatMinusSW(G%isc:G%iec,j) = netT(G%isc:G%iec)
     if (present(netSalt)) netSalt(G%isc:G%iec,j) = netS(G%isc:G%iec)
   enddo ! j

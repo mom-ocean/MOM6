@@ -751,7 +751,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
                           CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS)
 
       call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
-           CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
+           CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux, skip_diags=.true.)
 
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0, scale=GV%H_to_m)
