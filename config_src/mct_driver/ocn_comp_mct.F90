@@ -18,8 +18,9 @@ module ocn_comp_mct
   ! From MOM6
   use ocean_model_mod, only: ocean_state_type, ocean_public_type
   use ocean_model_mod, only: ocean_model_init
-  use MOM_time_manager, only: time_type, set_date, set_calendar_type, THIRTY_DAY_MONTHS
-  use MOM_domains, only: MOM_infra_init
+  use MOM_time_manager, only: time_type, set_date, set_calendar_type, NOLEAP
+  use MOM_domains, only: MOM_infra_init, num_pes, root_pe, pe_here
+
 !
 ! !PUBLIC MEMBER FUNCTIONS:
   implicit none
@@ -78,22 +79,29 @@ contains
   integer             :: year, month, day, hour, minute, seconds, rc
   character(len=128)  :: errMsg
   integer             :: mpicom
+  integer             :: npes, pe0
+  integer             :: i
 
   mpicom = cdata_o%mpicom
 
   call MOM_infra_init(mpicom)
-
   call ESMF_ClockGet(EClock, currTime=current_time, rc=rc) 
-
   call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-
-  call set_calendar_type(THIRTY_DAY_MONTHS)
+  ! we need to confirm this:
+  call set_calendar_type(NOLEAP)
 
   time_init = set_date(year, month, day, hour, minute, seconds, err_msg=errMsg)
+  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=errMsg)
+
+  npes = num_pes()
+  pe0 = root_pe()
 
   allocate(ocn_surface)
+  ocn_surface%is_ocean_PE = .true.
+  allocate(ocn_surface%pelist(npes))
+  ocn_surface%pelist(:) = (/(i,i=pe0,pe0+npes)/)
 
-  !call ocean_model_init(ocn_surface, ocn_state, time_init, time_in)
+  call ocean_model_init(ocn_surface, ocn_state, time_init, time_in)
 
 !-----------------------------------------------------------------------
 !EOC
