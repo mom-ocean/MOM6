@@ -969,7 +969,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     ! nonpenSW     = non-downwelling SW flux, which is absorbed in ocean surface
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.
 
-    !//////////
+    !----------------------------------------------------------------------------------------
     !NOTE June 26, 2017 - BGR
     !Temporary action to preserve answers while fixing a bug.
     ! To fix a bug in diagnostic calculation, applyboundaryfluxesinout now returns
@@ -995,7 +995,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !     for the buoyancy flux calculation and reproduce the old answers.
     !   In the future we should look at this and make sure we do the absolute correct thing.
     !   These details shouldn't effect climate, but will change answers.
-    !\\\\\\\\\\
+    !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
       call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                        &
                   H_limit_fluxes, CS%use_river_heat_content, CS%use_calving_heat_content, &
