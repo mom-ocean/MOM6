@@ -268,8 +268,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     cn       ! baroclinic gravity wave speeds (formerly cg1 - BDM)
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Rcv_ml   ! coordinate density of mixed layer, used for applying sponges
-
+    Rcv_ml, &   ! coordinate density of mixed layer, used for applying sponges
+    SkinBuoyFlux! 2d surface buoyancy flux (m2/s3)
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: h_diag                ! diagnostic array for thickness
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: temp_diag             ! diagnostic array for temp
   real, dimension(SZI_(G),SZJ_(G),G%ke) :: saln_diag             ! diagnostic array for salinity
@@ -746,12 +746,11 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
         h_prebound(i,j,k) = h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%use_energetic_PBL) then
-      call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
-                          h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
-                          CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS)
 
-      call calculateBuoyancyFlux2d(G, GV, fluxes, CS%optics, h, tv%T, tv%S, tv, &
-           CS%KPP_buoy_flux, CS%KPP_temp_flux, CS%KPP_salt_flux)
+      skinbuoyflux(:,:) = 0.0
+      call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
+              h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit,                         &
+              CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
 
       if (CS%debug) then
         call hchksum(ea, "after applyBoundaryFluxes ea",G%HI,haloshift=0, scale=GV%H_to_m)
@@ -763,7 +762,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
       call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, &
-                         CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, CS%KPP_Buoy_Flux)
+           CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
