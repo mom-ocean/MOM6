@@ -273,7 +273,8 @@ contains
 subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                           &
                   DepthBeforeScalingFluxes, useRiverHeatContent, useCalvingHeatContent, &
                   h, T, netMassInOut, netMassOut, net_heat, net_salt, pen_SW_bnd, tv,   &
-                  aggregate_FW_forcing, nonpenSW)
+                  aggregate_FW_forcing, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
+                  net_salt_rate, pen_sw_bnd_Rate)
 
   type(ocean_grid_type),             intent(in)    :: G                        !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV                       !< ocean vertical grid structure
@@ -317,10 +318,14 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
   real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW                 !< non-downwelling SW; use in net_heat.
                                                                                !! Sum over SW bands when diagnosing nonpenSW.
                                                                                !! Units are (K * H).
-
+  real, dimension(SZI_(G)), optional, intent(out) :: net_Heat_rate             !< Optional outputs of contributions to surface
+  real, dimension(SZI_(G)), optional, intent(out) :: net_salt_rate             !<  buoyancy flux which do not include dt
+  real, dimension(SZI_(G)), optional, intent(out) :: netmassInOut_rate         !<  and therefore are used to compute the rate.
+  real, dimension(:,:), optional, intent(out)     :: pen_sw_bnd_rate           !<  Perhaps just a temporary fix.
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
   real :: Pen_sw_tot(SZI_(G)) ! sum across all bands of Pen_SW (K * H)
+  real :: pen_sw_tot_rate(SZI_(G)) ! Similar but sum but as a rate (no dt in calculation)
   real :: Ih_limit            ! inverse depth at which surface fluxes start to be limited (1/H)
   real :: scale               ! scale scales away fluxes if depth < DepthBeforeScalingFluxes
   real :: J_m2_to_H           ! converts J/m^2 to H units (m for Bouss and kg/m^2 for non-Bouss)
@@ -329,13 +334,25 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
   character(len=200) :: mesg
   integer            :: is, ie, nz, i, k, n
+
+  logical :: do_NHR, do_NSR, do_NMIOR, do_PSWBR
+
+  ! Initializes/sets logicals if 'rates' are requested
+  do_NHR = .false.
+  do_NSR = .false.
+  do_NMIOR = .false.
+  do_PSWBR = .false.
+  if (present(net_heat_rate)) do_NHR = .true.
+  if (present(net_salt_rate)) do_NSR = .true.
+  if (present(netmassinout_rate)) do_NMIOR = .true.
+  if (present(pen_sw_bnd_rate)) do_PSWBR = .true.
+
   Ih_limit  = 1.0 / DepthBeforeScalingFluxes
   Irho0     = 1.0 / GV%Rho0
   I_Cp      = 1.0 / fluxes%C_p
   J_m2_to_H = 1.0 / (GV%H_to_kg_m2 * fluxes%C_p)
 
   is = G%isc ; ie = G%iec ; nz = G%ke
-
 
   ! error checking
 
@@ -386,6 +403,18 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       Pen_SW_bnd(1,i) = 0.0
     endif
 
+    if (do_PSWBR) then
+      pen_sw_tot_rate(i) = 0.0
+      if (nsw >= 1) then
+        do n=1,nsw
+          Pen_SW_bnd_rate(n,i) = J_m2_to_H*scale * max(0.0, optics%sw_pen_band(n,i,j))
+          pen_sw_tot_rate(i) = pen_sw_tot_rate(i) + pen_sw_bnd_rate(n,i)
+        enddo
+      else
+        pen_sw_bnd_rate(1,i) = 0.0
+      endif
+    endif
+
     ! net volume/mass of liquid and solid passing through surface boundary fluxes
     netMassInOut(i) = dt * (scale * ((((( fluxes%lprec(i,j)      &
                                         + fluxes%fprec(i,j)   )  &
@@ -393,13 +422,22 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
                                         + fluxes%lrunoff(i,j) )  &
                                         + fluxes%vprec(i,j)   )  &
                                         + fluxes%frunoff(i,j) ) )
-
+    if (do_NMIOr) then
+      netMassInOut_rate(i) = (scale * ((((( fluxes%lprec(i,j)      &
+                                        + fluxes%fprec(i,j)   )  &
+                                        + fluxes%evap(i,j)    )  &
+                                        + fluxes%lrunoff(i,j) )  &
+                                        + fluxes%vprec(i,j)   )  &
+                                        + fluxes%frunoff(i,j) ) )
+    endif
     ! smg:
     ! for non-Bouss, we add/remove salt mass to total ocean mass. to conserve
     ! total salt mass ocean+ice, the sea ice model must lose mass when
     ! salt mass is added to the ocean, which may still need to be coded.
     if (.not.GV%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
       netMassInOut(i) = netMassInOut(i) + (dt * GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
+
+      if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + (GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
     endif
 
     ! net volume/mass of water leaving the ocean.
@@ -429,16 +467,19 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
     ! convert to H units (Bouss=meter or non-Bouss=kg/m^2)
     netMassInOut(i) = GV%kg_m2_to_H * netMassInOut(i)
+    if (do_NMIOr) netMassInOut_rate(i) = GV%kg_m2_to_H * netMassInOut_rate(i)
     netMassOut(i)   = GV%kg_m2_to_H * netMassOut(i)
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
     net_heat(i) = scale * dt * J_m2_to_H * &
                   ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-
+    if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
+         ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (ASSOCIATED(fluxes%heat_added)) then
        net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
+       if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale * (J_m2_to_H)) * fluxes%heat_added(i,j)
     endif
 
     ! Add explicit heat flux for runoff (which is part of the ice-ocean boundary
@@ -447,6 +488,10 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove lrunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = (net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
                      (GV%kg_m2_to_H * (scale * dt)) * fluxes%lrunoff(i,j) * T(i,1)
+      !DONT include this in rate for legacy reasons.
+      !if (do_NHR) net_heat_rate(i) = (net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_lrunoff(i,j)) - &
+      !               (GV%kg_m2_to_H * (scale)) * fluxes%lrunoff(i,j) * T(i,1)
+
       if (ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_lrunoff(i,j) - fluxes%lrunoff(i,j)*T(i,1))
@@ -459,6 +504,10 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       ! remove frunoff*SST here, to counteract its addition elsewhere
       net_heat(i) = net_heat(i) + (scale*(dt*J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
                     (GV%kg_m2_to_H * (scale * dt)) * fluxes%frunoff(i,j) * T(i,1)
+      !DONT include this in rate for legacy reasons
+!      if (do_NHR) net_heat_rate(i) = net_heat_rate(i) + (scale*(J_m2_to_H)) * fluxes%heat_content_frunoff(i,j) - &
+!                    (GV%kg_m2_to_H * (scale)) * fluxes%frunoff(i,j) * T(i,1)
+
       if (ASSOCIATED(tv%TempxPmE)) then
         tv%TempxPmE(i,j) = tv%TempxPmE(i,j) + (scale * dt) * &
             (I_Cp*fluxes%heat_content_frunoff(i,j) - fluxes%frunoff(i,j)*T(i,1))
@@ -497,6 +546,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! remove penetrative portion of the SW that is NOT absorbed within a
     ! tiny layer at the top of the ocean.
     net_heat(i) = net_heat(i) - Pen_SW_tot(i)
+    if (do_NHR) net_heat_rate(i) = net_heat_rate(i) - Pen_SW_tot_rate(i)
 
     ! diagnose non-downwelling SW
     if (present(nonPenSW)) then
@@ -505,15 +555,16 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
     ! Salt fluxes
     Net_salt(i) = 0.0
+    if (do_NSR) Net_salt_rate(i) = 0.0
     ! Convert salt_flux from kg (salt)/(m^2 * s) to
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
       fluxes%netSalt(i,j) = Net_salt(i)
     endif
     ! Diagnostics follow...
-
     ! Initialize heat_content_massin that is diagnosed in mixedlayer_convection or
     ! applyBoundaryFluxes such that the meaning is as the sum of all incoming components.
     if(ASSOCIATED(fluxes%heat_content_massin))  then
@@ -541,7 +592,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         fluxes%heat_content_massout(i,j) = 0.0
       endif
     endif
-
     ! smg: we should remove sea ice melt from lprec!!!
     ! fluxes%lprec > 0 means ocean gains mass via liquid precipitation and/or sea ice melt.
     ! When atmosphere does not provide heat of this precipitation, the ocean assumes
@@ -556,7 +606,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         fluxes%heat_content_lprec(i,j) = 0.0
       endif
     endif
-
     ! fprec SHOULD enter ocean at 0degC if atmos model does not provide fprec heat content.
     ! However, we need to adjust netHeat above to reflect the difference between 0decC and SST
     ! and until we do so fprec is treated like lprec and enters at SST. -AJA
@@ -567,7 +616,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         fluxes%heat_content_fprec(i,j) = 0.0
       endif
     endif
-
     ! virtual precip associated with salinity restoring
     ! vprec > 0 means add water to ocean, assumed to be at SST
     ! vprec < 0 means remove water from ocean; set heat_content_vprec in MOM_diabatic_driver.F90
@@ -578,7 +626,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         fluxes%heat_content_vprec(i,j) = 0.0
       endif
     endif
-
     ! fluxes%evap < 0 means ocean loses mass due to evaporation.
     ! Evaporation leaves ocean surface at a temperature that has yet to be determined,
     ! since we do not know the precise layer that the water evaporates.  We therefore
@@ -592,21 +639,18 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         fluxes%heat_content_cond(i,j) = 0.0
       endif
     endif
-
     ! Liquid runoff enters ocean at SST if land model does not provide runoff heat content.
     if (.not. useRiverHeatContent) then
       if (ASSOCIATED(fluxes%lrunoff) .and. ASSOCIATED(fluxes%heat_content_lrunoff)) then
         fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*T(i,1)
       endif
     endif
-
     ! Icebergs enter ocean at SST if land model does not provide calving heat content.
     if (.not. useCalvingHeatContent) then
       if (ASSOCIATED(fluxes%frunoff) .and. ASSOCIATED(fluxes%heat_content_frunoff)) then
         fluxes%heat_content_frunoff(i,j) = fluxes%C_p*fluxes%frunoff(i,j)*T(i,1)
       endif
     endif
-
   enddo ! i-loop
 
 end subroutine extractFluxes1d
