@@ -14,6 +14,7 @@ use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
+use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_restart,       only : register_restart_field, MOM_restart_CS
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -35,6 +36,10 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! increases with grid spacing^2, up to something
                                    !! of order 500.
   real    :: ml_restrat_coef2      !< As for ml_restrat_coef but using the slow filtered MLD.
+  real    :: front_length          !< If non-zero, is the frontal-length scale used to calculate the
+                                   !! upscaling of buoyancy gradients that is otherwise represented
+                                   !! by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is
+                                   !! non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.
   logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
                                    !! if false, MLE will calculate a MLD based on a density difference
                                    !! based on the parameter MLE_DENSITY_DIFF.
@@ -79,7 +84,7 @@ contains
 !> Driver for the mixed-layer restratification parameterization.
 !! The code branches between two different implementations depending
 !! on whether the bulk-mixed layer or a general coordinate are in use.
-subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
+subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, VarMix, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (H units = m or kg/m2)
@@ -89,6 +94,7 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
   type(forcing),                             intent(in)    :: fluxes !< Pointers to forcing fields
   real,                                      intent(in)    :: dt     !< Time increment (sec)
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by PBL scheme (H units)
+  type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -97,13 +103,13 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
   if (GV%nkml>0) then
     call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, G, GV, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, VarMix, G, GV, CS)
   endif
 
 end subroutine mixedlayer_restrat
 
 !> Calculates a restratifying flow in the mixed layer.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, GV, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, VarMix, G, GV, CS)
   ! Arguments
   type(ocean_grid_type),                     intent(inout) :: G       !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV      !< Ocean vertical grid structure
@@ -114,6 +120,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   type(forcing),                             intent(in)    :: fluxes  !< Pointers to forcing fields
   real,                                      intent(in)    :: dt      !< Time increment (sec)
   real, dimension(:,:),                      pointer       :: MLD_in  !< Mixed layer depth provided by PBL scheme (H units)
+  type(VarMix_CS),                           pointer       :: VarMix  !< Container for derived fields
   type(mixedlayer_restrat_CS),               pointer       :: CS      !< Module control structure
   ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
@@ -160,8 +167,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
-  real :: hAtVel, zpa, zpb, dh
-  logical :: proper_averaging, line_is_empty, keep_going
+  real :: hAtVel, zpa, zpb, dh, res_scaling_fac, I_l_f
+  logical :: proper_averaging, line_is_empty, keep_going, res_upscale
 
   real :: PSI, PSI1, z, BOTTOP, XP, DD ! For the following statement functions
   ! Stream function as a function of non-dimensional position within mixed-layer (F77 statement function)
@@ -177,6 +184,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "An equation of state must be used with this module.")
+  if (.not.associated(VarMix) .and. CS%front_length>0.) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
+         "The resolution argument, Rd/dx, was not associated.")
 
   if (CS%MLE_density_diff > 0.) then ! We need to calculate a mixed layer depth, MLD.
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
@@ -263,15 +272,22 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff*GV%H_to_m
   proper_averaging = .not. CS%MLE_use_MLD_ave_bug
+  if (CS%front_length>0.) then
+    res_upscale = .true.
+    I_l_f = 1./CS%front_length
+  else
+    res_upscale = .false.
+  endif
 
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
 !$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
-!$OMP                               htot_slow,MLD_slow,Rml_av_slow,                    &
+!$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_l_f,        &
+!$OMP                               res_upscale,                                       &
 !$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
 !$OMP                       private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale,    &
-!$OMP                               line_is_empty, keep_going,                         &
+!$OMP                               line_is_empty, keep_going,res_scaling_fac,         &
 !$OMP                               a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)            &
 !$OMP                       firstprivate(uDml,vDml,uDml_slow,vDml_slow)
 !$OMP do
@@ -329,6 +345,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   do j=js,je ; do I=is-1,ie
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+    ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
+    if (res_upscale) res_scaling_fac = &
+          ( sqrt( 0.5 * ( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 ) ) * I_l_f ) &
+          * min( 1., 0.5*( VarMix%Rd_dx_h(i,j) + VarMix%Rd_dx_h(i+1,j) ) )
 
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -338,6 +358,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
     timescale = timescale * CS%ml_restrat_coef
+    if (res_upscale) timescale = timescale * res_scaling_fac
     uDml(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
         G%IdxCu(I,j)*(Rml_av_fast(i+1,j)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
     ! As above but using the slow filtered MLD
@@ -346,6 +367,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
     timescale = timescale * CS%ml_restrat_coef2
+    if (res_upscale) timescale = timescale * res_scaling_fac
     uDml_slow(I) = timescale * G%mask2dCu(I,j)*G%dyCu(I,j)* &
         G%IdxCu(I,j)*(Rml_av_slow(i+1,j)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
@@ -399,6 +421,10 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
   do J=js-1,je ; do i=is,ie
     u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+    ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
+    if (res_upscale) res_scaling_fac = &
+          ( sqrt( 0.5 * ( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 ) ) * I_l_f ) &
+          * min( 1., 0.5*( VarMix%Rd_dx_h(i,j) + VarMix%Rd_dx_h(i,j+1) ) )
 
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -408,6 +434,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
     timescale = timescale * CS%ml_restrat_coef
+    if (res_upscale) timescale = timescale * res_scaling_fac
     vDml(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av_fast(i,j+1)-Rml_av_fast(i,j)) * (h_vel**2 * GV%m_to_H)
     ! As above but using the slow filtered MLD
@@ -416,6 +443,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, G, 
                   (absf*h_vel**2 + 4.0*(h_vel+dz_neglect)*u_star)
     timescale = 0.0625 * (absf + 2.0*mom_mixrate) / (absf**2 + mom_mixrate**2)
     timescale = timescale * CS%ml_restrat_coef2
+    if (res_upscale) timescale = timescale * res_scaling_fac
     vDml_slow(i) = timescale * G%mask2dCv(i,J)*G%dxCv(i,J)* &
         G%IdyCv(i,J)*(Rml_av_slow(i,j+1)-Rml_av_slow(i,j)) * (h_vel**2 * GV%m_to_H)
 
@@ -787,7 +815,12 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
     call get_param(param_file, mdl, "FOX_KEMPER_ML_RESTRAT_COEF2", CS%ml_restrat_coef2, &
              "As for FOX_KEMPER_ML_RESTRAT_COEF but used in a second application\n"//&
              "of the MLE restratification parameterization.", units="nondim", default=0.0)
-  ! We use GV%nkml to distinguish between the old and new implementation of MLE.
+    call get_param(param_file, mdl, "MLE_FRONT_LENGTH", CS%front_length, &
+             "If non-zero, is the frontal-length scale used to calculate the\n"//&
+             "upscaling of buoyancy gradients that is otherwise represented\n"//&
+             "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is\n"//&
+             "non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.",&
+             units="m", default=0.0)
     call get_param(param_file, mdl, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer\n"//&
              "depth provided by the active PBL parameterization. If false,\n"//&
@@ -939,20 +972,22 @@ end subroutine mixedlayer_restrat_register_restarts
 !! For use in coarse-resolution models, an upscaling of the buoyancy gradients and adaption for the equator
 !! leads to the following parameterization (eq. 6 of Fox-Kemper et al., 2011):
 !! \f[
-!!    {\bf \Psi} = C_e \frac{\Delta s}{l_f} \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }{ \sqrt{ f^2 + \tau^{-2}} } \mu(z)
+!!    {\bf \Psi} = C_e \Gamma_\Delta \frac{\Delta s}{l_f} \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }{ \sqrt{ f^2 + \tau^{-2}} } \mu(z)
 !! \f]
-!! where \f$ \Delta s \f$ is the grid-scale and \f$ l_f \f$ is the width of the mixed-layer fronts.
+!! where \f$ \Delta s \f$ is the minimum of grid-scale and deformation radius,
+!! \f$ l_f \f$ is the width of the mixed-layer fronts, and \f$ \Gamma_\Delta=1 \f$.
 !! \f$ \tau \f$ is a time-scale for mixing momentum across the mixed layer.
 !! \f$ l_f \f$ is thought to be of order hundreds of meters.
 !!
-!! Currently, the upscaling factor \f$ \frac{\Delta s}{l_f} \f$ is a global constant, model parameter FOX_KEMPER_ML_RESTRAT,
+!! The upscaling factor \f$ \frac{\Delta s}{l_f} \f$ can be a global constant, model parameter FOX_KEMPER_ML_RESTRAT,
 !! so that in practice the parameterization is:
 !! \f[
 !!    {\bf \Psi} = C_e \Gamma_\Delta \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }{ \sqrt{ f^2 + \tau^{-2}} } \mu(z)
 !! \f]
+!! with non-unity \f$ \Gamma_\Delta \f$.
 !!
 !! \f$ C_e \f$ is hard-coded as 0.0625. \f$ \tau \f$ is calculated from the surface friction velocity \f$ u^* \f$.
-!! \todo Explain expression for momemntum mixing time-scale.
+!! \todo Explain expression for momentum mixing time-scale.
 !!
 !! \subsection section-mle-filtering Time-filtering of mixed-layer depth
 !!
@@ -994,6 +1029,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! | Symbol                       | Module parameter      |
 !! | ---------------------------- | --------------------- |
 !! | \f$ \Gamma_\Delta \f$        | FOX_KEMPER_ML_RESTRAT |
+!! | \f$ l_f \f$                  | MLE_FRONT_LENGTH      |
 !! | \f$ \tau_h \f$               | MLE_MLD_DECAY_TIME    |
 !! | \f$ \Delta \rho \f$          | MLE_DENSITY_DIFF      |
 
