@@ -733,6 +733,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
+  real :: MLE_front_length
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -807,6 +808,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
                  default=0., do_not_log=.true.)
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
+  call get_param(param_file, mdl, "MLE_FRONT_LENGTH", MLE_front_length, &
+                 default=0., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (MLE_front_length>0.)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
