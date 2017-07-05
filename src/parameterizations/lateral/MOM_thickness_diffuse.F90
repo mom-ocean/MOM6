@@ -141,7 +141,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, MEKE, VarMix, CDp, CS
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false.
   if (Associated(VarMix)) then
-    use_VarMix = VarMix%use_variable_mixing
+    use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
