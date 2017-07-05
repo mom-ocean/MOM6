@@ -799,7 +799,7 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
   netT(G%isc:G%iec) = 0. ; netS(G%isc:G%iec) = 0.
 
 !$OMP parallel do default(none) shared(G,GV,fluxes,optics,h,Temp,Salt,tv,buoyancyFlux,&
-!$OMP                                  netHeatMinusSW,netSalt)                     &
+!$OMP                                  netHeatMinusSW,netSalt,skip_diags)             &
 !$OMP                     firstprivate(netT,netS)
   do j = G%jsc, G%jec
     call calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, buoyancyFlux(:,j,:), &
