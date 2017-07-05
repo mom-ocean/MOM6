@@ -513,7 +513,7 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, MLD, dt, G, GV, CS, tv, optics, &
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
         evap_CFL_limit, minimum_forcing_depth)
     type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
