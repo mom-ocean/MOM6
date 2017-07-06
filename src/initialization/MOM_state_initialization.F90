@@ -1648,6 +1648,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   character(len=200) :: filename   ! The name of an input file containing temperature
                                    ! and salinity in z-space; also used for  ice shelf area.
+  character(len=200) :: tfilename  ! The name of an input file containing only temperature
+                                   ! in z-space.
+  character(len=200) :: sfilename  ! The name of an input file containing only salinity
+                                   ! in z-space.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
@@ -1745,15 +1749,24 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 
   call get_param(PF, mod, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
-                 "the layer thicknesses, temperatures and salinities.", &
-                 default="temp_salt_z.nc")
+                 "temperatures (T) and salinities (S). If T and S are not \n" //&
+                 "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE \n" //&
+                 "must be set.",default="temp_salt_z.nc")
+  call get_param(PF, mod, "TEMP_Z_INIT_FILE",tfilename, &
+                 "The name of the z-space input file used to initialize \n"//&
+                 "temperatures, only.", default=trim(filename))
+  call get_param(PF, mod, "SALT_Z_INIT_FILE",sfilename, &
+                 "The name of the z-space input file used to initialize \n"//&
+                 "temperatures, only.", default=trim(filename))
   filename = trim(inputdir)//trim(filename)
+  tfilename = trim(inputdir)//trim(tfilename)
+  sfilename = trim(inputdir)//trim(sfilename)
   call get_param(PF, mod, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="ptemp")
+                 "TEMP_Z_INIT_FILE.", default="ptemp")
   call get_param(PF, mod, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="salt")
+                 "SALT_Z_INIT_FILE.", default="salt")
   call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated \n"//&
                  "initial conditions.", default=.false.)
@@ -1792,10 +1805,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, dirs)
 !   value at the northernmost/southernmost latitude.
 
 
-  call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(tfilename, potemp_var,1.0,1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
 
-  call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(sfilename, salin_var,1.0,1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
   kd = size(z_in,1)
