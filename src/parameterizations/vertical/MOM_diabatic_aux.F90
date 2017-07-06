@@ -862,6 +862,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   real, dimension(SZI_(G), SZK_(G))                     :: pen_TKE_2d, dSV_dT_2d
   real, dimension(SZI_(G),SZK_(G)+1)                    :: netPen
   real, dimension(max(optics%nbands,1),SZI_(G))         :: Pen_SW_bnd, Pen_SW_bnd_rate
+                                                           !^ _rate is w/ dt=1
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(G)) :: opacityBand
   real                                                  :: hGrounding(maxGroundings)
   real    :: Temp_in, Salin_in
@@ -970,31 +971,31 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !                (in tandem w/ LW,SENS,LAT); saved only for diagnostic purposes.
 
     !----------------------------------------------------------------------------------------
-    !NOTE June 26, 2017 - BGR
+    !BGR-June 26, 2017{
     !Temporary action to preserve answers while fixing a bug.
-    ! To fix a bug in diagnostic calculation, applyboundaryfluxesinout now returns
+    ! To fix a bug in a diagnostic calculation, applyboundaryfluxesinout now returns
     !  the surface buoyancy flux. Previously, extractbuoyancyflux2d was called, meaning
     !  a second call to extractfluxes1d (causing the diagnostic net_heat to be incorrect).
     !  Note that this call to extract buoyancyflux2d was AFTER applyboundaryfluxesinout,
     !  which means it used the T/S fields after this routine.  Therefore, the surface
     !  buoyancy flux is computed here at the very end of this routine for legacy reasons.
     !  A few specific notes follow:
-    !  1. Original implementation called extractfluxes1d subsequently after
-    !     applyboundaryfluxesinout.  To avoid changing the answers the buoyancy flux is
-    !     computed at the end of this routine.  However it can (and maybe should) be
-    !     moved to immediately follow extractFluxes1d, but this will change answers.
-    !  2. There are a few issues to ensure answers are reproduced:
-    !     a) The old method did not included river/calving contributions to heat flux.  This
-    !        is accounted for by extractFluxes1d, but we may reconsider this approach.
-    !     b) The old method computed the buoyancy flux rate directly (by setting dt=1), instead
-    !        of computing the integrated value (and dividing by dt).
-    !        This is because: A*dt/dt =/=  A due to round off.
-    !     c) The old method computed buoyancy flux after this routine, meaning the returned
+    !     1) The old method did not included river/calving contributions to heat flux.  This
+    !        is kept consistent here via commenting code in the present extractFluxes1d <_rate>
+    !        outputs, but we may reconsider this approach.
+    !     2) The old method computed the buoyancy flux rate directly (by setting dt=1), instead
+    !        of computing the integrated value (and dividing by dt). Hence the required
+    !        additional outputs from extractFluxes1d.
+    !          *** This is because: A*dt/dt =/=  A due to round off.
+    !     3) The old method computed buoyancy flux after this routine, meaning the returned
     !        surface fluxes (from extractfluxes1d) must be recorded for use later in the code.
-    !     For all these reasons we compute additional values of '_rate' which are preserved
+    !        We could (and maybe should) move that loop up to before the surface fluxes are
+    !        applied, but this will change answers.
+    !     For all these reasons we compute additional values of <_rate> which are preserved
     !     for the buoyancy flux calculation and reproduce the old answers.
-    !   In the future we should look at this and make sure we do the absolute correct thing.
-    !   These details shouldn't effect climate, but will change answers.
+    !   In the future this needs more detailed investigation to make sure everything is
+    !   consistent and correct. These details shouldnt significantly effect climate,
+    !   but do change answers.
     !-----------------------------------------------------------------------------------------
     if (calculate_buoyancy) then
       call extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                        &
@@ -1268,12 +1269,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
       enddo
     endif
 
-    ! Get buoyancy flux to return for ePBL before netHeat, netSalt are applied
-    !  Here we want the rate, so we use the rate values returned from extractfluxes1d.
+    ! BGR: Get buoyancy flux to return for ePBL
+    !  We want the rate, so we use the rate values returned from extractfluxes1d.
+    !  Note that the *dt values could be divided by dt here, but
+    !  1) Answers will change due to round-off
+    !  2) Be sure to save their values BEFORE fluxes are used.
     if (Calculate_Buoyancy) then
-       drhodt = 0.0
-       drhods = 0.0
-       netPen = 0.0
+       drhodt(:) = 0.0
+       drhods(:) = 0.0
+       netPen(:,:) = 0.0
        ! Sum over bands and attenuate as a function of depth
        ! netPen is the netSW as a function of depth
        call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
@@ -1285,6 +1289,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
        ! 2. Add in the SW heating for purposes of calculating the net
        ! surface buoyancy flux affecting the top layer.
        ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
+       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
        SkinBuoyFlux(G%isc:G%iec,j) = - GoRho * ( dRhodS(G%isc:G%iec) * (netSalt_rate(G%isc:G%iec) &
             - tv%S(G%isc:G%iec,j,1) * netMassInOut_rate(G%isc:G%iec)* GV%H_to_m )&
             + dRhodT(G%isc:G%iec) * ( netHeat_rate(G%isc:G%iec) +        &
