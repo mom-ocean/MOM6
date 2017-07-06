@@ -182,8 +182,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                   optional, intent(in) :: pbce !< The baroclinic pressure anomaly in each layer
                                                !! due to free surface height anomalies, in
-                                               !! m s-2.pbce points to a space with nz layers
-                                               !! or NULL.                                                                            !! NULL.
+                                               !! m2 s-2 H-1.                                                                         !! NULL.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
                   optional, intent(in) :: u_accel_bt !< The zonal acceleration from terms in the
                                                      !! barotropic solver,in m s-2.
@@ -209,7 +208,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 !  (in)      pbce - the baroclinic pressure anomaly in each layer
-!                   due to free surface height anomalies, in m s-2.
+!                   due to free surface height anomalies, in m2 s-2 H-1.
 !                   pbce points to a space with nz layers or NULL.
 !  (in)      u_accel_bt - The zonal acceleration from terms in the barotropic
 !                         solver, in m s-2.
@@ -228,7 +227,7 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, pbce,
   call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym)
   call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym)
   if (present(pbce)) &
-    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%H_to_m)
+    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
     call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym)
 end subroutine MOM_accel_chksum
