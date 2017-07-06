@@ -592,7 +592,10 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      !BGR-Jul 5, 2017{
+      !Repeat above code for 'rate' term
       if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
+      !}BGR
     endif
 
     ! Diagnostics follow...
