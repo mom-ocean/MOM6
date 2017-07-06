@@ -227,24 +227,59 @@ integer :: num_msg = 0, max_msg = 2
 
 contains
 
+!>    This subroutine determines the diffusivities from the integrated energetics
+!!  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
+!!  have already been applied.  All calculations are done implicitly, and there
+!!  is no stability limit on the time step.
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                          dSV_dT, dSV_dS, TKE_forced, Buoy_Flux, dt_diag, last_call, &
                          dT_expected, dS_expected )
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_3d
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u_3d, v_3d, dSV_dT, dSV_dS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: TKE_forced
-  type(thermo_var_ptrs),                     intent(inout) :: tv
-  type(forcing),                             intent(inout) :: fluxes
-  real,                                      intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(out) :: Kd_int
-  type(energetic_PBL_CS),                    pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)             :: Buoy_Flux
-  real,                            optional, intent(in)    :: dt_diag
-  logical,                         optional, intent(in)    :: last_call
+  type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                   optional, intent(out)   :: dT_expected, dS_expected
+                           intent(inout) :: h_3d   !< Layer thickness, in m or kg m-2.
+                                                   !! (Intent in/out) The units of h are referred
+                                                   !! to as H below.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: u_3d   !< Zonal velocities interpolated to h points,
+                                                   !! m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: v_3d   !< Zonal velocities interpolated to h points,
+                                                   !! m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: dSV_dT !< The partial derivative of in-situ specific
+                                                   !! volume with potential temperature,
+                                                   !! in m3 kg-1 K-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: dSV_dS !< The partial derivative of in-situ specific
+                                                   !! volume with salinity, in m3 kg-1 ppt-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: TKE_forced !< The forcing requirements to homogenize the
+                                                   !! forcing that has been applied to each layer
+                                                   !! through each layer, in J m-2.
+  type(thermo_var_ptrs),   intent(inout) :: tv     !< A structure containing pointers to any
+                                                   !! available thermodynamic fields. Absent fields
+                                                   !! have NULL ptrs.
+  type(forcing),           intent(inout) :: fluxes !< A structure containing pointers to any
+                                                   !! possible forcing fields. Unused fields have
+                                                   !! NULL ptrs.
+  real,                    intent(in)    :: dt     !< Time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                           intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces,
+                                                   !! in m2 s-1.
+  type(energetic_PBL_CS),  pointer       :: CS     !< The control structure returned by a previous
+                                                   !! call to mixedlayer_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)    :: Buoy_Flux !< The surface buoyancy flux. in m2/s3.
+  real,          optional, intent(in)    :: dt_diag   !< The diagnostic time step, which may be less
+                                                   !! than dt if there are two callse to
+                                                   !! mixedlayer, in s.
+  logical,       optional, intent(in)    :: last_call !< If true, this is the last call to
+                                                   !! mixedlayer in the current time step, so
+                                                   !! diagnostics will be written. The default
+                                                   !! is .true.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(out)   :: dT_expected, dS_expected
 
 !    This subroutine determines the diffusivities from the integrated energetics
 !  mixed layer model.  It assumes that heating, cooling and freshwater fluxes
