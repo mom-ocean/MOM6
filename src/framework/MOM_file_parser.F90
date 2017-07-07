@@ -275,6 +275,9 @@ subroutine close_param_file(CS, quiet_close, component)
 
   if (present(quiet_close)) then ; if (quiet_close) then
     do i = 1, CS%nfiles
+      if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
+      call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
+                    " has been closed successfully.", 5)
       CS%iounit(i) = -1
       CS%filename(i) = ''
       CS%NetCDF_file(i) = .false.
@@ -322,14 +325,9 @@ subroutine close_param_file(CS, quiet_close, component)
 
   num_unused = 0
   do i = 1, CS%nfiles
-    ! only root pe has the file open
-    if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
-    call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
-                 " has been closed successfully.", 5)
-
-    ! Check for unused lines.
     if (is_root_pe() .and. (CS%report_unused .or. &
                             CS%unused_params_fatal)) then
+      ! Check for unused lines.
       do n=1,CS%param_data(i)%num_lines
         if (.not.CS%param_data(i)%line_used(n)) then
           num_unused = num_unused + 1
@@ -340,6 +338,9 @@ subroutine close_param_file(CS, quiet_close, component)
       enddo
     endif
 
+    if (all_PEs_read .or. is_root_pe()) close(CS%iounit(i))
+    call MOM_mesg("close_param_file: "// trim(CS%filename(i))// &
+                  " has been closed successfully.", 5)
     CS%iounit(i) = -1
     CS%filename(i) = ''
     CS%NetCDF_file(i) = .false.
