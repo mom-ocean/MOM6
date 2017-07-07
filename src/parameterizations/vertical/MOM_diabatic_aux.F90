@@ -913,11 +913,15 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
+!$OMP                                  calculate_buoyancy,netPen,SkinBuoyFlux,GoRho,     &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
 !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
+!$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
+!$OMP                                  drhodt,drhods,pen_sw_bnd_rate,SurfPressure,       &
+!$OMP                                  start,npts,                                       &
 !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
 
   ! Work in vertical slices for efficiency
