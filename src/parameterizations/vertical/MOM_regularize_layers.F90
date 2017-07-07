@@ -112,14 +112,29 @@ integer :: id_clock_pass, id_clock_EOS
 
 contains
 
+!> This subroutine partially steps the bulk mixed layer model.
+!! The following processes are executed, in the order listed.
 subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(inout) :: tv
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
-  type(regularize_layers_CS),               pointer       :: CS
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
+                                                  !! available thermodynamic fields. Absent fields
+                                                  !! have NULL ptrs.
+  real,                       intent(in)    :: dt !< Time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: ea !< The amount of fluid moved downward into a
+                                                  !! layer; this should be increased due to mixed
+                                                  !! layer detrainment, in the same units as
+                                                  !! h - usually m or kg m-2 (i.e., H).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                                                  !! this should be increased due to mixed layer
+                                                  !! entrainment, in the same units as h - usually
+                                                  !! m or kg m-2 (i.e., H).
+  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
+                                                  !! call to regularize_layers_init.
 
 !    This subroutine partially steps the bulk mixed layer model.
 !  The following processes are executed, in the order listed.
@@ -160,14 +175,29 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
 
 end subroutine regularize_layers
 
+!> This subroutine ensures that there is a degree of horizontal smoothness
+!! in the depths of the near-surface interfaces.
 subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(inout) :: tv
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
-  type(regularize_layers_CS),               pointer       :: CS
+  type(ocean_grid_type),      intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),      intent(inout) :: tv !< A structure containing pointers to any
+                                                  !! available thermodynamic fields. Absent fields
+                                                  !! have NULL ptrs.
+  real,                       intent(in)    :: dt !< Time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: ea !< The amount of fluid moved downward into a
+                                                  !! layer; this should be increased due to mixed
+                                                  !! layer detrainment, in the same units as h -
+                                                  !! usually m or kg m-2 (i.e., H).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                              intent(inout) :: eb !< The amount of fluid moved upward into a layer;
+                                                  !! this should be increased due to mixed layer
+                                                  !! entrainment, in the same units as h - usually
+                                                  !! m or kg m-2 (i.e., H).
+  type(regularize_layers_CS), pointer       :: CS !< The control structure returned by a previous
+                                                  !! call to regularize_layers_init.
 
 !    This subroutine ensures that there is a degree of horizontal smoothness
 !  in the depths of the near-surface interfaces.
@@ -770,20 +800,39 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
 
 end subroutine regularize_surface
 
+!>  This subroutine determines the amount by which the harmonic mean
+!! thickness at velocity points differ from the arithmetic means, relative to
+!! the the arithmetic means, after eliminating thickness variations that are
+!! solely due to topography and aggregating all interior layers into one.
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: def_rat_u
-  real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: def_rat_v
-  type(regularize_layers_CS),                pointer     :: CS
-  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: def_rat_u_2lay
-  real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: def_rat_v_2lay
-  integer,                         optional, intent(in)  :: halo
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in)  :: h !< Layer thicknesses, in H (usually m or kg m-2);
-                                                         !! if h is not present, vertical differences in interface
-                                                         !! heights are used instead.
+  type(ocean_grid_type),      intent(in)  :: G         !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)  :: GV        !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                              intent(in)  :: e         !< Interface depths, in m or kg m-2.
+  real, dimension(SZIB_(G),SZJ_(G)),          &
+                              intent(out) :: def_rat_u !< The thickness deficit ratio at u points,
+                                                       !! nondim.
+  real, dimension(SZI_(G),SZJB_(G)),          &
+                              intent(out) :: def_rat_v !< The thickness deficit ratio at v points,
+                                                       !! nondim.
+  type(regularize_layers_CS), pointer     :: CS        !< The control structure returned by a
+                                                       !! previous call to regularize_layers_init.
+  real, dimension(SZIB_(G),SZJ_(G)),          &
+                    optional, intent(out) :: def_rat_u_2lay !< The thickness deficit ratio at u
+                                                       !! points when the mixed and buffer layers
+                                                       !! are aggregated into 1 layer, nondim.
+  real, dimension(SZI_(G),SZJB_(G)),          &
+                    optional, intent(out) :: def_rat_v_2lay !< The thickness deficit ratio at v
+                                                       !! pointswhen the mixed and buffer layers
+                                                       !! are aggregated into 1 layer, nondim.
+  integer,          optional, intent(in)  :: halo      !< An extra-wide halo size, 0 by default.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                    optional, intent(in)  :: h         !< Layer thicknesses, in H (usually m or kg
+                                                       !! m-2); if h is not present, vertical
+                                                       !! differences in interface heights are used
+                                                       !! instead.
+
 !    This subroutine determines the amount by which the harmonic mean
 !  thickness at velocity points differ from the arithmetic means, relative to
 !  the the arithmetic means, after eliminating thickness variations that are
@@ -925,11 +974,14 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
 end subroutine find_deficit_ratios
 
 subroutine regularize_layers_init(Time, G, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(regularize_layers_CS), pointer    :: CS
+  type(time_type), target, intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for
+                                                 !! run-time parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate
+                                                 !! diagnostic output.
+  type(regularize_layers_CS), pointer    :: CS   !< A pointer that is set to point to the
+                                                 !! control structure for this module.
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
