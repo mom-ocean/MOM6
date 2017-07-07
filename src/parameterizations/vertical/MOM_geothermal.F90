@@ -85,14 +85,37 @@ end type geothermal_CS
 
 contains
 
+!>   This subroutine applies geothermal heating, including the movement of water
+!! between isopycnal layers to match the target densities.  The heating is
+!! applied to the bottommost layers that occur within ### of the bottom. If
+!! the partial derivative of the coordinate density with temperature is positive
+!! or very small, the layers are simply heated in place.  Any heat that can not
+!! be applied to the ocean is returned (WHERE)?
 subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(inout) :: tv
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
-  type(geothermal_CS),                      pointer       :: CS
+  type(ocean_grid_type),                    intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV !< The ocean's vertical grid
+                                                                !! structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thicknesses, in H
+                                                                !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                    intent(inout) :: tv !< A structure containing pointers
+                                                                !! to any available thermodynamic
+                                                                !! fields. Absent fields have NULL
+                                                                !! ptrs.
+  real,                                     intent(in)    :: dt !< Time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea !< The amount of fluid moved
+                                                                !! downward into a layer; this
+                                                                !! should be increased due to mixed
+                                                                !! layer detrainment, in the same
+                                                                !! units as h - usually m or kg m-2
+                                                                !! (i.e., H).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< The amount of fluid moved upward
+                                                                !! into a layer; this should be
+                                                                !! increased due to mixed layer
+                                                                !! entrainment, in the same units as
+                                                                !! h - usually m or kg m-2 (i.e., H)
+  type(geothermal_CS),                      pointer       :: CS !< The control structure returned by
+                                                                !! a previous call to
+                                                                !! geothermal_init.
 
 !   This subroutine applies geothermal heating, including the movement of water
 ! between isopycnal layers to match the target densities.  The heating is
@@ -357,11 +380,13 @@ subroutine geothermal(h, tv, dt, ea, eb, G, GV, CS)
 end subroutine geothermal
 
 subroutine geothermal_init(Time, G, param_file, diag, CS)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(geothermal_CS),     pointer       :: CS
+  type(time_type), target, intent(in)    :: Time !< Current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< Structure used to regulate diagnostic output.
+  type(geothermal_CS),     pointer       :: CS   !< Pointer pointing to the module control
+                                                 !! structure.
 
 ! Arguments:
 !  (in)      Time       - current model time
