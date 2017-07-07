@@ -14,12 +14,18 @@ module ocn_comp_mct
    use esmf
    use seq_cdata_mod
    use mct_mod
-
+   use seq_infodata_mod, only: seq_infodata_type,             &
+                               seq_infodata_GetData,          &
+                               seq_infodata_start_type_start, &
+                               seq_infodata_start_type_cont,  &
+                               seq_infodata_start_type_brnch
+ 
   ! From MOM6
   use ocean_model_mod, only: ocean_state_type, ocean_public_type
   use ocean_model_mod, only: ocean_model_init
   use MOM_time_manager, only: time_type, set_date, set_calendar_type, NOLEAP
   use MOM_domains, only: MOM_infra_init, num_pes, root_pe, pe_here
+  use coupler_indices, only: coupler_indices_init
 
 !
 ! !PUBLIC MEMBER FUNCTIONS:
@@ -42,6 +48,9 @@ module ocn_comp_mct
 ! !PRIVATE MODULE VARIABLES
  type(ocean_state_type), pointer  :: ocn_state => NULL()   ! Private state of ocean
  type(ocean_public_type), pointer :: ocn_surface => NULL() ! Public surface state of ocean
+
+ type(seq_infodata_type), pointer :: &
+      infodata
 
 !=======================================================================
 
@@ -78,13 +87,18 @@ contains
   type(ESMF_time)     :: current_time
   integer             :: year, month, day, hour, minute, seconds, rc
   character(len=128)  :: errMsg
+  character(len=384)  :: runid
+  character(len=384)  :: runtype
+  character(len=32)   :: starttype          ! infodata start type
   integer             :: mpicom
   integer             :: npes, pe0
   integer             :: i
 
-  mpicom = cdata_o%mpicom
 
+  ! Initialize MOM6
+  mpicom = cdata_o%mpicom
   call MOM_infra_init(mpicom)
+
   call ESMF_ClockGet(EClock, currTime=current_time, rc=rc) 
   call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   ! we need to confirm this:
@@ -101,7 +115,31 @@ contains
   allocate(ocn_surface%pelist(npes))
   ocn_surface%pelist(:) = (/(i,i=pe0,pe0+npes)/)
 
+  ! initialize the model run
   call ocean_model_init(ocn_surface, ocn_state, time_init, time_in)
+
+  ! set infodata, a cdata pointer
+  call seq_cdata_setptrs(cdata_o, infodata=infodata)
+
+  ! initialize coupler indices
+  call coupler_indices_init()
+
+  ! get runid and starttype:
+  call seq_infodata_GetData( infodata, case_name=runid )
+  call seq_infodata_GetData( infodata, start_type=starttype)
+
+
+  if (     trim(starttype) == trim(seq_infodata_start_type_start)) then
+     runtype = "initial"
+  else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
+     runtype = "continue"
+  else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
+     runtype = "branch"
+  else
+     write(*,*) 'ocn_comp_mct ERROR: unknown starttype'
+     call exit(0)
+  end if
+
 
 !-----------------------------------------------------------------------
 !EOC
