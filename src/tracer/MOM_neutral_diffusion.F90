@@ -471,7 +471,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     if (G%mask2dT(i,j)>0.) then
 
       dTracer(:) = 0.
-      do ks = 1,2*nk+1 ;
+      do ks = 1,CS%nsurf-1 ;
         k = CS%uKoL(I,j,ks)
         dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
         k = CS%uKoR(I-1,j,ks)
@@ -504,7 +504,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
       trans_x_2d(I,j) = 0.
       if (G%mask2dCu(I,j)>0.) then
-        do ks = 1,2*nk+1 ;
+        do ks = 1,CS%nsurf-1 ;
           trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
         enddo
         trans_x_2d(I,j) = trans_x_2d(I,j) * Idt * convert
@@ -519,7 +519,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
     do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
       trans_y_2d(i,J) = 0.
       if (G%mask2dCv(i,J)>0.) then
-        do ks = 1,2*nk+1 ;
+        do ks = 1,CS%nsurf-1 ;
           trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
         enddo
         trans_y_2d(i,J) = trans_y_2d(i,J) * Idt * convert
@@ -963,7 +963,7 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
       hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
       hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
-        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Analogous of effective resistance for two resistors
+        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean of layer thicknesses
       else
         hEff(k_surface-1) = 0.
       endif
@@ -1020,6 +1020,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
   ! Dimensions are [number of layers x number of interfaces]. Second dimension = 1 for top interface, = 2 for bottom
   real, dimension(nk,2) :: Pl, Pr, Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
 
+  !write(*,*) "Left column"
   ! Create vectors for left column reconstructions
   do kl_left = 1, nk
     Pl(kl_left,1) = Pres_l(kl_left)
@@ -1032,8 +1033,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     dRdT_l(kl_left,2) = dRdT_lb(kl_left)
     dRdS_l(kl_left,1) = dRdS_lt(kl_left)
     dRdS_l(kl_left,2) = dRdS_lb(kl_left)
+    !write(*,*) Tint_lt(kl_left), Tint_lb(kl_left), Sint_lt(kl_left), Sint_lb(kl_left)
+    !write(*,*) Tl(kl_left,1), Tl(kl_left,2), Sl(kl_left,1), Sl(kl_left,2)
   enddo
   ! Create vectors for right column reconstructions
+  !write(*,*) "Right column"
   do kl_right = 1, nk
     Pr(kl_right,1) = Pres_r(kl_right)
     Pr(kl_right,2) = Pres_r(kl_right+1)
@@ -1045,6 +1049,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     dRdT_r(kl_right,2) = dRdT_rb(kl_right)
     dRdS_r(kl_right,1) = dRdS_rt(kl_right)
     dRdS_r(kl_right,2) = dRdS_rb(kl_right)
+    !write(*,*) Tint_rt(kl_right), Tint_rb(kl_right), Sint_rt(kl_right), Sint_rb(kl_right)
+    !write(*,*) Tr(kl_right,1), Tr(kl_right,2), Sr(kl_right,1), Sr(kl_right,2)
   enddo
 
   ! Initialize variables for the search
@@ -1058,19 +1064,20 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
 
   ! Loop over each neutral surface, working from top to bottom
   neutral_surfaces: do k_surface = 1, 4*nk
-
     ! Potential density difference, rho(kr) - rho(kl)
     dRho = 0.5 * &
       ( ( dRdT_r(kl_right,ki_right) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,ki_right) - Tl(kl_left,ki_left) ) &
       + ( dRdS_r(kl_right,ki_right) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,ki_right) - Sl(kl_left,ki_left) ) )
+    !write(*,'(A,I2,A,F6.3,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  kl_left=",kl_left,   &
+    !  "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
-        same_direction = (searching_left_column == .true.) .and. (searching_right_column == .false.)
+        same_direction = (searching_left_column .eqv. .true.) .and. (searching_right_column .eqv. .false.)
         searching_left_column = .true.
         searching_right_column = .false.
       elseif (dRho > 0.) then
-        same_direction = (searching_left_column == .false.) .and. (searching_right_column == .true.)
+        same_direction = (searching_left_column .eqv. .false.) .and. (searching_right_column .eqv. .true.)
         searching_right_column = .true.
         searching_left_column = .false.
       else ! dRho == 0.
@@ -1087,7 +1094,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
     endif
 
     if (searching_left_column) then
-
       ! Determine differences between right column interface and potentially three different parts of the left
       ! Potential density difference, rho(kl-1) - rho(kr) (should be negative)
       dRhoTop = 0.5 * &
@@ -1104,21 +1110,27 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       else
         dRhoTopm1 = dRhoTop
       endif
+      !write(*,'(A,I2,A,F6.2,A,F6.2,A,F6.2)') "Searching left layer", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
+      !                                       "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
+      !write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
+      KoL(k_surface) = kl_left
+      KoR(k_surface) = kl_right
 
       ! Perform a check to make sure that the neutral surface does not connect to top of discontinuity
       if ( (lastP_left == 1.) .and. (dRhoTopm1 == 0.) ) then
         KoL(k_surface) = lastK_left
         PoL(k_surface) = 1.
-        PoR(k_surface) = REAL(ki_right) - 1. ! Position of an interface is the index of the interface minus 1
+        PoR(k_surface) = REAL(ki_right-1)
+        !write(*,*) "Searching across discontinuity"
       ! Search within the layer for the neutral surface
       else
+        KoL(k_surface) = kl_left
         call search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, lastP_left, lastK_left, &
                                  Pl(kl_left,1), Pl(kl_left,2), ki_left, ki_right, kl_left, PoL(k_surface))
+        PoR(k_surface) = REAL(ki_right-1)
       endif
-      PoR(k_surface) = REAL(ki_right) - 1.
-      KoR(k_surface) = kl_right
+      PoR(k_surface) = REAL(ki_right-1)
       call increment_interface(nk, kl_right, ki_right, reached_bottom, searching_right_column, searching_left_column)
-
 
     elseif (searching_right_column) then
       ! Interpolate for the neutral surface position within the right column, layer krm1
@@ -1130,25 +1142,31 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
         ( ( dRdT_r(kl_right,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,2) - Tl(kl_left,ki_left) ) &
         + ( dRdS_r(kl_right,2) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,2) - Sl(kl_left,ki_left) ) )
       if (kl_right>1) then
-        dRhoTop = 0.5 * &
-          ( ( dRdT_r(kl_right-1,1) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right-1,1) - Tl(kl_left,ki_left) ) &
-          + ( dRdS_r(kl_right-1,1) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right-1,1) - Sl(kl_left,ki_left) ) )
+        dRhoTopm1 = 0.5 * &
+          ( ( dRdT_r(kl_right-1,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right-1,2) - Tl(kl_left,ki_left) ) &
+          + ( dRdS_r(kl_right-1,2) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right-1,2) - Sl(kl_left,ki_left) ) )
       else
         dRhoTopm1 = dRhoTop
       endif
+      !write(*,'(A,I2,A,F6.2,A,F6.2,A,F6.2)') "Searching right layer", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
+      !                                       "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
+      !write(*,'(A,I2,X,I2)') "Searching from: ", kl_left, ki_left
+      KoL(k_surface) = kl_left
+      KoR(k_surface) = kl_right
 
       ! Perform a check to make sure that the neutral surface does not connect to top of discontinuity
       if ( (lastP_right == 1.) .and. (dRhoTopm1 == 0.) ) then
         KoR(k_surface) = lastK_right
         PoR(k_surface) = 1.
-        PoL(k_surface) = REAL(ki_left) - 1. ! Position of an interface is the index of the interface minus 1
+        PoL(k_surface) = REAL(ki_left-1)
+        !write(*,*) "Searching across discontinuity"
       ! Search within the layer for the neutral surface
       else
+        KoR(k_surface) = kl_right
         call search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, lastP_right, lastK_right, &
                                  Pr(kl_right,1), Pr(kl_right,2), ki_right, ki_left, kl_right, PoR(k_surface))
+        PoL(k_surface) = REAL(ki_left-1)
       endif
-      PoL(k_surface) = REAL(ki_left) - 1.
-      KoL(k_surface) = kl_left
       call increment_interface(nk, kl_left, ki_left, reached_bottom, searching_left_column, searching_right_column)
 
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
@@ -1156,9 +1174,13 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       stop 'Else what?'
     endif
     ! Store layer indices and positions for next iteration
+    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
+    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
-
+    !write(*,'(A,I2,A,F6.2,A,I2,A,F6.2)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
+    !  KoR(k_surface), " PoR:", PoR(k_surface)
+    !write(*,*)
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
@@ -1168,10 +1190,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, &
       hR = absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface) - &
            absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
-        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Analogous of effective resistance for two resistors
-        if (hEff(k_surface-1)<0.) then
-          call MOM_error(FATAL,"hEff<0.")
+        hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean
+        if (hEff(k_surface-1) < 0.) then
+          call MOM_error(FATAL,"MAYDAY")
         endif
+
       else
         hEff(k_surface-1) = 0.
       endif
@@ -1215,7 +1238,7 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
     searching_this_column = .true.
     searching_other_column = .false.
   else
-    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
+!    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
   endif
 
 end subroutine increment_interface
@@ -1236,23 +1259,33 @@ subroutine search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, o
   real,    intent(  out) :: other_P        !< Position within searched column
 
   ! Check if everything in this layer is denser than neutral surface or if at the top of the water column
-  if ( (dRhoTop > 0) .or. ( (other_ki + other_kl) == 2 ) ) then
+  if ( (dRhoTop > 0.) .or. ( (other_kl == 1 .and. other_ki == 1 ) )) then
     other_P = 0.
+    !write(*,*) "dRhoTop > 0 or at surface"
   elseif (dRhoTop == dRhoBot) then ! Layer is perfectly unstratified
     if (same_direction) then ! Always point to the same place as the last neutral surface
       other_P = other_lastP
       other_kl = other_lastK
+      !write(*,*) "Perfectly unstratified same direction"
     else
-      other_P = REAL(this_ki) ! Connect a top interface to a top interface, bottom to bottom
+      other_P = REAL(this_ki-1) ! Connect a top interface to a top interface, bottom to bottom
+      !write(*,*) "Perfectly unstratified different direction"
     endif
   elseif (dRhoTop > dRhoBot) then ! Layer is unstably stratified
     other_P = 1.
+    !write(*,*) "dRhoTop > dRhoBot"
   else ! Surface exists somewhere in between the interfaces
-    other_P = interpolate_for_nondim_position(dRhoTop, other_Ptop, dRhoBot, other_PBot)
+    !write(*,*) dRhoTop, other_Ptop, dRhoBot, other_Pbot
+!    if (other_Ptop>=other_Pbot) then
+!      other_P = 0.
+!    else
+      other_P = interpolate_for_nondim_position(dRhoTop, other_Ptop, dRhoBot, other_Pbot)
+!    endif
+
+    !write(*,*) "Interpolating for position"
   endif
 
 end subroutine search_other_column_discontinuous
-
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
 real function absolute_position(n,Pint,Karr,NParr,k_surface)
   integer, intent(in) :: n            !< Number of levels
@@ -1300,7 +1333,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if (dRhoNeg>dRhoPos) write(0,*) 'dRhoNeg, Pneg, dRhoPos, Ppos=',dRhoNeg, Pneg, dRhoPos, Ppos
   if (dRhoNeg>dRhoPos) stop 'interpolate_for_nondim_position: Houston, we have a problem! dRhoNeg>dRhoPos'
   if (Ppos<=Pneg) then ! Handle vanished or inverted layers
-    interpolate_for_nondim_position = 0.5
+    interpolate_for_nondim_position = 0.
   elseif ( dRhoPos - dRhoNeg > 0. ) then
     interpolate_for_nondim_position = min( 1., max( 0., -dRhoNeg / ( dRhoPos - dRhoNeg ) ) )
   elseif ( dRhoPos - dRhoNeg == 0) then
