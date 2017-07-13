@@ -39,28 +39,28 @@ logical, parameter :: verbose = .False.
 contains
 
 logical function diffConvection_init(paramFile, G, diag, Time, CS)
-! Initialize the CVmix KPP module and set up diagnostics
-! Returns True if module is to be used, otherwise returns False.
+!< Initialize the CVmix KPP module and set up diagnostics
+!! Returns True if module is to be used, otherwise returns False.
 
 ! Arguments
-  type(param_file_type),   intent(in)    :: paramFile ! File parser
-  type(ocean_grid_type),   intent(in)    :: G         ! Ocean grid
-  type(diag_ctrl), target, intent(in)    :: diag      ! Diagnostics
-  type(time_type),         intent(in)    :: Time      ! Time
-  type(diffConvection_CS), pointer       :: CS        ! Control structure
+  type(param_file_type),   intent(in)    :: paramFile !< File parser
+  type(ocean_grid_type),   intent(in)    :: G         !< Ocean grid
+  type(diag_ctrl), target, intent(in)    :: diag      !< Diagnostics
+  type(time_type),         intent(in)    :: Time      !< Time
+  type(diffConvection_CS), pointer       :: CS        !< Control structure
 ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mod = 'MOM_diffConvection' ! This module's name.
+  character(len=40) :: mdl = 'MOM_diffConvection' ! This module's name.
 
   if (associated(CS)) call MOM_error(FATAL, 'MOM_diffConvection, diffConvection_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
 
 ! Read parameters
-  call log_version(paramFile, mod, version, &
+  call log_version(paramFile, mdl, version, &
             'This module implements enhanced diffusivity as a\n' // &
             'function of static stability, N^2.')
-  call get_param(paramFile, mod, "USE_CONVECTION", diffConvection_init, &
+  call get_param(paramFile, mdl, "USE_CONVECTION", diffConvection_init, &
                  "If true, turns on the diffusive convection scheme that\n"// &
                  "increases diapycnal diffusivities at statically unstable\n"// &
                  "interfaces. Relevant parameters are contained in the\n"// &
@@ -68,14 +68,14 @@ logical function diffConvection_init(paramFile, G, diag, Time, CS)
                  default=.false.)
 
   call openParameterBlock(paramFile,'CONVECTION')
-  call get_param(paramFile, mod, 'PASSIVE', CS%passiveMode,           &
+  call get_param(paramFile, mdl, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
                  default=.False.)
-  call get_param(paramFile, mod, 'KD_CONV', CS%Kd_convection,                  &
+  call get_param(paramFile, mdl, 'KD_CONV', CS%Kd_convection,                  &
                  'DIffusivity used in statically unstable regions of column.', &
                  units='m2/s', default=1.00)
   call closeParameterBlock(paramFile)
-  call get_param(paramFile, mod, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
+  call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
 ! Forego remainder of initialization if not using this scheme
   if (.not. diffConvection_init) return
@@ -96,18 +96,18 @@ end function diffConvection_init
 
 
 subroutine diffConvection_calculate(CS, G, GV, h, Temp, Salt, EOS, Kd_int)
-! Calculates diffusivity and non-local transport for KPP parameterization
+!< Calculates diffusivity and non-local transport for KPP parameterization
 
 ! Arguments
-  type(diffConvection_CS),                   pointer       :: CS    ! Control structure
-  type(ocean_grid_type),                     intent(in)    :: G     ! Ocean grid
-  type(verticalGrid_type),                   intent(in)    :: GV    ! Ocean vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h     ! Layer/level thicknesses (units of H)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp  ! Pot. temperature (degrees C)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt  ! Salinity (ppt)
-  type(EOS_type),                            pointer       :: EOS   ! Equation of state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_int ! (in) Vertical diffusivity on interfaces (m2/s)
-                                                                 ! (out) Modified vertical diffusivity (m2/s)
+  type(diffConvection_CS),                   pointer       :: CS    !< Control structure
+  type(ocean_grid_type),                     intent(in)    :: G     !< Ocean grid
+  type(verticalGrid_type),                   intent(in)    :: GV    !< Ocean vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h     !< Layer/level thicknesses (units of H)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Temp  !< Pot. temperature (degrees C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: Salt  !< Salinity (ppt)
+  type(EOS_type),                            pointer       :: EOS   !< Equation of state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: Kd_int !< (in) Vertical diffusivity on interfaces (m2/s)
+                                                                 !! (out) Modified vertical diffusivity (m2/s)
 ! Local variables
   integer :: i, j, k
   real, dimension( G%ke+1 ) :: N2_1d ! Brunt-Vaisala frequency squared, at interfaces (1/s2)

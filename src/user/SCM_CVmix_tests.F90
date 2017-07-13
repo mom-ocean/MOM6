@@ -41,18 +41,20 @@ end type
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-character(len=40)  :: mod = "SCM_CVmix_tests" ! This module's name.
+character(len=40)  :: mdl = "SCM_CVmix_tests" ! This module's name.
 
 contains
 
 !> Initializes temperature and salinity for the SCM CVmix test example
-subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file)
+subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential tempera\ture (degC)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
   type(ocean_grid_type),                  intent(in)  :: G !< Grid structure
   type(verticalGrid_type),                intent(in)  :: GV!< Vertical grid structure
   type(param_file_type),                  intent(in)  :: param_file !< Input parameter structure
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
   ! Local variables
   real :: eta(SZK_(G)+1) ! The 1-d nominal positions of the interfaces.
   real :: UpperLayerTempMLD !< Upper layer Temp MLD thickness (m)
@@ -64,31 +66,36 @@ subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file)
   real :: LowerLayerdTdz !< Temp gradient in lower layer (deg C m^{-1})
   real :: LowerLayerdSdz !< Salt gradient in lower layer (PPT m^{-1})
   real :: zC, DZ
+  logical :: just_read    ! If true, just read parameters but set nothing.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file,mod,"SCM_TEMP_MLD",UpperLayerTempMLD, &
-                 'Initial temp mixed layer depth', units='m',default=0.0)
-  call get_param(param_file,mod,"SCM_SALT_MLD",UpperLayerSaltMLD, &
-                 'Initial salt mixed layer depth', units='m',default=0.0)
-  call get_param(param_file,mod,"SCM_L1_SALT",UpperLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0)
-  call get_param(param_file,mod,"SCM_L1_TEMP",UpperLayerTemp, &
-                 'Layer 1 surface temperature', units='C', default=20.0)
-  call get_param(param_file,mod,"SCM_L2_SALT",LowerLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3',default=35.0)
-  call get_param(param_file,mod,"SCM_L2_TEMP",LowerLayerTemp, &
-                 'Layer 2 surface temperature', units='C', default=20.0)
-  call get_param(param_file,mod,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl,"SCM_TEMP_MLD",UpperLayerTempMLD, &
+                 'Initial temp mixed layer depth', units='m',default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_SALT_MLD",UpperLayerSaltMLD, &
+                 'Initial salt mixed layer depth', units='m',default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L1_SALT",UpperLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L1_TEMP",UpperLayerTemp, &
+                 'Layer 1 surface temperature', units='C', default=20.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L2_SALT",LowerLayerSalt, &
+                 'Layer 2 surface salinity', units='1e-3',default=35.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L2_TEMP",LowerLayerTemp, &
+                 'Layer 2 surface temperature', units='C', default=20.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L2_DTDZ",LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
-                 units='C/m', default=0.00)
-  call get_param(param_file,mod,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
+                 units='C/m', default=0.00, do_not_log=just_read)
+  call get_param(param_file, mdl,"SCM_L2_DSDZ",LowerLayerdSdZ,  &
                  'Initial salinity stratification in layer 2', &
-                 units='PPT/m', default=0.00)
+                 units='PPT/m', default=0.00, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do j=js,je ; do i=is,ie
     eta(1) = 0. ! Reference to surface
@@ -130,47 +137,47 @@ subroutine SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SCM_USE_WIND_STRESS",              &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SCM_USE_WIND_STRESS",              &
                  CS%UseWindStress, "Wind Stress switch "//            &
                  "used in the SCM CVmix surface forcing.",            &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_HEAT_FLUX",                &
+  call get_param(param_file, mdl, "SCM_USE_HEAT_FLUX",                &
                  CS%UseHeatFlux, "Heat flux switch "//                &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_EVAPORATION",              &
+  call get_param(param_file, mdl, "SCM_USE_EVAPORATION",              &
                  CS%UseEvaporation, "Evaporation switch "//           &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
-  call get_param(param_file, mod, "SCM_USE_DIURNAL_SW",               &
+  call get_param(param_file, mdl, "SCM_USE_DIURNAL_SW",               &
                  CS%UseDiurnalSW, "Diurnal sw radation switch "//     &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='', default=.false.)
   if (CS%UseWindStress) then
-    call get_param(param_file, mod, "SCM_TAU_X",                      &
+    call get_param(param_file, mdl, "SCM_TAU_X",                      &
                  CS%tau_x, "Constant X-dir wind stress "//            &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='N/m2', fail_if_missing=.true.)
-    call get_param(param_file, mod, "SCM_TAU_Y",                      &
+    call get_param(param_file, mdl, "SCM_TAU_Y",                      &
                  CS%tau_y, "Constant y-dir wind stress "//            &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='N/m2', fail_if_missing=.true.)
   endif
   if (CS%UseHeatFlux) then
-    call get_param(param_file, mod, "SCM_HEAT_FLUX",                  &
+    call get_param(param_file, mdl, "SCM_HEAT_FLUX",                  &
                  CS%surf_HF, "Constant surface heat flux "//          &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m K/s', fail_if_missing=.true.)
   endif
   if (CS%UseEvaporation) then
-    call get_param(param_file, mod, "SCM_EVAPORATION",                &
+    call get_param(param_file, mdl, "SCM_EVAPORATION",                &
                  CS%surf_evap, "Constant surface evaporation "//      &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m/s', fail_if_missing=.true.)
   endif
   if (CS%UseDiurnalSW) then
-    call get_param(param_file, mod, "SCM_DIURNAL_SW_MAX",             &
+    call get_param(param_file, mdl, "SCM_DIURNAL_SW_MAX",             &
                  CS%Max_sw, "Maximum diurnal sw radiation "//         &
                  "used in the SCM CVmix test surface forcing.",       &
                  units='m K/s', fail_if_missing=.true.)

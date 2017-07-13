@@ -58,9 +58,17 @@ real, parameter ::  S00 = 1.965933e4, S10 = 1.444304e2, S20 = -1.706103, &
 
 contains
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Coded by R. Hallberg, 7/00
 subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho)
-real,    intent(in)  :: T, S, pressure
-real,    intent(out) :: rho
+real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+real,    intent(in)  :: S        !< Salinity in PSU.
+real,    intent(in)  :: pressure !< Pressure in Pa.
+real,    intent(out) :: rho      !< In situ density in kg m-3.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -88,10 +96,17 @@ real,    intent(out) :: rho
 
 end subroutine calculate_density_scalar_UNESCO
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! (T in deg C), and pressure in Pa.
 subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 
 ! *  This subroutine computes the in situ density of sea water (rho in *
 ! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
@@ -134,10 +149,20 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
   enddo
 end subroutine calculate_density_array_UNESCO
 
+!> This subroutine calculates the partial derivatives of density
+!! with potential temperature and salinity.
 subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: drho_dT, drho_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature, in kg m-3 K-1.
+  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in kg m-3 psu-1.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
+
 ! *   This subroutine calculates the partial derivatives of density    *
 ! * with potential temperature and salinity.                           *
 ! *                                                                    *
@@ -200,10 +225,21 @@ subroutine calculate_density_derivs_UNESCO(T, S, pressure, drho_dT, drho_dS, sta
 
 end subroutine calculate_density_derivs_UNESCO
 
+!> This subroutine computes the in situ density of sea water (rho)
+!! and the compressibility (drho/dp == C_sound^-2) at the given
+!! salinity, potential temperature, and pressure.
 subroutine calculate_compress_UNESCO(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho, drho_dp
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
+                                                 !! (also the inverse of the square of sound speed)
+                                                 !! in s2 m-2.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
+
 ! *  This subroutine computes the in situ density of sea water (rho)   *
 ! *  and the compressibility (drho/dp == C_sound^-2) at the given      *
 ! *  salinity, potential temperature, and pressure.                    *
