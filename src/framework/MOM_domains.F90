@@ -60,7 +60,7 @@ public :: AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM, CORNER
 public :: To_East, To_West, To_North, To_South, To_All, Omit_Corners
 public :: create_group_pass, do_group_pass, group_pass_type
 public :: start_group_pass, complete_group_pass
-public :: compute_block_extent
+public :: compute_block_extent, get_global_shape
 
 interface pass_var
   module procedure pass_var_3d, pass_var_2d
@@ -1598,5 +1598,16 @@ subroutine get_domain_extent(Domain, isc, iec, jsc, jec, isd, ied, jsd, jed, &
   symmetric = Domain%symmetric
 
 end subroutine get_domain_extent
+
+!> Returns the global shape of h-point arrays
+subroutine get_global_shape(domain, niglobal, njglobal)
+  type(MOM_domain_type), intent(in)  :: domain !< MOM domain
+  integer,               intent(out) :: niglobal !< i-index global size of h-point arrays
+  integer,               intent(out) :: njglobal !< j-index global size of h-point arrays
+
+  niglobal = domain%niglobal
+  njglobal = domain%njglobal
+
+end subroutine get_global_shape
 
 end module MOM_domains
