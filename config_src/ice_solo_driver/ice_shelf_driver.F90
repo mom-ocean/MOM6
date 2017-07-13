@@ -54,13 +54,15 @@ program SHELF_main
   use MOM_restart, only : save_restart
 !  use MOM_sum_output, only : write_energy, accumulate_net_input
 !  use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
+  use MOM_string_functions, only : uppercase
 !  use MOM_surface_forcing, only : set_forcing, average_forcing
 !  use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
   use MOM_time_manager, only : time_type, set_date, set_time, get_date, time_type_to_real
   use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
   use MOM_time_manager, only : operator(>), operator(<), operator(>=)
   use MOM_time_manager, only : increment_date, set_calendar_type, month_name
-  use MOM_time_manager, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, NO_CALENDAR
+  use MOM_time_manager, only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
+  use MOM_time_manager, only : NO_CALENDAR
   use MOM_write_cputime, only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime, only : write_cputime_start_clock, write_cputime_CS
 
@@ -159,7 +161,7 @@ program SHELF_main
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "SHELF_main (ice_shelf_driver)" ! This module's name.
+  character(len=40)  :: mdl = "SHELF_main (ice_shelf_driver)" ! This module's name.
 
   namelist /ice_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
 
@@ -197,12 +199,14 @@ program SHELF_main
     read(unit,*) date
     call close_file(unit)
   else
-    if (calendar(1:6) == 'julian') then ;         calendar_type = JULIAN
+    calendar = uppercase(calendar)
+    if (calendar(1:6) == 'JULIAN') then ;         calendar_type = JULIAN
+    else if (calendar(1:9) == 'GREGORIAN') then ; calendar_type = GREGORIAN
     else if (calendar(1:6) == 'NOLEAP') then ;    calendar_type = NOLEAP
-    else if (calendar(1:10)=='thirty_day') then ; calendar_type = THIRTY_DAY_MONTHS
-    else if (calendar(1:11)=='no_calendar') then; calendar_type = NO_CALENDAR
+    else if (calendar(1:10)=='THIRTY_DAY') then ; calendar_type = THIRTY_DAY_MONTHS
+    else if (calendar(1:11)=='NO_CALENDAR') then; calendar_type = NO_CALENDAR
     else if (calendar(1:1) /= ' ') then
-      call MOM_error(FATAL,'MOM_driver: Invalid namelist value for calendar')
+      call MOM_error(FATAL,'MOM_driver: Invalid namelist value '//trim(calendar)//' for calendar')
     else
       call MOM_error(FATAL,'MOM_driver: No namelist value for calendar')
     endif
@@ -219,16 +223,16 @@ program SHELF_main
   call Get_MOM_Input(param_file, dirs)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "ICE_SHELF", use_ice_shelf, &
+  call get_param(param_file, mdl, "ICE_SHELF", use_ice_shelf, &
                  "If true, call the code to apply an ice shelf model over \n"//&
                  "some of the domain.", default=.false.)
 
   if (.not.use_ice_shelf) call MOM_error(FATAL, &
         "shelf_driver: ICE_SHELF must be defined.")
 
-  call get_param(param_file, mod, "ICE_VELOCITY_TIMESTEP", time_step, &
+  call get_param(param_file, mdl, "ICE_VELOCITY_TIMESTEP", time_step, &
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics.", &
                  units="s", fail_if_missing=.true.)
@@ -256,20 +260,20 @@ program SHELF_main
     call MOM_mesg("Using real elapsed time for the master clock.")
 
   ! Determine the segment end time, either from the namelist file or parsed input file.
-  call get_param(param_file, mod, "TIMEUNIT", Time_unit, &
+  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
                  "The time unit for DAYMAX and RESTINT.", &
                  units="s", default=86400.0)
   if (years+months+days+hours+minutes+seconds > 0) then
     Time_end = increment_date(Time, years, months, days, hours, minutes, seconds)
     call MOM_mesg('Segment run length determied from ice_solo_nml.', 2)
-    call get_param(param_file, mod, "DAYMAX", daymax, &
+    call get_param(param_file, mdl, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&
                  "TIMEUNIT seconds.  This also sets the potential end \n"//&
                  "time of the present run segment if the end time is \n"//&
                  "not set (as it was here) via ocean_solo_nml in input.nml.", &
                  timeunit=Time_unit, default=Time_end)
   else
-    call get_param(param_file, mod, "DAYMAX", daymax, &
+    call get_param(param_file, mdl, "DAYMAX", daymax, &
                  "The final time of the whole simulation, in units of \n"//&
                  "TIMEUNIT seconds.  This also sets the potential end \n"//&
                  "time of the present run segment if the end time is \n"//&
@@ -282,18 +286,18 @@ program SHELF_main
   if (Time >= Time_end) call MOM_error(FATAL, &
     "MOM_driver: The run has been started at or after the end time of the run.")
 
-  call get_param(param_file, mod, "RESTART_CONTROL", Restart_control, &
+  call get_param(param_file, mdl, "RESTART_CONTROL", Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
                  "(bit 0) for a non-time-stamped file. A non-time-stamped \n"//&
                  "restart file is saved at the end of the run segment \n"//&
                  "for any non-negative value.", default=1)
-  call get_param(param_file, mod, "RESTINT", restint, &
+  call get_param(param_file, mdl, "RESTINT", restint, &
                  "The interval between saves of the restart file in units \n"//&
                  "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
                  "incremental restart files at all.", default=set_time(0), &
                  timeunit=Time_unit)
-  call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
+  call log_param(param_file, mdl, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
 !   i don't think we'll use this...
 !   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &

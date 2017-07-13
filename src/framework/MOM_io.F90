@@ -842,9 +842,9 @@ subroutine MOM_io_init(param_file)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_io" ! This module's name.
+  character(len=40)  :: mdl = "MOM_io" ! This module's name.
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mdl, version)
 
 end subroutine MOM_io_init
 
