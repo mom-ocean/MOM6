@@ -93,7 +93,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
 
   ! Read all relevant parameters and write them to the model log.
-  call get_param(param_file, mod, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
+  call get_param(param_file, mdl, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
                  "If true, uses a continuous reconstruction of T and S when  \n"//  &
                  "finding neutral surfaces along which diffusion will happen.\n"//  &
                  "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
