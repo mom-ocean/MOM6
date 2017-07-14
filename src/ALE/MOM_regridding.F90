@@ -1204,6 +1204,11 @@ subroutine build_sigma_grid( CS, G, GV, h, dzInterface )
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
 
+      if (G%mask2dT(i,j)==0.) then
+        dzInterface(i,j,:) = 0.
+        cycle
+      endif
+
       ! The rest of the model defines grids integrating up from the bottom
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
@@ -1292,6 +1297,12 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
+
+      if (G%mask2dT(i,j)==0.) then
+        dzInterface(i,j,:) = 0.
+        cycle
+      endif
+
 
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
