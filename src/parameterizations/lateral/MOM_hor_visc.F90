@@ -369,6 +369,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
+  if (.not.(CS%Laplacian .or. CS%biharmonic)) return
 
   find_FrictWork = (CS%id_FrictWork > 0)
   if (CS%id_FrictWorkIntz > 0)    find_FrictWork = .true.
@@ -1227,9 +1228,12 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                           "at the same time in MOM.")
 
-  if (.not.(CS%Laplacian .or. CS%biharmonic)) call MOM_error(WARNING, &
-    "hor_visc_init:  It is usually a very bad idea not to use either "//&
-    "LAPLACIAN or BIHARMONIC viscosity.")
+  if (.not.(CS%Laplacian .or. CS%biharmonic)) then
+    call MOM_error(WARNING, &
+      "hor_visc_init:  It is usually a very bad idea not to use either "//&
+      "LAPLACIAN or BIHARMONIC viscosity.")
+    return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
+  endif
 
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0
@@ -1572,10 +1576,11 @@ subroutine hor_visc_end(CS)
 !                 hor_visc_init.
   type(hor_visc_CS), pointer :: CS
 
-  DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
-  DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
-
-  DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
+  if (CS%Laplacian .or. CS%biharmonic) then
+    DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
+    DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
+    DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
+  endif
 
   if (CS%Laplacian) then
     DEALLOC_(CS%Kh_bg_xx) ; DEALLOC_(CS%Kh_bg_xy)
