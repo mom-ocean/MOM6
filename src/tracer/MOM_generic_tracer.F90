@@ -61,15 +61,17 @@ module MOM_generic_tracer
   use MOM_hor_index, only : hor_index_type
   use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+  use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
   use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS
   use MOM_time_manager, only : time_type, get_time, set_time
+  use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
   use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-  use MOM_tracer_registry, only : tracer_vertdiff
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
-  use MOM_variables, only : surface, ocean_OBC_type, thermo_var_ptrs
+  use MOM_variables, only : surface, thermo_var_ptrs
+  use MOM_open_boundary, only : ocean_OBC_type
   use MOM_verticalGrid, only : verticalGrid_type
 
 
@@ -85,7 +87,7 @@ module MOM_generic_tracer
   public MOM_generic_tracer_fluxes_accumulate
 
   type, public :: MOM_generic_tracer_CS ; private
-     character(len=200) :: IC_file ! The file in which the generic tracer initial values can
+     character(len = 200) :: IC_file ! The file in which the generic tracer initial values can
                        ! be found, or an empty string for internal initialization.
      logical :: Z_IC_file ! If true, the generic_tracer IC_file is in Z-space.  The default is false.
      real :: tracer_IC_val = 0.0    ! The initial value assigned to tracers.
@@ -105,6 +107,8 @@ module MOM_generic_tracer
      ! linked list of generic diagnostics fields that must be Z registered by MOM.
      type(g_diag_type), pointer :: g_diag_list => NULL()
 
+     integer :: H_to_m !Auxiliary to access GV%H_to_m in routines that do not have access to GV
+
   end type MOM_generic_tracer_CS
 
 ! This include declares and sets the variable "version".
@@ -123,25 +127,25 @@ contains
   !     Register these tracers for restart
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+  !   call register_MOM_generic_tracer(G, param_file, CS, diag, tr_Reg, restart_CS)
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
   function register_MOM_generic_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-    type(hor_index_type),    intent(in)   :: HI
-    type(verticalGrid_type), intent(in)   :: GV
-    type(param_file_type),   intent(in)   :: param_file
-    type(MOM_generic_tracer_CS), pointer  :: CS
-    type(tracer_registry_type), pointer   :: tr_Reg
-    type(MOM_restart_CS),       pointer   :: restart_CS
+    type(hor_index_type),       intent(in)   :: HI
+    type(verticalGrid_type),    intent(in)   :: GV   !< The ocean's vertical grid structure
+    type(param_file_type),      intent(in)   :: param_file !< A structure to parse for run-time parameters
+    type(MOM_generic_tracer_CS), pointer      :: CS
+    type(tracer_registry_type), pointer     :: tr_Reg
+    type(MOM_restart_CS),       pointer     :: restart_CS
     ! This subroutine is used to register tracer fields and subroutines
     ! to be used with MOM.
-    ! Arguments: HI - A horizontal index type structure.
-    !  (in)      GV - The ocean's vertical grid structure.
+    ! Arguments: G - The ocean's grid structure.
     !  (in)      param_file - A structure indicating the open file to parse for
     !                         model parameter values.
     !  (in/out)  CS - A pointer that is set to point to the control structure
     !                 for this module
+    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in/out)  tr_Reg - A pointer that is set to point to the control structure
     !                  for the tracer advection and diffusion module.
     !  (in)      restart_CS - A pointer to the restart control structure.
@@ -157,8 +161,8 @@ contains
     character(len=fm_string_len)      :: g_tracer_name,longname,units
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real, dimension(HI%isd:HI%ied, HI%jsd:HI%jed, GV%ke)   :: grid_tmask
-    integer, dimension(HI%isd:HI%ied, HI%jsd:HI%jed)       :: grid_kmt
+    real, dimension(HI%isd:HI%ied, HI%jsd:HI%jed,GV%ke)         :: grid_tmask
+    integer, dimension(HI%isd:HI%ied, HI%jsd:HI%jed)           :: grid_kmt
     type(vardesc) :: vdesc
 
     register_MOM_generic_tracer = .false.
@@ -169,12 +173,14 @@ contains
     endif
     allocate(CS)
 
+
     !Register all the generic tracers used and create the list of them.
     !This can be called by ALL PE's. No array fields allocated.
     if (.not. g_registered) then
        call generic_tracer_register
        g_registered = .true.
     endif
+
 
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
@@ -202,7 +208,8 @@ contains
 
     ntau=1 ! MOM needs the fields at only one time step
 
-    !   At this point HI%mask2dT and CS%diag%axesTL are not allocated.
+
+    !   At this point G%mask2dT and CS%diag%axesTL are not allocated.
     ! postpone diag_registeration to initialize_MOM_generic_tracer
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
@@ -214,7 +221,7 @@ contains
     ! Initialize all generic tracers
     !
     call generic_tracer_init(HI%isc,HI%iec,HI%jsc,HI%jec,HI%isd,HI%ied,HI%jsd,HI%jed,&
-           GV%ke,ntau,axes,grid_tmask,grid_kmt,set_time(0,0))
+         GV%ke,ntau,axes,grid_tmask,grid_kmt,set_time(0,0))
 
 
     !
@@ -282,11 +289,11 @@ contains
                                           sponge_CSp, ALE_sponge_CSp,diag_to_Z_CSp)
     logical,                               intent(in) :: restart
     type(time_type), target,               intent(in) :: day
-    type(ocean_grid_type),                 intent(inout) :: G
-    type(verticalGrid_type),               intent(in) :: GV
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
-    type(param_file_type),                 intent(in) :: param_file
-    type(diag_ctrl), target,               intent(in) :: diag
+    type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
+    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+    type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
+    type(diag_ctrl),               target, intent(in) :: diag
     type(ocean_OBC_type),                  pointer    :: OBC
     type(MOM_generic_tracer_CS),           pointer    :: CS
     type(sponge_CS),                       pointer    :: sponge_CSp
@@ -301,7 +308,6 @@ contains
     !  (in)      G - The ocean's grid structure.
     !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      h - Layer thickness, in m or kg m-2.
-    !  (in)      diag - A structure that is used to regulate diagnostic output.
     !  (in)      OBC - This open boundary condition type specifies whether, where,
     !                  and what open boundary conditions are used.
     !  (in/out)  CS - The control structure returned by a previous call to
@@ -321,23 +327,21 @@ contains
     character(len=fm_string_len)      :: g_tracer_name, longname, units
     real, dimension(:,:,:,:), pointer   :: tr_field
     real, dimension(:,:,:), pointer     :: tr_ptr
-    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:GV%ke) :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)         :: grid_kmt
+    real,    dimension(G%isd:G%ied, G%jsd:G%jed,1:G%ke) :: grid_tmask
+    integer, dimension(G%isd:G%ied, G%jsd:G%jed)        :: grid_kmt
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
     !! Ideally, the generic tracer IC file should have the tracers on Z levels.
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
 
+    CS%diag=>diag
     !Get the tracer list
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
-
-    ! diag is an opaque type that contains information about the diagnostics.
-    CS%diag => diag
 
     do
       if(INDEX(CS%IC_file, '_NULL_') .ne. 0) then
@@ -353,7 +357,7 @@ contains
       if (.not.restart .or. (CS%tracers_may_reinit .and. &
           .not.query_initialized(tr_ptr, g_tracer_name, CS%restart_CSp))) then
 
-       if(g_tracer%requires_src_info ) then 
+       if(g_tracer%requires_src_info ) then
          call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                              "initializing generic tracer "//trim(g_tracer_name)//&
                              " using MOM_initialize_tracer_from_Z ")
@@ -374,7 +378,16 @@ contains
             endif
          enddo; enddo ; enddo
 
-       else !Do it old way if the tracer is not registered to start from a specific source file.  
+         !jgj: Reset CASED to 0 below K=1
+         if(trim(g_tracer_name) .eq. 'cased') then
+            do k=2,nk ; do j=jsc,jec ; do i=isc,iec
+               if(tr_ptr(i,j,k) .ne. CS%tracer_land_val) then
+                 tr_ptr(i,j,k) = 0.0
+               endif
+            enddo; enddo ; enddo
+         endif
+
+       else !Do it old way if the tracer is not registered to start from a specific source file.
             !This path should be deprecated if all generic tracers are required to start from specified sources.
         if (len_trim(CS%IC_file) > 0) then
         !  Read the tracer concentrations from a netcdf file.
@@ -392,7 +405,7 @@ contains
                             "initialized generic tracer "//trim(g_tracer_name)//&
                             " using Generic Tracer File on Z: "//CS%IC_file)
           else
-            ! native grid 
+            ! native grid
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                   "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
                   " for tracer "//trim(g_tracer_name))
@@ -422,10 +435,9 @@ contains
     do j = G%jsd, G%jed ; do i = G%isd, G%ied
        if (G%mask2dT(i,j) .gt. 0) then
           grid_tmask(i,j,:) = 1.0
-          grid_kmt(i,j) = GV%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
+          grid_kmt(i,j) = G%ke ! Tell the code that a layer thicker than 1m is the bottom layer.
        endif
     enddo ; enddo
-
     call g_tracer_set_common(G%isc,G%iec,G%jsc,G%jec,G%isd,G%ied,G%jsd,G%jed,&
                              GV%ke,1,CS%diag%axesTL%handles,grid_tmask,grid_kmt,day)
 
@@ -481,6 +493,8 @@ contains
        enddo
     endif
 
+    CS%H_to_m = GV%H_to_m
+
   end subroutine initialize_MOM_generic_tracer
 
   ! <SUBROUTINE NAME="MOM_generic_tracer_column_physics">
@@ -499,15 +513,19 @@ contains
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, optics)
-    type(ocean_grid_type),                 intent(in) :: G
-    type(verticalGrid_type),               intent(in) :: GV
+  subroutine MOM_generic_tracer_column_physics(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, CS, tv, optics, &
+        evap_CFL_limit, minimum_forcing_depth)
+    type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+    type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
     type(forcing),                         intent(in) :: fluxes
-    real,                                  intent(in) :: dt
+    real, dimension(SZI_(G),SZJ_(G)),      intent(in) :: Hml  !< Mixed layer depth
+    real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
     type(MOM_generic_tracer_CS),           pointer    :: CS
-    type(thermo_var_ptrs),                 intent(in) :: tv
+    type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
     type(optics_type),                     intent(in) :: optics
+    real,                        optional,intent(in)  :: evap_CFL_limit
+    real,                        optional,intent(in)  :: minimum_forcing_depth
     !   This subroutine applies diapycnal diffusion and any other column
     ! tracer physics or chemistry to the tracers from this file.
     ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -528,6 +546,10 @@ contains
     !  (in)      GV - The ocean's vertical grid structure.
     !  (in)      CS - The control structure returned by a previous call to
     !                 register_MOM_generic_tracer.
+    !  (in)      evap_CFL_limit - Limits how much water can be fluxed out of the top layer
+    !                             Stored previously in diabatic CS.
+    !  (in)      minimum_forcing_depth - The smallest depth over which fluxes can be applied
+    !                             Stored previously in diabatic CS.
     !
     ! The arguments to this subroutine are redundant in that
     !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
@@ -537,11 +559,14 @@ contains
     character(len=fm_string_len)  :: g_tracer_name
     real, dimension(:,:), pointer :: stf_array,trunoff_array,runoff_tracer_flux_array
 
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
-    real, dimension(G%isd:G%ied,G%jsd:G%jed)       :: hblt_depth
+    real :: surface_field(SZI_(G),SZJ_(G))
+    real :: sosga
+
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,G%ke) :: rho_dzt, dzt
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G))      :: h_work
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
-    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = G%ke
 
     !Get the tracer list
     if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL,&
@@ -554,7 +579,7 @@ contains
     !
     !Extract the tracer surface fields from coupler and update tracer fields from sources
     !
-    !call generic_tracer_coupler_get(fluxes%tr_fluxes) 
+    !call generic_tracer_coupler_get(fluxes%tr_fluxes)
     !Niki: This is moved out to ocean_model_MOM.F90 because if dt_therm>dt_cpld we need to average
     !      the fluxes without coming into this subroutine.
     !      MOM5 has to modified to conform.
@@ -595,33 +620,49 @@ contains
       dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
     enddo; enddo ; enddo !}
 
-
-    ! Boussinesq model
-    hblt_depth(:,:) = GV%H_to_m * GV%Angstrom
-    do j=jsc,jec ; do i=isc,iec ;
-      hblt_depth(i,j) = GV%H_to_m * h_old(i,j,1)
-    enddo; enddo
-    do k=2,GV%nkml ; do j=jsc,jec ; do i=isc,iec
-      hblt_depth(i,j) = hblt_depth(i,j) + GV%H_to_m * h_old(i,j,k)
-    enddo; enddo ; enddo
-
+    do j=jsc,jec ; do i=isc,iec
+       surface_field(i,j) = tv%S(i,j,1)
+    enddo ; enddo
+    sosga = global_area_mean(surface_field, G)
 
     !
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
     !
 
-    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,hblt_depth,G%isd,G%jsd,1,dt,&
+    call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
-         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band)
+         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
+
+    ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
+    ! usually in ALE mode
+    if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+      g_tracer=>CS%g_tracer_list
+      do
+        if (g_tracer_is_prog(g_tracer)) then
+          do k=1,nk ;do j=jsc,jec ; do i=isc,iec
+            h_work(i,j,k) = h_old(i,j,k)
+          enddo ; enddo ; enddo;
+          call applyTracerBoundaryFluxesInOut(G, GV, g_tracer%field(:,:,:,1), dt, fluxes, h_work, &
+              evap_CFL_limit, minimum_forcing_depth)
+        endif
+
+         !traverse the linked list till hit NULL
+         call g_tracer_get_next(g_tracer, g_tracer_next)
+        if(.NOT. associated(g_tracer_next)) exit
+        g_tracer=>g_tracer_next
+      enddo
+    endif
 
     !
     !Update Tr(n)%field from explicit vertical diffusion
     !
-
     ! Use a tridiagonal solver to determine the concentrations after the
     ! surface source is applied and diapycnal advection and diffusion occurs.
-
-    call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
+      call generic_tracer_vertdiff_G(h_work, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    else
+      call generic_tracer_vertdiff_G(h_old, ea, eb, dt, GV%kg_m2_to_H, GV%m_to_H, 1) !Last arg is tau which is always 1 for MOM
+    endif
 
     ! Update bottom fields after vertical processes
 
@@ -652,9 +693,9 @@ contains
   ! </SUBROUTINE>
 
   function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
-    type(ocean_grid_type),              intent(in)    :: G
-    type(verticalGrid_type),            intent(in)    :: GV
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+    type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+    type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
     real, dimension(:),                 intent(out)   :: stocks
     type(MOM_generic_tracer_CS),        pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
@@ -682,7 +723,7 @@ contains
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: i, j, k, is, ie, js, je, nz, m
-    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+    is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
     MOM_generic_tracer_stock = 0
     if (.not.associated(CS)) return
@@ -742,8 +783,8 @@ contains
     logical, dimension(:),              intent(out)   :: got_minmax
     real, dimension(:),                 intent(out)   :: gmin,gmax
     real, dimension(:),                 intent(out)   :: xgmin, ygmin, zgmin, xgmax, ygmax, zgmax
-    type(ocean_grid_type),              intent(in)    :: G
-    type(MOM_generic_tracer_CS),        pointer       :: CS
+    type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+    type(MOM_generic_tracer_CS),       pointer       :: CS
     character(len=*), dimension(:),     intent(out)   :: names
     character(len=*), dimension(:),     intent(out)   :: units
     integer                                           :: MOM_generic_tracer_min_max
@@ -834,9 +875,9 @@ contains
   ! </SUBROUTINE>
 
   subroutine MOM_generic_tracer_surface_state(state, h, G, CS)
-    type(ocean_grid_type),                 intent(in) :: G
+    type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
     type(surface),                         intent(inout) :: state
-    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
     type(MOM_generic_tracer_CS),           pointer    :: CS
     !   This subroutine sets up the fields that the coupler needs to calculate the
     ! CFC fluxes between the ocean and atmosphere.
@@ -847,27 +888,35 @@ contains
     !  (in)      CS - The control structure returned by a previous call to
     !                 register_MOM_generic_tracer.
 
+    real :: sosga
+
     character(len=fm_string_len), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
     real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke,1) :: rho0
+    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:G%ke) ::  dzt
     type(g_tracer_type), pointer :: g_tracer
 
     !Set coupler values
     !nnz: fake rho0
     rho0=1.0
 
+    dzt(:,:,:) = CS%H_to_m * h(:,:,:)
+
+    sosga = global_area_mean(state%SSS, G)
+
     call generic_tracer_coupler_set(state%tr_fields,&
          ST=state%SST,&
          SS=state%SSS,&
          rho=rho0,& !nnz: required for MOM5 and previous versions.
          ilb=G%isd, jlb=G%jsd,&
-         tau=1)
+         dzt=dzt,& !This is needed for the Mocsy method of carbonate system vars
+         tau=1,sosga=sosga,model_time=get_diag_time_end(CS%diag))
 
     !Output diagnostics via diag_manager for all tracers in this module
 !    if(.NOT. associated(CS%g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
 !         "No tracer in the list.")
 !    call g_tracer_send_diag(CS%g_tracer_list, get_diag_time_end(CS%diag), tau=1)
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
-    !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers 
+    !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers
     !      had not been updated.
     !      Moving this to the end of column physics subrotuine fixes this issue.
 

@@ -48,7 +48,7 @@ character(len=40) :: mod = "seamount_initialization" ! This module's name.
 ! -----------------------------------------------------------------------------
 public seamount_initialize_topography
 public seamount_initialize_thickness
-public seamount_initialize_temperature_salinity 
+public seamount_initialize_temperature_salinity
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -57,14 +57,14 @@ contains
 
 !> Initialization of topography.
 subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
-  ! Arguments 
+  ! Arguments
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-  
-  ! Local variables 
+
+  ! Local variables
   integer   :: i, j
   real      :: x, y, delta, Lx, rLx, Ly, rLy
 
@@ -79,13 +79,13 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
                  "Length scale of seamount in y-direction.\n"//&
                  "Set to zero make topography uniform in the y-direction.", &
                  units="Same as x,y", default=0.)
-  
+
   Lx = Lx / G%len_lon
   Ly = Ly / G%len_lat
   rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
-  do i=G%isc,G%iec 
-    do j=G%jsc,G%jec 
+  do i=G%isc,G%iec
+    do j=G%jsc,G%jec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
       x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
       y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
@@ -123,20 +123,20 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
   call get_param(param_file,mod,"MIN_THICKNESS",min_thickness,'Minimum thickness for layer',units='m',default=1.0e-3)
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE",verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE)
- 
+
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
   !          layer distribution, use this line of code within the loop:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz)
-  !          To obtain a thickness distribution where the last layer is 
+  !          To obtain a thickness distribution where the last layer is
   !          vanished and the other thicknesses uniformly distributed, use:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
   !do k=1,nz+1
   !  e0(k) = -G%max_depth * real(k-1) / real(nz)
   !enddo
-    
+
   select case ( coordinateMode(verticalCoordinate) )
-    
+
   case ( REGRIDDING_LAYER, REGRIDDING_RHO ) ! Initial thicknesses for isopycnal coordinates
     call get_param(param_file,mod,"INITIAL_SSS", S_surf, default=34., do_not_log=.true.)
     call get_param(param_file,mod,"INITIAL_S_RANGE", S_range, default=2., do_not_log=.true.)
@@ -186,9 +186,9 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file )
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
       h(i,j,:) = delta_h
-    end do ; end do 
+    end do ; end do
 end select
-    
+
 end subroutine seamount_initialize_thickness
 
 !> Initial values for temperature and salinity
@@ -205,7 +205,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
   character(len=20) :: verticalCoordinate, density_profile
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
@@ -221,10 +221,10 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
                  'Initial salinity range (bottom - surface)', units='1e-3', default=2.)
   call get_param(param_file,mod,"INITIAL_T_RANGE", T_range, &
                  'Initial temperature range (bottom - surface)', units='C', default=0.)
-  
+
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
-      ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range" 
+      ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
       call get_param(param_file, mod, "T_REF", T_ref, default=10.0, do_not_log=.true.)
       call get_param(param_file, mod, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
       call get_param(param_file, mod, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
@@ -269,10 +269,10 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
         enddo
       enddo ; enddo
   end select
-  
+
 end subroutine seamount_initialize_temperature_salinity
 
-!> \class seamount_initialization
+!> \namespace seamount_initialization
 !!
 !! The module configures the model for the idealized seamount
 !! test case.

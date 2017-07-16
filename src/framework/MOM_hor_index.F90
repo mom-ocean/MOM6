@@ -1,24 +1,7 @@
+!> Defines the horizontal index type (hor_index_type) used for providing index ranges
 module MOM_hor_index
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domains, only : MOM_domain_type, get_domain_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
@@ -28,23 +11,48 @@ implicit none ; private
 
 public :: hor_index_init, assignment(=)
 
+!> Container for horizontal index ranges for data, computational and global domains
 type, public :: hor_index_type
-  integer :: isc, iec, jsc, jec     ! The range of the computational indices and
-  integer :: isd, ied, jsd, jed     ! data indices at tracer cell centers.
-  integer :: isg, ieg, jsg, jeg     ! The range of the global domain tracer cell indices.
-  integer :: IscB, IecB, JscB, JecB ! The range of the computational indices and
-  integer :: IsdB, IedB, JsdB, JedB ! data indices at tracer cell vertices.
-  integer :: IsgB, IegB, JsgB, JegB ! The range of the global domain vertex indices.
-  integer :: idg_offset             ! The offset between the corresponding global
-  integer :: jdg_offset             ! and local array indices.
-  logical :: symmetric              ! True if symmetric memory is used.
+  integer :: isc !< The start i-index of cell centers within the computational domain
+  integer :: iec !< The end i-index of cell centers within the computational domain
+  integer :: jsc !< The start j-index of cell centers within the computational domain
+  integer :: jec !< The end j-index of cell centers within the computational domain
+
+  integer :: isd !< The start i-index of cell centers within the data domain
+  integer :: ied !< The end i-index of cell centers within the data domain
+  integer :: jsd !< The start j-index of cell centers within the data domain
+  integer :: jed !< The end j-index of cell centers within the data domain
+
+  integer :: isg !< The start i-index of cell centers within the global domain
+  integer :: ieg !< The end i-index of cell centers within the global domain
+  integer :: jsg !< The start j-index of cell centers within the global domain
+  integer :: jeg !< The end j-index of cell centers within the global domain
+
+  integer :: IscB !< The start i-index of cell vertices within the computational domain
+  integer :: IecB !< The end i-index of cell vertices within the computational domain
+  integer :: JscB !< The start j-index of cell vertices within the computational domain
+  integer :: JecB !< The end j-index of cell vertices within the computational domain
+
+  integer :: IsdB !< The start i-index of cell vertices within the data domain
+  integer :: IedB !< The end i-index of cell vertices within the data domain
+  integer :: JsdB !< The start j-index of cell vertices within the data domain
+  integer :: JedB !< The end j-index of cell vertices within the data domain
+
+  integer :: IsgB !< The start i-index of cell vertices within the global domain
+  integer :: IegB !< The end i-index of cell vertices within the global domain
+  integer :: JsgB !< The start j-index of cell vertices within the global domain
+  integer :: JegB !< The end j-index of cell vertices within the global domain
+
+  integer :: idg_offset !< The offset between the corresponding global and local i-indices.
+  integer :: jdg_offset !< The offset between the corresponding global and local j-indices.
+  logical :: symmetric  !< True if symmetric memory is used.
 end type hor_index_type
 
 interface assignment(=); module procedure HIT_assign ; end interface
 
 contains
 
-!> hor_index_init sets various index values in a hor_index_type.
+!> Sets various index values in a hor_index_type.
 subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
   type(MOM_domain_type),  intent(in)    :: Domain     !< The MOM domain from which to extract information.
   type(hor_index_type),   intent(inout) :: HI         !< A horizontal index type to populate with data
@@ -82,10 +90,10 @@ subroutine hor_index_init(Domain, HI, param_file, local_indexing, index_offset)
 end subroutine hor_index_init
 
 !> HIT_assign copies one hor_index_type into another.  It is accessed via an
-!!   assignment (=) operator.
+!! assignment (=) operator.
 subroutine HIT_assign(HI1, HI2)
-  type(hor_index_type), intent(out) :: HI1
-  type(hor_index_type), intent(in)  :: HI2
+  type(hor_index_type), intent(out) :: HI1 !< Horizontal index type to copy to
+  type(hor_index_type), intent(in)  :: HI2 !< Horizontal index type to copy from
   ! This subroutine copies all components of the horizontal array index type
   ! variable on the RHS (HI2) to the variable on the LHS (HI1).
 
@@ -101,5 +109,21 @@ subroutine HIT_assign(HI1, HI2)
   HI1%symmetric = HI2%symmetric
 
 end subroutine HIT_assign
+
+!> \namespace mom_hor_index
+!!
+!! The hor_index_type provides the decalarations and loop ranges for almost all data with horizontal extent.
+!!
+!! Declarations and loop ranges should always be coded with the symmetric memory model in mind.
+!! The non-symmetric memory mode will then also work, albeit with a different (less efficient) communication pattern.
+!!
+!! Using the hor_index_type HI:
+!! - declaration of h-point data is of the form `h(HI%%isd:HI%%ied,HI%%jsd:HI%%jed)`;
+!! - declaration of q-point data is of the form `q(HI%%IsdB:HI%%IedB,HI%%JsdB:HI%%JedB)`;
+!! - declaration of u-point data is of the form `u(HI%%IsdB:HI%%IedB,HI%%jsd:HI%%jed)`;
+!! - declaration of v-point data is of the form `v(HI%%isd:HI%%ied,HI%%JsdB:HI%%JedB)`.
+!!
+!! For more detail explanation of horizontal indexing see \ref Horizontal_indexing.
+
 
 end module MOM_hor_index

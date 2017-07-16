@@ -25,8 +25,8 @@ implicit none ; private
 character(len=40) :: mod = "Rossby_front_2d_initialization" !< This module's name.
 
 public Rossby_front_initialize_thickness
-public Rossby_front_initialize_temperature_salinity 
-public Rossby_front_initialize_velocity 
+public Rossby_front_initialize_temperature_salinity
+public Rossby_front_initialize_velocity
 
 ! Parameters defining the initial conditions of this test case
 real, parameter :: frontFractionalWidth = 0.5 !< Width of front as fraction of domain
@@ -60,7 +60,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file )
   call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
 
   Tz = T_range / G%max_depth
- 
+
   select case ( coordinateMode(verticalCoordinate) )
 
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
@@ -73,7 +73,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file )
           h(i,j,k) = h0
         enddo
       end do ; end do
-  
+
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
@@ -109,7 +109,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, param_file, 
   real      :: y, zc, zi, dTdz
   character(len=40) :: verticalCoordinate
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
@@ -117,7 +117,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, param_file, 
   call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3',fail_if_missing=.true.)
   call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',fail_if_missing=.true.)
   call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='C',default=0.0)
-  
+
   T(:,:,:) = 0.0
   S(:,:,:) = S_ref
   dTdz = T_range / G%max_depth
@@ -152,17 +152,17 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   real    :: dRho_dT, zi, zc, zm, f, Ty, Dml, hAtU
   integer :: i, j, k, is, ie, js, je, nz
   character(len=40) :: verticalCoordinate
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
             default=DEFAULT_COORDINATE_MODE)
   call get_param(param_file, mod, "T_RANGE", T_range, 'Initial temperature range', units='C', default=0.0)
   call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
-  
+
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0
-  
+
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec+1
     f = 0.5*( G%CoriolisBu(I,j) + G%CoriolisBu(I,j-1) )
     dUdT = 0.0 ; if (abs(f) > 0.0) &
@@ -226,7 +226,7 @@ real function dTdy( G, dT, lat )
 end function dTdy
 
 
-!> \namespace Rossby_front_2d_initialization
+!> \namespace rossby_front_2d_initialization
 !!
 !! \section section_Rossby_front_2d Description of the 2d Rossby front initial conditions
 !!
@@ -239,11 +239,11 @@ end function dTdy
 !! \f[ \theta(z) = \theta_0 - \Delta \theta \left( z + h_{ML} \right) \f]
 !! where \f$ \theta_0 \f$ and \f$ \Delta \theta \f$ are external model parameters.
 !!
-!! The depth of the mixed layer, \f$H_{ML}\f$ is 
+!! The depth of the mixed layer, \f$H_{ML}\f$ is
 !! \f[ h_{ML}(y) = h_{min} + \left( h_{max} - h_{min} \right) \cos{\pi y/L} \f].
 !! The temperature in mixed layer is given by the reference temperature at \f$z=h_{ML}\f$
 !! so that
-!! \f[ \theta(y,z) = 
+!! \f[ \theta(y,z) =
 !!     \theta_0 - \Delta \theta \left( z + h_{ML} \right) & \forall & z < h_{ML}(y) T.B.D.
 !! \f]
 

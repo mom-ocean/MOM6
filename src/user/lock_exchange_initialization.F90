@@ -95,7 +95,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file)
 end subroutine lock_exchange_initialize_thickness
 ! -----------------------------------------------------------------------------
 
-!> \class lock_exchange_initialization
+!> \namespace lock_exchange_initialization
 !!
 !! The module configures the model for the "lock_exchange" experiment.
 !! lock_exchange = A 2-d density driven hydraulic exchange flow.

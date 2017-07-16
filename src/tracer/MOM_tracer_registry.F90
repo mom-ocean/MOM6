@@ -1,13 +1,13 @@
 !> This module contains the tracer_registry_type and the subroutines
-!! that handle registration of tracers and related subroutines. 
+!! that handle registration of tracers and related subroutines.
 !! The primary subroutine, register_tracer, is called to indicate the
-!! tracers advected and diffused. 
+!! tracers advected and diffused.
 module MOM_tracer_registry
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! use MOM_diag_mediator, only : diag_ctrl
-use MOM_checksums,     only : hchksum
+use MOM_debugging,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type
@@ -26,24 +26,23 @@ public MOM_tracer_chksum
 public add_tracer_diagnostics
 public add_tracer_OBC_values
 public lock_tracer_registry
-public tracer_vertdiff
 public tracer_registry_end
 
-!> The tracer type 
+!> The tracer type
 type, public :: tracer_type
 
-  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array 
+  real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array
   real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows
   real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
-                                                              !! specified in OBCs through u-face of cell 
+                                                              !! specified in OBCs through u-face of cell
   real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
-                                                              !! specified in OBCs through v-face of cell 
+                                                              !! specified in OBCs through v-face of cell
 
   real, dimension(:,:,:), pointer :: ad_x           => NULL() !< diagnostic array for x-advective tracer flux
   real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
-  real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux 
+  real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux
                                                               !! in units of (conc * m3/s or conc * kg/s)
-  real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux 
+  real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux
                                                               !! in units of (conc * m3/s or conc * kg/s)
 
   real, dimension(:,:,:), pointer :: df_x           => NULL() !< diagnostic array for x-diffusive tracer flux
@@ -53,21 +52,21 @@ type, public :: tracer_type
   real, dimension(:,:),   pointer :: df2d_y         => NULL() !< diagnostic vertical sum y-diffusive flux
                                                               !! in units of (conc * m3/s or conc * kg/s)
 
-  real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes  
+  real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
 
   character(len=32)               :: name                     !< tracer name used for error messages
   type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
 
 end type tracer_type
 
-!> Type to carry basic tracer information 
+!> Type to carry basic tracer information
 type, public :: tracer_registry_type
   integer                  :: ntr = 0           !< number of registered tracers
   type(tracer_type)        :: Tr(MAX_FIELDS_)   !< array of registered tracers
 ! type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
-  logical                  :: locked = .false.  !< New tracers may be registered if locked=.false. 
+  logical                  :: locked = .false.  !< New tracers may be registered if locked=.false.
                                                 !! When locked=.true.,no more tracers can be registered,
-                                                !! at which point common diagnostics can be set up 
+                                                !! at which point common diagnostics can be set up
                                                 !! for the registered tracers.
 end type tracer_registry_type
 
@@ -77,8 +76,8 @@ contains
 subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
-  type(hor_index_type),           intent(in)    :: HI           !< horizontal index type 
-  type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure 
+  type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
+  type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), target :: tr1    !< pointer to the tracer (concentration units)
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
@@ -94,19 +93,19 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   real, pointer, dimension(:,:,:), optional     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
   real, pointer, dimension(:,:,:), optional     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
 
-  real, intent(in),                optional     :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u 
+  real, intent(in),                optional     :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u
                                                                 !! or OBC_in_v are not specified (units of tracer CONC)
   real, pointer, dimension(:,:,:), optional     :: OBC_in_u     !< tracer at inflows through u-faces of
-                                                                !! tracer cells (units of tracer CONC) 
+                                                                !! tracer cells (units of tracer CONC)
   real, pointer, dimension(:,:,:), optional     :: OBC_in_v     !< tracer at inflows through v-faces of
                                                                 !! tracer cells (units of tracer CONC)
-   
-  real, dimension(:,:),   pointer, optional     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s) 
-  real, dimension(:,:),   pointer, optional     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)  
-  real, dimension(:,:),   pointer, optional     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s) 
 
-  real, pointer, dimension(:,:,:), optional     :: advection_xy !< convergence of lateral advective tracer fluxes  
+  real, dimension(:,:),   pointer, optional     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   pointer, optional     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
+
+  real, pointer, dimension(:,:,:), optional     :: advection_xy !< convergence of lateral advective tracer fluxes
 
   integer :: ntr
   type(tracer_type) :: temp
@@ -170,11 +169,11 @@ end subroutine lock_tracer_registry
 !> This subroutine adds open boundary condition concentrations for a tracer that
 !! has previously been registered by a call to register_tracer.
 subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
-  character(len=*), intent(in)               :: name        !< tracer name for which the diagnostic points 
+  character(len=*), intent(in)               :: name        !< tracer name for which the diagnostic points
   type(tracer_registry_type), pointer        :: Reg         !< pointer to the tracer registry
   real, intent(in), optional                 :: OBC_inflow  !< tracer value for all inflows via the OBC
                                                             !! for which OBC_in_u or OBC_in_v are
-                                                            !! not specified (same units as tracer CONC) 
+                                                            !! not specified (same units as tracer CONC)
   real, pointer, dimension(:,:,:), optional  :: OBC_in_u    !< tracer at inflows through u-face of tracer cells
                                                             !! (same units as tracer CONC)
   real, pointer, dimension(:,:,:), optional  :: OBC_in_v    !< tracer at inflows through v-face of tracer cells
@@ -201,23 +200,23 @@ subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
 end subroutine add_tracer_OBC_values
 
 
-!> This subroutine adds diagnostic arrays for a tracer that has 
+!> This subroutine adds diagnostic arrays for a tracer that has
 !! previously been registered by a call to register_tracer.
 subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
                                   ad_2d_x, ad_2d_y, df_2d_x, df_2d_y,&
                                   advection_xy)
   character(len=*), intent(in)              :: name         !< name of the tracer for which the diagnostic points
   type(tracer_registry_type), pointer       :: Reg          !< pointer to the tracer registry
-  real, dimension(:,:,:), pointer, optional :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:,:), pointer, optional :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), pointer, optional :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), pointer, optional :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:,:), pointer, optional :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:),   pointer, optional :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:),   pointer, optional :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:),   pointer, optional :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s) 
+  real, dimension(:,:),   pointer, optional :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
 
-  real, dimension(:,:,:), pointer, optional :: advection_xy !< convergence of lateral advective tracer fluxes  
+  real, dimension(:,:,:), pointer, optional :: advection_xy !< convergence of lateral advective tracer fluxes
 
   integer :: m
 
@@ -247,186 +246,12 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
 
 end subroutine add_tracer_diagnostics
 
-
-!> This subroutine solves a tridiagonal equation for the final tracer
-!! concentrations after the dual-entrainments, and possibly sinking or surface
-!! and bottom sources, are applied.  The sinking is implemented with an
-!! fully implicit upwind advection scheme.
-subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
-                           sfc_flux, btm_flux, btm_reservoir, sink_rate)
-  type(ocean_grid_type),                     intent(in)    :: G             !< ocean grid structure 
-  type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old         !< layer thickness before entrainment (m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: ea            !< amount of fluid entrained from the layer above (units of h_old)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: eb            !< amount of fluid entrained from the layer below (units of h_old)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: tr            !< tracer concentration (in concentration units CU)
-  real,                                      intent(in)    :: dt            !< amount of time covered by this call (seconds)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: sfc_flux      !< surface flux of the tracer (in CU * kg m-2 s-1)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(in)    :: btm_flux      !< The (negative upward) bottom flux of the tracer,
-                                                                            !! in units of (CU * kg m-2 s-1)
-  real, dimension(SZI_(G),SZJ_(G)), optional,intent(inout) :: btm_reservoir !< amount of tracer in a bottom reservoir (units of CU kg m-2; formerly CU m)
-  real,                             optional,intent(in)    :: sink_rate     !< rate at which the tracer sinks, in m s-1
-
- 
-  real :: sink_dist ! The distance the tracer sinks in a time step, in m or kg m-2.
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    sfc_src, &      ! The time-integrated surface source of the tracer, in
-                    ! units of m or kg m-2 times a concentration.
-    btm_src         ! The time-integrated bottom source of the tracer, in
-                    ! units of m or kg m-2  times a concentration.
-  real, dimension(SZI_(G)) :: &
-    b1, &           ! b1 is used by the tridiagonal solver, in m-1 or m2 kg-1.
-    d1              ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
-  real :: c1(SZI_(G),SZK_(GV))    ! c1 is used by the tridiagonal solver, ND.
-  real :: h_minus_dsink(SZI_(G),SZK_(GV)) ! The layer thickness minus the
-                    ! difference in sinking rates across the layer, in m or kg m-2.
-                    ! By construction, 0 <= h_minus_dsink < h_old.
-  real :: sink(SZI_(G),SZK_(GV)+1) ! The tracer's sinking distances at the
-                    ! interfaces, limited to prevent characteristics from
-                    ! crossing within a single timestep, in m or kg m-2.
-  real :: b_denom_1 ! The first term in the denominator of b1, in m or kg m-2.
-  real :: h_tr      ! h_tr is h at tracer points with a h_neglect added to
-                    ! ensure positive definiteness, in m or kg m-2.
-  real :: h_neglect ! A thickness that is so small it is usually lost
-                    ! in roundoff and can be neglected, in m.
-
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  h_neglect = GV%H_subroundoff
-  sink_dist = 0.0
-  if (present(sink_rate)) sink_dist = (dt*sink_rate) * GV%m_to_H
-!$OMP parallel default(none) shared(is,ie,js,je,sfc_src,btm_src,sfc_flux,dt,G,GV,btm_flux, &
-!$OMP                               sink_rate,btm_reservoir,nz,sink_dist,h_old,ea,      &
-!$OMP                               h_neglect,eb,tr) & 
-!$OMP                       private(sink,h_minus_dsink,b_denom_1,b1,d1,h_tr,c1)
-!$OMP do
-  do j=js,je; do i=is,ie ; sfc_src(i,j) = 0.0 ; btm_src(i,j) = 0.0 ; enddo; enddo
-  if (present(sfc_flux)) then
-!$OMP do 
-     do j = js, je; do i = is,ie
-        sfc_src(i,j) = (sfc_flux(i,j)*dt) * GV%kg_m2_to_H
-     enddo; enddo
-  endif
-  if (present(btm_flux)) then
-!$OMP do
-     do j = js, je; do i = is,ie
-        btm_src(i,j) = (btm_flux(i,j)*dt) * GV%kg_m2_to_H
-     enddo; enddo
-  endif
-
-
-  if (present(sink_rate)) then
-!$OMP do
-    do j=js,je
-      ! Find the sinking rates at all interfaces, limiting them if necesary
-      ! so that the characteristics do not cross within a timestep.
-      !   If a non-constant sinking rate were used, that would be incorprated
-      ! here.
-      if (present(btm_reservoir)) then
-        do i=is,ie ; sink(i,nz+1) = sink_dist ; enddo
-        do k=2,nz ; do i=is,ie
-          sink(i,K) = sink_dist ; h_minus_dsink(i,k) = h_old(i,j,k)
-        enddo ; enddo
-      else
-        do i=is,ie ; sink(i,nz+1) = 0.0 ; enddo
-        ! Find the limited sinking distance at the interfaces.
-        do k=nz,2,-1 ; do i=is,ie
-          if (sink(i,K+1) >= sink_dist) then
-            sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = h_old(i,j,k) + (sink(i,K+1) - sink(i,K))
-          elseif (sink(i,K+1) + h_old(i,j,k) < sink_dist) then
-            sink(i,K) = sink(i,K+1) + h_old(i,j,k)
-            h_minus_dsink(i,k) = 0.0
-          else
-            sink(i,K) = sink_dist
-            h_minus_dsink(i,k) = (h_old(i,j,k) + sink(i,K+1)) - sink(i,K)
-          endif
-        enddo ; enddo
-      endif
-      do i=is,ie
-        sink(i,1) = 0.0 ; h_minus_dsink(i,1) = (h_old(i,j,1) + sink(i,2))
-      enddo
-
-      ! Now solve the tridiagonal equation for the tracer concentrations.
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        b_denom_1 = h_minus_dsink(i,1) + ea(i,j,1) + h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-        d1(i) = b_denom_1 * b1(i)
-        h_tr = h_old(i,j,1) + h_neglect
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
-      endif ; enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,k) = eb(i,j,k-1) * b1(i)
-        b_denom_1 = h_minus_dsink(i,k) + d1(i) * (ea(i,j,k) + sink(i,K)) + &
-                    h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-        d1(i) = b_denom_1 * b1(i)
-        h_tr = h_old(i,j,k) + h_neglect
-        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + &
-                             (ea(i,j,k) + sink(i,K)) * tr(i,j,k-1))
-      endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,nz) = eb(i,j,nz-1) * b1(i)
-        b_denom_1 = h_minus_dsink(i,nz) + d1(i) * (ea(i,j,nz) + sink(i,nz)) + &
-                    h_neglect
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,nz))
-        h_tr = h_old(i,j,nz) + h_neglect
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
-                              (ea(i,j,nz) + sink(i,nz)) * tr(i,j,nz-1))
-      endif ; enddo
-      if (present(btm_reservoir)) then ; do i=is,ie ; if (G%mask2dT(i,j)>0.5) then
-        btm_reservoir(i,j) = btm_reservoir(i,j) + &
-                             (sink(i,nz+1)*tr(i,j,nz)) * GV%H_to_kg_m2
-      endif ; enddo ; endif
-
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
-      endif ; enddo ; enddo
-    enddo
-  else
-!$OMP do 
-    do j=js,je
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        h_tr = h_old(i,j,1) + h_neglect
-        b_denom_1 = h_tr + ea(i,j,1)
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
-        d1(i) = b_denom_1 * b1(i)
-        tr(i,j,1) = b1(i)*(h_tr*tr(i,j,1) + sfc_src(i,j))
-       endif 
-      enddo
-      do k=2,nz-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,k) = eb(i,j,k-1) * b1(i)
-        h_tr = h_old(i,j,k) + h_neglect
-        b_denom_1 = h_tr + d1(i) * ea(i,j,k)
-        b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
-        d1(i) = b_denom_1 * b1(i)
-        tr(i,j,k) = b1(i) * (h_tr * tr(i,j,k) + ea(i,j,k) * tr(i,j,k-1))
-      endif ; enddo ; enddo
-      do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        c1(i,nz) = eb(i,j,nz-1) * b1(i)
-        h_tr = h_old(i,j,nz) + h_neglect
-        b1(i) = 1.0 / (h_tr + d1(i) * ea(i,j,nz) + eb(i,j,nz))
-        tr(i,j,nz) = b1(i) * ((h_tr * tr(i,j,nz) + btm_src(i,j)) + &
-                              ea(i,j,nz) * tr(i,j,nz-1))
-      endif ; enddo
-      do k=nz-1,1,-1 ; do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-        tr(i,j,k) = tr(i,j,k) + c1(i,k+1)*tr(i,j,k+1)
-      endif ; enddo ; enddo
-    enddo
-  endif
-
-!$OMP end parallel
-
-end subroutine tracer_vertdiff
-
-
 !> This subroutine writes out chksums for thermodynamic state variables.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
   type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
   integer,                  intent(in) :: ntr    !< number of registered tracers
-  type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure 
+  type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure
 
   integer :: is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -441,7 +266,7 @@ end subroutine MOM_tracer_chksum
 !> This routine include declares and sets the variable "version".
 subroutine tracer_registry_init(param_file, Reg)
   type(param_file_type),      intent(in) :: param_file !< open file to parse for model parameters
-  type(tracer_registry_type), pointer    :: Reg        !< pointer to tracer registry 
+  type(tracer_registry_type), pointer    :: Reg        !< pointer to tracer registry
 
   integer, save :: init_calls = 0
 
@@ -465,7 +290,7 @@ subroutine tracer_registry_init(param_file, Reg)
 end subroutine tracer_registry_init
 
 
-!> This routine closes the tracer registry module. 
+!> This routine closes the tracer registry module.
 subroutine tracer_registry_end(Reg)
   type(tracer_registry_type), pointer :: Reg
   if (associated(Reg)) deallocate(Reg)

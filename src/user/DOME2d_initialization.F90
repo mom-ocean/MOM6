@@ -441,7 +441,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
         z = z + 0.5 * h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
-  
+
     if ( associated(tv%T) ) then
       call set_up_ALE_sponge_field(T,G,tv%T,ACSp)
     endif

@@ -121,8 +121,8 @@ contains
 
 function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),    intent(in)   :: HI
-  type(verticalGrid_type), intent(in)   :: GV
-  type(param_file_type),   intent(in)   :: param_file
+  type(verticalGrid_type), intent(in)   :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)   :: param_file !< A structure to parse for run-time parameters
   type(USER_tracer_example_CS), pointer :: CS
   type(tracer_registry_type), pointer   :: tr_Reg
   type(MOM_restart_CS),       pointer   :: restart_CS
@@ -207,9 +207,10 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
@@ -323,7 +324,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
   if (associated(OBC)) then
     call query_vardesc(CS%tr_desc(1), name, caller="USER_initialize_tracer")
-    if (OBC%apply_OBC_v) then
+    if (OBC%specified_v_BCs_exist_globally) then
       allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
         if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
@@ -383,11 +384,11 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine USER_initialize_tracer
 
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
+  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
   type(USER_tracer_example_CS),       pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -516,9 +517,10 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
 end subroutine tracer_column_physics
 
 function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(USER_tracer_example_CS),       pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -569,9 +571,9 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function USER_tracer_stock
 
 subroutine USER_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),              intent(in)    :: G
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(surface),                      intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(USER_tracer_example_CS),       pointer       :: CS
 !   This particular tracer package does not report anything back to the coupler.
 ! The code that is here is just a rough guide for packages that would.
@@ -583,7 +585,7 @@ subroutine USER_tracer_surface_state(state, h, G, CS)
 !                 register_USER_tracer.
   integer :: i, j, m, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  
+
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then

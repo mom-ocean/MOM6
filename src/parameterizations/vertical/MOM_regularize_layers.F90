@@ -59,7 +59,6 @@ use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-use MOM_EOS, only : calculate_2_densities
 
 implicit none ; private
 
@@ -114,9 +113,9 @@ integer :: id_clock_pass, id_clock_EOS
 contains
 
 subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
@@ -162,9 +161,9 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
 end subroutine regularize_layers
 
 subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(inout) :: tv
   real,                                     intent(in)    :: dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea, eb
@@ -193,7 +192,7 @@ subroutine regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
     def_rat_u   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJB_(G)) :: &
     def_rat_v   ! The ratio of the thickness deficit to the minimum depth, ND.
-  real, dimension(SZI_(G),SZJB_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     def_rat_h   ! The ratio of the thickness deficit to the minimum depth, ND.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     e           ! The interface depths, in H, positive upward.
@@ -773,8 +772,8 @@ end subroutine regularize_surface
 
 subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
                                def_rat_u_2lay, def_rat_v_2lay, halo, h)
-  type(ocean_grid_type),                     intent(in)  :: G
-  type(verticalGrid_type),                   intent(in)  :: GV
+  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(in) :: e
   real, dimension(SZIB_(G),SZJ_(G)),         intent(out) :: def_rat_u
   real, dimension(SZI_(G),SZJB_(G)),         intent(out) :: def_rat_v
@@ -782,7 +781,9 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   real, dimension(SZIB_(G),SZJ_(G)), optional, intent(out) :: def_rat_u_2lay
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(out) :: def_rat_v_2lay
   integer,                         optional, intent(in)  :: halo
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in)  :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(in)  :: h !< Layer thicknesses, in H (usually m or kg m-2);
+                                                         !! if h is not present, vertical differences in interface
+                                                         !! heights are used instead.
 !    This subroutine determines the amount by which the harmonic mean
 !  thickness at velocity points differ from the arithmetic means, relative to
 !  the the arithmetic means, after eliminating thickness variations that are
@@ -925,8 +926,8 @@ end subroutine find_deficit_ratios
 
 subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(regularize_layers_CS), pointer    :: CS
 ! Arguments: Time - The current model time.

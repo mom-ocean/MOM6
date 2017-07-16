@@ -4,7 +4,7 @@ module MOM_fixed_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, qchksum, uchksum, vchksum, chksum
+use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -15,7 +15,7 @@ use MOM_io, only : slasher
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_open_boundary, only : open_boundary_config, open_boundary_query
-use MOM_open_boundary, only : set_Flather_positions, open_boundary_impose_normal_slope
+use MOM_open_boundary, only : open_boundary_impose_normal_slope
 use MOM_open_boundary, only : open_boundary_impose_land_mask
 ! use MOM_shared_initialization, only : MOM_shared_init_init
 use MOM_shared_initialization, only : MOM_initialize_rotation, MOM_calculate_grad_Coriolis
@@ -25,15 +25,20 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
-use user_initialization, only : user_initialize_topography, USER_set_OBC_positions
-use DOME_initialization, only : DOME_initialize_topography, DOME_set_OBC_positions
+
+use user_initialization, only : user_initialize_topography
+use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
 use Neverland_initialization, only : Neverland_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
+use Kelvin_initialization, only : Kelvin_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
+use shelfwave_initialization, only : shelfwave_initialize_topography
+use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
+use dense_water_initialization, only : dense_water_initialize_topography
 
 use netcdf
 
@@ -83,25 +88,6 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 ! Determine the position of any open boundaries
   call open_boundary_config(G, PF, OBC)
-  if (open_boundary_query(OBC, apply_orig_OBCs=.true.)) then
-    call get_param(PF, mod, "OBC_CONFIG", config, &
-                 "A string that sets how the open boundary conditions are \n"//&
-                 " configured: \n"//&
-                 " \t DOME - use a slope and channel configuration for the \n"//&
-                 " \t\t DOME sill-overflow test case. \n"//&
-                 " \t USER - call a user modified routine.", default="file", &
-                 fail_if_missing=.true.)
-    select case ( trim(config) )
-      case ("none")
-      case ("DOME") ; call DOME_set_OBC_positions(G, PF, OBC)
-      case ("USER") ; call user_set_OBC_positions(G, PF, OBC)
-      case default ; call MOM_error(FATAL, "MOM_initialize_fixed: "// &
-                       "The open boundary positions specified by OBC_CONFIG="//&
-                       trim(config)//" have not been fully implemented.")
-    end select
-  elseif (open_boundary_query(OBC, apply_orig_Flather=.true.)) then
-    call set_Flather_positions(G, OBC)
-  endif
 
   ! Make bathymetry consistent with open boundaries
   call open_boundary_impose_normal_slope(OBC, G, G%bathyT)
@@ -109,14 +95,14 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! This call sets masks that prohibit flow over any point interpreted as land
   call initialize_masks(G, PF)
 
-  ! Make OBC mask consistent with land mask, deallocate OBC on PEs where it is not needed
-  call open_boundary_impose_land_mask(OBC, G)
+  ! Make OBC mask consistent with land mask
+  call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv)
 
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
-    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G%HI)
-    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
+                  G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
@@ -167,6 +153,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
   endif
 
+  call initialize_grid_rotation_angle(G, PF)
+
 ! Compute global integrals of grid values for later use in scalar diagnostics !
   call compute_global_grid_integrals(G)
 
@@ -211,8 +199,12 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t\t ISOMIP test case. \n"//&
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
+                 " \t Kelvin - flat but with rotated land mask.\n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t shelfwave - exponential slope for shelfwave test case.\n"//&
+                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
+                 " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
   max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
@@ -227,9 +219,13 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
     case ("Neverland"); call Neverland_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
+    case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
+    case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
+    case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
@@ -245,7 +241,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
   if (trim(config) .ne. "DOME") then
     call limit_topography(D, G, PF, max_depth)
   endif
-  
+
 end subroutine MOM_initialize_topography
 
 end module MOM_fixed_initialization

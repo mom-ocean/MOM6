@@ -52,7 +52,7 @@ end type directories
 contains
 
 subroutine Get_MOM_Input(param_file, dirs, check_params)
-  type(param_file_type), optional, intent(out) :: param_file
+  type(param_file_type), optional, intent(out) :: param_file !< A structure to parse for run-time parameters
   type(directories),     optional, intent(out) :: dirs
   logical,               optional, intent(in)  :: check_params
 

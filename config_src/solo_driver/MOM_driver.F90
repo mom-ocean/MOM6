@@ -47,6 +47,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
+  use MOM,                 only : step_tracers
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -86,21 +87,21 @@ program MOM_main
 #include <MOM_memory.h>
 
   ! A structure containing pointers to the ocean forcing fields.
-  type(forcing) :: fluxes 
+  type(forcing) :: fluxes
 
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface) :: state  
-  
+  type(surface) :: state
+
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
   type(verticalGrid_type), pointer :: GV
-                                       
+
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
 
   ! This is .true. if incremental restart files may be saved.
-  logical :: permit_incr_restart = .true. 
-                               
+  logical :: permit_incr_restart = .true.
+
   integer :: n
 
   ! nmax is the number of iterations after which to stop so that the
@@ -110,9 +111,9 @@ program MOM_main
   integer :: nmax=2000000000;
 
   ! A structure containing several relevant directory paths.
-  type(directories) :: dirs   
+  type(directories) :: dirs
 
-  ! A suite of time types for use by MOM 
+  ! A suite of time types for use by MOM
   type(time_type), target :: Time       ! A copy of the ocean model's time.
                                         ! Other modules can set pointers to this and
                                         ! change it to manage diagnostics.
@@ -134,6 +135,7 @@ program MOM_main
                                   ! representation of time_step.
   real :: time_step               ! The time step of a call to step_MOM in seconds.
   real :: dt                      ! The baroclinic dynamics time step, in seconds.
+  real :: dt_off                  ! Offline time step in seconds
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within time_step.
 
@@ -169,6 +171,14 @@ program MOM_main
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
+  logical :: offline_tracer_mode ! If false, use the model in prognostic mode where
+                                 ! the barotropic and baroclinic dynamics, thermodynamics,
+                                 ! etc. are stepped forward integrated in time.
+                                 ! If true, then all of the above are bypassed with all
+                                 ! fields necessary to integrate only the tracer advection
+                                 ! and diffusion equation are read in from files stored from
+                                 ! a previous integration of the prognostic model
+
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
@@ -181,7 +191,12 @@ program MOM_main
 #include "version_variable.h"
   character(len=40)  :: mod = "MOM_main (MOM_driver)" ! This module's name.
 
-  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds
+  integer :: ocean_nthreads = 1
+  integer :: ncores_per_node = 36
+  logical :: use_hyper_thread = .false.
+  integer :: omp_get_num_threads,omp_get_thread_num,get_cpu_affinity,adder,base_cpu
+  namelist /ocean_solo_nml/ date_init, calendar, months, days, hours, minutes, seconds,&
+                            ocean_nthreads, ncores_per_node, use_hyper_thread
 
   !#######################################################################
 
@@ -222,6 +237,23 @@ program MOM_main
     endif
   endif
 
+!$  call omp_set_num_threads(ocean_nthreads)
+!$OMP PARALLEL private(adder)
+!$  base_cpu = get_cpu_affinity()
+!$  if (use_hyper_thread) then
+!$     if (imod(omp_get_thread_num(),2) == 0) then
+!$        adder = omp_get_thread_num()/2
+!$     else
+!$        adder = ncores_per_node + omp_get_thread_num()/2
+!$     endif
+!$  else
+!$     adder = omp_get_thread_num()
+!$  endif
+!$  call set_cpu_affinity (base_cpu + adder)
+!$  write(6,*) " ocean  ", omp_get_num_threads(), get_cpu_affinity(), adder, omp_get_thread_num()
+!$  call flush(6)
+!$OMP END PARALLEL
+
   ! Read ocean_solo restart, which can override settings from the namelist.
   if (file_exists(trim(dirs%restart_input_dir)//'ocean_solo.res')) then
     call open_file(unit,trim(dirs%restart_input_dir)//'ocean_solo.res', &
@@ -255,12 +287,13 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time)
+    ! Note the not before CS%d
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp)
+    call initialize_MOM(Time, param_file, dirs, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
   endif
   fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
 
@@ -279,7 +312,7 @@ program MOM_main
                  "If true, enables the ice shelf model.", default=.false.)
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
-    ! when using an ice shelf 
+    ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
   endif
 
@@ -299,7 +332,11 @@ program MOM_main
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics. \n"//&
                  "The default value is given by DT.", units="s", default=dt)
-
+  if (offline_tracer_mode) then
+    call get_param(param_file, mod, "DT_OFFLINE", time_step, &
+                   "Time step for the offline time step")
+    dt = time_step
+  endif
   ntstep = MAX(1,ceiling(time_step/dt - 0.001))
 
   Time_step_ocean = set_time(int(floor(time_step+0.5)))
@@ -350,6 +387,7 @@ program MOM_main
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
+
   call log_param(param_file, mod, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
   ! Close the param_file.  No further parsing of input is possible after this.
@@ -399,8 +437,10 @@ program MOM_main
     call callTree_enter("Main loop, MOM_driver.F90",n)
 
     ! Set the forcing for the next steps.
-    call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
+    if (.not. offline_tracer_mode) then
+        call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
+    endif
     if (MOM_CSp%debug) then
       call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
     endif
@@ -416,17 +456,21 @@ program MOM_main
 
     if (n==1) then
       call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
-      
+
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
                         Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
     endif
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    if (offline_tracer_mode) then
+      call step_tracers(fluxes, state, Time1, time_step, MOM_CSp)
+    else
+      call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+    endif
 
-!    Time = Time + Time_step_ocean
-!  This is here to enable fractional-second time steps.
+!   Time = Time + Time_step_ocean
+!   This is here to enable fractional-second time steps.
     elapsed_time = elapsed_time + time_step
     if (elapsed_time > 2e9) then
       ! This is here to ensure that the conversion from a real to an integer
@@ -450,20 +494,22 @@ program MOM_main
                             surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
-    if (fluxes%fluxes_used) then
-      call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
-      call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
-                               MOM_CSp%diag, surface_forcing_CSp%handles)
-      call accumulate_net_input(fluxes, state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
-      call disable_averaging(MOM_CSp%diag)
-    else
-      call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
-             "thermodynamic time steps that are longer than the couping timestep.")
+    if (.not. offline_tracer_mode) then
+      if (fluxes%fluxes_used) then
+        call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
+        call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
+                                 MOM_CSp%diag, surface_forcing_CSp%handles)
+        call accumulate_net_input(fluxes, state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
+        call disable_averaging(MOM_CSp%diag)
+      else
+        call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
+               "thermodynamic time steps that are longer than the coupling timestep.")
+      endif
     endif
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
-        (MOM_CSp%dt_trans == 0.0)) then
+        (MOM_CSp%t_dyn_rel_adv == 0.0)) then
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                         MOM_CSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
@@ -500,11 +546,13 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-         "with a non-zero dt_trans.  Additional restart fields are required.")
-     if (.not.fluxes%fluxes_used) call MOM_error(FATAL, "End of MOM_main reached "//&
-         "with unused buoyancy fluxes.  For conservation, the ocean restart "//&
-         "files can only be created after the buoyancy forcing is applied.")
+    if (MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+         "with inconsistent dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
+     if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
+         "End of MOM_main reached with unused buoyancy fluxes. "//&
+         "For conservation, the ocean restart files can only be "//&
+         "created after the buoyancy forcing is applied.")
 
     call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &

@@ -19,7 +19,7 @@ module MOM_ocmip2_co2calc_mod  !{
 !* or see:   http://www.gnu.org/licenses/gpl.html                      *
 !***********************************************************************
 !
-! 
+!
 !<CONTACT EMAIL="Richard.Slater@noaa.gov"> Richard D. Slater
 !</CONTACT>
 !
@@ -82,19 +82,19 @@ contains
 !
 ! INPUT
 !
-!       dope_vec   = an array of indices corresponding to the compute 
+!       dope_vec   = an array of indices corresponding to the compute
 !                    and data domain boundaries.
 !
 !       mask       = land mask array (0.0 = land)
 !
-!       dic_in     = total inorganic carbon (mol/kg) 
+!       dic_in     = total inorganic carbon (mol/kg)
 !                    where 1 T = 1 metric ton = 1000 kg
 !
-!       ta_in      = total alkalinity (eq/kg) 
+!       ta_in      = total alkalinity (eq/kg)
 !
-!       pt_in      = inorganic phosphate (mol/kg) 
+!       pt_in      = inorganic phosphate (mol/kg)
 !
-!       sit_in     = inorganic silicate (mol/kg) 
+!       sit_in     = inorganic silicate (mol/kg)
 !
 !       htotallo   = lower limit of htotal range
 !
@@ -230,7 +230,7 @@ real :: logf_of_s
 ! k1 = [H][HCO3]/[H2CO3]
 ! k2 = [H][CO3]/[HCO3]
 !
-! Millero p.664 (1995) using Mehrbach et al. data on seawater scale 
+! Millero p.664 (1995) using Mehrbach et al. data on seawater scale
 !
 
         k1 = 10.0**(-(3670.7 * invtk - 62.008 + 9.7944 * dlogtk -       &
@@ -361,7 +361,7 @@ real :: logf_of_s
                                 htotalhi(i,j), htotallo(i,j), xacc)
       endif
 !
-! Calculate [CO2*] as defined in DOE Methods Handbook 1994 Ver.2, 
+! Calculate [CO2*] as defined in DOE Methods Handbook 1994 Ver.2,
 ! ORNL/CDIAC-74, Dickson and Goyet, eds. (Ch 2 p 10, Eq A.49)
 !
         htotal2 = htotal(i,j) * htotal(i,j)
@@ -491,7 +491,7 @@ end  function  drtsafe  !}
 !
 ! <DESCRIPTION>
 ! This routine expresses TA as a function of DIC, htotal and constants.
-! It also calculates the derivative of this function with respect to 
+! It also calculates the derivative of this function with respect to
 ! htotal. It is used in the iterative solution for htotal. In the call
 ! "x" is the input value for htotal, "fn" is the calculated value for TA
 ! and "df" is the value for dTA/dhtotal

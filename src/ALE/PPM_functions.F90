@@ -34,13 +34,13 @@ subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients)
   ! Local variables
   integer   :: k              ! Loop index
   real      :: edge_l, edge_r ! Edge values (left and right)
-  
+
   ! PPM limiter
   call PPM_limiter_standard( N, h, u, ppoly_E )
 
   ! Loop over all cells
   do k = 1,N
-  
+
     edge_l = ppoly_E(k,1)
     edge_r = ppoly_E(k,2)
 
@@ -48,7 +48,7 @@ subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients)
     ppoly_coefficients(k,1) = edge_l
     ppoly_coefficients(k,2) = 4.0 * ( u(k) - edge_l ) + 2.0 * ( u(k) - edge_r )
     ppoly_coefficients(k,3) = 3.0 * ( ( edge_r - u(k) ) + ( edge_l - u(k) ) )
-  
+
   enddo
 
 end subroutine PPM_reconstruction
@@ -177,9 +177,9 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly_coefficients(i1,2)
-  u1_r = b *((h0+h_neglect)/(h1+h_neglect))     ! derivative evaluated at xi = 0.0, 
+  u1_r = b *((h0+h_neglect)/(h1+h_neglect))     ! derivative evaluated at xi = 0.0,
                         ! expressed w.r.t. xi (local coord. system)
-  
+
   ! Limit the right slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_r) .GT. abs(slope) ) then
@@ -198,18 +198,18 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   ! Apply the traditional PPM limiter
   exp1 = (u0_r - u0_l) * (u0 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
-    
-  if ( exp1 .GT. exp2 ) then  
-    u0_l = 3.0 * u0 - 2.0 * u0_r
-  end if  
 
-  if ( exp1 .LT. -exp2 ) then  
+  if ( exp1 .GT. exp2 ) then
+    u0_l = 3.0 * u0 - 2.0 * u0_r
+  end if
+
+  if ( exp1 .LT. -exp2 ) then
     u0_r = 3.0 * u0 - 2.0 * u0_l
-  end if  
+  end if
 
   ppoly_E(i0,1) = u0_l
   ppoly_E(i0,2) = u0_r
-    
+
   a = u0_l
   b = 6.0 * u0 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u0 )
@@ -217,7 +217,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   ppoly_coefficients(i0,1) = a
   ppoly_coefficients(i0,2) = b
   ppoly_coefficients(i0,3) = c
-  
+
   ! ----- Right boundary -----
   i0 = N-1
   i1 = N
@@ -232,7 +232,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   c = ppoly_coefficients(i0,3)
   u1_l = (b + 2*c)                  ! derivative evaluated at xi = 1.0
   u1_l = u1_l * ((h1+h_neglect)/(h0+h_neglect))
-  
+
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_l) .GT. abs(slope) ) then
@@ -247,22 +247,22 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   ! edge value and slope by computing the parabola as determined by
   ! the left edge value and slope and the boundary cell average
   u0_r = 3.0 * u1 - 0.5 * u1_l - 2.0 * u0_l
-  
+
   ! Apply the traditional PPM limiter
   exp1 = (u0_r - u0_l) * (u1 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
-    
-  if ( exp1 .GT. exp2 ) then  
-    u0_l = 3.0 * u1 - 2.0 * u0_r
-  end if  
 
-  if ( exp1 .LT. -exp2 ) then  
+  if ( exp1 .GT. exp2 ) then
+    u0_l = 3.0 * u1 - 2.0 * u0_r
+  end if
+
+  if ( exp1 .LT. -exp2 ) then
     u0_r = 3.0 * u1 - 2.0 * u0_l
-  end if  
+  end if
 
   ppoly_E(i1,1) = u0_l
   ppoly_E(i1,2) = u0_r
-    
+
   a = u0_l
   b = 6.0 * u1 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u1 )

@@ -136,6 +136,9 @@ interface get_param
                    get_param_char, get_param_char_array, get_param_time, &
                    get_param_int_array, get_param_real_array
 end interface
+interface log_version
+  module procedure log_version_cs, log_version_plain
+end interface
 
 contains
 
@@ -1181,15 +1184,16 @@ end function overrideWarningHasBeenIssued
 
 ! The following subroutines write out to a log file.
 
-subroutine log_version(CS, modulename, version, desc)
-  type(param_file_type),      intent(in) :: CS
-  character(len=*),           intent(in) :: modulename
-  character(len=*),           intent(in) :: version
-  character(len=*), optional, intent(in) :: desc
-! This subroutine writes the version of a module to a log file.
+!> Log the version of a module to a log file and/or stdout, and/or to the
+!! parameter documentation file.
+subroutine log_version_cs(CS, modulename, version, desc)
+  type(param_file_type),      intent(in) :: CS         !< File parser type
+  character(len=*),           intent(in) :: modulename !< Name of calling module
+  character(len=*),           intent(in) :: version    !< Version string of module
+  character(len=*), optional, intent(in) :: desc       !< Module description
+  ! Local variables
   character(len=240) :: mesg
 
-!  write(mesg, '(a,": ",a)') trim(modulename), trim(version)
   mesg = trim(modulename)//": "//trim(version)
   if (is_root_pe()) then
     if (CS%log_open) write(CS%stdlog,'(a)') trim(mesg)
@@ -1198,7 +1202,21 @@ subroutine log_version(CS, modulename, version, desc)
 
   if (present(desc)) call doc_module(CS%doc, modulename, desc)
 
-end subroutine log_version
+end subroutine log_version_cs
+
+!> Log the version of a module to a log file and/or stdout.
+subroutine log_version_plain(modulename, version)
+  character(len=*),           intent(in) :: modulename !< Name of calling module
+  character(len=*),           intent(in) :: version    !< Version string of module
+  ! Local variables
+  character(len=240) :: mesg
+
+  mesg = trim(modulename)//": "//trim(version)
+  if (is_root_pe()) then
+    write(stdlog(),'(a)') trim(mesg)
+  endif
+
+end subroutine log_version_plain
 
 subroutine log_param_int(CS, modulename, varname, value, desc, units, &
                          default, layoutParam)

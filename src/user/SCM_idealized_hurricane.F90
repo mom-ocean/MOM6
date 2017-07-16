@@ -59,7 +59,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  
+
   call log_version(param_file, mod, version)
   call get_param(param_file,mod,"SCM_S_REF",S_ref, &
                  'Reference salinity', units='1e-3',default=35.0)
@@ -173,13 +173,13 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
-  
+
   pie = 4.0*atan(1.0) ; Deg2Rad = pie/180.
 
   !/ BR
   ! Implementing Holland (1980) parameteric wind profile
   !------------------------------------------------------|
-  BR_Bench = .true.   !true if comparing to LES runs     | 
+  BR_Bench = .true.   !true if comparing to LES runs     |
   t0 = 129600.        !TC 'eye' crosses (0,0) at 36 hours|
   transdir = pie      !translation direction (-x)        |
   !------------------------------------------------------|
@@ -205,7 +205,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   !       used in km due to error, correct implementation should
   !       not need rkm, but to match winds w/ experiment this must
   !       be maintained.  Causes winds far from storm center to be a
-  !       couple of m/s higher than the correct Holland prof. 
+  !       couple of m/s higher than the correct Holland prof.
   if (BR_Bench) then
      rkm = r/1000.
      rB = (rkm)**B
@@ -235,9 +235,9 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
      U10 = 0.
   end if
   Adir = atan2(CS%YY,xx)
-  
-  !/ BR 
-  ! Wind angle model following Zhang and Ulhorn (2012) 
+
+  !/ BR
+  ! Wind angle model following Zhang and Ulhorn (2012)
   ! ALPH is inflow angle positive outward.
   RSTR = min(10.,r / CS%r_max)
   A0 = -0.9*RSTR -0.09*CS%U_max -14.33
@@ -264,7 +264,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
     !/BR
-    ! Turn off surface current for stress calculation to be 
+    ! Turn off surface current for stress calculation to be
     ! consistent with test case.
     Uocn = 0.!state%u(I,j)
     Vocn = 0.!0.25*( (state%v(i,J) + state%v(i+1,J-1)) &
@@ -280,7 +280,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     !/----------------------------------------------------|
     du10=sqrt(du**2+dv**2)
     if (du10.LT.11.) then
-       Cd = 1.2e-3 
+       Cd = 1.2e-3
     elseif (du10.LT.20.) then
        Cd = (0.49 + 0.065 * U10 )*0.001
     else
@@ -298,7 +298,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     dV = U10*cos(Adir-Alph) - Vocn + V_TS
     du10=sqrt(du**2+dv**2)
     if (du10.LT.11.) then
-       Cd = 1.2e-3 
+       Cd = 1.2e-3
     elseif (du10.LT.20.) then
        Cd = (0.49 + 0.065 * U10 )*0.001
     else

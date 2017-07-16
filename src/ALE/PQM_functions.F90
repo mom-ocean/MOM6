@@ -41,15 +41,15 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial 
- 
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+
   ! Local variables
   integer   :: k                ! loop index
   real      :: h_c              ! cell width
   real      :: u0_l, u0_r       ! edge values (left and right)
   real      :: u1_l, u1_r       ! edge slopes (left and right)
   real      :: a, b, c, d, e    ! parabola coefficients
-  
+
   ! PQM limiter
   call PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
@@ -58,25 +58,25 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
 
     u0_l = ppoly_E(k,1)
     u0_r = ppoly_E(k,2)
-    
+
     u1_l = ppoly_S(k,1)
     u1_r = ppoly_S(k,2)
 
     h_c = h(k)
-    
+
     a = u0_l
     b = h_c * u1_l
     c = 30.0 * u(k) - 12.0*u0_r - 18.0*u0_l + 1.5*h_c*(u1_r - 3.0*u1_l)
     d = -60.0 * u(k) + h_c *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
     e = 30.0 * u(k) + 2.5*h_c*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
-    
+
     ! Store coefficients
     ppoly_coefficients(k,1) = a
     ppoly_coefficients(k,2) = b
     ppoly_coefficients(k,3) = c
     ppoly_coefficients(k,4) = d
     ppoly_coefficients(k,5) = e
-    
+
   end do ! end loop on cells
 
 end subroutine PQM_reconstruction
@@ -112,8 +112,8 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
   real      :: u1_l, u1_r   ! edge slopes
   real      :: u_l, u_c, u_r        ! left, center and right cell averages
   real      :: h_l, h_c, h_r        ! left, center and right cell widths
-  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right 
-                                            ! van Leer slopes   
+  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right
+                                            ! van Leer slopes
   real      :: slope        ! retained PLM slope
   real      :: a, b, c, d, e
   real      :: alpha1, alpha2, alpha3
@@ -129,18 +129,18 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
   ! Loop on interior cells to apply the PQM limiter
   do k = 2,N-1
-    
+
     !if ( h(k) .lt. 1.0 ) cycle
-    
+
     inflexion_l = 0
     inflexion_r = 0
-    
+
     ! Get edge values, edge slopes and cell width
     u0_l = ppoly_E(k,1)
     u0_r = ppoly_E(k,2)
     u1_l = ppoly_S(k,1)
     u1_r = ppoly_S(k,2)
-    
+
     ! Get cell widths and cell averages (boundary cells are assumed to
     ! be local extrema for the sake of slopes)
     h_l = h(k-1)
@@ -149,7 +149,7 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
     u_l = u(k-1)
     u_c = u(k)
     u_r = u(k+1)
-    
+
     ! Compute limited slope
     sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
     sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
@@ -160,12 +160,12 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
     else
       slope = 0.0
     end if
-    
-    ! If one of the slopes has the wrong sign compared with the 
+
+    ! If one of the slopes has the wrong sign compared with the
     ! limited PLM slope, it is set equal to the limited PLM slope
     if ( u1_l*slope .le. 0.0 ) u1_l = slope
     if ( u1_r*slope .le. 0.0 ) u1_r = slope
-    
+
     ! Local extremum --> flatten
     if ( (u0_r - u_c) * (u_c - u0_l) .le. 0.0) then
       u0_l = u_c
@@ -175,46 +175,46 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
       inflexion_l = -1
       inflexion_r = -1
     end if
-      
-    ! Edge values are bounded and averaged when discontinuous and not 
+
+    ! Edge values are bounded and averaged when discontinuous and not
     ! monotonic, edge slopes are consistent and the cell is not an extremum.
     ! We now need to check and encorce the monotonicity of the quartic within
     ! the cell
     if ( (inflexion_l .EQ. 0) .AND. (inflexion_r .EQ. 0) ) then
-    
+
       a = u0_l
       b = h_c * u1_l
       c = 30.0 * u(k) - 12.0*u0_r - 18.0*u0_l + 1.5*h_c*(u1_r - 3.0*u1_l)
       d = -60.0 * u(k) + h_c *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
       e = 30.0 * u(k) + 2.5*h_c*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
-    
-      ! Determine the coefficients of the second derivative 
+
+      ! Determine the coefficients of the second derivative
       ! alpha1 xi^2 + alpha2 xi + alpha3
       alpha1 = 6*e
       alpha2 = 3*d
       alpha3 = c
 
       rho = alpha2 * alpha2 - 4.0 * alpha1 * alpha3
-    
+
       ! Check whether inflexion points exist
       if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
-      
+
         sqrt_rho = sqrt( rho )
-    
+
         x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
         x2 = 0.5 * ( - alpha2 + sqrt_rho ) / alpha1
 
         ! Check whether both inflexion points lie in [0,1]
         if ( (x1 .GE. 0.0) .AND. (x1 .LE. 1.0) .AND. &
              (x2 .GE. 0.0) .AND. (x2 .LE. 1.0) ) then
-      
+
           gradient1 = 4.0 * e * (x1**3) + 3.0 * d * (x1**2) + 2.0 * c * x1 + b
           gradient2 = 4.0 * e * (x2**3) + 3.0 * d * (x2**2) + 2.0 * c * x2 + b
 
           ! Check whether one of the gradients is inconsistent
           if ( (gradient1 * slope .LT. 0.0) .OR. &
                (gradient2 * slope .LT. 0.0) ) then
-            ! Decide where to collapse inflexion points 
+            ! Decide where to collapse inflexion points
             ! (depends on one-sided slopes)
             if ( abs(sigma_l) .LT. abs(sigma_r) ) then
               inflexion_l = 1
@@ -222,16 +222,16 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
               inflexion_r = 1
             end if
           end if
-    
-        ! If both x1 and x2 do not lie in [0,1], check whether 
+
+        ! If both x1 and x2 do not lie in [0,1], check whether
         ! only x1 lies in [0,1]
         else if ( (x1 .GE. 0.0) .AND. (x1 .LE. 1.0) ) then
-     
+
           gradient1 = 4.0 * e * (x1**3) + 3.0 * d * (x1**2) + 2.0 * c * x1 + b
 
           ! Check whether the gradient is inconsistent
           if ( gradient1 * slope .LT. 0.0 ) then
-            ! Decide where to collapse inflexion points 
+            ! Decide where to collapse inflexion points
             ! (depends on one-sided slopes)
             if ( abs(sigma_l) .LT. abs(sigma_r) ) then
               inflexion_l = 1
@@ -239,15 +239,15 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
               inflexion_r = 1
             end if
           end if
-    
+
         ! If x1 does not lie in [0,1], check whether x2 lies in [0,1]
         else if ( (x2 .GE. 0.0) .AND. (x2 .LE. 1.0) ) then
-        
+
           gradient2 = 4.0 * e * (x2**3) + 3.0 * d * (x2**2) + 2.0 * c * x2 + b
-        
+
           ! Check whether the gradient is inconsistent
           if ( gradient2 * slope .LT. 0.0 ) then
-            ! Decide where to collapse inflexion points 
+            ! Decide where to collapse inflexion points
             ! (depends on one-sided slopes)
             if ( abs(sigma_l) .LT. abs(sigma_r) ) then
               inflexion_l = 1
@@ -256,22 +256,22 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
             end if
           end if
 
-        end if ! end checking where the inflexion points lie 
+        end if ! end checking where the inflexion points lie
 
       end if ! end checking if alpha1 != 0 AND rho >= 0
-      
+
       ! If alpha1 is zero, the second derivative of the quartic reduces
       ! to a straight line
       if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
-          
+
           x1 = - alpha3 / alpha2
           if ( (x1 .ge. 0.0) .AND. (x1 .le. 1.0) ) then
-        
+
             gradient1 = 4.0 * e * (x1**3) + 3.0 * d * (x1**2) + 2.0 * c * x1 + b
-        
+
             ! Check whether the gradient is inconsistent
             if ( gradient1 * slope .LT. 0.0 ) then
-              ! Decide where to collapse inflexion points 
+              ! Decide where to collapse inflexion points
               ! (depends on one-sided slopes)
               if ( abs(sigma_l) .LT. abs(sigma_r) ) then
                 inflexion_l = 1
@@ -279,81 +279,81 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
                 inflexion_r = 1
               end if
             end if ! check slope consistency
-          
-          end if    
-        
+
+          end if
+
       end if ! end check whether we can find the root of the straight line
-       
+
     end if ! end checking whether to shift inflexion points
 
     ! At this point, we know onto which edge to shift inflexion points
     if ( inflexion_l .EQ. 1 ) then
-      
-      ! We modify the edge slopes so that both inflexion points 
+
+      ! We modify the edge slopes so that both inflexion points
       ! collapse onto the left edge
       u1_l = ( 10.0 * u_c - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h_c + h_neglect )
       u1_r = ( -10.0 * u_c + 6.0 * u0_r + 4.0 * u0_l ) / ( h_c + h_neglect )
 
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
-      ! and edge slope are modified in compliance with the fact that both 
+      ! and edge slope are modified in compliance with the fact that both
       ! inflexion points must still be located on the left edge
       if ( u1_l * slope .LT. 0.0 ) then
-      
+
         u1_l = 0.0
         u0_r = 5.0 * u_c - 4.0 * u0_l
         u1_r = 20.0 * (u_c - u0_l) / ( h_c + h_neglect )
-      
+
       else if ( u1_r * slope .LT. 0.0 ) then
-        
+
         u1_r = 0.0
         u0_l = (5.0*u_c - 3.0*u0_r) / 2.0
         u1_l = 10.0 * (-u_c + u0_r) / (3.0 * h_c + h_neglect)
-      
+
       end if
-      
+
     else if ( inflexion_r .EQ. 1 ) then
-      
-      ! We modify the edge slopes so that both inflexion points 
+
+      ! We modify the edge slopes so that both inflexion points
       ! collapse onto the right edge
       u1_r = ( -10.0 * u_c + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h_c + h_neglect)
       u1_l = ( 10.0 * u_c - 4.0 * u0_r - 6.0 * u0_l ) / (h_c + h_neglect)
-      
+
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
-      ! and edge slope are modified in compliance with the fact that both 
+      ! and edge slope are modified in compliance with the fact that both
       ! inflexion points must still be located on the right edge
       if ( u1_l * slope .LT. 0.0 ) then
-        
+
         u1_l = 0.0
         u0_r = ( 5.0 * u_c - 3.0 * u0_l ) / 2.0
         u1_r = 10.0 * (u_c - u0_l) / (3.0 * h_c + h_neglect)
-      
+
       else if ( u1_r * slope .LT. 0.0 ) then
-        
+
         u1_r = 0.0
         u0_l = 5.0 * u_c - 4.0 * u0_r
         u1_l = 20.0 * ( -u_c + u0_r ) / (h_c + h_neglect)
-      
+
       end if
 
     end if ! clause to check where to collapse inflexion points
-    
+
     ! Save edge values and edge slopes for reconstruction
     ppoly_E(k,1) = u0_l
     ppoly_E(k,2) = u0_r
     ppoly_S(k,1) = u1_l
     ppoly_S(k,2) = u1_r
-    
+
   end do ! end loop on interior cells
 
   ! Constant reconstruction within boundary cells
   ppoly_E(1,:) = u(1)
   ppoly_S(1,:) = 0.0
-  
+
   ppoly_E(N,:) = u(N)
   ppoly_S(N,:) = 0.0
-  
+
 end subroutine PQM_limiter
 
 
@@ -388,7 +388,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   real, dimension(:),   intent(in)    :: h ! cell widths (size N)
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial  
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
 
   ! Local variables
   integer       :: i0, i1
@@ -411,9 +411,9 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly_coefficients(i1,2)
-  u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0, 
+  u1_r = b *(h0/h1)     ! derivative evaluated at xi = 0.0,
                         ! expressed w.r.t. xi (local coord. system)
-  
+
   ! Limit the right slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_r) .GT. abs(slope) ) then
@@ -432,18 +432,18 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! Apply the traditional PPM limiter
   exp1 = (u0_r - u0_l) * (u0 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
-    
-  if ( exp1 .GT. exp2 ) then  
-    u0_l = 3.0 * u0 - 2.0 * u0_r
-  end if  
 
-  if ( exp1 .LT. -exp2 ) then  
+  if ( exp1 .GT. exp2 ) then
+    u0_l = 3.0 * u0 - 2.0 * u0_r
+  end if
+
+  if ( exp1 .LT. -exp2 ) then
     u0_r = 3.0 * u0 - 2.0 * u0_l
-  end if  
+  end if
 
   ppoly_E(i0,1) = u0_l
   ppoly_E(i0,2) = u0_r
-    
+
   a = u0_l
   b = 6.0 * u0 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u0 )
@@ -471,7 +471,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   e = ppoly_coefficients(i0,5)
   u1_l = (b + 2*c + 3*d + 4*e)      ! derivative evaluated at xi = 1.0
   u1_l = u1_l * (h1/h0)
-  
+
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )
   if ( abs(u1_l) .GT. abs(slope) ) then
@@ -486,22 +486,22 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ! edge value and slope by computing the parabola as determined by
   ! the left edge value and slope and the boundary cell average
   u0_r = 3.0 * u1 - 0.5 * u1_l - 2.0 * u0_l
-  
+
   ! Apply the traditional PPM limiter
   exp1 = (u0_r - u0_l) * (u1 - 0.5*(u0_l+u0_r))
   exp2 = (u0_r - u0_l) * (u0_r - u0_l) / 6.0
-    
-  if ( exp1 .GT. exp2 ) then  
-    u0_l = 3.0 * u1 - 2.0 * u0_r
-  end if  
 
-  if ( exp1 .LT. -exp2 ) then  
+  if ( exp1 .GT. exp2 ) then
+    u0_l = 3.0 * u1 - 2.0 * u0_r
+  end if
+
+  if ( exp1 .LT. -exp2 ) then
     u0_r = 3.0 * u1 - 2.0 * u0_l
-  end if  
+  end if
 
   ppoly_E(i1,1) = u0_l
   ppoly_E(i1,2) = u0_r
-    
+
   a = u0_l
   b = 6.0 * u1 - 4.0 * u0_l - 2.0 * u0_r
   c = 3.0 * ( u0_r + u0_l - 2.0 * u1 )
@@ -512,7 +512,7 @@ subroutine PQM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients )
   ppoly_coefficients(i1,3) = c
   ppoly_coefficients(i1,4) = 0.0
   ppoly_coefficients(i1,5) = 0.0
-  
+
 end subroutine PQM_boundary_extrapolation
 
 
@@ -548,8 +548,8 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial 
- 
+  real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+
   ! Local variables
   integer       :: i0, i1
   integer       :: inflexion_l
@@ -575,7 +575,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   u0 = u(i0)
   u1 = u(i1)
   um = u0
-  
+
   ! Compute real slope and express it w.r.t. local coordinate system
   ! within boundary cell
   slope = 2.0 * ( u1 - u0 ) / ( ( h0 + h1 ) + h_neglect )
@@ -585,7 +585,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   ! left edge value and slope of the adjacent cell
   a = ppoly_coefficients(i1,1)
   b = ppoly_coefficients(i1,2)
-  
+
   u0_r = a          ! edge value
   u1_r = b / (h1 + h_neglect) ! edge slope (w.r.t. global coord.)
 
@@ -601,7 +601,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Left edge value estimate based on rational function
   u0_l = ar
-  
+
   ! Edge value estimate based on PLM
   u_plm = um - 0.5 * slope
 
@@ -616,7 +616,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
     u0_l = u_plm
     u1_l = slope / (h0 + h_neglect)
   end if
- 
+
   ! Monotonize quartic
   inflexion_l = 0
 
@@ -631,13 +631,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   alpha3 = c
 
   rho = alpha2 * alpha2 - 4.0 * alpha1 * alpha3
-    
+
   ! Check whether inflexion points exist. If so, transform the quartic
   ! so that both inflexion points coalesce on the left edge.
   if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
-    
+
     sqrt_rho = sqrt( rho )
-    
+
     x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
     if ( (x1 .gt. 0.0) .and. (x1 .lt. 1.0) ) then
       gradient1 = 4.0 * e * (x1**3) + 3.0 * d * (x1**2) + 2.0 * c * x1 + b
@@ -645,7 +645,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
         inflexion_l = 1
       end if
     end if
-        
+
     x2 = 0.5 * ( - alpha2 + sqrt_rho ) / alpha1
     if ( (x2 .gt. 0.0) .and. (x2 .lt. 1.0) ) then
       gradient2 = 4.0 * e * (x2**3) + 3.0 * d * (x2**2) + 2.0 * c * x2 + b
@@ -655,44 +655,44 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
     end if
 
   end if
-  
+
   if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
-          
+
     x1 = - alpha3 / alpha2
     if ( (x1 .ge. 0.0) .and. (x1 .le. 1.0) ) then
       gradient1 = 3.0 * d * (x1**2) + 2.0 * c * x1 + b
       if ( gradient1 * slope .lt. 0.0 ) then
         inflexion_l = 1
       end if
-    end if  
-  
+    end if
+
   end if
-    
+
   if ( inflexion_l .eq. 1 ) then
-      
-    ! We modify the edge slopes so that both inflexion points 
+
+    ! We modify the edge slopes so that both inflexion points
     ! collapse onto the left edge
     u1_l = ( 10.0 * um - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h0 + h_neglect)
     u1_r = ( -10.0 * um + 6.0 * u0_r + 4.0 * u0_l ) / (h0 + h_neglect)
 
     ! One of the modified slopes might be inconsistent. When that happens,
     ! the inconsistent slope is set equal to zero and the opposite edge value
-    ! and edge slope are modified in compliance with the fact that both 
+    ! and edge slope are modified in compliance with the fact that both
     ! inflexion points must still be located on the left edge
     if ( u1_l * slope .LT. 0.0 ) then
-      
+
       u1_l = 0.0
       u0_r = 5.0 * um - 4.0 * u0_l
       u1_r = 20.0 * (um - u0_l) / ( h0 + h_neglect )
-      
+
     else if ( u1_r * slope .LT. 0.0 ) then
-        
+
       u1_r = 0.0
       u0_l = (5.0*um - 3.0*u0_r) / 2.0
       u1_l = 10.0 * (-um + u0_r) / (3.0 * h0 + h_neglect )
-      
+
     end if
-      
+
   end if
 
   ! Store edge values, edge slopes and coefficients
@@ -700,13 +700,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   ppoly_E(i0,2) = u0_r
   ppoly_S(i0,1) = u1_l
   ppoly_S(i0,2) = u1_r
-    
+
   a = u0_l
   b = h0 * u1_l
   c = 30.0 * um - 12.0*u0_r - 18.0*u0_l + 1.5*h0*(u1_r - 3.0*u1_l)
   d = -60.0 * um + h0 *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
   e = 30.0 * um + 2.5*h0*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
-    
+
     ! Store coefficients
   ppoly_coefficients(i0,1) = a
   ppoly_coefficients(i0,2) = b
@@ -722,7 +722,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   u0 = u(i0)
   u1 = u(i1)
   um = u1
-  
+
   ! Compute real slope and express it w.r.t. local coordinate system
   ! within boundary cell
   slope = 2.0 * ( u1 - u0 ) / ( h0 + h1 )
@@ -737,7 +737,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   e = ppoly_coefficients(i0,5)
   u0_l = a + b + c + d + e                  ! edge value
   u1_l = (b + 2*c + 3*d + 4*e) / h0         ! edge slope (w.r.t. global coord.)
- 
+
   ! Compute coefficient for rational function based on mean and left
   ! edge value and slope
   if (um-u0_l.ne.0.) then ! HACK by AJA
@@ -754,7 +754,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   else
     u0_r = um + 0.5 * slope ! PLM
   endif ! HACK by AJA
-  
+
   ! Right edge value estimate based on PLM
   u_plm = um + 0.5 * slope
 
@@ -769,7 +769,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
     u0_r = u_plm
     u1_r = slope / h1
   end if
-  
+
   ! Monotonize quartic
   inflexion_r = 0
 
@@ -784,13 +784,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   alpha3 = c
 
   rho = alpha2 * alpha2 - 4.0 * alpha1 * alpha3
-    
+
   ! Check whether inflexion points exist. If so, transform the quartic
   ! so that both inflexion points coalesce on the right edge.
   if (( alpha1 .ne. 0.0 ) .and. ( rho .ge. 0.0 )) then
-    
+
     sqrt_rho = sqrt( rho )
-    
+
     x1 = 0.5 * ( - alpha2 - sqrt_rho ) / alpha1
     if ( (x1 .gt. 0.0) .and. (x1 .lt. 1.0) ) then
       gradient1 = 4.0 * e * (x1**3) + 3.0 * d * (x1**2) + 2.0 * c * x1 + b
@@ -798,7 +798,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
         inflexion_r = 1
       end if
     end if
-        
+
     x2 = 0.5 * ( - alpha2 + sqrt_rho ) / alpha1
     if ( (x2 .gt. 0.0) .and. (x2 .lt. 1.0) ) then
       gradient2 = 4.0 * e * (x2**3) + 3.0 * d * (x2**2) + 2.0 * c * x2 + b
@@ -808,64 +808,64 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
     end if
 
   end if
-  
+
   if (( alpha1 .eq. 0.0 ) .and. ( alpha2 .ne. 0.0 )) then
-          
+
     x1 = - alpha3 / alpha2
     if ( (x1 .ge. 0.0) .and. (x1 .le. 1.0) ) then
       gradient1 = 3.0 * d * (x1**2) + 2.0 * c * x1 + b
       if ( gradient1 * slope .lt. 0.0 ) then
         inflexion_r = 1
       end if
-    end if  
-  
-  end if
-    
-  if ( inflexion_r .eq. 1 ) then
-      
-    ! We modify the edge slopes so that both inflexion points 
-    ! collapse onto the right edge
-    u1_r = ( -10.0 * um + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h1)
-    u1_l = ( 10.0 * um - 4.0 * u0_r - 6.0 * u0_l ) / h1
-      
-    ! One of the modified slopes might be inconsistent. When that happens,
-    ! the inconsistent slope is set equal to zero and the opposite edge value
-    ! and edge slope are modified in compliance with the fact that both 
-    ! inflexion points must still be located on the right edge
-    if ( u1_l * slope .lt. 0.0 ) then
-        
-      u1_l = 0.0
-      u0_r = ( 5.0 * um - 3.0 * u0_l ) / 2.0
-      u1_r = 10.0 * (um - u0_l) / (3.0 * h1)
-      
-    else if ( u1_r * slope .lt. 0.0 ) then
-        
-      u1_r = 0.0
-      u0_l = 5.0 * um - 4.0 * u0_r
-      u1_l = 20.0 * ( -um + u0_r ) / h1
-      
     end if
 
   end if
-  
+
+  if ( inflexion_r .eq. 1 ) then
+
+    ! We modify the edge slopes so that both inflexion points
+    ! collapse onto the right edge
+    u1_r = ( -10.0 * um + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h1)
+    u1_l = ( 10.0 * um - 4.0 * u0_r - 6.0 * u0_l ) / h1
+
+    ! One of the modified slopes might be inconsistent. When that happens,
+    ! the inconsistent slope is set equal to zero and the opposite edge value
+    ! and edge slope are modified in compliance with the fact that both
+    ! inflexion points must still be located on the right edge
+    if ( u1_l * slope .lt. 0.0 ) then
+
+      u1_l = 0.0
+      u0_r = ( 5.0 * um - 3.0 * u0_l ) / 2.0
+      u1_r = 10.0 * (um - u0_l) / (3.0 * h1)
+
+    else if ( u1_r * slope .lt. 0.0 ) then
+
+      u1_r = 0.0
+      u0_l = 5.0 * um - 4.0 * u0_r
+      u1_l = 20.0 * ( -um + u0_r ) / h1
+
+    end if
+
+  end if
+
   ! Store edge values, edge slopes and coefficients
   ppoly_E(i1,1) = u0_l
   ppoly_E(i1,2) = u0_r
   ppoly_S(i1,1) = u1_l
   ppoly_S(i1,2) = u1_r
-    
+
   a = u0_l
   b = h1 * u1_l
   c = 30.0 * um - 12.0*u0_r - 18.0*u0_l + 1.5*h1*(u1_r - 3.0*u1_l)
   d = -60.0 * um + h1 *(6.0*u1_l - 4.0*u1_r) + 28.0*u0_r + 32.0*u0_l
   e = 30.0 * um + 2.5*h1*(u1_r - u1_l) - 15.0*(u0_l + u0_r)
-    
+
   ppoly_coefficients(i1,1) = a
   ppoly_coefficients(i1,2) = b
   ppoly_coefficients(i1,3) = c
   ppoly_coefficients(i1,4) = d
   ppoly_coefficients(i1,5) = e
-  
+
 end subroutine PQM_boundary_extrapolation_v1
 
 end module PQM_functions

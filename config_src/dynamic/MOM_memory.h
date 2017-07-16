@@ -34,7 +34,9 @@
                                !    NJPROC_ is the number of processors in the
                                !  y-direction.
 
+#ifndef MAX_FIELDS_
 #define MAX_FIELDS_ 50
+#endif
                                !    The maximum permitted number (each) of
                                !  restart variables, time derivatives, etc.
                                !  This is mostly used for the size of pointer
