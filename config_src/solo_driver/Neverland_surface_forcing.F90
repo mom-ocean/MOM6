@@ -53,9 +53,9 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
   ! Local variable
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  
+
   real :: x, y
-  real :: PI 
+  real :: PI
   real :: tau_max, off
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -79,18 +79,18 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
 !    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
      y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
 !    fluxes%taux(I,j) =  G%mask2dCu(I,j) * 0.0
-    
+
     if (y.le.0.29) then
        fluxes%taux(I,j) = fluxes%taux(I,j) +  tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
     endif
     if (y.gt.0.29 .and. y.le.(0.8-off)) then
-       fluxes%taux(I,j)	= fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
     endif
     if (y.gt.(0.8-off) .and. y.le.(1-off) ) then
        fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
     endif
   enddo ; enddo
- 
+
   do J=js-1,Jeq ; do i=is,ie
     fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
@@ -111,7 +111,7 @@ end subroutine Neverland_wind_forcing
 
    real , intent(in) :: x       !< non-dimensional position
    real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
    PI      = 4.0*atan(1.0)
    cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
@@ -122,7 +122,7 @@ end subroutine Neverland_wind_forcing
 
    real , intent(in) :: x       !< non-dimensional position
    real , intent(in) :: L       !< non-dimensional width
-   real              :: PI      !< 3.1415926... calculated as 4*atan(1) 
+   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
    PI    = 4.0*atan(1.0)
    spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
