@@ -1229,7 +1229,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                           "at the same time in MOM.")
 
   if (.not.(CS%Laplacian .or. CS%biharmonic)) then
-    call MOM_error(WARNING, &
+    ! Only issue inviscid warning if not in single column mode (usually 2x2 domain) 
+    if ( max(G%domain%niglobal, G%domain%njglobal)>2 ) call MOM_error(WARNING, &
       "hor_visc_init:  It is usually a very bad idea not to use either "//&
       "LAPLACIAN or BIHARMONIC viscosity.")
     return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
