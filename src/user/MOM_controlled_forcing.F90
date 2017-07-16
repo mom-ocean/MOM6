@@ -505,7 +505,7 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   integer :: num_cycle
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_controlled_forcing" ! This module's name.
+  character(len=40)  :: mdl = "MOM_controlled_forcing" ! This module's name.
 
   ! These should have already been called.
   ! call read_param(param_file, "CTRL_FORCE_INTEGRATED", CS%do_integrated)
@@ -518,12 +518,12 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call log_param(param_file, mod, "CTRL_FORCE_INTEGRATED", do_integrated, &
+  call log_version(param_file, mdl, version, "")
+  call log_param(param_file, mdl, "CTRL_FORCE_INTEGRATED", do_integrated, &
                  "If true, use a PI controller to determine the surface \n"//&
                  "forcing that is consistent with the observed mean properties.", &
                  default=.false.)
-  call log_param(param_file, mod, "CTRL_FORCE_NUM_CYCLE", num_cycle, &
+  call log_param(param_file, mdl, "CTRL_FORCE_NUM_CYCLE", num_cycle, &
                  "The number of cycles per year in the controlled forcing, \n"//&
                  "or 0 for no cyclic forcing.", default=0)
 
@@ -531,32 +531,32 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "CTRL_FORCE_HEAT_INT_RATE", CS%heat_int_rate, &
+  call get_param(param_file, mdl, "CTRL_FORCE_HEAT_INT_RATE", CS%heat_int_rate, &
                  "The integrated rate at which heat flux anomalies are \n"//&
                  "accumulated.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_PREC_INT_RATE", CS%prec_int_rate, &
+  call get_param(param_file, mdl, "CTRL_FORCE_PREC_INT_RATE", CS%prec_int_rate, &
                  "The integrated rate at which precipitation anomalies \n"//&
                  "are accumulated.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_HEAT_CYC_RATE", CS%heat_cyc_rate, &
+  call get_param(param_file, mdl, "CTRL_FORCE_HEAT_CYC_RATE", CS%heat_cyc_rate, &
                  "The integrated rate at which cyclical heat flux \n"//&
                  "anomalies are accumulated.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_PREC_CYC_RATE", CS%prec_cyc_rate, &
+  call get_param(param_file, mdl, "CTRL_FORCE_PREC_CYC_RATE", CS%prec_cyc_rate, &
                  "The integrated rate at which cyclical precipitation \n"//&
                  "anomalies are accumulated.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_SMOOTH_LENGTH", smooth_len, &
+  call get_param(param_file, mdl, "CTRL_FORCE_SMOOTH_LENGTH", smooth_len, &
                  "The length scales over which controlled forcing \n"//&
                  "anomalies are smoothed.", units="m", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_LAMDA_HEAT", CS%lam_heat, &
+  call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_HEAT", CS%lam_heat, &
                  "A constant of proportionality between SST anomalies \n"//&
                  "and controlling heat fluxes", "W m-2 K-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_LAMDA_PREC", CS%lam_prec, &
+  call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_PREC", CS%lam_prec, &
                  "A constant of proportionality between SSS anomalies \n"//&
                  "(normalised by mean SSS) and controlling precipitation.", &
                  "kg m-2", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_LAMDA_CYC_HEAT", CS%lam_cyc_heat, &
+  call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_HEAT", CS%lam_cyc_heat, &
                  "A constant of proportionality between SST anomalies \n"//&
                  "and cyclical controlling heat fluxes", "W m-2 K-1", default=0.0)
-  call get_param(param_file, mod, "CTRL_FORCE_LAMDA_CYC_PREC", CS%lam_cyc_prec, &
+  call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_PREC", CS%lam_cyc_prec, &
                  "A constant of proportionality between SSS anomalies \n"//&
                  "(normalised by mean SSS) and cyclical controlling \n"//&
                  "precipitation.", "kg m-2", default=0.0)

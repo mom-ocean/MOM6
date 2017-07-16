@@ -13,14 +13,15 @@ implicit none ; private
 #include "version_variable.h"
 
 ! Private (module-wise) parameters
-character(len=40) :: mod = "baroclinic_zone_initialization" !< This module's name.
+character(len=40) :: mdl = "baroclinic_zone_initialization" !< This module's name.
 
 public baroclinic_zone_init_temperature_salinity
 
 contains
 
 !> Reads the parameters unique to this module
-subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone)
+subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
+                      delta_T, dTdx, L_zone, just_read_params)
   type(ocean_grid_type), intent(in)  :: G          !< Grid structure
   type(param_file_type), intent(in)  :: param_file !< Parameter file handle
   real,                  intent(out) :: S_ref      !< Reference salinity (ppt)
@@ -32,29 +33,47 @@ subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, de
   real,                  intent(out) :: delta_T    !< Temperature difference across baroclinic zone (ppt)
   real,                  intent(out) :: dTdx       !< Linear temperature gradient (ppt/m)
   real,                  intent(out) :: L_zone     !< Width of baroclinic zone (m)
+  logical,     optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
-  call log_version(param_file, mod, version, 'Initialization of an analytic baroclninic zone')
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) &
+    call log_version(param_file, mdl, version, 'Initialization of an analytic baroclinic zone')
   call openParameterBlock(param_file,'BCZIC')
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='ppt',default=35.)
-  call get_param(param_file,mod,"DSDZ",dSdz,'Salinity stratification',units='ppt/m',default=0.0)
-  call get_param(param_file,mod,"DELTA_S",delta_S,'Salinity difference across baroclinic zone',units='ppt',default=0.0)
-  call get_param(param_file,mod,"DSDX",dSdx,'Meridional salinity difference',units='ppt/'//trim(G%x_axis_units),default=0.0)
-  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',default=10.)
-  call get_param(param_file,mod,"DTDZ",dTdz,'Temperature stratification',units='C/m',default=0.0)
-  call get_param(param_file,mod,"DELTA_T",delta_T,'Temperature difference across baroclinic zone',units='C',default=0.0)
-  call get_param(param_file,mod,"DTDX",dTdx,'Meridional temperature difference',units='C/'//trim(G%x_axis_units),default=0.0)
-  call get_param(param_file,mod,"L_ZONE",L_zone,'Width of baroclinic zone',units=G%x_axis_units,default=0.5*G%len_lat)
+  call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', units='ppt', &
+                 default=35., do_not_log=just_read)
+  call get_param(param_file, mdl,"DSDZ",dSdz,'Salinity stratification',units='ppt/m', &
+                 default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"DELTA_S",delta_S,'Salinity difference across baroclinic zone', &
+                 units='ppt', default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"DSDX",dSdx,'Meridional salinity difference', &
+                 units='ppt/'//trim(G%x_axis_units), default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C', &
+                 default=10., do_not_log=just_read)
+  call get_param(param_file, mdl,"DTDZ",dTdz,'Temperature stratification',units='C/m', &
+                 default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"DELTA_T",delta_T,'Temperature difference across baroclinic zone', &
+                 units='C', default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"DTDX",dTdx,'Meridional temperature difference', &
+                 units='C/'//trim(G%x_axis_units), default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl,"L_ZONE",L_zone,'Width of baroclinic zone', &
+                 units=G%x_axis_units, default=0.5*G%len_lat, do_not_log=just_read)
   call closeParameterBlock(param_file)
 
 end subroutine bcz_params
 
 !> Initialization of temperature and salinity with the baroclinic zone initial conditions
-subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file)
+subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file, &
+                                                     just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
@@ -62,9 +81,14 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file)
   real      :: L_zone ! Width of baroclinic zone
   real      :: zc, zi, x, xd, xs, y, yd, fn
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  call bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  call bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, delta_T, dTdx, L_zone, just_read_params)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   T(:,:,:) = 0.
   S(:,:,:) = 0.

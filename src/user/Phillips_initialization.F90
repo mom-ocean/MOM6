@@ -48,14 +48,15 @@ public Phillips_initialize_topography
 contains
 
 !> Initialize thickness field.
-subroutine Phillips_initialize_thickness(h, G, GV, param_file)
+subroutine Phillips_initialize_thickness(h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h         !< The thickness that is being initialized.
-  type(param_file_type),   intent(in) :: param_file !< A structure indicating the
-                                                    !! open file to parse for model
-                                                    !! parameter values.
+                           intent(out) :: h         !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   real :: eta0(SZK_(G)+1)   ! The 1-d nominal positions of the interfaces.
   real :: eta_im(SZJ_(G),SZK_(G)+1) ! A temporary array for zonal-mean eta, m.
@@ -63,7 +64,8 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file)
                             ! positive upward, in m.
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
-  character(len=40)  :: mod = "Phillips_initialize_thickness" ! This subroutine's name.
+  logical :: just_read    ! If true, just read parameters but set nothing.
+  character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -71,17 +73,21 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file)
 
   eta_im(:,:) = 0.0
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &
-                 default = 0.5)
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
+                 default = 0.5, do_not_log=just_read)
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   half_depth = G%max_depth*half_strat
   eta0(1) = 0.0 ; eta0(nz+1) = -G%max_depth
@@ -123,37 +129,45 @@ subroutine Phillips_initialize_thickness(h, G, GV, param_file)
 end subroutine Phillips_initialize_thickness
 
 !> Initialize velocity fields.
-subroutine Phillips_initialize_velocity(u, v, G, GV, param_file)
-  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
-  type(param_file_type),                  intent(in)     :: param_file !< A structure indicating
-                                                            !! the open file to parse for model
-                                                            !! parameter values.
+subroutine Phillips_initialize_velocity(u, v, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(out) :: v  !< j-component of velocity [m/s]
+  type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file to
+                                                        !! parse for modelparameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   real :: damp_rate, jet_width, jet_height, x_2, y_2
   real :: velocity_amplitude, pi
   integer :: i, j, k, is, ie, js, je, nz, m
-  character(len=40)  :: mod = "Phillips_initialize_velocity" ! This subroutine's name.
+  logical :: just_read    ! If true, just read parameters but set nothing.
+  character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (.not.just_read) call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
+                 "The magnitude of the initial velocity perturbation.", &
+                 units="m s-1", default=0.001, do_not_log=just_read)
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
+                 "The width of the zonal-mean jet.", units="km", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
+                 "The interface height scale associated with the \n"//&
+                 "zonal-mean jet.", units="m", &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   u(:,:,:) = 0.0
   v(:,:,:) = 0.0
 
   pi = 4.0*atan(1.0)
-
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
-                 "The magnitude of the initial velocity perturbation.", &
-                 units="m s-1", default=0.001)
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
-                 "The width of the zonal-mean jet.", units="km", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the \n"//&
-                 "zonal-mean jet.", units="m", &
-                 fail_if_missing=.true.)
 
   ! Use thermal wind shear to give a geostrophically balanced flow.
   do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
@@ -215,7 +229,7 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate, in s-1.
   real :: damp_rate, jet_width, jet_height, y_2
   real :: half_strat, half_depth
-  character(len=40)  :: mod = "Phillips_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   logical, save :: first_call = .true.
@@ -226,19 +240,19 @@ subroutine Phillips_initialize_sponges(G, use_temperature, tv, param_file, CSp, 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
   eta_im(:,:) = 0.0 ; Idamp_im(:) = 0.0
 
-  if (first_call) call log_version(param_file, mod, version)
+  if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.
-  call get_param(param_file, mod, "HALF_STRAT_DEPTH", half_strat, &
+  call get_param(param_file, mdl, "HALF_STRAT_DEPTH", half_strat, &
                  "The maximum depth of the ocean.", units="nondim", &
                  default = 0.5)
-  call get_param(param_file, mod, "SPONGE_RATE", damp_rate, &
+  call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
                  "The rate at which the zonal-mean sponges damp.", units="s-1", &
                  default = 1.0/(10.0*86400.0))
 
-  call get_param(param_file, mod, "JET_WIDTH", jet_width, &
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
                  "The width of the zonal-mean jet.", units="km", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "JET_HEIGHT", jet_height, &
+  call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
                  "The interface height scale associated with the \n"//&
                  "zonal-mean jet.", units="m", &
                  fail_if_missing=.true.)
@@ -291,13 +305,13 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth)
   real :: PI, Htop, Wtop, Ltop, offset, dist, &
           x1, x2, x3, x4, y1, y2
   integer :: i,j,is,ie,js,je
-  character(len=40)  :: mod = "Phillips_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "Phillips_initialize_topography" ! This subroutine's name.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   PI = 4.0*atan(1.0)
 
-  call get_param(param_file, mod, "PHILLIPS_HTOP", Htop,             &
+  call get_param(param_file, mdl, "PHILLIPS_HTOP", Htop,             &
                  "The maximum height of the topography.", units="m", &
                  fail_if_missing=.true.)
 ! Htop=0.375*G%max_depth     ! max height of topog. above max_depth
@@ -356,19 +370,10 @@ end subroutine Phillips_initialize_topography
 !!  in MOM_surface_forcing.F90.                                        *
 !!                                                                     *
 !!    These variables are all set in the set of subroutines (in this   *
-!!  file) USER_initialize_bottom_depth, USER_initialize_thickness,     *
-!!  USER_initialize_velocity,  USER_initialize_temperature_salinity,   *
-!!  USER_initialize_mixed_layer_density, USER_initialize_sponges,      *
-!!  USER_set_coord, and USER_set_ref_profile.                          *
-!!                                                                     *
-!!    The names of these subroutines should be self-explanatory. They  *
-!!  start with "USER_" to indicate that they will likely have to be    *
-!!  modified for each simulation to set the initial conditions and     *
-!!  boundary conditions.  Most of these take two arguments: an integer *
-!!  argument specifying whether the fields are to be calculated        *
-!!  internally or read from a NetCDF file; and a string giving the     *
-!!  path to that file.  If the field is initialized internally, the    *
-!!  path is ignored.                                                   *
+!!  file) Phillips_initialize_thickness, Phillips_initialize_velocity, *
+!!  Phillips_initialize_topography and Phillips_initialize_sponges     *
+!!  that seet up fields that are specific to the Phillips instability  *
+!!  test case.                                                         *
 !!                                                                     *
 !!  Macros written all in capital letters are defined in MOM_memory.h. *
 !!                                                                     *

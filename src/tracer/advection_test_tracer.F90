@@ -63,7 +63,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, MOM_restart_CS
+use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -110,6 +110,7 @@ type, public :: advection_test_tracer_CS ; private
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
   logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
   logical :: use_sponge
+  logical :: tracers_may_reinit
 
   real :: x_origin, x_width ! Parameters describing the test functions
   real :: y_origin, y_width ! Parameters describing the test functions
@@ -120,6 +121,8 @@ type, public :: advection_test_tracer_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
+
   integer, dimension(NTR) :: id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1
   integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
@@ -149,7 +152,7 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "advection_test_tracer" ! This module's name.
+  character(len=40)  :: mdl = "advection_test_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_advection_test_tracer
@@ -164,35 +167,41 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
+  call get_param(param_file, mdl, "ADVECTION_TEST_X_ORIGIN", CS%x_origin, &
         "The x-coorindate of the center of the test-functions.\n", default=0.)
-  call get_param(param_file, mod, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
+  call get_param(param_file, mdl, "ADVECTION_TEST_Y_ORIGIN", CS%y_origin, &
         "The y-coorindate of the center of the test-functions.\n", default=0.)
-  call get_param(param_file, mod, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
+  call get_param(param_file, mdl, "ADVECTION_TEST_X_WIDTH", CS%x_width, &
         "The x-width of the test-functions.\n", default=0.)
-  call get_param(param_file, mod, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
+  call get_param(param_file, mdl, "ADVECTION_TEST_Y_WIDTH", CS%y_width, &
         "The y-width of the test-functions.\n", default=0.)
-  call get_param(param_file, mod, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
+  call get_param(param_file, mdl, "ADVECTION_TEST_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
 
   if (len_trim(CS%tracer_IC_file) >= 1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%tracer_IC_file = trim(slasher(inputdir))//trim(CS%tracer_IC_file)
-    call log_param(param_file, mod, "INPUTDIR/ADVECTION_TEST_TRACER_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/ADVECTION_TEST_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
-  call get_param(param_file, mod, "SPONGE", CS%use_sponge, &
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  call get_param(param_file, mod, "MASK_TRACERS_IN_MASSLESS_LAYERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_TRACERS_IN_MASSLESS_LAYERS", CS%mask_tracers, &
                  "If true, tracers will be masked out in massless layers. \n", &
                  default=.false.)
+  call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+                 "If true, tracers may go through the initialization code \n"//&
+                 "if they are not found in the restart files.  Otherwise \n"//&
+                 "it is a fatal error if the tracers are not found in the \n"//&
+                 "restart files of a restarted run.", default=.false.)
+
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
   if (CS%mask_tracers) then
@@ -203,13 +212,14 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m
-    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
+    call register_restart_field(tr_ptr, CS%tr_desc(m), &
+        .not. CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
                          tr_desc_ptr=CS%tr_desc(m))
@@ -223,6 +233,7 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
   enddo
 
   CS%tr_Reg => tr_Reg
+  CS%restart_CSp => restart_CS
   register_advection_test_tracer = .true.
 end function register_advection_test_tracer
 
@@ -285,8 +296,11 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
 
   CS%diag => diag
   CS%ntr = NTR
-  if (.not.restart) then
-    do m=1,NTR
+  do m=1,NTR
+    call query_vardesc(CS%tr_desc(m), name=name, &
+                       caller="initialize_advection_test_tracer")
+    if ((.not.restart) .or. (CS%tracers_may_reinit .and. .not. &
+        query_initialized(CS%tr(:,:,:,m), name, CS%restart_CSp))) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         CS%tr(i,j,k,m) = 0.0
       enddo ; enddo ; enddo
@@ -320,8 +334,9 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
         if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
         if (locx>0.0.and.abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
       enddo ; enddo
-    enddo
-  endif ! restart
+    endif ! restart
+  enddo
+
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"

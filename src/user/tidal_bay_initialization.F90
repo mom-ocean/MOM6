@@ -89,7 +89,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, h, Time)
   real :: my_flux, total_area
   real :: PI
   real, allocatable :: my_area(:,:)
-  character(len=40)  :: mod = "tidal_bay_set_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "tidal_bay_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment

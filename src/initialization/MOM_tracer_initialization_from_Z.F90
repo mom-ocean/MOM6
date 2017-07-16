@@ -43,7 +43,7 @@ implicit none ; private
 
 public :: MOM_initialize_tracer_from_Z, horiz_interp_and_extrap_tracer
 
-character(len=40)  :: mod = "MOM_tracer_initialization_from_Z" ! This module's name.
+character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" ! This module's name.
 
 interface fill_boundaries
   module procedure fill_boundaries_real
@@ -89,7 +89,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  character(len=40)  :: mod = "MOM_initialize_tracers_from_Z" ! This module's name.
+  character(len=40)  :: mdl = "MOM_initialize_tracers_from_Z" ! This module's name.
 
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isc,iec,jsc,jec    ! global compute domain indices
@@ -124,24 +124,24 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
-  call callTree_enter(trim(mod)//"(), MOM_state_initialization.F90")
+  call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
   call mpp_get_compute_domain(G%domain%mpp_domain,isc,iec,jsc,jec)
 
-  call get_param(PF, mod, "Z_INIT_HOMOGENIZE", homog, &
+  call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homog, &
                  "If True, then horizontally homogenize the interpolated \n"//&
                  "initial conditions.", default=.false.)
-  call get_param(PF, mod, "Z_INIT_ALE_REMAPPING", useALE, &
+  call get_param(PF, mdl, "Z_INIT_ALE_REMAPPING", useALE, &
                  "If True, then remap straight to model coordinate from file.",&
                  default=.true.)
-  call get_param(PF, mod, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
+  call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING\n"//&
                  "is True.", default="PLM")
 
   ! These are model grid properties, but being applied to the data grid for now.
   ! need to revisit this (mjh)
-  reentrant_x = .false. ;  call get_param(PF, mod, "REENTRANT_X", reentrant_x,default=.true.)
-  tripolar_n = .false. ;  call get_param(PF, mod, "TRIPOLAR_N", tripolar_n, default=.false.)
+  reentrant_x = .false. ;  call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
+  tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
 
 
   if (PRESENT(homogenize)) homog=homogenize
@@ -224,7 +224,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
   enddo ; enddo ; enddo
 
 
-  call callTree_leave(trim(mod)//'()')
+  call callTree_leave(trim(mdl)//'()')
   call cpu_clock_end(id_clock_routine)
 
 

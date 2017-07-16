@@ -65,7 +65,7 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
   type(Kelvin_OBC_CS),      pointer    :: CS         !< Kelvin wave control structure.
   type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_Kelvin_OBC
-  character(len=40)  :: mod = "register_Kelvin_OBC"  !< This subroutine's name.
+  character(len=40)  :: mdl = "register_Kelvin_OBC"  !< This subroutine's name.
   character(len=32)  :: casename = "Kelvin wave"     !< This case's name.
   character(len=200) :: config
 
@@ -76,30 +76,30 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
   endif
   allocate(CS)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "KELVIN_WAVE_MODE", CS%mode, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "KELVIN_WAVE_MODE", CS%mode, &
                  "Vertical Kelvin wave mode imposed at upstream open boundary.", &
                  default=0)
-  call get_param(param_file, mod, "F_0", CS%F_0, &
+  call get_param(param_file, mdl, "F_0", CS%F_0, &
                  default=0.0, do_not_log=.true.)
-  call get_param(param_file, mod, "TOPO_CONFIG", config, do_not_log=.true.)
+  call get_param(param_file, mdl, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
-    call get_param(param_file, mod, "KELVIN_COAST_OFFSET", CS%coast_offset, &
+    call get_param(param_file, mdl, "KELVIN_COAST_OFFSET", CS%coast_offset, &
                    "The distance along the southern and northern boundaries \n"//&
                    "at which the coasts angle in.", &
                    units="km", default=100.0)
-    call get_param(param_file, mod, "KELVIN_COAST_ANGLE", CS%coast_angle, &
+    call get_param(param_file, mdl, "KELVIN_COAST_ANGLE", CS%coast_angle, &
                    "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
                    units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
     CS%coast_offset = CS%coast_offset * 1.e3          ! Convert to m
   endif
   if (CS%mode /= 0) then
-    call get_param(param_file, mod, "DENSITY_RANGE", CS%rho_range, &
+    call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
                    default=2.0, do_not_log=.true.)
-    call get_param(param_file, mod, "RHO_0", CS%rho_0, &
+    call get_param(param_file, mdl, "RHO_0", CS%rho_0, &
                    default=1035.0, do_not_log=.true.)
-    call get_param(param_file, mod, "MAXIMUM_DEPTH", CS%H0, &
+    call get_param(param_file, mdl, "MAXIMUM_DEPTH", CS%H0, &
                    default=1000.0, do_not_log=.true.)
   endif
 
@@ -126,7 +126,7 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
   type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
   real,                             intent(in)  :: max_depth  !< Maximum depth of model in m
   ! Local variables
-  character(len=40)  :: mod = "Kelvin_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
   real :: min_depth ! The minimum and maximum depths in m.
   real :: PI ! 3.1415...
   real :: coast_offset, coast_angle, right_angle
@@ -134,11 +134,11 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "KELVIN_COAST_OFFSET", coast_offset, &
+  call get_param(param_file, mdl, "KELVIN_COAST_OFFSET", coast_offset, &
                  default=100.0, do_not_log=.true.)
-  call get_param(param_file, mod, "KELVIN_COAST_ANGLE", coast_angle, &
+  call get_param(param_file, mdl, "KELVIN_COAST_ANGLE", coast_angle, &
                  default=11.3, do_not_log=.true.)
 
   coast_angle = coast_angle * (atan(1.0)/45.) ! Convert to radians

@@ -133,6 +133,8 @@ type, public :: hor_visc_CS ; private
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: Leith_Kh        ! If true, use 2D Leith nonlinear eddy
                              ! viscosity. KH is the background value.
+  logical :: Modified_Leith  ! If true, use extra component of Leith viscosity
+                             ! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
   logical :: Leith_Ah        ! If true, use a biharmonic form of 2D Leith
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
@@ -216,18 +218,39 @@ end type hor_visc_CS
 
 contains
 
+!>    This subroutine determines the acceleration due to the
+!! horizontal viscosity.  A combination of biharmonic and Laplacian
+!! forms can be used.  The coefficient may either be a constant or
+!! a shear-dependent form.  The biharmonic is determined by twice
+!! taking the divergence of an appropriately defined stress tensor.
+!! The Laplacian is determined by doing so once.
+!!   To work, the following fields must be set outside of the usual
+!! is to ie range before this subroutine is called:
+!!  v[is-2,is-1,ie+1,ie+2], u[is-2,is-1,ie+1,ie+2], and h[is-1,ie+1],
+!! with a similarly sized halo in the y-direction.
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, OBC)
-  type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: diffu
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: diffv
-  type(MEKE_type),                           pointer     :: MEKE
-  type(VarMix_CS),                           pointer     :: VarMix
-  type(hor_visc_CS),                         pointer     :: CS
-  type(ocean_OBC_type),              pointer, optional   :: OBC
+  type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                                 intent(in)  :: u      !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                                 intent(in)  :: v      !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                                 intent(in)  :: h      !< Layer thicknesses, in H
+                                                       !! (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                                 intent(out) :: diffu  !< Zonal acceleration due to convergence of
+                                                       !! along-coordinate stress tensor (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                                 intent(out) :: diffv  !< Meridional acceleration due to convergence
+                                                       !! of along-coordinate stress tensor (m/s2).
+  type(MEKE_type),               pointer     :: MEKE   !< Pointer to a structure containing fields
+                                                       !! related to Mesoscale Eddy Kinetic Energy.
+  type(VarMix_CS),               pointer     :: VarMix !< Pointer to a structure with fields that
+                                                       !! specify the spatially variable viscosities
+  type(hor_visc_CS),             pointer     :: CS     !< Pontrol structure returned by a previous
+                                                       !! call to hor_visc_init.
+  type(ocean_OBC_type), pointer, optional    :: OBC    !< Pointer to an open boundary condition type
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -270,6 +293,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     sh_xx, &      ! horizontal tension (du/dx - dv/dy) (1/sec) including metric terms
     str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
+    div_xx, &     ! horizontal divergence (du/dx + dv/dy) (1/sec) including metric terms
     FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
@@ -280,10 +304,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    vort_xy_dx    ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 sec-1) including metric terms
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    vort_xy_dy    ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 sec-1) including metric terms
+    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 sec-1) including metric terms
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
@@ -300,6 +326,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
+  real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
+                     ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
+                     ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
   real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
@@ -367,6 +396,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+!$OMP                                  div_xx, div_xx_dx, div_xx_dy, mod_Leith,       &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
@@ -388,6 +418,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                                     G%IdyCu(I-1,j) * u(I-1,j,k)) - &
                     CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
                                     G%IdxCv(i,J-1)*v(i,J-1,k)))
+      div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+                          G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+                         (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+                          G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+                                    (h(i,j,k) + h_neglect)
     enddo ; enddo
     ! Components for the shearing strain
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
@@ -519,6 +554,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
     enddo ; enddo
 
+! Divergence gradient
+    do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+      div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+    enddo ; enddo
+
+    do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+      div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+    enddo ; enddo
+
+! Coefficient for modified Leith
+    if (CS%Modified_Leith) then
+      mod_Leith = 1.0
+    else
+      mod_Leith = 0.0
+    endif
+
 !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -551,10 +602,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         Vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
-                (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))))
+                (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
+                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+      endif
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
                             (h(i,j,k) + h_neglect) )
@@ -681,7 +735,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
         Vort_mag = sqrt( &
           0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
-                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))))
+                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
@@ -929,13 +985,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
 end subroutine horizontal_viscosity
 
-
+!> This subroutine allocates space for and calculates static variables
+!! used by this module. The metrics may be 0, 1, or 2-D arrays,
+!! while fields like the background viscosities are 2-D arrays.
+!! ALLOC is a macro defined in MOM_memory.h to either allocate
+!! for dynamic memory, or do nothing when using static memory.
 subroutine hor_visc_init(Time, G, param_file, diag, CS)
-  type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(hor_visc_CS), pointer             :: CS
+  type(time_type),         intent(in)    :: Time !< current model time.
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< structure to regulate diagnostic output.
+  type(hor_visc_CS), pointer             :: CS   !< pointer to the control structure for this module
 
 ! This subroutine allocates space for and calculates static variables
 ! used by this module. The metrics may be 0, 1, or 2-D arrays,
@@ -991,7 +1052,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_hor_visc"  ! module name
+  character(len=40)  :: mdl = "MOM_hor_visc"  ! module name
 
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
@@ -1008,101 +1069,108 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
   !   It is not clear whether these initialization lines are needed for the
   ! cases where the corresponding parameters are not read.
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
+  CS%Modified_Leith = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
   !   If GET_ALL_PARAMS is true, all parameters are read in all cases to enable
   ! parameter spelling checks.
-  call get_param(param_file, mod, "GET_ALL_PARAMS", get_all, default=.false.)
+  call get_param(param_file, mdl, "GET_ALL_PARAMS", get_all, default=.false.)
 
-  call get_param(param_file, mod, "LAPLACIAN", CS%Laplacian, &
+  call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
   if (CS%Laplacian .or. get_all) then
-    call get_param(param_file, mod, "KH", Kh,                      &
+    call get_param(param_file, mdl, "KH", Kh,                      &
                  "The background Laplacian horizontal viscosity.", &
                  units = "m2 s-1", default=0.0)
-    call get_param(param_file, mod, "KH_BG_MIN", CS%Kh_bg_min, &
+    call get_param(param_file, mdl, "KH_BG_MIN", CS%Kh_bg_min, &
                  "The minimum value allowed for Laplacian horizontal viscosity, KH.", &
                  units = "m2 s-1",  default=0.0)
-    call get_param(param_file, mod, "KH_VEL_SCALE", Kh_vel_scale, &
+    call get_param(param_file, mdl, "KH_VEL_SCALE", Kh_vel_scale, &
                  "The velocity scale which is multiplied by the grid \n"//&
                  "spacing to calculate the Laplacian viscosity. \n"//&
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and KH.", &
                  units="m s-1", default=0.0)
 
-    call get_param(param_file, mod, "SMAGORINSKY_KH", CS%Smagorinsky_Kh, &
+    call get_param(param_file, mdl, "SMAGORINSKY_KH", CS%Smagorinsky_Kh, &
                  "If true, use a Smagorinsky nonlinear eddy viscosity.", &
                  default=.false.)
     if (CS%Smagorinsky_Kh .or. get_all) &
-      call get_param(param_file, mod, "SMAG_LAP_CONST", Smag_Lap_const, &
+      call get_param(param_file, mdl, "SMAG_LAP_CONST", Smag_Lap_const, &
                  "The nondimensional Laplacian Smagorinsky constant, \n"//&
                  "often 0.15.", units="nondim", default=0.0, &
                   fail_if_missing = CS%Smagorinsky_Kh)
 
-    call get_param(param_file, mod, "LEITH_KH", CS%Leith_Kh, &
+    call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
+
+    call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
+                 "If true, add a term to Leith viscosity which is \n"//&
+                 "proportional to the gradient of divergence.", &
+                 default=.false.)
+
     if (CS%Leith_Kh .or. get_all) &
-      call get_param(param_file, mod, "LEITH_LAP_CONST", Leith_Lap_const, &
+      call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
                  "The nondimensional Laplacian Leith constant, \n"//&
                  "often ??", units="nondim", default=0.0, &
                   fail_if_missing = CS%Leith_Kh)
 
-    call get_param(param_file, mod, "BOUND_KH", CS%bound_Kh, &
+    call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited \n"//&
                  "to be stable.", default=.true.)
-    call get_param(param_file, mod, "BETTER_BOUND_KH", CS%better_bound_Kh, &
+    call get_param(param_file, mdl, "BETTER_BOUND_KH", CS%better_bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited \n"//&
                  "to be stable with a better bounding than just BOUND_KH.", &
                  default=CS%bound_Kh)
   endif
 
-  call get_param(param_file, mod, "BIHARMONIC", CS%biharmonic, &
+  call get_param(param_file, mdl, "BIHARMONIC", CS%biharmonic, &
                  "If true, use a biharmonic horizontal viscosity. \n"//&
                  "BIHARMONIC may be used with LAPLACIAN.", &
                  default=.true.)
   if (CS%biharmonic .or. get_all) then
-    call get_param(param_file, mod, "AH", Ah, &
+    call get_param(param_file, mdl, "AH", Ah, &
                  "The background biharmonic horizontal viscosity.", &
                  units = "m4 s-1", default=0.0)
-    call get_param(param_file, mod, "AH_VEL_SCALE", Ah_vel_scale, &
+    call get_param(param_file, mdl, "AH_VEL_SCALE", Ah_vel_scale, &
                  "The velocity scale which is multiplied by the cube of \n"//&
                  "the grid spacing to calculate the biharmonic viscosity. \n"//&
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and AH.", &
                  units="m s-1", default=0.0)
-    call get_param(param_file, mod, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
+    call get_param(param_file, mdl, "SMAGORINSKY_AH", CS%Smagorinsky_Ah, &
                  "If true, use a biharmonic Smagorinsky nonlinear eddy \n"//&
                  "viscosity.", default=.false.)
-    call get_param(param_file, mod, "LEITH_AH", CS%Leith_Ah, &
+    call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
                  "If true, use a biharmonic Leith nonlinear eddy \n"//&
                  "viscosity.", default=.false.)
 
-    call get_param(param_file, mod, "BOUND_AH", CS%bound_Ah, &
+    call get_param(param_file, mdl, "BOUND_AH", CS%bound_Ah, &
                  "If true, the biharmonic coefficient is locally limited \n"//&
                  "to be stable.", default=.true.)
-    call get_param(param_file, mod, "BETTER_BOUND_AH", CS%better_bound_Ah, &
+    call get_param(param_file, mdl, "BETTER_BOUND_AH", CS%better_bound_Ah, &
                  "If true, the biharmonic coefficient is locally limited \n"//&
                  "to be stable with a better bounding than just BOUND_AH.", &
                  default=CS%bound_Ah)
 
     if (CS%Smagorinsky_Ah .or. get_all) then
-      call get_param(param_file, mod, "SMAG_BI_CONST",Smag_bi_const, &
+      call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, \n"//&
                  "typically 0.015 - 0.06.", units="nondim", default=0.0, &
                  fail_if_missing = CS%Smagorinsky_Ah)
 
-      call get_param(param_file, mod, "BOUND_CORIOLIS", bound_Cor_def, default=.false.)
-      call get_param(param_file, mod, "BOUND_CORIOLIS_BIHARM", CS%bound_Coriolis, &
+      call get_param(param_file, mdl, "BOUND_CORIOLIS", bound_Cor_def, default=.false.)
+      call get_param(param_file, mdl, "BOUND_CORIOLIS_BIHARM", CS%bound_Coriolis, &
                  "If true use a viscosity that increases with the square \n"//&
                  "of the velocity shears, so that the resulting viscous \n"//&
                  "drag is of comparable magnitude to the Coriolis terms \n"//&
@@ -1110,9 +1178,9 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "points is 0.5*BOUND_CORIOLIS_VEL.  The default is the \n"//&
                  "value of BOUND_CORIOLIS (or false).", default=bound_Cor_def)
       if (CS%bound_Coriolis .or. get_all) then
-        call get_param(param_file, mod, "MAXVEL", maxvel, default=3.0e8)
+        call get_param(param_file, mdl, "MAXVEL", maxvel, default=3.0e8)
         bound_Cor_vel = maxvel
-        call get_param(param_file, mod, "BOUND_CORIOLIS_VEL", bound_Cor_vel, &
+        call get_param(param_file, mdl, "BOUND_CORIOLIS_VEL", bound_Cor_vel, &
                  "The velocity scale at which BOUND_CORIOLIS_BIHARM causes \n"//&
                  "the biharmonic drag to have comparable magnitude to the \n"//&
                  "Coriolis acceleration.  The default is set by MAXVEL.", &
@@ -1121,7 +1189,7 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     endif
 
     if (CS%Leith_Ah .or. get_all) then
-      call get_param(param_file, mod, "LEITH_BI_CONST",Leith_bi_const, &
+      call get_param(param_file, mdl, "LEITH_BI_CONST",Leith_bi_const, &
                  "The nondimensional biharmonic Leith constant, \n"//&
                  "typical values are thus far undetermined", units="nondim", default=0.0, &
                  fail_if_missing = CS%Leith_Ah)
@@ -1130,13 +1198,13 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   endif
 
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
-    call get_param(param_file, mod, "HORVISC_BOUND_COEF", CS%bound_coef, &
+    call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
                  "The nondimensional coefficient of the ratio of the \n"//&
                  "viscosity bounds to the theoretical maximum for \n"//&
                  "stability without considering other terms.", units="nondim", &
                  default=0.8)
 
-  call get_param(param_file, mod, "NOSLIP", CS%no_slip, &
+  call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
                  "If true, no slip boundary conditions are used; otherwise \n"//&
                  "free slip boundary conditions are assumed. The \n"//&
                  "implementation of the free slip BCs on a C-grid is much \n"//&
@@ -1144,14 +1212,14 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "is strongly encouraged, and no slip BCs are not used with \n"//&
                  "the biharmonic viscosity.", default=.false.)
 
-  call get_param(param_file, mod, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
+  call get_param(param_file, mdl, "USE_KH_BG_2D", CS%use_Kh_bg_2d, &
                  "If true, read a file containing 2-d background harmonic  \n"//&
                  "viscosities. The final viscosity is the maximum of the other "//&
                  "terms and this background value.", default=.false.)
 
 
   if (CS%bound_Kh .or. CS%bound_Ah .or. CS%better_bound_Kh .or. CS%better_bound_Ah) &
-    call get_param(param_file, mod, "DT", dt, &
+    call get_param(param_file, mdl, "DT", dt, &
                  "The (baroclinic) dynamics time step.", units = "s", &
                  fail_if_missing=.true.)
 
@@ -1194,10 +1262,10 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   if (CS%use_Kh_bg_2d) then
     ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
-    call get_param(param_file, mod, "KH_BG_2D_FILENAME", filename, &
+    call get_param(param_file, mdl, "KH_BG_2D_FILENAME", filename, &
                  'The filename containing a 2d map of "Kh".', &
                  default='KH_background_2d.nc')
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     call read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
                    domain=G%domain%mpp_domain, timelevel=1)

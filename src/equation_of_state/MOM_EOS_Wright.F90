@@ -60,9 +60,17 @@ real, parameter :: c3 = 5.140652e-2, c4 = -2.302158e2, c5 = -3.079464
 
 contains
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Coded by R. Hallberg, 7/00
 subroutine calculate_density_scalar_wright(T, S, pressure, rho)
-real,    intent(in)  :: T, S, pressure
-real,    intent(out) :: rho
+real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
+real,    intent(in)  :: S        !< Salinity in PSU.
+real,    intent(in)  :: pressure !< Pressure in Pa.
+real,    intent(out) :: rho      !< In situ density in kg m-3.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -92,10 +100,20 @@ real,    intent(out) :: rho
 
 end subroutine calculate_density_scalar_wright
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Coded by R. Hallberg, 7/00
 subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< in situ density in kg m-3.
+  integer, intent(in)                :: start    !< the starting point in the arrays.
+  integer, intent(in)                :: npts     !< the number of values to calculate.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -122,10 +140,19 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
   enddo
 end subroutine calculate_density_array_wright
 
+! #@# This subroutine needs a doxygen description.
 subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: drho_dT, drho_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature, in kg m-3 K-1.
+  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in kg m-3 psu-1.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -156,9 +183,17 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
 end subroutine calculate_density_derivs_wright
 
 subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
+                                                 !! potential temperature, in m3 kg-1 K-1.
+  real,    intent(out), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
+                                                 !! salinity, in m3 kg-1 / (g/kg).
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in g/kg.                                   *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -187,10 +222,24 @@ subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start
 
 end subroutine calculate_specvol_derivs_wright
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) and the compressibility (drho/dp = C_sound^-2)
+!! (drho_dp in units of s2 m-2) from salinity (sal in psu), potential
+!! temperature (T in deg C), and pressure in Pa.  It uses the expressions
+!! from Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! Coded by R. Hallberg, 1/01
 subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho, drho_dp
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
+                                                 !! in C.
+  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
+                                                 !! (also the inverse of the square of sound speed)
+                                                 !! in s2 m-2.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
+
 ! * Arguments: T - potential temperature relative to the surface in C. *
 ! *  (in)      S - salinity in PSU.                                    *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -222,20 +271,44 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   enddo
 end subroutine calculate_compress_wright
 
+!> This subroutine calculates analytical and nearly-analytical integrals of
+!! pressure anomalies across layers, which are required for calculating the
+!! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa)
   type(hor_index_type), intent(in)  :: HII, HIO
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                        intent(in)  :: T, S, z_t, z_b
-  real,                 intent(in)  :: rho_ref, rho_0, G_e
+                        intent(in)  :: T        !< Potential temperature relative to the surface
+                                                !! in C.
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: S        !< Salinity in PSU.
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: z_t      !< Height at the top of the layer in m.
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                        intent(in)  :: z_b      !< Height at the top of the layer in m.
+  real,                 intent(in)  :: rho_ref  !< A mean density, in kg m-3, that is subtracted out
+                                                !! to reduce the magnitude of each of the integrals.
+                                                !! (The pressure is calucated as p~=-z*rho_0*G_e.)
+  real,                 intent(in)  :: rho_0    !< Density, in kg m-3, that is used to calculate the
+                                                !! pressure (as p~=-z*rho_0*G_e) used in the
+                                                !! equation of state.
+  real,                 intent(in)  :: G_e      !< The Earth's gravitational acceleration, in m s-2.
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-                        intent(out) :: dpa
+                        intent(out) :: dpa      !< The change in the pressure anomaly across the
+                                                !! layer, in Pa.
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
-              optional, intent(out) :: intz_dpa
+              optional, intent(out) :: intz_dpa !< The integral through the thickness of the layer
+                                                !! of the pressure anomaly relative to the anomaly
+                                                !! at the top of the layer, in Pa m.
   real, dimension(HIO%IsdB:HIO%IedB,HIO%jsd:HIO%jed), &
-              optional, intent(out) :: intx_dpa
+              optional, intent(out) :: intx_dpa !< The integral in x of the difference between the
+                                                !! pressure anomaly at the top and bottom of the
+                                                !! layer divided by the x grid spacing, in Pa.
   real, dimension(HIO%isd:HIO%ied,HIO%JsdB:HIO%JedB), &
-              optional, intent(out) :: inty_dpa
+              optional, intent(out) :: inty_dpa !< The integral in y of the difference between the
+                                                !! pressure anomaly at the top and bottom of the
+                                                !! layer divided by the y grid spacing, in Pa.
+
 !   This subroutine calculates analytical and nearly-analytical integrals of
 ! pressure anomalies across layers, which are required for calculating the
 ! finite-volume form pressure accelerations in a Boussinesq model.
@@ -361,21 +434,48 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO, 
   enddo ; enddo ; endif
 end subroutine int_density_dz_wright
 
+!>   This subroutine calculates analytical and nearly-analytical integrals in
+!! pressure across layers of geopotential anomalies, which are required for
+!! calculating the finite-volume form pressure accelerations in a non-Boussinesq
+!! model.  There are essentially no free assumptions, apart from the use of
+!! Bode's rule to do the horizontal integrals, and from a truncation in the
+!! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size)
   type(hor_index_type), intent(in)  :: HI
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: T, S, p_t, p_b
-  real,                 intent(in)  :: alpha_ref
+                        intent(in)  :: T         !< Potential temperature relative to the surface
+                                                 !! in C.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(out) :: dza
+                        intent(in)  :: S         !< Salinity in PSU.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-              optional, intent(out) :: intp_dza
+                        intent(in)  :: p_t       !< Pressure at the top of the layer in Pa.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(in)  :: p_b       !< Pressure at the top of the layer in Pa.
+  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
+           !! to reduce the magnitude of each of the integrals, m3 kg-1.The calculation is
+           !! mathematically identical with different values of alpha_ref, but this reduces the
+           !! effects of roundoff.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+                        intent(out) :: dza       !< The change in the geopotential anomaly across
+                                                 !! the layer, in m2 s-2.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(out) :: intp_dza  !< The integral in pressure through the layer of
+                                                 !! the geopotential anomaly relative to the anomaly
+                                                 !! at the bottom of the layer, in Pa m2 s-2.
   real, dimension(HI%IsdB:HI%IedB,HI%jsd:HI%jed), &
-              optional, intent(out) :: intx_dza
+              optional, intent(out) :: intx_dza  !< The integral in x of the difference between the
+                                                 !! geopotential anomaly at the top and bottom of
+                                                 !! the layer divided by the x grid spacing,
+                                                 !! in m2 s-2.
   real, dimension(HI%isd:HI%ied,HI%JsdB:HI%JedB), &
-              optional, intent(out) :: inty_dza
-  integer,    optional, intent(in)  :: halo_size
+              optional, intent(out) :: inty_dza  !< The integral in y of the difference between the
+                                                 !! geopotential anomaly at the top and bottom of
+                                                 !! the layer divided by the y grid spacing,
+                                                 !! in m2 s-2.
+  integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
+                                                 !! dza.
+
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
 ! calculating the finite-volume form pressure accelerations in a non-Boussinesq

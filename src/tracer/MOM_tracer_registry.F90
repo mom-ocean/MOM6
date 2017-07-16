@@ -7,6 +7,7 @@ module MOM_tracer_registry
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! use MOM_diag_mediator, only : diag_ctrl
+use MOM_coms,          only : reproducing_sum
 use MOM_debugging,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -23,6 +24,7 @@ implicit none ; private
 public register_tracer
 public tracer_registry_init
 public MOM_tracer_chksum
+public MOM_tracer_chkinv
 public add_tracer_diagnostics
 public add_tracer_OBC_values
 public lock_tracer_registry
@@ -246,22 +248,46 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
 
 end subroutine add_tracer_diagnostics
 
-!> This subroutine writes out chksums for thermodynamic state variables.
+!> This subroutine writes out chksums for tracers.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
   type(tracer_type),        intent(in) :: Tr(:)  !< array of all of registered tracers
   integer,                  intent(in) :: ntr    !< number of registered tracers
   type(ocean_grid_type),    intent(in) :: G      !< ocean grid structure
 
-  integer :: is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  integer :: is, ie, js, je, nz
+  integer :: i, j, k, m
 
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   do m=1,ntr
     call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI)
   enddo
 
 end subroutine MOM_tracer_chksum
 
+!> Calculates and prints the global inventory of all tracers in the registry.
+subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
+  character(len=*),                         intent(in) :: mesg   !< message that appears on the chksum lines
+  type(ocean_grid_type),                    intent(in) :: G      !< ocean grid structure
+  type(tracer_type),                        intent(in) :: Tr(:)  !< array of all of registered tracers
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h      !< Layer thicknesses
+  integer,                                  intent(in) :: ntr    !< number of registered tracers
+
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: tr_inv !< Tracer inventory
+  real :: total_inv
+  integer :: is, ie, js, je, nz
+  integer :: i, j, k, m
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  do m=1,ntr
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tr_inv(i,j,k) = Tr(m)%t(i,j,k)*h(i,j,k)*G%areaT(i,j)*G%mask2dT(i,j)
+    enddo ; enddo ; enddo
+    total_inv = reproducing_sum(tr_inv, is, ie, js, je)
+    if (is_root_pe()) write(0,'(A,1X,A5,1X,ES25.16,1X,A)') "h-point: inventory", Tr(m)%name, total_inv, mesg
+  enddo
+
+end subroutine MOM_tracer_chkinv
 
 !> This routine include declares and sets the variable "version".
 subroutine tracer_registry_init(param_file, Reg)
@@ -271,14 +297,14 @@ subroutine tracer_registry_init(param_file, Reg)
   integer, save :: init_calls = 0
 
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_registry" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(Reg)) then ; allocate(Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then

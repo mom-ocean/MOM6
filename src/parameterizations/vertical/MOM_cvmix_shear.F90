@@ -38,7 +38,7 @@ type, public :: CVMix_shear_CS
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 end type CVMix_shear_CS
 
-character(len=40)  :: mod = "MOM_CVMix_shear"  !< This module's name.
+character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 
 contains
 
@@ -148,16 +148,16 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   allocate(CS)
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
     "Parameterization of shear-driven turbulence via CVMix (various options)")
-  call get_param(param_file, mod, "USE_LMD94", CS%use_LMD94, &
+  call get_param(param_file, mdl, "USE_LMD94", CS%use_LMD94, &
                  "If true, use the Large-McWilliams-Doney (JGR 1994) \n"//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_LMD94) then
      NumberTrue=NumberTrue + 1
      CS%Mix_Scheme='KPP'
   endif
-  call get_param(param_file, mod, "USE_PP81", CS%use_PP81, &
+  call get_param(param_file, mdl, "USE_PP81", CS%use_PP81, &
                  "If true, use the Pacanowski and Philander (JPO 1981) \n"//&
                  "shear mixing parameterization.", default=.false.)
   if (CS%use_PP81) then
@@ -177,15 +177,15 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
 
 ! Forego remainder of initialization if not using this scheme
   if (.not. cvmix_shear_init) return
-  call get_param(param_file, mod, "NU_ZERO", CS%Nu_Zero, &
+  call get_param(param_file, mdl, "NU_ZERO", CS%Nu_Zero, &
                  "Leading coefficient in KPP shear mixing.", &
                  units="nondim", default=5.e-3)
-  call get_param(param_file, mod, "RI_ZERO", CS%Ri_Zero, &
+  call get_param(param_file, mdl, "RI_ZERO", CS%Ri_Zero, &
                  "Critical Richardson for KPP shear mixing,"// &
                  " NOTE this the internal mixing and this is"// &
                  " not for setting the boundary layer depth." &
                  ,units="nondim", default=0.7)
-  call get_param(param_file, mod, "KPP_EXP", CS%KPP_exp, &
+  call get_param(param_file, mdl, "KPP_EXP", CS%KPP_exp, &
                  "Exponent of unitless factor of diffusivities,"// &
                  " for KPP internal shear mixing scheme." &
                  ,units="nondim", default=3.0)
@@ -206,9 +206,9 @@ logical function cvmix_shear_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< Run-time parameter files handle.
   ! Local variables
   logical :: LMD94, PP81
-  call get_param(param_file, mod, "USE_LMD94", LMD94, &
+  call get_param(param_file, mdl, "USE_LMD94", LMD94, &
        default=.false., do_not_log = .true.)
-  call get_param(param_file, mod, "Use_PP81", PP81, &
+  call get_param(param_file, mdl, "Use_PP81", PP81, &
        default=.false., do_not_log = .true.)
   cvmix_shear_is_used = (LMD94 .or. PP81)
 end function cvmix_shear_is_used
