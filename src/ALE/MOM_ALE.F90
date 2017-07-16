@@ -8,9 +8,12 @@ module MOM_ALE
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,        only : check_column_integrals
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_EOS,              only : calculate_density
+use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING
 use MOM_error_handler,    only : callTree_showQuery
 use MOM_error_handler,    only : callTree_enter, callTree_leave, callTree_waypoint
@@ -36,7 +39,7 @@ use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
-use MOM_tracer_registry,  only : tracer_registry_type
+use MOM_tracer_registry,  only : tracer_registry_type, MOM_tracer_chkinv
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
 
@@ -105,6 +108,7 @@ public ALE_init
 public ALE_end
 public ALE_main
 public ALE_main_offline
+public ALE_offline_inputs
 public ALE_offline_tracer_final
 public ALE_build_grid
 public ALE_regrid_accelerated
@@ -138,7 +142,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
 
   ! Local variables
   real, dimension(:), allocatable :: dz
-  character(len=40)               :: mod = "MOM_ALE" ! This module's name.
+  character(len=40)               :: mdl = "MOM_ALE" ! This module's name.
   character(len=80)               :: string ! Temporary strings
   real                            :: filter_shallow_depth, filter_deep_depth
   logical                         :: check_reconstruction
@@ -159,7 +163,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
   ! --- BOUNDARY EXTRAPOLATION --
   ! This sets whether high-order (rather than PCM) reconstruction schemes
   ! should be used within boundary cells
-  call get_param(param_file, mod, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
+  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
                  CS%boundary_extrapolation_for_pressure, &
                  "When defined, the reconstruction is extrapolated\n"//&
                  "within boundary cells rather than assume PCM for the.\n"//&
@@ -168,7 +172,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  "boundary cells.", default=.true.)
 
   ! --- PRESSURE GRADIENT CALCULATION ---
-  call get_param(param_file, mod, "RECONSTRUCT_FOR_PRESSURE", &
+  call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", &
                  CS%reconstructForPressure , &
                  "If True, use vertical reconstruction of T/S within\n"//&
                  "the integrals of teh FV pressure gradient calculation.\n"//&
@@ -176,14 +180,14 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  "By default, this is True when using ALE and False otherwise.", &
                  default=.true. )
 
-  call get_param(param_file, mod, "PRESSURE_RECONSTRUCTION_SCHEME", &
+  call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", &
                  CS%pressureReconstructionScheme, &
                  "Type of vertical reconstruction of T/S to use in integrals\n"//&
                  "within the FV pressure gradient calculation."//&
                  " 1: PLM reconstruction.\n"//&
                  " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
 
-  call get_param(param_file, mod, "REMAP_UV_USING_OLD_ALG", &
+  call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
                  CS%remap_uv_using_old_alg, &
                  "If true, uses the old remapping-via-a-delta-z method for\n"//&
                  "remapping u and v. If false, uses the new method that remaps\n"//&
@@ -191,23 +195,23 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  default=.true.)
 
   ! Initialize and configure regridding
-  call ALE_initRegridding( GV, max_depth, param_file, mod, CS%regridCS)
+  call ALE_initRegridding( GV, max_depth, param_file, mdl, CS%regridCS)
 
   ! Initialize and configure remapping
-  call get_param(param_file, mod, "REMAPPING_SCHEME", string, &
+  call get_param(param_file, mdl, "REMAPPING_SCHEME", string, &
                  "This sets the reconstruction scheme used\n"//&
                  "for vertical remapping for all variables.\n"//&
                  "It can be one of the following schemes:\n"//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
-  call get_param(param_file, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
+  call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
                  "If true, cell-by-cell reconstructions are checked for\n"//&
                  "consistency and if non-monotonicty or an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
-  call get_param(param_file, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
+  call get_param(param_file, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
                  "If true, the results of remapping are checked for\n"//&
                  "conservation and new extrema and if an inconsistency is\n"//&
                  "detected then a FATAL error is issued.", default=.false.)
-  call get_param(param_file, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+  call get_param(param_file, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
                  "If true, the values on the intermediate grid used for remapping\n"//&
                  "are forced to be bounded, which might not be the case due to\n"//&
                  "round off.", default=.false.)
@@ -217,29 +221,29 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell)
 
-  call get_param(param_file, mod, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
+  call get_param(param_file, mdl, "REMAP_AFTER_INITIALIZATION", CS%remap_after_initialization, &
                  "If true, applies regridding and remapping immediately after\n"//&
                  "initialization so that the state is ALE consistent. This is a\n"//&
                  "legacy step and should not be needed if the initialization is\n"//&
                  "consistent with the coordinate mode.", default=.true.)
 
-  call get_param(param_file, mod, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
+  call get_param(param_file, mdl, "REGRID_TIME_SCALE", CS%regrid_time_scale, &
                  "The time-scale used in blending between the current (old) grid\n"//&
                  "and the target (new) grid. A short time-scale favors the target\n"//&
                  "grid (0. or anything less than DT_THERM) has no memory of the old\n"//&
                  "grid. A very long time-scale makes the model more Lagrangian.", &
                  units="s", default=0.)
-  call get_param(param_file, mod, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
+  call get_param(param_file, mdl, "REGRID_FILTER_SHALLOW_DEPTH", filter_shallow_depth, &
                  "The depth above which no time-filtering is applied. Above this depth\n"//&
                  "final grid exactly matches the target (new) grid.", units="m", default=0.)
-  call get_param(param_file, mod, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
+  call get_param(param_file, mdl, "REGRID_FILTER_DEEP_DEPTH", filter_deep_depth, &
                  "The depth below which full time-filtering is applied with time-scale\n"//&
                  "REGRID_TIME_SCALE. Between depths REGRID_FILTER_SHALLOW_DEPTH and\n"//&
                  "REGRID_FILTER_SHALLOW_DEPTH the filter wieghts adopt a cubic profile.", &
                  units="m", default=0.)
   call set_regrid_params(CS%regridCS, depth_of_time_filter_shallow=filter_shallow_depth*GV%m_to_H, &
                                       depth_of_time_filter_deep=filter_deep_depth*GV%m_to_H)
-  call get_param(param_file, mod, "REGRID_USE_OLD_DIRECTION", local_logical, &
+  call get_param(param_file, mdl, "REGRID_USE_OLD_DIRECTION", local_logical, &
                  "If true, the regridding ntegrates upwards from the bottom for\n"//&
                  "interface positions, much as the main model does. If false\n"//&
                  "regridding integrates downward, consistant with the remapping\n"//&
@@ -488,51 +492,130 @@ subroutine ALE_main_offline( G, GV, h, tv, Reg, CS, dt)
 
 end subroutine ALE_main_offline
 
+!> Regrid/remap stored fields used for offline tracer integrations. These input fields are assumed to have
+!! the same layer thicknesses at the end of the last offline interval (which should be a Zstar grid). This
+!! routine builds a grid on the runtime specified vertical coordinate
+subroutine ALE_offline_inputs(CS, G, GV, h, tv, Reg, uhtr, vhtr, Kd, debug)
+  type(ALE_CS),                                 pointer       :: CS    !< Regridding parameters and options
+  type(ocean_grid_type),                        intent(in   ) :: G     !< Ocean grid informations
+  type(verticalGrid_type),                      intent(in   ) :: GV    !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(inout) :: h     !< Layer thicknesses
+  type(thermo_var_ptrs),                        intent(inout) :: tv    !< Thermodynamic variable structure
+  type(tracer_registry_type),                   pointer       :: Reg   !< Tracer registry structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: uhtr  !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),   intent(inout) :: vhtr  !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1),  intent(inout) :: Kd    !< Input diffusivites
+  logical,                                      intent(in   ) :: debug !< If true, then turn checksums
+  ! Local variables
+  integer :: nk, i, j, k, isc, iec, jsc, jec
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    ! Layer thicknesses after regridding
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZK_(GV)) :: h_src
+  real, dimension(SZK_(GV)) :: h_dest, uh_dest
+  real, dimension(SZK_(GV)) :: temp_vec
+
+  nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
+  dzRegrid(:,:,:) = 0.0
+  h_new(:,:,:) = 0.0
+
+  if (debug) call MOM_tracer_chkinv("Before ALE_offline_inputs", G, h, Reg%Tr, Reg%ntr)
+
+  ! Build new grid from the Zstar state onto the requested vertical coordinate. The new grid is stored
+  ! in h_new. The old grid is h. Both are needed for the subsequent remapping of variables. Convective
+  ! adjustment right now is not used because it is unclear what to do with vanished layers
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h, tv, h_new, dzRegrid, conv_adjust = .false. )
+  call check_grid( G, GV, h_new, 0. )
+  if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_offline_inputs)")
+
+  ! Remap all variables from old grid h onto new grid h_new
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_inputs)")
+
+  ! Reintegrate mass transports from Zstar to the offline vertical coordinate
+  do j=jsc,jec ; do i=G%iscB,G%iecB
+    if (G%mask2dCu(i,j)>0.) then
+      h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+      h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i+1,j,:))
+      call reintegrate_column(nk, h_src, uhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      uhtr(I,j,:) = temp_vec
+    endif
+  enddo ; enddo
+  do j=G%jscB,G%jecB ; do i=isc,iec
+    if (G%mask2dCv(i,j)>0.) then
+      h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+      h_dest(:) = 0.5 * (h_new(i,j,:) + h_new(i,j+1,:))
+      call reintegrate_column(nk, h_src, vhtr(I,j,:), nk, h_dest, 0., temp_vec)
+      vhtr(I,j,:) = temp_vec
+    endif
+  enddo ; enddo
+
+  do j = jsc,jec ; do i=isc,iec
+    if (G%mask2dT(i,j)>0.) then
+      if (check_column_integrals(nk, h_src, nk, h_dest)) then
+        call MOM_error(FATAL, "ALE_offline_inputs: Kd interpolation columns do not match")
+      endif
+      call interpolate_column(nk, h(i,j,:), Kd(i,j,:), nk, h_new(i,j,:), 0., Kd(i,j,:))
+    endif
+  enddo ; enddo;
+
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S)
+
+  if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, h_new, Reg%Tr, Reg%ntr)
+
+  ! Copy over the new layer thicknesses
+  do k = 1,nk  ; do j = jsc-1,jec+1 ; do i = isc-1,iec+1
+      h(i,j,k) = h_new(i,j,k)
+  enddo ; enddo ; enddo
+
+  if (CS%show_call_tree) call callTree_leave("ALE_offline_inputs()")
+end subroutine ALE_offline_inputs
+
+
 !> Remaps all tracers from h onto h_target. This is intended to be called when tracers
 !! are done offline. In the case where transports don't quite conserve, we still want to
 !! make sure that layer thicknesses offline do not drift too far away from the online model
-subroutine ALE_offline_tracer_final( G, GV, h, h_target, Reg, CS)
+subroutine ALE_offline_tracer_final( G, GV, h, tv, h_target, Reg, CS)
   type(ocean_grid_type),                      intent(in)    :: G   !< Ocean grid informations
   type(verticalGrid_type),                    intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after last time step (m or Pa)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_target   !< Current 3D grid obtained after last time step (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h   !< Current 3D grid obtained after
+                                                                   !! last time step (m or Pa)
+  type(thermo_var_ptrs),                      intent(inout) :: tv  !< Thermodynamic variable structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_target !< Current 3D grid obtained after
+                                                                        !! last time step (m or Pa)
   type(tracer_registry_type),                 pointer       :: Reg !< Tracer registry structure
   type(ALE_CS),                               pointer       :: CS  !< Regridding parameters and options
   ! Local variables
 
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid ! The change in grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: dzRegrid !< The change in grid interface positions
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV))   :: h_new    !< Regridded target thicknesses
   integer :: nk, i, j, k, isc, iec, jsc, jec
 
   nk = GV%ke; isc = G%isc; iec = G%iec; jsc = G%jsc; jec = G%jec
 
   if (CS%show_call_tree) call callTree_enter("ALE_offline_tracer_final(), MOM_ALE.F90")
-
-  ! It does not seem that remap_all_state_vars uses dzRegrid for tracers, only for u, v
-  dzRegrid(:,:,:) = 0.0
-
-  call check_grid( G, GV, h, 0. )
+  ! Need to make sure that h_target is consistent with the current offline ALE confiuration
+  call regridding_main( CS%remapCS, CS%regridCS, G, GV, h_target, tv, h_new, dzRegrid )
   call check_grid( G, GV, h_target, 0. )
 
-  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer)")
+
+  if (CS%show_call_tree) call callTree_waypoint("Source and target grids checked (ALE_offline_tracer_final)")
 
   ! Remap all variables from old grid h onto new grid h_new
 
-  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_target, Reg, &
-                             debug=CS%show_call_tree )
+  call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, debug=CS%show_call_tree )
 
-  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer)")
+  if (CS%show_call_tree) call callTree_waypoint("state remapped (ALE_offline_tracer_final)")
 
   ! Override old grid with new one. The new grid 'h_new' is built in
   ! one of the 'build_...' routines above.
-!$OMP parallel do default(none) shared(isc,iec,jsc,jec,nk,h,h_target,CS)
+  !$OMP parallel do default(shared)
   do k = 1,nk
     do j = jsc-1,jec+1 ; do i = isc-1,iec+1
-      h(i,j,k) = h_target(i,j,k)
+      h(i,j,k) = h_new(i,j,k)
     enddo ; enddo
   enddo
-
-  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer()")
-
+  if (CS%show_call_tree) call callTree_leave("ALE_offline_tracer_final()")
 end subroutine ALE_offline_tracer_final
 
 !> Check grid for negative thicknesses
@@ -1101,22 +1184,22 @@ integer function pressureReconstructionScheme(CS)
 end function pressureReconstructionScheme
 
 !> Initializes regridding for the main ALE algorithm
-subroutine ALE_initRegridding(GV, max_depth, param_file, mod, regridCS)
+subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
   type(verticalGrid_type), intent(in)  :: GV         !< Ocean vertical grid structure
   real,                    intent(in)  :: max_depth  !< The maximum depth of the ocean, in m.
   type(param_file_type),   intent(in)  :: param_file !< parameter file
-  character(len=*),        intent(in)  :: mod        !< Name of calling module
+  character(len=*),        intent(in)  :: mdl        !< Name of calling module
   type(regridding_CS),     intent(out) :: regridCS   !< Regridding parameters and work arrays
   ! Local variables
   character(len=30) :: coord_mode
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", coord_mode, &
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", coord_mode, &
                  "Coordinate mode for vertical regridding.\n"//&
                  "Choose among the following possibilities:\n"//&
                  trim(regriddingCoordinateModeDoc), &
                  default=DEFAULT_COORDINATE_MODE, fail_if_missing=.true.)
 
-  call initialize_regridding(regridCS, GV, max_depth, param_file, mod, coord_mode, '', '')
+  call initialize_regridding(regridCS, GV, max_depth, param_file, mdl, coord_mode, '', '')
 
 end subroutine ALE_initRegridding
 

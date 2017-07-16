@@ -54,7 +54,7 @@ end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-character(len=40)  :: mod = "MOM_neutral_diffusion" ! module name
+character(len=40)  :: mdl = "MOM_neutral_diffusion" ! module name
 
 logical, parameter :: debug_this_module = .false.
 
@@ -77,9 +77,9 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
   endif
 
   ! Log this module and master switch for turning it on/off
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
        "This module implements neutral diffusion of tracers")
-  call get_param(param_file, mod, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
+  call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", neutral_diffusion_init, &
                  "If true, enables the neutral diffusion module.", &
                  default=.false.)
 
@@ -93,7 +93,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
   ! Read all relevant parameters and write them to the model log.
 ! call openParameterBlock(param_file,'NEUTRAL_DIFF')
-! call get_param(param_file, mod, "KHTR", CS%KhTr, &
+! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
 ! call closeParameterBlock(param_file)

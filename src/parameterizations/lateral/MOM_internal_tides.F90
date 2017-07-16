@@ -197,19 +197,29 @@ end type loop_bounds_type
 
 contains
 
-
+!> This subroutine calls other subroutines in this file that are needed to
+!! refract, propagate, and dissipate energy density of the internal tide.
 subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
                               G, GV, CS)
-  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),          intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),            intent(inout) :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),          intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                                    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),            intent(in)    :: tv
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide, Nb
-  real,                             intent(in)    :: dt
-  type(int_tide_CS),                pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G),CS%nMode), intent(in) :: cn
+                                    intent(in)    :: h  !< Layer thicknesses, in H
+                                                        !! (usually m or kg m-2).
+  type(thermo_var_ptrs),            intent(in)    :: tv !< Pointer to thermodynamic variables
+                                                        !! (needed for wave structure).
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: TKE_itidal_input !< The energy input to the
+                                                        !! internal waves, in W m-2.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vel_btTide       !< Barotropic velocity read
+                                                        !! from file, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: Nb !< Near-bottom buoyancy frequency, in s-1.
+  real,                             intent(in)    :: dt !< Length of time over which these fluxes
+                                                        !! will be applied, in s.
+  type(int_tide_CS),                pointer       :: CS !< A pointer to the control structure
+                                                        !! returned by a previous call to
+                                                        !! int_tide_init.
+  real, dimension(SZI_(G),SZJ_(G),CS%nMode), &
+                                    intent(in)    :: cn
 
   ! This subroutine calls other subroutines in this file that are needed to
   ! refract, propagate, and dissipate energy density of the internal tide.
@@ -645,8 +655,9 @@ subroutine propagate_int_tide(h, tv, cn, TKE_itidal_input, vel_btTide, Nb, dt, &
 
 end subroutine propagate_int_tide
 
+!> This subroutine checks for energy conservation on computational domain
 subroutine sum_En(G, CS, En, label)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
   type(int_tide_CS), pointer            :: CS
   real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle), intent(in) :: En
   character(len=*), intent(in) :: label
@@ -685,16 +696,27 @@ subroutine sum_En(G, CS, En, label)
 
 end subroutine sum_En
 
+!> This subroutine calculates the energy lost from the propagating internal tide due to
+!! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
 subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, full_halos)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
-  type(int_tide_CS), pointer            :: CS
-  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: Nb
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), intent(inout) :: Ub
-  real, dimension(G%isd:G%ied,G%jsd:G%jed), intent(in) :: TKE_loss_fixed
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), intent(out)   :: TKE_loss
-  real, intent(in) :: dt
-  logical,optional, intent(in)  :: full_halos
+  type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
+  type(int_tide_CS),         pointer       :: CS
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                             intent(in)    :: Nb !< Near-bottom stratification, in s-1.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%nFreq,CS%nMode), &
+                             intent(inout) :: Ub !< Rms (over one period) near-bottom horizontal
+                                                 !! mode velocity , in m s-1.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                             intent(in) :: TKE_loss_fixed !< Fixed part of energy loss,
+                                                 !! in kg m-2 (rho*kappa*h^2).
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
+                             intent(inout) :: En !< Energy density of the internal waves, in J m-2.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,CS%NAngle,CS%nFreq,CS%nMode), &
+                             intent(out)   :: TKE_loss    !< Energy loss rate, in W m-2
+                                                 !! (q*rho*kappa*h^2*N*U^2).
+  real,                      intent(in)    :: dt !< Time increment, in s.
+  logical,optional,          intent(in)    :: full_halos  !< If true, do the calculation over the
+                                                 !! entirecomputational domain.
 
   ! This subroutine calculates the energy lost from the propagating internal tide due to
   ! scattering over small-scale roughness along the lines of Jayne & St. Laurent (2001).
@@ -774,13 +796,17 @@ subroutine itidal_lowmode_loss(G, CS, Nb, Ub, En, TKE_loss_fixed, TKE_loss, dt, 
 
 end subroutine itidal_lowmode_loss
 
-
+!> This subroutine extracts the energy lost from the propagating internal which has
+!> been summed across all angles, frequencies, and modes for a given mechanism and location.
+!> It can be called from another module to get values from this module's (private) CS.
 subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
-  integer, intent(in)                :: i,j
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
-  type(int_tide_CS), pointer         :: CS
-  character(len=*), intent(in)       :: mechanism
-  real, intent(out)                  :: TKE_loss_sum
+  integer,                intent(in)  :: i,j
+  type(ocean_grid_type),  intent(in)  :: G            !< The ocean's grid structure
+  type(int_tide_CS),      pointer     :: CS
+  character(len=*),       intent(in)  :: mechanism
+  real,                   intent(out) :: TKE_loss_sum !< Total energy loss rate due to specified
+                                                      !! mechanism, in W m-2.
+
   ! This subroutine extracts the energy lost from the propagating internal which has
   ! been summed across all angles, frequencies, and modes for a given mechanism and location.
   ! It can be called from another module to get values from this module's (private) CS.
@@ -795,15 +821,20 @@ subroutine get_lowmode_loss(i,j,G,CS,mechanism,TKE_loss_sum)
 
 end subroutine get_lowmode_loss
 
-
+!> This subroutine does refraction on the internal waves at a single frequency.
 subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
   integer,                intent(in)    :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
-  real,                   intent(in)    :: freq
-  real,                   intent(in)    :: dt
-  logical,                intent(in)    :: use_PPMang
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+                          intent(inout) :: En   !< The internal gravity wave energy density as a
+                                                !! function of space and angular resolution,
+                                                !! in J m-2 radian-1.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
+                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
+  real,                   intent(in)    :: freq !< Wave frequency, in s-1.
+  real,                   intent(in)    :: dt   !< Time step, in s.
+  logical,                intent(in)    :: use_PPMang !< If true, use PPM for advection rather
+                                                !! than upwind.
   !  This subroutine does refraction on the internal waves at a single frequency.
 
   ! Arguments:
@@ -936,13 +967,17 @@ subroutine refract(En, cn, freq, dt, G, NAngle, use_PPMang)
   enddo ! j-loop
 end subroutine refract
 
-
+!> This subroutine calculates the 1-d flux for advection in angular space
+!! using a monotonic piecewise parabolic scheme. Should be within i and j spatial
+!! loops.
 subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   integer,                     intent(in)    :: NAngle
   real,                        intent(in)    :: dt
   integer,                     intent(in)    :: halo_ang
-  real, dimension(1-halo_ang:NAngle+halo_ang),   intent(in)    :: En2d
-  real, dimension(1-halo_ang:NAngle+halo_ang),   intent(in)    :: CFL_ang
+  real, dimension(1-halo_ang:NAngle+halo_ang),   &
+                               intent(in)    :: En2d
+  real, dimension(1-halo_ang:NAngle+halo_ang),   &
+                               intent(in)    :: CFL_ang
   real, dimension(0:NAngle),   intent(out)   :: Flux_En
 
   !   This subroutine calculates the 1-d flux for advection in angular space
@@ -1015,14 +1050,18 @@ subroutine PPM_angular_advect(En2d, CFL_ang, Flux_En, NAngle, dt, halo_ang)
   enddo
 end subroutine PPM_angular_advect
 
-
+!> This subroutine does refraction on the internal waves at a single frequency.
 subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
-  type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure
+  type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
   integer,                intent(in)    :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),        intent(in)    :: cn
-  real,                   intent(in)    :: freq
-  real,                   intent(in)    :: dt
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+                          intent(inout) :: En   !< The internal gravity wave energy density as a
+                                                !! function of space and angular resolution,
+                                                !! in J m-2 radian-1.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed),        &
+                          intent(in)    :: cn   !< Baroclinic mode speed, in m s-1.
+  real,                   intent(in)    :: freq !< Wave frequency, in s-1.
+  real,                   intent(in)    :: dt   !< Time step, in s.
   type(int_tide_CS),      pointer       :: CS
   !  This subroutine does refraction on the internal waves at a single frequency.
 
@@ -1141,16 +1180,23 @@ subroutine propagate(En, cn, freq, dt, G, CS, NAngle)
   endif
 end subroutine propagate
 
-
+!> This subroutine does first-order corner advection. It was written with the hopes
+!! of smoothing out the garden sprinkler effect, but is too numerically diffusive to
+!! be of much use as of yet. It is not yet compatible with reflection schemes (BDM).
 subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),   intent(inout) :: En
-  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed), intent(in)    :: speed
-  integer,                intent(in)    :: energized_wedge
+  type(ocean_grid_type),  intent(in)    :: G     !< The ocean's grid structure.
+  real, dimension(G%isd:G%ied,G%jsd:G%jed),   &
+                          intent(inout) :: En    !< The energy density integrated over an angular
+                                                 !! band, in W m-2, intent in/out.
+  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed), &
+                          intent(in)    :: speed !< The magnitude of the group velocity at the cell
+                                                 !! corner points, in m s-1.
+  integer,                intent(in)    :: energized_wedge !< Index of current ray direction.
   integer,                intent(in)    :: NAngle
-  real,                   intent(in)    :: dt
-  type(int_tide_CS),      pointer       :: CS
-  type(loop_bounds_type), intent(in)    :: LB
+  real,                   intent(in)    :: dt    !< Time increment in s.
+  type(int_tide_CS),      pointer       :: CS    !< The control structure returned by a previous
+                                                 !! call to continuity_PPM_init.
+  type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
 
   !   This subroutine does first-order corner advection. It was written with the hopes
   ! of smoothing out the garden sprinkler effect, but is too numerically diffusive to
@@ -1411,15 +1457,22 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
   enddo; enddo
 end subroutine propagate_corner_spread
 
+! #@# This subroutine needs a doxygen description
 subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
-  integer,                intent(in) :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   intent(inout) :: En
-  real, dimension(G%IsdB:G%IedB,G%jsd:G%jed), intent(in)    :: speed_x
-  real, dimension(Nangle),                    intent(in)    :: Cgx_av, dCgx
-  real,                   intent(in)    :: dt
-  type(int_tide_CS),      pointer       :: CS
-  type(loop_bounds_type), intent(in)    :: LB
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
+  integer,                 intent(in)    :: NAngle
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   &
+                           intent(inout) :: En !< The energy density integrated over an angular
+                                               !! band, in J m-2, intent in/out.
+  real, dimension(G%IsdB:G%IedB,G%jsd:G%jed),        &
+                           intent(in)    :: speed_x !< The magnitude of the group velocity at the
+                                               !! Cu points, in m s-1.
+  real, dimension(Nangle), intent(in)    :: Cgx_av, dCgx
+  real,                    intent(in)    :: dt !< Time increment in s.
+  type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
+                                               !! to continuity_PPM_init.
+  type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
+
   ! Arguments: En - The energy density integrated over an angular band, in J m-2,
   !                 intent in/out.
   !  (in)      speed_x - The magnitude of the group velocity at the Cu
@@ -1493,15 +1546,22 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, Nangle, CS, LB)
 
 end subroutine propagate_x
 
+! #@# This subroutine needs a doxygen description.
 subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure
-  integer,                intent(in) :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle),   intent(inout) :: En
-  real, dimension(G%isd:G%ied,G%JsdB:G%JedB), intent(in)    :: speed_y
-  real, dimension(Nangle),                    intent(in)    :: Cgy_av, dCgy
-  real,                   intent(in)    :: dt
-  type(int_tide_CS),      pointer       :: CS
-  type(loop_bounds_type), intent(in)    :: LB
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure.
+  integer,                 intent(in)    :: NAngle
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,Nangle), &
+                           intent(inout) :: En !< The energy density integrated over an angular
+                                               !! band, in J m-2, intent in/out.
+  real, dimension(G%isd:G%ied,G%JsdB:G%JedB),      &
+                           intent(in)    :: speed_y !< The magnitude of the group velocity at the
+                                               !! Cv points, in m s-1.
+  real, dimension(Nangle), intent(in)    :: Cgy_av, dCgy
+  real,                    intent(in)    :: dt !< Time increment in s.
+  type(int_tide_CS),       pointer       :: CS !< The control structure returned by a previous call
+                                               !! to continuity_PPM_init.
+  type(loop_bounds_type),  intent(in)    :: LB !< A structure with the active energy loop bounds.
+
   ! Arguments: En - The energy density integrated over an angular band, in J m-2,
   !                 intent in/out.
   !  (in)      speed_y - The magnitude of the group velocity at the Cv
@@ -1583,17 +1643,23 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, Nangle, CS, LB)
 
 end subroutine propagate_y
 
-
+!> This subroutines evaluates the zonal mass or volume fluxes in a layer.
 subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
-  type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G)),  intent(in)    :: h
-  real, dimension(SZI_(G)),  intent(in)    :: hL
-  real, dimension(SZI_(G)),  intent(in)    :: hR
-  real, dimension(SZIB_(G)), intent(inout) :: uh
-  real,                      intent(in)    :: dt
-  integer,                   intent(in)    :: j, ish, ieh
-  logical,                   intent(in)    :: vol_CFL
+  type(ocean_grid_type),     intent(in)    :: G  !< The ocean's grid structure.
+  real, dimension(SZIB_(G)), intent(in)    :: u  !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G)),  intent(in)    :: h  !< Energy density used to calculate the fluxes,
+                                                 !! in J m-2.
+  real, dimension(SZI_(G)),  intent(in)    :: hL !< Left- Energy densities in the reconstruction,
+                                                 !! in J m-2.
+  real, dimension(SZI_(G)),  intent(in)    :: hR !< Right- Energy densities in the reconstruction,
+                                                 !! in J m-2.
+  real, dimension(SZIB_(G)), intent(inout) :: uh !< The zonal energy transport,
+                                                 !! in J s-1.
+  real,                      intent(in)    :: dt !< Time increment in s.
+  integer,                   intent(in)    :: j, ish, ieh !< The index range to work on.
+  logical,                   intent(in)    :: vol_CFL !< If true, rescale the ratio of face areas to
+                                                 !! the cell areas when estimating the CFL number.
+
   !   This subroutines evaluates the zonal mass or volume fluxes in a layer.
   !
   ! Arguments: u - Zonal velocity, in m s-1.
@@ -1630,15 +1696,23 @@ subroutine zonal_flux_En(u, h, hL, hR, uh, dt, G, j, ish, ieh, vol_CFL)
   enddo
 end subroutine zonal_flux_En
 
-
+!> This subroutines evaluates the meridional mass or volume fluxes in a layer.
 subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
-  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G)),         intent(in)    :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h, hL, hR
-  real, dimension(SZI_(G)),         intent(inout) :: vh
-  real,                             intent(in)    :: dt
-  integer,                          intent(in)    :: J, ish, ieh
-  logical,                          intent(in)    :: vol_CFL
+  type(ocean_grid_type),            intent(in)    :: G  !< The ocean's grid structure.
+  real, dimension(SZI_(G)),         intent(in)    :: v  !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: h  !< Energy density used to calculate the
+                                                        !! fluxes, in J m-2.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: hL !< Left- Energy densities in the
+                                                        !! reconstruction, in J m-2.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: hR !< Right- Energy densities in the
+                                                        !! reconstruction, in J m-2.
+  real, dimension(SZI_(G)),         intent(inout) :: vh !< The meridional energy transport,
+                                                        !! in J s-1.
+  real,                             intent(in)    :: dt !< Time increment in s.
+  integer,                          intent(in)    :: J, ish, ieh !< The index range to work on.
+  logical,                          intent(in)    :: vol_CFL !< If true, rescale the ratio of face
+                                                        !! areas to the cell areas when estimating
+                                                        !! the CFL number.
   !   This subroutines evaluates the meridional mass or volume fluxes in a layer.
   !
   ! Arguments: v - Meridional velocity, in m s-1.
@@ -1674,11 +1748,12 @@ subroutine merid_flux_En(v, h, hL, hR, vh, dt, G, J, ish, ieh, vol_CFL)
   enddo
 end subroutine merid_flux_En
 
-
+!> This subroutine does reflection of the internal waves at a single frequency.
 subroutine reflect(En, NAngle, CS, G, LB)
   type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
   integer,                intent(in)    :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+                          intent(inout) :: En
   type(int_tide_CS),      pointer       :: CS
   type(loop_bounds_type), intent(in)    :: LB
 
@@ -1790,10 +1865,13 @@ subroutine reflect(En, NAngle, CS, G, LB)
 
 end subroutine reflect
 
+!> This subroutine moves energy across lines of partial reflection to prevent
+!! reflection of energy that is supposed to get across.
 subroutine teleport(En, NAngle, CS, G, LB)
-  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure
+  type(ocean_grid_type),  intent(in)    :: G    !< The ocean's grid structure.
   integer,                intent(in)    :: NAngle
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), intent(inout) :: En
+  real, dimension(G%isd:G%ied,G%jsd:G%jed,NAngle), &
+                          intent(inout) :: En
   type(int_tide_CS),      pointer       :: CS
   type(loop_bounds_type), intent(in)    :: LB
 
@@ -1888,6 +1966,8 @@ subroutine teleport(En, NAngle, CS, G, LB)
 
 end subroutine teleport
 
+!> This subroutine rotates points in the halos where required to accomodate
+!! changes in grid orientation, such as at the tripolar fold.
 subroutine correct_halo_rotation(En, test, G, NAngle)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   real, dimension(:,:,:,:,:),         intent(inout) :: En
@@ -1940,12 +2020,17 @@ subroutine correct_halo_rotation(En, test, G, NAngle)
   enddo
 end subroutine correct_halo_rotation
 
+!> This subroutine calculates left/right edge values for PPM reconstruction.
 subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
-  type(loop_bounds_type),           intent(in)  :: LB
-  logical, optional,                intent(in)  :: simple_2nd
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in !< Energy density in a sector (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
+  type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
+  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+                                                        !! energy densities as default edge values
+                                                        !! for a simple 2nd order scheme.
+
   ! This subroutine calculates left/right edge values for PPM reconstruction.
   ! Arguments: h_in    - Energy density in a sector (2D)
   !  (out)     h_l,h_r - left/right edge value of reconstruction (2D)
@@ -2020,13 +2105,17 @@ subroutine PPM_reconstruction_x(h_in, h_l, h_r, G, LB, simple_2nd)
   call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
 end subroutine PPM_reconstruction_x
 
-
+!> This subroutine calculates left/right edge valus for PPM reconstruction.
 subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
-  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l, h_r
-  type(loop_bounds_type),           intent(in)  :: LB
-  logical, optional,                intent(in)  :: simple_2nd
+  type(ocean_grid_type),            intent(in)  :: G    !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: h_in !< Energy density in a sector (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_l  !< Left edge value of reconstruction (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: h_r  !< Right edge value of reconstruction (2D).
+  type(loop_bounds_type),           intent(in)  :: LB   !< A structure with the active loop bounds.
+  logical, optional,                intent(in)  :: simple_2nd !< If true, use the arithmetic mean
+                                                        !! energy densities as default edge values
+                                                        !! for a simple 2nd order scheme.
+
   ! This subroutine calculates left/right edge valus for PPM reconstruction.
   ! Arguments: h_in    - Energy density in a sector (2D)
   !  (out)     h_l,h_r - left/right edge value of reconstruction (2D)
@@ -2099,13 +2188,20 @@ subroutine PPM_reconstruction_y(h_in, h_l, h_r, G, LB, simple_2nd)
   call PPM_limit_pos(h_in, h_l, h_r, 0.0, G, isl, iel, jsl, jel)
 end subroutine PPM_reconstruction_y
 
-
+!> This subroutine limits the left/right edge values of the PPM reconstruction
+!! to give a reconstruction that is positive-definite.  Here this is
+!! reinterpreted as giving a constant thickness if the mean thickness is less
+!! than h_min, with a minimum of h_min otherwise.
 subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
-  type(ocean_grid_type),            intent(in)     :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)     :: h_in
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout)  :: h_L, h_R
-  real,                             intent(in)     :: h_min
-  integer,                          intent(in)     :: iis, iie, jis, jie
+  type(ocean_grid_type),            intent(in)     :: G     !< The ocean's grid structure.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)     :: h_in  !< Thickness of layer (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout)  :: h_L   !< Left edge value (2D).
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout)  :: h_R   !< Right edge value (2D).
+  real,                             intent(in)     :: h_min !< The minimum thickness that can be
+                                                            !! obtained by a concave parabolic fit.
+  integer,                          intent(in)     :: iis, iie, jis, jie !< Index range for
+                                                            !! computation.
+
   ! This subroutine limits the left/right edge values of the PPM reconstruction
   ! to give a reconstruction that is positive-definite.  Here this is
   ! reinterpreted as giving a constant thickness if the mean thickness is less
@@ -2199,13 +2295,18 @@ end subroutine PPM_limit_pos
 
 ! end subroutine register_int_tide_restarts
 
+! #@# This subroutine needs a doxygen comment.
 subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
-  type(time_type), target,   intent(in)    :: Time
-  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,   intent(in)    :: diag
-  type(int_tide_CS),pointer                :: CS
+  type(time_type), target,   intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),     intent(in)    :: param_file !< A structure to parse for run-time
+                                                   !! parameters.
+  type(diag_ctrl), target,   intent(in)    :: diag !< A structure that is used to regulate
+                                                   !! diagnostic output.
+  type(int_tide_CS),pointer                :: CS   !< A pointer that is set to point to the control
+                                                   !! structure for this module.
+
   ! Arguments: Time - The current model time.
   !  (in)      G - The ocean's grid structure.
   !  (in)      GV - The ocean's vertical grid structure.
@@ -2229,7 +2330,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   type(axes_grp) :: axes_ang
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_internal_tides" ! This module's name.
+  character(len=40)  :: mdl = "MOM_internal_tides" ! This module's name.
   character(len=16), dimension(8) :: freq_name
   character(len=40)  :: var_name
   character(len=160) :: var_descript
@@ -2287,18 +2388,18 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   CS%Time => Time ! direct a pointer to the current model time target
 
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
                  CS%inputdir = slasher(CS%inputdir)
 
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "INTERNAL_TIDE_FREQS", num_freq, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_FREQS", num_freq, &
                  "The number of distinct internal tide frequency bands \n"//&
                  "that will be calculated.", default=1)
-  call get_param(param_file, mod, "INTERNAL_TIDE_MODES", num_mode, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_MODES", num_mode, &
                  "The number of distinct internal tide modes \n"//&
                  "that will be calculated.", default=1)
-  call get_param(param_file, mod, "INTERNAL_TIDE_ANGLES", num_angle, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ANGLES", num_angle, &
                  "The number of angular resolution bands for the internal \n"//&
                  "tide calculations.", default=24)
 
@@ -2328,17 +2429,17 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  call get_param(param_file, mod, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
                  "The rate at which internal tide energy is lost to the \n"//&
                  "interior ocean internal wave field.", units="s-1", default=0.0)
-  call get_param(param_file, mod, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
                  "If true, use the ratio of the open face lengths to the \n"//&
                  "tracer cell areas when estimating CFL numbers in the \n"//&
                  "internal tide code.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
                  "If true, internal tide ray-tracing advection uses a \n"//&
                  " corner-advection scheme rather than PPM.\n", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
                  "If true, CONTINUITY_PPM uses a simple 2nd order \n"//&
                  "(arithmetic mean) interpolation of the edge values. \n"//&
                  "This may give better PV conservation propterties. While \n"//&
@@ -2346,44 +2447,44 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
                  "solver itself in the strongly advective limit, it does \n"//&
                  "not reduce the overall order of accuracy of the dynamic \n"//&
                  "core.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_UPWIND_1ST", CS%upwind_1st, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_UPWIND_1ST", CS%upwind_1st, &
                  "If true, the internal tide ray-tracing advection uses \n"//&
                  "1st-order upwind advection.  This scheme is highly \n"//&
                  "continuity solver.  This scheme is highly \n"//&
                  "diffusive but may be useful for debugging.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_BACKGROUND_DRAG", &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_BACKGROUND_DRAG", &
                  CS%apply_background_drag, "If true, the internal tide \n"//&
                  "ray-tracing advection uses a background drag term as a sink.",&
                  default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_QUAD_DRAG", CS%apply_bottom_drag, &
                  "If true, the internal tide ray-tracing advection uses \n"//&
                  "a quadratic bottom drag term as a sink.", default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_WAVE_DRAG", CS%apply_wave_drag, &
                  "If true, apply scattering due to small-scale roughness as a sink.", &
                  default=.false.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_FROUDE_DRAG", CS%apply_Froude_drag, &
                  "If true, apply wave breaking as a sink.", &
                  default=.false.)
-  call get_param(param_file, mod, "CDRAG", CS%cdrag, &
+  call get_param(param_file, mdl, "CDRAG", CS%cdrag, &
                  "CDRAG is the drag coefficient relating the magnitude of \n"//&
                  "the velocity field to the bottom stress.", units="nondim", &
                  default=0.003)
-  call get_param(param_file, mod, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_ENERGIZED_ANGLE", CS%energized_angle, &
                  "If positive, only one angular band of the internal tides \n"//&
                  "gets all of the energy.  (This is for debugging.)", default=-1)
-  call get_param(param_file, mod, "USE_PPM_ANGULAR", CS%use_PPMang, &
+  call get_param(param_file, mdl, "USE_PPM_ANGULAR", CS%use_PPMang, &
                  "If true, use PPM for advection of energy in angular  \n"//&
                  "space.", default=.false.)
-  call get_param(param_file, mod, "GAMMA_ITIDES", CS%q_itides, &
+  call get_param(param_file, mdl, "GAMMA_ITIDES", CS%q_itides, &
                  "The fraction of the internal tidal energy that is \n"//&
                  "dissipated locally with INT_TIDE_DISSIPATION.  \n"//&
                  "THIS NAME COULD BE BETTER.", &
                  units="nondim", default=0.3333)
-    call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
+    call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
-  call get_param(param_file, mod, "KAPPA_H2_FACTOR", kappa_h2_factor, &
+  call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
                "A scaling factor for the roughness amplitude with n"//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
 
@@ -2405,12 +2506,12 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   allocate(CS%tot_Froude_loss(isd:ied,jsd:jed)) ; CS%tot_Froude_loss(:,:) = 0.0
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
-  call get_param(param_file, mod, "H2_FILE", h2_file, &
+  call get_param(param_file, mdl, "H2_FILE", h2_file, &
           "The path to the file containing the sub-grid-scale \n"//&
           "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
-  call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, timelevel=1)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
@@ -2422,12 +2523,12 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   enddo; enddo
 
   ! Read in prescribed coast/ridge/shelf angles from file
-  call get_param(param_file, mod, "REFL_ANGLE_FILE", refl_angle_file, &
+  call get_param(param_file, mdl, "REFL_ANGLE_FILE", refl_angle_file, &
                "The path to the file containing the local angle of \n"//&
                "the coastline/ridge/shelf with respect to the equator.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_ANGLE_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
   call read_data(filename, 'refl_angle', CS%refl_angle, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2438,11 +2539,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   call pass_var(CS%refl_angle,G%domain)
 
   ! Read in prescribed partial reflection coefficients from file
-  call get_param(param_file, mod, "REFL_PREF_FILE", refl_pref_file, &
+  call get_param(param_file, mdl, "REFL_PREF_FILE", refl_pref_file, &
                "The path to the file containing the reflection coefficients.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_pref_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_PREF_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
   call read_data(filename, 'refl_pref', CS%refl_pref, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2462,11 +2563,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   enddo
 
   ! Read in double-reflective (ridge) tags from file
-  call get_param(param_file, mod, "REFL_DBL_FILE", refl_dbl_file, &
+  call get_param(param_file, mdl, "REFL_DBL_FILE", refl_dbl_file, &
                "The path to the file containing the double-reflective ridge tags.", &
                fail_if_missing=.false.)
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
-  call log_param(param_file, mod, "INPUTDIR/REFL_DBL_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
   call read_data(filename, 'refl_dbl', ridge_temp, &
                  domain=G%domain%mpp_domain, timelevel=1)
@@ -2480,11 +2581,11 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   ! Read in prescribed land mask from file (if overwriting -BDM).
   ! This should be done in MOM_initialize_topography subroutine
   ! defined in MOM_fixed_initialization.F90 (BDM)
-  !call get_param(param_file, mod, "LAND_MASK_FILE", land_mask_file, &
+  !call get_param(param_file, mdl, "LAND_MASK_FILE", land_mask_file, &
   !             "The path to the file containing the land mask.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(land_mask_file)
-  !call log_param(param_file, mod, "INPUTDIR/LAND_MASK_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/LAND_MASK_FILE", filename)
   !G%mask2dCu(:,:) = 1 ; G%mask2dCv(:,:) = 1 ; G%mask2dT(:,:)  = 1
   !call read_data(filename, 'land_mask', G%mask2dCu, &
   !               domain=G%domain%mpp_domain, timelevel=1)
@@ -2497,31 +2598,31 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   !call pass_var(G%mask2dT,G%domain)
 
   ! Read in prescribed partial east face blockages from file (if overwriting -BDM)
-  !call get_param(param_file, mod, "dy_Cu_FILE", dy_Cu_file, &
+  !call get_param(param_file, mdl, "dy_Cu_FILE", dy_Cu_file, &
   !             "The path to the file containing the east face blockages.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(dy_Cu_file)
-  !call log_param(param_file, mod, "INPUTDIR/dy_Cu_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/dy_Cu_FILE", filename)
   !G%dy_Cu(:,:) = 0.0
   !call read_data(filename, 'dy_Cu', G%dy_Cu, &
   !               domain=G%domain%mpp_domain, timelevel=1)
   !call pass_var(G%dy_Cu,G%domain)
 
   ! Read in prescribed partial north face blockages from file (if overwriting -BDM)
-  !call get_param(param_file, mod, "dx_Cv_FILE", dx_Cv_file, &
+  !call get_param(param_file, mdl, "dx_Cv_FILE", dx_Cv_file, &
   !             "The path to the file containing the north face blockages.", &
   !             fail_if_missing=.false.)
   !filename = trim(CS%inputdir) // trim(dx_Cv_file)
-  !call log_param(param_file, mod, "INPUTDIR/dx_Cv_FILE", filename)
+  !call log_param(param_file, mdl, "INPUTDIR/dx_Cv_FILE", filename)
   !G%dx_Cv(:,:) = 0.0
   !call read_data(filename, 'dx_Cv', G%dx_Cv, &
   !               domain=G%domain%mpp_domain, timelevel=1)
   !call pass_var(G%dx_Cv,G%domain)
 
   ! For debugging - delete later
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_X", CS%int_tide_source_x, &
                 "X Location of generation site for internal tide", default=1.)
-  call get_param(param_file, mod, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_SOURCE_Y", CS%int_tide_source_y, &
                 "Y Location of generation site for internal tide", default=1.)
 
   ! Register maps of reflection parameters

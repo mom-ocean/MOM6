@@ -373,11 +373,12 @@ subroutine doc_closeBlock(doc, blockName)
   endif
 end subroutine doc_closeBlock
 
-subroutine doc_param_time(doc, varname, desc, units, val, default)
+subroutine doc_param_time(doc, varname, desc, units, val, default, layoutParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   type(time_type),  intent(in) :: val
   type(time_type),  optional, intent(in) :: default
+  logical,          optional, intent(in) :: layoutParam
 ! This subroutine handles parameter documentation for time-type variables.
 !  ### This needs to be written properly!
   integer :: numspc
@@ -394,7 +395,7 @@ subroutine doc_param_time(doc, varname, desc, units, val, default)
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
   endif
 
 end subroutine doc_param_time

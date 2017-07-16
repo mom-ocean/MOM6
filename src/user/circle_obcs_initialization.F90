@@ -38,33 +38,42 @@ public circle_obcs_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
-subroutine circle_obcs_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
-  type(param_file_type),   intent(in) :: param_file  !< A structure indicating the open
-                                   !! file to parse for model parameter values.
+subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  real :: e0(SZK_(GV)+1)   ! The resting interface heights, in m, usually !
+                           ! negative because it is positive upward.      !
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
+                           ! positive upward, in m.                       !
+  real :: diskrad, rad, xCenter, xRadius, lonC, latC
+  logical :: just_read
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "circle_obcs_initialize_thickness"   ! This module's name.
+  character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
-  real :: diskrad, rad, xCenter, xRadius, lonC, latC
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
+  if (.not.just_read) &
+    call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)
+
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Parameters read by cartesian grid initialization
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DISK_RADIUS", diskrad, &
+  call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the \n"//&
                  "circle_obcs test case.", units=G%x_axis_units, &
-                 fail_if_missing=.true.)
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do k=1,nz
     e0(K) = -G%max_depth * real(k-1) / real(nz)

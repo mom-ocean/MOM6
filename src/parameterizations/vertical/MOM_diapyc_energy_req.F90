@@ -57,16 +57,21 @@ end type diapyc_energy_req_CS
 
 contains
 
+! #@# This subroutine needs a doxygen description
 subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
-  type(ocean_grid_type),          intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),          intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),        intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke), &
-                                  intent(in)    :: h_3d
-  type(thermo_var_ptrs),          intent(inout) :: tv
-  real,                           intent(in)    :: dt
-  type(diapyc_energy_req_CS),     pointer       :: CS
+                                  intent(in)    :: h_3d !< Layer thickness before entrainment,
+                                                        !! in m or kg m-2.
+  type(thermo_var_ptrs),          intent(inout) :: tv   !< A structure containing pointers to any
+                                                        !! available thermodynamic fields.
+                                                        !! Absent fields have NULL ptrs.
+  real,                           intent(in)    :: dt   !< The amount of time covered by this call,
+                                                        !! in s.
+  type(diapyc_energy_req_CS),     pointer       :: CS   !< This module's control structure.
   real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke+1), &
-                        optional, intent(in)    :: Kd_int
+                        optional, intent(in)    :: Kd_int !< Interface diffusivities.
 
 ! Arguments: h_3d -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      tv - A structure containing pointers to any available
@@ -127,17 +132,34 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, CS, Kd_int)
 
 end subroutine diapyc_energy_req_test
 
+!>   This subroutine uses a substantially refactored tridiagonal equation for
+!! diapycnal mixing of temperature and salinity to estimate the potential energy
+!! change due to diapycnal mixing in a column of water.  It does this estimate
+!! 4 different ways, all of which should be equivalent, but reports only one.
+!! The various estimates are taken because they will later be used as templates
+!! for other bits of code
 subroutine diapyc_energy_req_calc(h_in, T_in, S_in, Kd, energy_Kd, dt, tv, &
                                   G, GV, may_print, CS)
-  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(GV%ke),   intent(in)    :: h_in, T_in, S_in
-  real, dimension(GV%ke+1), intent(in)    :: Kd
-  real,                     intent(in)    :: dt
-  real,                     intent(out)   :: energy_Kd
-  type(thermo_var_ptrs),    intent(inout) :: tv
-  logical,        optional, intent(in)    :: may_print
-  type(diapyc_energy_req_CS), optional, pointer :: CS
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(GV%ke),   intent(in)    :: h_in !< Layer thickness before entrainment,
+                                                  !! in m or kg m-2.
+  real, dimension(GV%ke),   intent(in)    :: T_in !< The layer temperatures, in degC.
+  real, dimension(GV%ke),   intent(in)    :: S_in !< The layer salinities, in g kg-1.
+  real, dimension(GV%ke+1), intent(in)    :: Kd   !< The interfaces diapycnal diffusivities,
+                                                  !! in m2 s-1.
+  real,                     intent(in)    :: dt   !< The amount of time covered by this call,
+                                                  !! in s.
+  real,                     intent(out)   :: energy_Kd !< The column-integrated rate of energy
+                                                  !! consumption by diapycnal diffusion, in W m-2.
+  type(thermo_var_ptrs),    intent(inout) :: tv   !< A structure containing pointers to any
+                                                  !! available thermodynamic fields.
+                                                  !! Absent fields have NULL ptrs.
+  logical,        optional, intent(in)    :: may_print !< If present and true, write out diagnostics
+                                                  !! of energy use.
+  type(diapyc_energy_req_CS), &
+                  optional, pointer        :: CS  !< This module's control structure.
+
 ! Arguments: h_in -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      T_in - The layer temperatures, in degC.
 !  (in)      S_in - The layer salinities, in g kg-1.
@@ -1283,7 +1305,7 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   integer, save :: init_calls = 0
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_diapyc_energy_req" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diapyc_energy_req" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(CS)) then ; allocate(CS)
@@ -1293,14 +1315,14 @@ subroutine diapyc_energy_req_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENERGY_REQ_KH_SCALING", CS%test_Kh_scaling, &
                  "A scaling factor for the diapycnal diffusivity used in \n"//&
                  "testing the energy requirements.", default=1.0, units="nondim")
-  call get_param(param_file, mod, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
+  call get_param(param_file, mdl, "ENERGY_REQ_COL_HT_SCALING", CS%ColHt_scaling, &
                  "A scaling factor for the column height change correction \n"//&
                  "used in testing the energy requirements.", default=1.0, units="nondim")
-  call get_param(param_file, mod, "ENERGY_REQ_USE_TEST_PROFILE", &
+  call get_param(param_file, mdl, "ENERGY_REQ_USE_TEST_PROFILE", &
                  CS%use_test_Kh_profile, &
                  "If true, use the internal test diffusivity profile in \n"//&
                  "place of any that might be passed in as an argument.", default=.false.)
