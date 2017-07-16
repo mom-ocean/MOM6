@@ -97,7 +97,7 @@ program MOM_main
   call MOM_set_verbosity(verbosity)
 
   call MOM_domains_init(grid%domain, param_file)
-  
+
   call MOM_io_init(param_file)
 !  call diag_mediator_init(param_file)
   call MOM_grid_init(grid, param_file)
@@ -183,9 +183,9 @@ program MOM_main
 contains
 
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)             :: G
+  type(ocean_grid_type), intent(in)             :: G    !< The ocean's grid structure
   real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
-  type(param_file_type), intent(in)             :: param_file
+  type(param_file_type), intent(in)             :: param_file !< A structure to parse for run-time parameters
   real,                  intent(in)             :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.

@@ -33,7 +33,7 @@ implicit none ; private
 #  define NIMEMQ_IS_ NIMEMQS_
 #  define NJMEMQ_IS_ NJMEMQS_
 #  define ISUMSTART_INT_ CS%grid%iscq+1
-#  define JSUMSTART_INT_ CS%grid%jscq+1 
+#  define JSUMSTART_INT_ CS%grid%jscq+1
 #else
 #  define GRID_SYM_ .false.
 #  define NIMEMQ_IS_ NIMEMQ_
@@ -51,12 +51,12 @@ contains
 subroutine initialize_ice_thickness (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   character(len=40)  :: mod = "initialize_ice_thickness" ! This subroutine's name.
   character(len=200) :: config
-  
+
   call get_param(PF, mod, "ICE_PROFILE_CONFIG", config, &
                  "This specifies how the initial ice profile is specified. \n"//&
                  "Valid values are: CHANNEL, FILE, and USER.", &
@@ -76,7 +76,7 @@ end subroutine initialize_ice_thickness
 subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   !  This subroutine reads ice thickness and area from a file and puts it into
@@ -109,7 +109,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
-  
+
   call read_data(filename,trim(thickness_varname),h_shelf,domain=G%Domain%mpp_domain)
   call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
@@ -122,7 +122,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
   do j=jsc,jec
     do i=isc,iec
 
-      ! taper ice shelf in area where there is no sidestress - 
+      ! taper ice shelf in area where there is no sidestress -
       ! but do not interfere with hmask
 
       if ((G%geoLonCv(i,j) .gt. len_sidestress).and. &
@@ -140,7 +140,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
 
       if (area_shelf_h (i,j) .ge. G%areaT(i,j)) then
         hmask(i,j) = 1.
-      elseif (area_shelf_h (i,j) .eq. 0.0) then 
+      elseif (area_shelf_h (i,j) .eq. 0.0) then
         hmask(i,j) = 0.
       elseif ((area_shelf_h(i,j) .gt. 0) .and. (area_shelf_h(i,j) .le. G%areaT(i,j))) then
         hmask(i,j) = 2.
@@ -149,7 +149,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
       endif
     enddo
   enddo
-           
+
 
 end subroutine initialize_ice_thickness_from_file
 
@@ -157,7 +157,7 @@ end subroutine initialize_ice_thickness_from_file
 subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF)
 
   real, intent(inout), dimension(:,:)          :: h_shelf, area_shelf_h, hmask
-  type(ocean_grid_type), intent(in)            :: G
+  type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
   character(len=40)  :: mod = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
@@ -168,11 +168,11 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
 
   jsc = G%jsc ; jec = G%jec ; isc = G%isc ; iec = G%iec
   jsd = G%jsd ; jed = G%jed ; isd = G%isd ; ied = G%ied
-  nyh = G%domain%njhalo ; jedg = G%domain%njglobal+nyh 
+  nyh = G%domain%njhalo ; jedg = G%domain%njglobal+nyh
   j_off = G%jdg_offset
-  
+
   call MOM_mesg(mod//": setting thickness")
-  
+
   call get_param(PF, mod, "SHELF_MAX_DRAFT", max_draft, &
                  units="m", default=1.0)
   call get_param(PF, mod, "SHELF_MIN_DRAFT", min_draft, &
@@ -190,7 +190,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
   do j=G%jsd,G%jed
 
   if (((j+j_off) <= jedg) .AND. ((j+j_off) >= nyh+1)) then
-   
+
     do i=G%isc,G%iec
 
       if ((j.ge.jsc) .and. (j.le.jec)) then
@@ -206,11 +206,11 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
             area_shelf_h(i,j) = G%areaT(i,j) * (edge_pos - G%geoLonCu(i-1,j)) / &
                             (G%geoLonCu(i,j) - G%geoLonCu(i-1,j))
             hmask (i,j) = 2.0
-          else                  
+          else
             area_shelf_h(i,j) = G%areaT(i,j)
             hmask (i,j) = 1.0
           endif
-          
+
           if (G%geoLonT(i,j) > slope_pos) then
             h_shelf (i,j) = min_draft
 !              mass_shelf(i,j) = Rho_ocean * min_draft
@@ -223,14 +223,14 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
                min(1.0, (c1*(slope_pos - G%geoLonT(i,j)))**2) )
           endif
 
-        endif  
+        endif
       endif
 
       if ((i+G%idg_offset) .eq. G%domain%nihalo+1) then
         hmask(i-1,j) = 3.0
       endif
 
-    enddo 
+    enddo
   endif ; enddo
 
 end subroutine initialize_ice_thickness_channel
@@ -245,7 +245,7 @@ end subroutine initialize_ice_thickness_channel
 !      h_boundary_values, &
 !      hmask, G, PF)
 
-!   type(ocean_grid_type), intent(in)                 :: G
+!   type(ocean_grid_type), intent(in)                 :: G    !< The ocean's grid structure
 !   real, intent(inout), dimension(SZIB_(G),SZJ_(G))  :: u_face_mask_boundary, u_flux_boundary_values
 !   real, intent(inout), dimension(SZI_(G),SZJB_(G))  :: v_face_mask_boundary, v_flux_boundary_values
 !   real, intent(inout), dimension(SZIB_(G),SZJB_(G)) :: u_boundary_values, v_boundary_values
@@ -291,18 +291,18 @@ end subroutine initialize_ice_thickness_channel
 !   hmask, &
 !   G, flux_bdry, PF )
 
-!   type(ocean_grid_type), intent(in)                 :: G
+!   type(ocean_grid_type), intent(in)                 :: G    !< The ocean's grid structure
 !   real, dimension(SZIB_(G),SZJ_(G)),  intent(inout) :: u_face_mask_boundary, u_flux_boundary_values
 !   real, dimension(SZI_(G),SZJB_(G)),  intent(inout) :: v_face_mask_boundary, v_flux_boundary_values
 !   real, dimension(SZIB_(G),SZJB_(G)), intent(inout) :: u_boundary_values, v_boundary_values
 !   real, dimension(:,:), intent(inout)               :: h_boundary_values, hmask
 !   logical, intent(in)                               :: flux_bdry
-!   type (param_file_type), intent(in)                :: PF 
-  
+!   type (param_file_type), intent(in)                :: PF
+
 !   character(len=40)  :: mod = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
-!   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed 
+!   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed
 !   real                                                  :: lenlat, input_thick, input_flux, len_stress
-  
+
 !   call get_param(PF, mod, "LENLAT", lenlat, fail_if_missing=.true.)
 
 !   call get_param(PF, mod, "INPUT_FLUX_ICE_SHELF", input_flux, &
@@ -317,12 +317,12 @@ end subroutine initialize_ice_thickness_channel
 
 !   call MOM_mesg(mod//": setting boundary")
 
-!   isd = G%isd ; ied = G%ied  
+!   isd = G%isd ; ied = G%ied
 !   jsd = G%jsd ; jed = G%jed
 !   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
 !   gisc = G%Domain%nihalo ; gjsc = G%Domain%njhalo
 !   giec = G%Domain%niglobal+gisc ; gjec = G%Domain%njglobal+gjsc
-   
+
 !   do j=jsd,jed
 !     do i=isd,ied
 
@@ -341,7 +341,7 @@ end subroutine initialize_ice_thickness_channel
 !           u_boundary_values (i-1,j) = (1 - ((G%geoLatBu(i-1,j) - 0.5*lenlat)*2./lenlat)**2) * &
 !                   1.5 * input_flux / input_thick
 !         endif
-!       endif 
+!       endif
 
 !       ! side boundaries: no flow
 

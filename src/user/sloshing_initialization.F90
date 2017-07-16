@@ -43,7 +43,7 @@ implicit none ; private
 ! -----------------------------------------------------------------------------
 public sloshing_initialize_topography
 public sloshing_initialize_thickness
-public sloshing_initialize_temperature_salinity 
+public sloshing_initialize_temperature_salinity
 
 character(len=40)  :: mod = "sloshing_initialization" ! This module's name.
 
@@ -59,13 +59,13 @@ subroutine sloshing_initialize_topography ( D, G, param_file, max_depth )
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-  
-  ! Local variables 
+
+  ! Local variables
   integer   :: i, j
-  
-  do i=G%isc,G%iec 
-    do j=G%jsc,G%jec 
-    
+
+  do i=G%isc,G%iec
+    do j=G%jsc,G%jec
+
       D(i,j) = max_depth
 
     enddo
@@ -91,7 +91,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
                                                             !! open file to parse for model
                                                             !! parameter values.
 
-  real    :: displ(SZK_(G)+1)  
+  real    :: displ(SZK_(G)+1)
   real    :: z_unif(SZK_(G)+1)
   real    :: z_inter(SZK_(G)+1)
   real    :: x
@@ -102,16 +102,16 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
   real    :: x1, y1, x2, y2
   real    :: t
   integer :: n
-  
+
   integer :: i, j, k, is, ie, js, je, nx, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  
+
   deltah = G%max_depth / nz
 
   ! Define thicknesses
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-  
+
     ! Define uniform interfaces
     do k = 0,nz
       z_unif(k+1) = -real(k)/real(nz)
@@ -120,71 +120,71 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file )
     ! 1. Define stratification
     n = 3
     do k = 1,nz+1
-      
+
       ! Thin pycnocline in the middle
       !z_inter(k) = (2.0**(n-1)) * (z_unif(k) + 0.5)**n - 0.5
 
       ! Thin pycnocline in the middle (piecewise linear profile)
       x1 = 0.30; y1 = 0.48; x2 = 0.70; y2 = 0.52
-    
+
       x = -z_unif(k)
-      
+
       if ( x .le. x1 ) then
-        t = y1*x/x1;    
+        t = y1*x/x1;
       else if ( (x .gt. x1 ) .and. ( x .lt. x2 )) then
         t = y1 + (y2-y1) * (x-x1) / (x2-x1)
-      else  
+      else
         t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
       end if
-      
+
       t = - z_unif(k)
 
       z_inter(k) = -t * G%max_depth
-      
+
     end do
-    
+
     ! 2. Define displacement
     a0 = 75.0;      ! Displacement amplitude (meters)
     do k = 1,nz+1
-      
+
       weight_z = - 4.0 * ( z_unif(k) + 0.5 )**2 + 1
-      
+
       x = G%geoLonT(i,j) / G%len_lon
-      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z; 
-      
+      displ(k) = a0 * cos(acos(-1.0)*x) + weight_z;
+
       if ( k .EQ. 1 ) then
         displ(k) = 0.0
       end if
-      
+
       if ( k .EQ. nz+1 ) then
         displ(k) = 0.0
       end if
-      
+
       z_inter(k) = z_inter(k) + displ(k)
-      
+
     end do
-    
+
     ! 3. The last interface must coincide with the seabed
     z_inter(nz+1) = -G%bathyT(i,j)
 
-    ! Modify interface heights to make sure all thicknesses 
+    ! Modify interface heights to make sure all thicknesses
     ! are strictly positive
     do k = nz,1,-1
-      
+
       if ( z_inter(k) .LT. (z_inter(k+1) + GV%Angstrom) ) then
         z_inter(k) = z_inter(k+1) + GV%Angstrom
       end if
-      
+
     end do
-    
+
     ! 4. Define layers
     total_height = 0.0
     do k = 1,nz
       h(i,j,k) = z_inter(k) - z_inter(k+1)
-      
+
       total_height = total_height + h(i,j,k)
     end do
- 
+
   enddo ; enddo
 
 end subroutine sloshing_initialize_thickness
@@ -207,7 +207,7 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
                                                             !! open file to parse for model
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure.
-                                                      
+
   integer :: i, j, k, is, ie, js, je, nz
   real    :: delta_S, delta_T
   real    :: S_ref, T_ref;      ! Reference salinity and temerature within
@@ -217,13 +217,13 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
   integer :: kdelta
   real    :: deltah
   real    :: xi0, xi1
-  character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's 
+  character(len=40)  :: mod = "initialize_temp_salt_linear" ! This subroutine's
                                                             ! name.
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   call get_param(param_file,mod,"S_REF",S_ref,'Reference value for salinity',units='1e-3',fail_if_missing=.true.)
   call get_param(param_file,mod,"T_REF",T_ref,'Refernce value for temperature',units='C',fail_if_missing=.true.)
-  
+
   ! The default is to assume an increase by 2 for the salinity and a uniform
   ! temperature
   call get_param(param_file,mod,"S_RANGE",S_range,'Initial salinity range.',units='1e-3',default=2.0)
@@ -231,13 +231,13 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   ! Prescribe salinity
   !delta_S = S_range / ( G%ke - 1.0 )
-  
+
   !S(:,:,1) = S_ref
   !do k = 2,G%ke
   !  S(:,:,k) = S(:,:,k-1) + delta_S
-  !end do  
-    
-  deltah = G%max_depth / nz;  
+  !end do
+
+  deltah = G%max_depth / nz;
   do j=js,je ; do i=is,ie
     xi0 = 0.0
     do k = 1,nz
@@ -246,20 +246,20 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
       xi0 = xi1
     enddo
   enddo ; enddo
-  
+
   ! Prescribe temperature
   delta_T = T_range / ( G%ke - 1.0 )
-  
+
   T(:,:,1) = T_ref
   do k = 2,G%ke
     T(:,:,k) = T(:,:,k-1) + delta_T
-  end do  
+  end do
   kdelta = 2
   T(:,:,G%ke/2 - (kdelta-1):G%ke/2 + kdelta) = 1.0
-  
+
 end subroutine sloshing_initialize_temperature_salinity
 
-!> \class sloshing_initialization
+!> \namespace sloshing_initialization
 !!
 !! The module configures the model for the non-rotating sloshing
 !! test case.

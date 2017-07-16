@@ -4,7 +4,7 @@ module MOM_shared_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : max_across_PEs
+use MOM_coms, only : max_across_PEs, reproducing_sum
 use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
 use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
 use MOM_dyn_horgrid, only : dyn_horgrid_type
@@ -89,6 +89,14 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G)
   ! Local variables
   integer :: i,j
   real :: f1, f2
+
+  if ((LBOUND(G%CoriolisBu,1) > G%isc-1) .or. &
+      (LBOUND(G%CoriolisBu,2) > G%isc-1)) then
+    ! The gradient of the Coriolis parameter can not be calculated with this grid.
+    dF_dx(:,:) = 0.0 ; dF_dy(:,:) = 0.0
+    return
+  endif
+
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     f1 = 0.5*( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
     f2 = 0.5*( G%CoriolisBu(I-1,J) + G%CoriolisBu(I-1,J-1) )
@@ -438,9 +446,9 @@ end subroutine limit_topography
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_planetary(f, G, param_file)
-  type(dyn_horgrid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -467,9 +475,9 @@ end subroutine set_rotation_planetary
 
 ! -----------------------------------------------------------------------------
 subroutine set_rotation_beta_plane(f, G, param_file)
-  type(dyn_horgrid_type),                        intent(in)  :: G
+  type(dyn_horgrid_type),                       intent(in)  :: G  !< The dynamic horizontal grid
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB), intent(out) :: f
-  type(param_file_type),                        intent(in)  :: param_file
+  type(param_file_type),                        intent(in)  :: param_file !< A structure to parse for run-time parameters
 ! Arguments: f          - Coriolis parameter (vertical component) in s^-1
 !     (in)   G          - grid type
 !     (in)   param_file - parameter file type
@@ -513,7 +521,7 @@ end subroutine set_rotation_beta_plane
 !> initialize_grid_rotation_angle initializes the arrays with the sine and
 !!   cosine of the angle between logical north on the grid and true north.
 subroutine initialize_grid_rotation_angle(G, PF)
-  type(dyn_horgrid_type), intent(inout) :: G   !< The model's horizontal grid structure.
+  type(dyn_horgrid_type), intent(inout) :: G   !< The dynamic horizontal grid
   type(param_file_type),  intent(in)    :: PF  !< A structure indicating the open file
                                                !! to parse for model parameter values.
 
@@ -539,9 +547,9 @@ end subroutine initialize_grid_rotation_angle
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_named(G, param_file, name)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
-  character(len=*),      intent(in)    :: name
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
+  character(len=*),       intent(in)    :: name
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -575,8 +583,8 @@ subroutine reset_face_lengths_named(G, param_file, name)
       if ((abs(G%geoLatCu(I,j)-12.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-43.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*10000.0   ! Red Sea
 
-      if ((abs(G%geoLatCu(i,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(i,j)-26.0) < dx_2)) &
-        G%dy_Cu(i,j) = G%mask2dCu(i,j)*5000.0   ! Dardanelles
+      if ((abs(G%geoLatCu(I,j)-40.5) < dy_2) .and. (abs(G%geoLonCu(I,j)-26.0) < dx_2)) &
+        G%dy_Cu(I,j) = G%mask2dCu(I,j)*5000.0   ! Dardanelles
 
       if ((abs(G%geoLatCu(I,j)-41.5) < dy_2) .and. (abs(G%geoLonCu(I,j)+220.0) < dx_2)) &
         G%dy_Cu(I,j) = G%mask2dCu(I,j)*35000.0   ! Tsugaru strait at 140.0e
@@ -664,8 +672,8 @@ end subroutine reset_face_lengths_named
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_file(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type), intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type), intent(in)     :: param_file !< A structure to parse for run-time parameters
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -732,8 +740,8 @@ end subroutine reset_face_lengths_file
 
 ! -----------------------------------------------------------------------------
 subroutine reset_face_lengths_list(G, param_file)
-  type(dyn_horgrid_type), intent(inout) :: G
-  type(param_file_type),  intent(in)    :: param_file
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters
 !   This subroutine sets the open face lengths at selected points to restrict
 ! passages to their observed widths.
 
@@ -829,11 +837,11 @@ subroutine reset_face_lengths_list(G, param_file)
       found_u = .false.; found_v = .false.
       isu = index(uppercase(line), "U_WIDTH" ); if (isu > 0) found_u = .true.
       isv = index(uppercase(line), "V_WIDTH" ); if (isv > 0) found_v = .true.
-      
+
       ! Store and check the relevant values.
       if (found_u) then
         u_pt = u_pt + 1
-        read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt) 
+        read(line(isu+8:),*) u_lon(1:2,u_pt), u_lat(1:2,u_pt), u_width(u_pt)
         if (is_root_PE()) then
           if (check_360) then
             if ((abs(u_lon(1,u_pt)) > 360.0) .or. (abs(u_lon(2,u_pt)) > 360.0)) &
@@ -887,7 +895,7 @@ subroutine reset_face_lengths_list(G, param_file)
         endif
       endif
     enddo
-    
+
     deallocate(lines)
   endif
 
@@ -901,7 +909,7 @@ subroutine reset_face_lengths_list(G, param_file)
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
-  
+
       G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
     enddo
 
@@ -950,7 +958,7 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
   logical :: found_u, found_v
   integer :: isu, isv, icom, verbose
   integer :: last
-  
+
   num_lines = 0
 
   if (iounit <= 0) return
@@ -985,7 +993,7 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
 
 9 call MOM_error(FATAL, "read_face_length_list : "//&
                   "Error while reading file "//trim(filename))
- 
+
 end subroutine read_face_length_list
 ! -----------------------------------------------------------------------------
 
@@ -1036,19 +1044,21 @@ subroutine compute_global_grid_integrals(G)
   type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid
   ! Subroutine to pre-compute global integrals of grid quantities for
   ! later use in reporting diagnostics
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
+  tmpForSumming(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    G%areaT_global = G%areaT_global + ( G%areaT(i,j) * G%mask2dT(i,j) )
+    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  call sum_across_PEs( G%areaT_global )
+  G%areaT_global = reproducing_sum(tmpForSumming)
 
   if (G%areaT_global == 0.0) &
     call MOM_error(FATAL, "compute_global_grid_integrals: "//&
                     "zero ocean area (check topography?)")
 
-  G%IareaT_global = 1. / G%areaT_global 
+  G%IareaT_global = 1. / G%areaT_global
 end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 

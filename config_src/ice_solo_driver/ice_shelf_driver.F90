@@ -72,9 +72,9 @@ program SHELF_main
 #include <MOM_memory.h>
 
 
-!  type(forcing)         :: fluxes ! A structure that will be uninitialized till i figure out 
+!  type(forcing)         :: fluxes ! A structure that will be uninitialized till i figure out
           ! whether i can make the argument optional
-                                  
+
 !   type(ocean_grid_type), pointer :: grid ! A pointer to a structure containing
                                   ! metrics and related information.
   logical :: use_ice_shelf = .false. ! If .true., use the ice shelf model for
@@ -111,9 +111,9 @@ program SHELF_main
   type(time_type) :: restart_time ! The next time to write restart files.
 
   type(time_type) :: Time_step_shelf ! A time_type version of time_step.
-  
+
   real :: elapsed_time = 0.0    ! Elapsed time in this run in seconds. (years?)
-  
+
   logical :: elapsed_time_master  ! If true, elapsed time is used to set the
                                 ! model's master clock (Time).  This is needed
                                 ! if Time_step_shelf is not an exact
@@ -215,7 +215,7 @@ program SHELF_main
   else
     Start_time = set_time(0,0)
   endif
- 
+
   call Get_MOM_Input(param_file, dirs)
 
   ! Read all relevant parameters and write them to the model log.
@@ -232,7 +232,7 @@ program SHELF_main
                  "The time step for changing forcing, coupling with other \n"//&
                  "components, or potentially writing certain diagnostics.", &
                  units="s", fail_if_missing=.true.)
-  
+
   if (sum(date) >= 0) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
@@ -246,7 +246,7 @@ program SHELF_main
   endif
   Master_Time = Time
 !   grid => ice_shelf_CSp%grid
-   
+
   segment_start_time = Time
   elapsed_time = 0.0
 

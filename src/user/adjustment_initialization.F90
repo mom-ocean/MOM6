@@ -43,7 +43,7 @@ character(len=40) :: mod = "adjustment_initialization" ! This module's name.
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
 public adjustment_initialize_thickness
-public adjustment_initialize_temperature_salinity 
+public adjustment_initialize_temperature_salinity
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -103,12 +103,12 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file )
   call get_param(param_file,mod,"FRONT_WAVE_ASYM",front_wave_asym,       &
                  "Amplitude of frontal asymmetric perturbation",         &
                  default=0.)
- 
+
   ! WARNING: this routine specifies the interface heights so that the last layer
   !          is vanished, even at maximum depth. In order to have a uniform
   !          layer distribution, use this line of code within the loop:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz)
-  !          To obtain a thickness distribution where the last layer is 
+  !          To obtain a thickness distribution where the last layer is
   !          vanished and the other thicknesses uniformly distributed, use:
   !          e0(k) = -G%max_depth * real(k-1) / real(nz-1)
 
@@ -216,7 +216,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
   real       :: front_wave_amp, front_wave_length, front_wave_asym
   real      :: eta1d(SZK_(G)+1)
   character(len=20) :: verticalCoordinate
-  
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! Parameters used by main model initialization
@@ -238,7 +238,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
   T(:,:,:) = 0.0
   S(:,:,:) = 0.0
-  
+
   ! Linear salinity profile
   select case ( coordinateMode(verticalCoordinate) )
 
@@ -278,8 +278,8 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
    !    x = abs(S(1,1,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
    !    x = 1.-min(1., x)
    !    T(:,:,k) = x
-      end do 
-    
+      end do
+
     case default
       call MOM_error(FATAL,"adjustment_initialize_temperature_salinity: "// &
       "Unrecognized i.c. setup - set ADJUSTMENT_IC")
@@ -288,7 +288,7 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
 
 end subroutine adjustment_initialize_temperature_salinity
 
-!> \class adjustment_initialization
+!> \namespace adjustment_initialization
 !!
 !! The module configures the model for the geostrophic adjustment
 !! test case.

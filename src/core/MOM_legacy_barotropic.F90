@@ -91,7 +91,7 @@ module MOM_legacy_barotropic
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : safe_alloc_ptr, diag_ctrl, enable_averaging
@@ -109,7 +109,7 @@ use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, OBC_FLATHER
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
-use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_tidal_forcing, only : tidal_forcing_sensitivity, tidal_forcing_CS
 use MOM_time_manager, only : time_type, set_time, operator(+), operator(-)
@@ -348,14 +348,6 @@ end type memory_size_type
 
 
 type, private :: BT_OBC_type
-  logical, dimension(:,:), pointer :: &
-    OBC_mask_u => NULL(), &
-    OBC_mask_v => NULL()
-  integer, dimension(:,:), pointer :: &
-    OBC_direction_u => NULL(), &
-    OBC_direction_v => NULL(), &
-    OBC_kind_u => NULL(), &
-    OBC_kind_v => NULL()
   real, dimension(:,:), pointer :: &
     Cg_u => NULL(), &     ! The external wave speed at u-points, in m s-1.
     Cg_v => NULL(), &     ! The external wave speed at u-points, in m s-1.
@@ -377,6 +369,7 @@ end type BT_OBC_type
 integer :: id_clock_sync=-1, id_clock_calc=-1
 integer :: id_clock_calc_pre=-1, id_clock_calc_post=-1
 integer :: id_clock_pass_step=-1, id_clock_pass_pre=-1, id_clock_pass_post=-1
+logical :: apply_u_OBCs, apply_v_OBCs
 
 ! Enumeration values for various schemes
 integer, parameter :: HARMONIC        = 1
@@ -397,13 +390,13 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
                   visc_rem_u, visc_rem_v, etaav, uhbt_out, vhbt_out, OBC, &
                   BT_cont, eta_PF_start, &
                   taux_bot, tauy_bot, uh0, vh0, u_uh0, v_vh0)
-  type(ocean_grid_type),                   intent(inout) :: G
-  type(verticalGrid_type),                 intent(in)    :: GV
+  type(ocean_grid_type),                   intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                 intent(in)    :: GV   !< The ocean's vertical grid structure
   logical,                                 intent(in)    :: use_fluxes
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: U_in
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: V_in
   real, dimension(SZI_(G),SZJ_(G)),        intent(in)    :: eta_in
-  real,                                    intent(in)    :: dt
+  real,                                    intent(in)    :: dt   !< The time increment over which to integrate, in s.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v
   type(forcing),                           intent(in)    :: fluxes
@@ -659,7 +652,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   real :: dt_filt     ! The half-width of the barotropic filter, in s.
   integer :: nfilter
 
-  logical :: apply_OBCs, apply_u_OBCs, apply_v_OBCs, apply_OBC_flather
+  logical :: apply_OBCs, apply_OBC_flather
   type(BT_OBC_type) :: BT_OBC  ! A structure with all of this module's fields
                                ! for applying open boundary conditions.
   type(memory_size_type) :: MS
@@ -670,7 +663,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   integer :: pid_bt_rem_u, pid_Datu, pid_BT_force_u, pid_Cor_ref
   integer :: pid_eta_PF_1, pid_d_eta_PF, pid_uhbt0
   integer :: isv, iev, jsv, jev ! The valid array size at the end of a step.
-  integer :: stensil  ! The stensil size of the algorithm, often 1 or 2.
+  integer :: stencil  ! The stencil size of the algorithm, often 1 or 2.
   integer :: isvf, ievf, jsvf, jevf, num_cycles
   integer :: i, j, k, n
   integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
@@ -695,15 +688,15 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   project_velocity = CS%BT_project_velocity
 
   ! Figure out the fullest arrays that could be updated.
-  stensil = 1
+  stencil = 1
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
-      (CS%Nonlin_cont_update_period > 0)) stensil = 2
+      (CS%Nonlin_cont_update_period > 0)) stencil = 2
 
   num_cycles = 1
   if (CS%use_wide_halos) &
-    num_cycles = min((is-CS%isdw) / stensil, (js-CS%jsdw) / stensil)
-  isvf = is - (num_cycles-1)*stensil ; ievf = ie + (num_cycles-1)*stensil
-  jsvf = js - (num_cycles-1)*stensil ; jevf = je + (num_cycles-1)*stensil
+    num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
+  isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
+  jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
   do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
@@ -734,10 +727,10 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   apply_OBCs = .false. ; apply_u_OBCs = .false. ; apply_v_OBCs = .false.
   apply_OBC_flather = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
-    apply_OBC_flather = OBC%apply_OBC_u_flather_east .or. &
-        OBC%apply_OBC_u_flather_west .or. OBC%apply_OBC_v_flather_north .or. &
-        OBC%apply_OBC_v_flather_south
-    apply_OBCs = OBC%apply_OBC_u .or. OBC%apply_OBC_v .or. apply_OBC_flather
+    apply_u_OBCs = OBC%Flather_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
+    apply_v_OBCs = OBC%Flather_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
+    apply_OBC_flather = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
+    apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. apply_OBC_flather
 
     if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
       "legacy_btstep: Flather open boundary conditions have not yet been "// &
@@ -965,8 +958,6 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   if (apply_OBCs) then
     call set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, ievf-ie, use_BT_cont, &
                                      Datu, Datv, BTCL_u, BTCL_v)
-    apply_u_OBCs = associated(BT_OBC%OBC_mask_u)
-    apply_v_OBCs = associated(BT_OBC%OBC_mask_v)
   endif
 
 !   Here the vertical average accelerations due to the Coriolis, advective,
@@ -1449,39 +1440,31 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   endif
 
   if (CS%debug) then
-    call uchksum(uhbt, "BT uhbt",CS%debug_BT_HI,haloshift=0)
-    call vchksum(vhbt, "BT vhbt",CS%debug_BT_HI,haloshift=0)
-    call uchksum(ubt, "BT Initial ubt",CS%debug_BT_HI,haloshift=0)
-    call vchksum(vbt, "BT Initial vbt",CS%debug_BT_HI,haloshift=0)
-    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_HI,haloshift=0)
-    call uchksum(BT_force_u, "BT BT_force_u",CS%debug_BT_HI,haloshift=0)
-    call vchksum(BT_force_v, "BT BT_force_v",CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0)
+    call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0)
+    call hchksum(eta, "BT Initial eta",CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
+    call uvchksum("BT BT_force_[uv]", &
+                  BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=0)
     if (interp_eta_PF) then
-      call hchksum(GV%H_to_kg_m2*eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0)
+      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
     else
-      call hchksum(GV%H_to_kg_m2*eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0)
-      call hchksum(GV%H_to_kg_m2*eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0)
+      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, scale=GV%H_to_m)
     endif
-    call uchksum(Cor_ref_u, "BT Cor_ref_u",CS%debug_BT_HI,haloshift=0)
-    call vchksum(Cor_ref_v, "BT Cor_ref_v",CS%debug_BT_HI,haloshift=0)
-    call uchksum(uhbt0, "BT uhbt0",CS%debug_BT_HI,haloshift=0)
-    call vchksum(vhbt0, "BT vhbt0",CS%debug_BT_HI,haloshift=0)
+    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, &
+                  CS%debug_BT_HI, haloshift=0)
+    call uvchksum("BT [uv]hbt0", uhbt0,  vhbt0, CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
     if (.not. use_BT_cont) then
-      call uchksum(GV%H_to_m*Datu, "BT Datu",CS%debug_BT_HI,haloshift=1)
-      call vchksum(GV%H_to_m*Datv, "BT Datv",CS%debug_BT_HI,haloshift=1)
+      call uvchksum("BT Dat[uv]", Datu, Datv, &
+                    CS%debug_BT_HI,haloshift=1, scale=GV%H_to_m)
     endif
-    call uchksum(wt_u, "BT wt_u",G%HI,haloshift=1)
-    call vchksum(wt_v, "BT wt_v",G%HI,haloshift=1)
-    call uchksum(CS%frhatu, "BT frhatu",G%HI,haloshift=1)
-    call vchksum(CS%frhatv, "BT frhatv",G%HI,haloshift=1)
-    call uchksum(bc_accel_u, "BT bc_accel_u",G%HI,haloshift=0)
-    call vchksum(bc_accel_v, "BT bc_accel_v",G%HI,haloshift=0)
-    call uchksum(CS%IDatu, "BT IDatu",G%HI,haloshift=0)
-    call vchksum(CS%IDatv, "BT IDatv",G%HI,haloshift=0)
+    call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI,haloshift=1)
+    call uvchksum("BT frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI,haloshift=0)
+    call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI,haloshift=0)
     if (use_visc_rem) then
-      call uchksum(visc_rem_u, "BT visc_rem_u",G%HI,haloshift=1)
-      call vchksum(visc_rem_v, "BT visc_rem_v",G%HI,haloshift=1)
+      call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=1)
     endif
   endif
 
@@ -1567,7 +1550,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       enddo ; enddo
     endif
 
-    if ((iev - stensil < ie) .or. (jev - stensil < je)) then
+    if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
       if (id_clock_pass_step > 0) call cpu_clock_begin(id_clock_pass_step)
       if (G%nonblocking_updates) then
@@ -1583,8 +1566,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
       if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
-      isv = isv+stensil ; iev = iev-stensil
-      jsv = jsv+stensil ; jev = jev-stensil
+      isv = isv+stencil ; iev = iev-stencil
+      jsv = jsv+stencil ; jev = jev-stencil
     endif
 
     if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
@@ -1655,7 +1638,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 !$OMP                               Cor_ref_v,find_PF,find_Cor,apply_v_OBCs,dtbt,        &
 !$OMP                               project_velocity,be_proj,bebt,use_BT_cont,BTCL_v,    &
 !$OMP                               vhbt0,Datv,vbt_sum,wt_trans,vhbt_sum,vbt_wtd,wt_vel, &
-!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,         &
+!$OMP                               azon,bzon,czon,dzon,Cor_ref_u,gtot_E,gtot_W,OBC,     &
 !$OMP                               u_accel_bt,PFu_bt_sum,Coru_bt_sum,apply_u_OBCs,      &
 !$OMP                               bt_rem_u,BT_force_u,uhbt,BTCL_u,uhbt0,Datu,ubt_sum,  &
 !$OMP                               uhbt_sum,ubt_wtd)                                    &
@@ -1675,7 +1658,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
         if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
 
-        if (apply_v_OBCs) then ; if (BT_OBC%OBC_mask_v(i,J)) cycle ; endif
+        if (apply_v_OBCs) then ; if (OBC%segnum_v(i,J) /= OBC_NONE) cycle ; endif
 
         vel_prev = vbt(i,J)
         vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
@@ -1709,7 +1692,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
         if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
 
-        if (apply_u_OBCs) then ; if (BT_OBC%OBC_mask_u(I,j)) cycle ; endif
+        if (apply_u_OBCs) then ; if (OBC%segnum_u(I,j) /= OBC_NONE) cycle ; endif
 
         vel_prev = ubt(I,j)
         ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
@@ -1745,7 +1728,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         if (find_PF)  PFu_bt_sum(I,j)  = PFu_bt_sum(I,j) + wt_accel2(n) * gradP
         if (find_Cor) Coru_bt_sum(I,j) = Coru_bt_sum(I,j) + wt_accel2(n) * Cor
 
-        if (apply_u_OBCs) then ; if (BT_OBC%OBC_mask_u(I,j)) cycle ; endif
+        if (apply_u_OBCs) then ; if (OBC%segnum_u(I,j) /= OBC_NONE) cycle ; endif
 
         vel_prev = ubt(I,j)
         ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
@@ -1779,7 +1762,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
         if (find_PF)  PFv_bt_sum(i,J)  = PFv_bt_sum(i,J) + wt_accel2(n) * gradP
         if (find_Cor) Corv_bt_sum(i,J) = Corv_bt_sum(i,J) + wt_accel2(n) * Cor
 
-        if (apply_v_OBCs) then ; if (BT_OBC%OBC_mask_v(i,J)) cycle ; endif
+        if (apply_v_OBCs) then ; if (OBC%segnum_v(i,J) /= OBC_NONE) cycle ; endif
 
         vel_prev = vbt(i,J)
         vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
@@ -1808,14 +1791,14 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
            G, MS, iev-ie, dtbt, bebt, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v, &
            uhbt0, vhbt0)
       if (apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
-        if (BT_OBC%OBC_mask_u(I,j)) then
+        if (OBC%segnum_u(I,j) /= OBC_NONE) then
           ubt_sum(I,j) = ubt_sum(I,j) + wt_trans(n) * ubt_trans(I,j)
           uhbt_sum(I,j) = uhbt_sum(I,j) + wt_trans(n) * uhbt(I,j)
           ubt_wtd(I,j) = ubt_wtd(I,j) + wt_vel(n) * ubt(I,j)
         endif
       enddo ; enddo ; endif
       if (apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
-        if (BT_OBC%OBC_mask_v(i,J)) then
+        if (OBC%segnum_v(i,J) /= OBC_NONE) then
           vbt_sum(i,J) = vbt_sum(i,J) + wt_trans(n) * vbt_trans(i,J)
           vhbt_sum(i,J) = vhbt_sum(i,J) + wt_trans(n) * vhbt(i,J)
           vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
@@ -1824,8 +1807,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
     endif
 
     if (CS%debug_bt) then
-      call uchksum(uhbt, "BT uhbt just after OBC",CS%debug_BT_HI,haloshift=iev-ie)
-      call vchksum(vhbt, "BT vhbt just after OBC",CS%debug_BT_HI,haloshift=iev-ie)
+      call uvchksum("BT [uv]hbt just after OBC", &
+                    uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie)
     endif
 
 !$OMP parallel do default(none) shared(isv,iev,jsv,jev,n,eta,eta_src,dtbt,CS,uhbt,vhbt,eta_wtd,wt_eta)
@@ -1850,9 +1833,9 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
-      call uchksum(ubt, trim(mesg)//" ubt",CS%debug_BT_HI,haloshift=iev-ie)
-      call vchksum(vbt, trim(mesg)//" vbt",CS%debug_BT_HI,haloshift=iev-ie)
-      call hchksum(GV%H_to_kg_m2*eta, trim(mesg)//" eta",CS%debug_BT_HI,haloshift=iev-ie)
+      call uvchksum(trim(mesg)//" [uv]bt", &
+                    ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie)
+      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, scale=GV%H_to_m)
     endif
 
   enddo ! end of do n=1,ntimestep
@@ -2054,8 +2037,8 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
 end subroutine legacy_btstep
 
 subroutine legacy_set_dtbt(G, GV, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
-  type(ocean_grid_type),                    intent(inout) :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   type(legacy_barotropic_CS),               pointer       :: CS
   real, dimension(SZI_(G),SZJ_(G)),         intent(in), optional :: eta
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: pbce
@@ -2176,7 +2159,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                G, MS, halo, dtbt, bebt, use_BT_cont, Datu, Datv, &
                                BTCL_u, BTCL_v, uhbt0, vhbt0)
   type(ocean_OBC_type),              pointer       :: OBC
-  type(ocean_grid_type),             intent(inout) :: G
+  type(ocean_grid_type),             intent(inout) :: G    !< The ocean's grid structure
   type(memory_size_type),            intent(in)    :: MS
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt, uhbt, ubt_trans
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(inout) :: vbt, vhbt, vbt_trans
@@ -2232,14 +2215,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if (associated(BT_OBC%OBC_mask_u)) then
-    do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
-      if (BT_OBC%OBC_kind_u(I,j) == OBC_SIMPLE) then
+  if (apply_u_OBCs) then
+    do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_u(I,j))%specified) then
         uhbt(I,j) = BT_OBC%uhbt(I,j)
         ubt(I,j) = BT_OBC%ubt_outer(I,j)
         vel_trans = ubt(I,j)
-      elseif (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
+      elseif (OBC%segment(OBC%segnum_u(I,j))%Flather) then
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2251,7 +2234,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (h_in-BT_OBC%eta_outer_u(I,j)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2263,15 +2246,15 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_u(I,j)/H_u) * (BT_OBC%eta_outer_u(I,j)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_N) then
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_N) then
           if ((vbt(i,J-1)+vbt(i+1,J-1)) > 0.0) then
             ubt(I,j) = 2.0*ubt(I,j-1)-ubt(I,j-2)
           else
             ubt(I,j) = BT_OBC%ubt_outer(I,j)
           endif
           vel_trans = ubt(I,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_S) then
-          if ((vbt(i,J)+vbt(i+1,J)) > 0.0) then
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_S) then
+          if ((vbt(i,J)+vbt(i+1,J)) < 0.0) then
             ubt(I,j) = 2.0*ubt(I,j+1)-ubt(I,j+2)
           else
             ubt(I,j) = BT_OBC%ubt_outer(I,j)
@@ -2280,7 +2263,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       endif
 
-      if (BT_OBC%OBC_kind_u(I,j) /= OBC_SIMPLE) then
+      if (.not. OBC%segment(OBC%segnum_u(I,j))%specified) then
         if (use_BT_cont) then
           uhbt(I,j) = find_uhbt(vel_trans,BTCL_u(I,j)) + uhbt0(I,j)
         else
@@ -2292,14 +2275,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
     endif ; enddo ; enddo
   endif
 
-  if (associated(BT_OBC%OBC_mask_v)) then
-    do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
-      if (BT_OBC%OBC_kind_v(i,J) == OBC_SIMPLE) then
+  if (apply_v_OBCs) then
+    do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_v(i,J))%specified) then
         vhbt(i,J) = BT_OBC%vhbt(i,J)
         vbt(i,J) = BT_OBC%vbt_outer(i,J)
         vel_trans = vbt(i,J)
-      elseif (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
+      elseif (OBC%segment(OBC%segnum_v(i,J))%Flather) then
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
         !  h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2311,7 +2294,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (h_in-BT_OBC%eta_outer_v(i,J)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(I,j)            ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
         !  h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2323,7 +2306,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
               (BT_OBC%Cg_v(i,J)/H_v) * (BT_OBC%eta_outer_v(i,J)-h_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_E) then
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_E) then
           if ((ubt(I-1,j)+ubt(I-1,j+1)) > 0.0) then
             vbt(i,J) = 2.0*vbt(i-1,J)-vbt(i-2,J)
           else
@@ -2334,7 +2317,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
 !       cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J)           !
 !       vbt(i,J) = (vbt(i-1,J) + CFL*vbt(i,J)) / (1.0 + CFL)  !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_W) then
           if ((ubt(I,j)+ubt(I,j+1)) < 0.0) then
             vbt(i,J) = 2.0*vbt(i+1,J)-vbt(i+2,J)
           else
@@ -2348,7 +2331,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         endif
       endif
 
-      if (BT_OBC%OBC_kind_v(i,J) /= OBC_SIMPLE) then
+      if (OBC%segnum_v(i,J) /= OBC_SIMPLE) then
         if (use_BT_cont) then
            vhbt(i,J) = find_vhbt(vel_trans,BTCL_v(i,J)) + vhbt0(i,J)
         else
@@ -2369,7 +2352,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt
   real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt
   type(BT_OBC_type),                     intent(in)    :: BT_OBC
-  type(ocean_grid_type),                 intent(inout) :: G
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
   integer,                               intent(in)    :: halo
   real,                                  intent(in)    :: dtbt
 !   This subroutine applies the open boundary conditions on the free surface
@@ -2394,11 +2377,10 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
 
-  if ((OBC%apply_OBC_u_flather_east .or. OBC%apply_OBC_u_flather_west) .and. &
-      associated(BT_OBC%OBC_mask_u)) then
-    do j=js,je ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) then
-      if (BT_OBC%OBC_kind_u(I,j) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_E) then
+  if ((OBC%Flather_u_BCs_exist_globally) .and. apply_u_OBCs) then
+    do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
+        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j)            ! CFL
           u_inlet = cfl*ubt(I-1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i+1,j)    ! external
@@ -2407,7 +2389,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_u = BT_OBC%H_u(I,j)
           eta(i+1,j) = 2.0 * 0.5*((BT_OBC%eta_outer_u(I,j)+h_in) + &
               (H_u/BT_OBC%Cg_u(I,j))*(u_inlet-BT_OBC%ubt_outer(I,j))) - eta(i,j)
-        elseif (BT_OBC%OBC_direction_u(I,j) == OBC_DIRECTION_W) then
+        elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
           cfl = dtbt*BT_OBC%Cg_u(I,j)*G%IdxCu(I,j)                ! CFL
           u_inlet = cfl*ubt(I+1,j) + (1.0-cfl)*ubt(I,j)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i+1,j) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2421,11 +2403,10 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
     endif ; enddo ; enddo
   endif
 
-  if ((OBC%apply_OBC_v_flather_north .or. OBC%apply_OBC_v_flather_south) .and. &
-    associated(BT_OBC%OBC_mask_v)) then
-    do J=js-1,je ; do i=is,ie ; if (BT_OBC%OBC_mask_v(i,J)) then
-      if (BT_OBC%OBC_kind_v(i,J) == OBC_FLATHER) then
-        if (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_N) then
+  if ((OBC%Flather_v_BCs_exist_globally) .and. apply_v_OBCs) then
+    do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
+        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J-1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j) + (1.0-2.0*cfl)*eta(i,j+1)    ! external
@@ -2434,7 +2415,7 @@ subroutine apply_eta_OBCs(OBC, eta, ubt, vbt, BT_OBC, G, MS, halo, dtbt)
           H_v = BT_OBC%H_v(i,J)
           eta(i,j+1) = 2.0 * 0.5*((BT_OBC%eta_outer_v(i,J)+h_in) + &
               (H_v/BT_OBC%Cg_v(i,J))*(v_inlet-BT_OBC%vbt_outer(i,J))) - eta(i,j)
-        elseif (BT_OBC%OBC_direction_v(i,J) == OBC_DIRECTION_S) then
+        elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
           cfl = dtbt*BT_OBC%Cg_v(i,J)*G%IdyCv(i,J)                ! CFL
           v_inlet = cfl*vbt(i,J+1) + (1.0-cfl)*vbt(i,J)          ! Valid for cfl <1
 !          h_in = 2.0*cfl*eta(i,j+1) + (1.0-2.0*cfl)*eta(i,j)    ! external
@@ -2455,8 +2436,8 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   type(memory_size_type),                intent(in)    :: MS
   real, dimension(SZIW_(MS),SZJW_(MS)),  intent(in)    :: eta
   type(BT_OBC_type),                     intent(inout) :: BT_OBC
-  type(ocean_grid_type),                 intent(inout) :: G
-  type(verticalGrid_type),               intent(in)    :: GV
+  type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
   integer,                               intent(in)    :: halo
   logical,                               intent(in)    :: use_BT_cont
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu
@@ -2482,10 +2463,12 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
 !  (in)      BCTL_u - Structures of information used for a dynamic estimate
 !  (in)      BCTL_v - of the face areas at u- and v- points.
 
-  integer :: i, j, k, is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, k, is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
   logical :: OBC_used
+  type(OBC_segment_type), pointer  :: segment !< Open boundary segment
+
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -2501,32 +2484,26 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw))        ; BT_OBC%uhbt(:,:) = 0.0
   allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw))   ; BT_OBC%ubt_outer(:,:) = 0.0
   allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw)) ; BT_OBC%eta_outer_u(:,:) = 0.0
-  allocate(BT_OBC%OBC_mask_u(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_mask_u(:,:)=.false.
-  allocate(BT_OBC%OBC_kind_u(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_kind_u(:,:)=OBC_NONE
-  allocate(BT_OBC%OBC_direction_u(isdw-1:iedw,jsdw:jedw)); BT_OBC%OBC_direction_u(:,:)=OBC_NONE
 
   allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%Cg_v(:,:) = 0.0
   allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw))         ; BT_OBC%H_v(:,:) = 0.0
   allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw))        ; BT_OBC%vhbt(:,:) = 0.0
   allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
   allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
-  allocate(BT_OBC%OBC_mask_v(isdw:iedw,jsdw-1:jedw))  ; BT_OBC%OBC_mask_v(:,:)=.false.
-  allocate(BT_OBC%OBC_kind_v(isdw-1:iedw,jsdw:jedw))  ; BT_OBC%OBC_kind_v(:,:)=OBC_NONE
-  allocate(BT_OBC%OBC_direction_v(isdw-1:iedw,jsdw:jedw)); BT_OBC%OBC_direction_v(:,:)=OBC_NONE
 
-  if (associated(OBC%OBC_mask_u)) then
-    do j=js-1,je+1 ; do I=is-1,ie
-      BT_OBC%OBC_mask_u(I,j) = OBC%OBC_mask_u(I,j)
-      BT_OBC%OBC_kind_u(I,j) = OBC%OBC_kind_u(I,j)
-      BT_OBC%OBC_direction_u(I,j) = OBC%OBC_direction_u(I,j)
-    enddo ; enddo
-    if (OBC%apply_OBC_u) then
-      do k=1,nz ; do j=js,je ; do I=is-1,ie
-        BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + OBC%uh(I,j,k)
-      enddo ; enddo ; enddo
+  if (apply_u_OBCs) then
+    if (OBC%specified_u_BCs_exist_globally) then
+      do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_E_or_W .and. segment%specified) then
+          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
+            BT_OBC%uhbt(I,j) = BT_OBC%uhbt(I,j) + segment%normal_trans(I,j,k)
+          enddo ; enddo ; enddo
+        endif
+      enddo
     endif
-    do j=js,je ; do I=is-1,ie ; if (OBC%OBC_mask_u(I,j)) then
-      if (OBC%OBC_kind_u(I,j) == OBC_SIMPLE) then
+    do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_u(I,j))%specified) then
         if (use_BT_cont) then
           BT_OBC%ubt_outer(I,j) = uhbt_to_ubt(BT_OBC%uhbt(I,j),BTCL_u(I,j))
         else
@@ -2543,27 +2520,32 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         endif
       endif
     endif ; enddo ; enddo
-    if (associated(OBC%ubt_outer)) then ; do j=js,je ; do I=is-1,ie
-      BT_OBC%ubt_outer(I,j) = OBC%ubt_outer(I,j)
-    enddo ; enddo ; endif
-    if (associated(OBC%eta_outer_u)) then ; do j=js,je ; do I=is-1,ie
-      BT_OBC%eta_outer_u(I,j) = OBC%eta_outer_u(I,j)
-    enddo ; enddo ; endif
+    if (OBC%Flather_u_BCs_exist_globally) then
+      do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_E_or_W .and. segment%Flather) then
+          do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
+            BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
+            BT_OBC%eta_outer_u(I,j) = segment%eta(I,j)
+          enddo ; enddo
+        endif
+      enddo
+    endif
   endif
-  if (associated(OBC%OBC_mask_v)) then
-    do J=js-1,je ; do i=is-1,ie+1
-      BT_OBC%OBC_mask_v(i,J) = OBC%OBC_mask_v(i,J)
-      BT_OBC%OBC_kind_v(i,J) = OBC%OBC_kind_v(i,J)
-      BT_OBC%OBC_direction_v(i,J) = OBC%OBC_direction_v(i,J)
-    enddo ; enddo
-    if (OBC%apply_OBC_v) then
-      do k=1,nz ; do J=js-1,je ; do i=is,ie
-        BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + OBC%vh(i,J,k)
-      enddo ; enddo ; enddo
+  if (apply_v_OBCs) then
+    if (OBC%specified_v_BCs_exist_globally) then
+      do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_N_or_S .and. segment%specified) then
+          do k=1,nz ; do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
+            BT_OBC%vhbt(i,J) = BT_OBC%vhbt(i,J) + segment%normal_trans(i,J,k)
+          enddo ; enddo ; enddo
+        endif
+      enddo
     endif
 
-    do J=js-1,je ; do i=is,ie ; if (OBC%OBC_mask_v(i,J)) then
-      if (OBC%OBC_kind_v(i,J) == OBC_SIMPLE) then
+    do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      if (OBC%segnum_v(i,J) == OBC_SIMPLE) then
         if (use_BT_cont) then
           BT_OBC%vbt_outer(i,J) = vhbt_to_vbt(BT_OBC%vhbt(i,J),BTCL_v(i,J))
         else
@@ -2580,40 +2562,29 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         endif
       endif
     endif ; enddo ; enddo
-    if (associated(OBC%vbt_outer)) then ; do J=js-1,je ; do i=is,ie
-      BT_OBC%vbt_outer(i,J) = OBC%vbt_outer(i,J)
-    enddo ; enddo ; endif
-    if (associated(OBC%eta_outer_v)) then ; do J=js-1,je ; do i=is,ie
-      BT_OBC%eta_outer_v(i,J) = OBC%eta_outer_v(i,J)
-    enddo ; enddo ; endif
+    if (OBC%Flather_v_BCs_exist_globally) then
+      do n = 1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (segment%is_N_or_S .and. segment%Flather) then
+          do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
+            BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
+            BT_OBC%eta_outer_v(i,J) = segment%eta(i,J)
+          enddo ; enddo
+        endif
+      enddo
+    endif
   endif
-
-  ! Check whether the OBCs are used on this PE.
-  OBC_used = .false.
-  do j=js-1,je+1 ; do I=is-1,ie ; if (BT_OBC%OBC_mask_u(I,j)) OBC_used = .true. ; enddo ; enddo
-  if (.not. OBC_used) deallocate(BT_OBC%OBC_mask_u)
-
-  OBC_used = .false.
-  do J=js-1,je ; do i=is-1,ie+1 ; if (BT_OBC%OBC_mask_v(i,J)) OBC_used = .true. ; enddo ; enddo
-  if (.not. OBC_used) deallocate(BT_OBC%OBC_mask_v)
-
 end subroutine set_up_BT_OBC
 
 subroutine destroy_BT_OBC(BT_OBC)
   type(BT_OBC_type), intent(inout) :: BT_OBC
 
-  if (associated(BT_OBC%OBC_mask_u)) deallocate(BT_OBC%OBC_mask_u)
-  if (associated(BT_OBC%OBC_kind_u)) deallocate(BT_OBC%OBC_kind_u)
-  if (associated(BT_OBC%OBC_direction_u)) deallocate(BT_OBC%OBC_direction_u)
   deallocate(BT_OBC%Cg_u)
   deallocate(BT_OBC%H_u)
   deallocate(BT_OBC%uhbt)
   deallocate(BT_OBC%ubt_outer)
   deallocate(BT_OBC%eta_outer_u)
 
-  if (associated(BT_OBC%OBC_mask_v)) deallocate(BT_OBC%OBC_mask_v)
-  if (associated(BT_OBC%OBC_kind_v)) deallocate(BT_OBC%OBC_kind_v)
-  if (associated(BT_OBC%OBC_direction_v)) deallocate(BT_OBC%OBC_direction_v)
   deallocate(BT_OBC%Cg_v)
   deallocate(BT_OBC%H_v)
   deallocate(BT_OBC%vhbt)
@@ -2623,9 +2594,9 @@ end subroutine destroy_BT_OBC
 
 
 subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
-  type(ocean_grid_type),                  intent(inout) :: G
-  type(verticalGrid_type),                intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h
+  type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(legacy_barotropic_CS),             pointer       :: CS
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in), optional :: h_u
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in), optional :: h_v
@@ -2695,13 +2666,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith)
   do j=js-1,je+1
     if (present(h_u)) then
-      do I=is-2,ie+1 ; hatutot(I) = h_u(i,j,1) ; enddo
+      do I=is-2,ie+1 ; hatutot(I) = h_u(I,j,1) ; enddo
       do k=2,nz ; do I=is-2,ie+1
-        hatutot(I) = hatutot(I) + h_u(i,j,k)
+        hatutot(I) = hatutot(I) + h_u(I,j,k)
       enddo ; enddo
       do I=is-2,ie+1 ; Ihatutot(I) = 1.0 / (hatutot(I) + h_neglect) ; enddo
       do k=1,nz ; do I=is-2,ie+1
-        CS%frhatu(I,j,k) = h_u(i,j,k) * Ihatutot(I)
+        CS%frhatu(I,j,k) = h_u(I,j,k) * Ihatutot(I)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -2758,13 +2729,13 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
 !$OMP                          private(hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith)
   do J=js-2,je+1
     if (present(h_v)) then
-      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,j,1) ; enddo
+      do i=is-1,ie+1 ; hatvtot(i) = h_v(i,J,1) ; enddo
       do k=2,nz ; do i=is-1,ie+1
-        hatvtot(i) = hatvtot(i) + h_v(i,j,k)
+        hatvtot(i) = hatvtot(i) + h_v(i,J,k)
       enddo ; enddo
       do i=is-1,ie+1 ; Ihatvtot(i) = 1.0 / (hatvtot(i) + h_neglect) ; enddo
       do k=1,nz ; do i=is-1,ie+1
-        CS%frhatv(i,J,k) = h_v(i,j,k) * Ihatvtot(i)
+        CS%frhatv(i,J,k) = h_v(i,J,k) * Ihatvtot(i)
       enddo ; enddo
     else
       if (CS%hvel_scheme == ARITHMETIC) then
@@ -2861,15 +2832,14 @@ subroutine legacy_btcalc(h, G, GV, CS, h_u, h_v, may_use_default)
   endif
 
   if (CS%debug) then
-    call uchksum(CS%frhatu, "btcalc frhatu",G%HI,haloshift=1)
-    call vchksum(CS%frhatv, "btcalc frhatv",G%HI,haloshift=1)
-    call hchksum(GV%H_to_m*h, "btcalc h",G%HI,haloshift=1)
+    call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, haloshift=1)
+    call hchksum(h, "btcalc h", G%HI, haloshift=1, scale=GV%H_to_m)
   endif
 
 end subroutine legacy_btcalc
 
 function find_uhbt(u, BTC) result(uhbt)
-  real, intent(in) :: u
+  real, intent(in) :: u    !< The zonal velocity, in m s-1
   type(local_BT_cont_u_type), intent(in) :: BTC
   real :: uhbt ! The result
   ! This function evaluates the zonal transport function.
@@ -2986,7 +2956,7 @@ function uhbt_to_ubt(uhbt, BTC, guess) result(ubt)
 end function uhbt_to_ubt
 
 function find_vhbt(v, BTC) result(vhbt)
-  real, intent(in) :: v
+  real, intent(in) :: v    !< The meridional velocity, in m s-1
   type(local_BT_cont_v_type), intent(in) :: BTC
   real :: vhbt ! The result
   ! This function evaluates the meridional transport function.
@@ -3108,7 +3078,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, MS, BT_Domain, ha
   type(memory_size_type),                                intent(in)    :: MS
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(out) :: BTCL_u
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(out) :: BTCL_v
-  type(ocean_grid_type),                                 intent(inout) :: G
+  type(ocean_grid_type),                                 intent(inout) :: G    !< The ocean's grid structure
   type(MOM_domain_type),                                intent(inout) :: BT_Domain
   integer,                                     optional, intent(in)    :: halo
 !   This subroutine sets up reordered versions of the BT_cont type in the
@@ -3216,7 +3186,7 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, halo, maximize)
   type(memory_size_type),                     intent(in)    :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
-  type(ocean_grid_type),                      intent(in)  :: G
+  type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
   integer,                          optional, intent(in)  :: halo
   logical,                          optional, intent(in)  :: maximize
   !   This subroutine uses the BTCL types to find typical or maximum face
@@ -3256,8 +3226,8 @@ subroutine find_face_areas(Datu, Datv, G, GV, CS, MS, rescale_faces, eta, halo, 
   type(memory_size_type),                   intent(in) :: MS
   real, dimension(MS%isdw-1:MS%iedw,MS%jsdw:MS%jedw), intent(out)   :: Datu
   real, dimension(MS%isdw:MS%iedw,MS%jsdw-1:MS%jedw), intent(out)   :: Datv
-  type(ocean_grid_type),                    intent(in) :: G
-  type(verticalGrid_type),                  intent(in) :: GV
+  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in) :: GV   !< The ocean's vertical grid structure
   type(legacy_barotropic_CS),               pointer    :: CS
   logical,                        optional, intent(in) :: rescale_faces
   real, dimension(MS%isdw:MS%iedw,MS%jsdw:MS%jedw), optional, intent(in) :: eta
@@ -3364,9 +3334,9 @@ end subroutine find_face_areas
 
 subroutine legacy_bt_mass_source(h, eta, fluxes, set_cor, dt_therm, &
                                  dt_since_therm, G, GV, CS)
-  type(ocean_grid_type),                intent(in) :: G
-  type(verticalGrid_type),              intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),                intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),              intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)),     intent(in) :: eta
   type(forcing),                        intent(in) :: fluxes
   logical,                              intent(in) :: set_cor
@@ -3470,14 +3440,14 @@ end subroutine legacy_bt_mass_source
 
 subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                            restart_CS, BT_cont, tides_CSp)
-  type(ocean_grid_type),              intent(inout) :: G
-  type(verticalGrid_type),            intent(in)    :: GV
-  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u
-  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h
+  type(ocean_grid_type),              intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u    !< The zonal velocity, in m s-1
+  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v    !< The meridional velocity, in m s-1
+  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, intent(in), dimension(SZI_(G),SZJ_(G))      :: eta
   type(time_type), target,            intent(in)    :: Time
-  type(param_file_type),              intent(in)    :: param_file
+  type(param_file_type),              intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,            intent(inout) :: diag
   type(legacy_barotropic_CS),         pointer       :: CS
   type(MOM_restart_CS),               pointer       :: restart_CS
@@ -3802,7 +3772,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
     CS%debug_BT_HI%IedB=CS%iedw
     CS%debug_BT_HI%JsdB=CS%jsdw-1
     CS%debug_BT_HI%JedB=CS%jedw
-    
+
   endif
 
   ! IareaT, IdxCu, and IdyCv need to be allocated with wide halos.
@@ -3960,7 +3930,7 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
       CS%ubtav(I,j) = 0.0 ; CS%vbtav(i,J) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(i,J,k) * u(i,J,k)
+      CS%ubtav(I,j) = CS%ubtav(I,j) + CS%frhatu(I,j,k) * u(I,j,k)
       CS%vbtav(I,j) = CS%vbtav(I,j) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
   endif
@@ -3976,17 +3946,17 @@ subroutine legacy_barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, C
   ! The following is only valid with the Boussinesq approximation.
 ! if (GV%Boussinesq) then
     do j=js,je ; do I=is-1,ie
-      CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
+      CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (G%bathyT(i+1,j) + G%bathyT(i,j))
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
+      CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (G%bathyT(i,j+1) + G%bathyT(i,j))
     enddo ; enddo
 ! else
 !   do j=js,je ; do I=is-1,ie
-!     CS%IDatu(I,j) = G%mask2dCu(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
+!     CS%IDatu(I,j) = G%mask2dCu(I,j) * 2.0 / (GV%Rho0*(G%bathyT(i+1,j) + G%bathyT(i,j)))
 !   enddo ; enddo
 !   do J=js-1,je ; do i=is,ie
-!     CS%IDatv(i,J) = G%mask2dCv(i,j) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
+!     CS%IDatv(i,J) = G%mask2dCv(i,J) * 2.0 / (GV%Rho0*(G%bathyT(i,j+1) + G%bathyT(i,j)))
 !   enddo ; enddo
 ! endif
 
@@ -4038,8 +4008,8 @@ end subroutine legacy_barotropic_end
 
 subroutine register_legacy_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   type(hor_index_type),    intent(in) :: HI
-  type(verticalGrid_type), intent(in) :: GV
-  type(param_file_type),   intent(in) :: param_file
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
   type(legacy_barotropic_CS), pointer :: CS
   type(MOM_restart_CS),    pointer    :: restart_CS
 ! This subroutine is used to register any fields from MOM_barotropic.F90

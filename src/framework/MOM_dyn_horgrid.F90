@@ -245,10 +245,12 @@ subroutine create_dyn_horgrid(G, HI, bathymetry_at_vel)
     allocate(G%Dopen_v(isd:ied, JsdB:JedB))  ; G%Dopen_v(:,:) = 0.0
   endif
 
-  allocate(G%gridLonT(isg:ieg))       ; G%gridLonT(:) = 0.0
-  allocate(G%gridLonB(G%IsgB:G%IegB)) ; G%gridLonB(:) = 0.0
-  allocate(G%gridLatT(jsg:jeg))       ; G%gridLatT(:) = 0.0
-  allocate(G%gridLatB(G%JsgB:G%JegB)) ; G%gridLatB(:) = 0.0
+  ! gridLonB and gridLatB are used as edge values in some cases, so they
+  ! always need to use symmetric memory allcoations.
+  allocate(G%gridLonT(isg:ieg))   ; G%gridLonT(:) = 0.0
+  allocate(G%gridLonB(isg-1:ieg)) ; G%gridLonB(:) = 0.0
+  allocate(G%gridLatT(jsg:jeg))   ; G%gridLatT(:) = 0.0
+  allocate(G%gridLatB(jsg-1:jeg)) ; G%gridLatB(:) = 0.0
 
 end subroutine create_dyn_horgrid
 

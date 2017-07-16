@@ -98,7 +98,7 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
   if (present(Kd_int_add)) store_Kd_add = associated(Kd_int_add)
 
   if (.not.range_OK(CS%lat_range)) then
-    write(mesg, '(4(1pe15.6))') CS%lat_range(1:4) 
+    write(mesg, '(4(1pe15.6))') CS%lat_range(1:4)
     call MOM_error(FATAL, "user_set_diffusivity: bad latitude range: \n  "//&
                     trim(mesg))
   endif
@@ -113,12 +113,12 @@ subroutine user_change_diff(h, tv, G, CS, Kd, Kd_int, T_f, S_f, Kd_int_add)
   do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
-      do k=1,nz 
+      do k=1,nz
         call calculate_density(T_f(:,j,k),S_f(:,j,k),p_ref,Rcv(:,k),&
                                is,ie-is+1,tv%eqn_of_state)
       enddo
     else
-      do k=1,nz 
+      do k=1,nz
         call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_ref,Rcv(:,k),&
                                is,ie-is+1,tv%eqn_of_state)
       enddo
@@ -159,11 +159,11 @@ end subroutine user_change_diff
 function range_OK(range) result(OK)
   real, dimension(4), intent(in) :: range  !< Four values to check.
   logical                        :: OK     !< Return value.
-  
-  
+
+
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
         (range(3) <= range(4)))
-  
+
 end function range_OK
 
 !> This subroutine returns a value that goes smoothly from 0 to 1, stays
@@ -250,9 +250,9 @@ subroutine user_change_diff_init(Time, G, param_file, diag, CS)
                  "checking whether a point fits into range of latitudes.", &
                  default=.false.)
   endif
- 
+
  if (.not.range_OK(CS%lat_range)) then
-    write(mesg, '(4(1pe15.6))') CS%lat_range(1:4) 
+    write(mesg, '(4(1pe15.6))') CS%lat_range(1:4)
     call MOM_error(FATAL, "user_set_diffusivity: bad latitude range: \n  "//&
                     trim(mesg))
   endif
@@ -274,7 +274,7 @@ subroutine user_change_diff_end(CS)
 
 end subroutine user_change_diff_end
 
-!> \class user_change_diffusivity
+!> \namespace user_change_diffusivity
 !!
 !!  By Robert Hallberg, May 2012
 !!

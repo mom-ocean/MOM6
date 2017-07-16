@@ -45,7 +45,7 @@ use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_checksums, only : hchksum
+use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -62,7 +62,7 @@ implicit none ; private
 
 public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
-type, public :: Kappa_shear_CS ! ; private
+type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
                              ! shear-entrainment. The theoretical value is 0.25.
                              ! The values found by Jackson et al. are 0.25-0.35.
@@ -118,11 +118,11 @@ contains
 
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  type(ocean_grid_type),                      intent(in)    :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
+  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                      intent(in)    :: tv
   real, dimension(:,:),                       pointer       :: p_surf
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io
@@ -503,8 +503,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         I_L2_bdry(K) = (dist_from_top(K) + dist_from_bot)**2 / &
                          (dist_from_top(K) * dist_from_bot)**2
       enddo
-      f2 = 0.25*((G%CoriolisBu(i,j)**2 + G%CoriolisBu(i-1,j-1)**2) + &
-                 (G%CoriolisBu(i,j-1)**2 + G%CoriolisBu(i-1,j)**2))
+      f2 = 0.25*((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
 
       ! Calculate thermodynamic coefficients and an initial estimate of N2.
       if (use_temperature) then
@@ -1644,9 +1644,9 @@ end subroutine find_kappa_tke
 
 logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target, intent(inout) :: diag
   type(Kappa_shear_CS),    pointer       :: CS
 ! Arguments: Time - The current model time.
@@ -1790,7 +1790,7 @@ logical function kappa_shear_is_used(param_file)
 ! Reads the parameter "USE_JACKSON_PARAM" and returns state.
 !   This function allows other modules to know whether this parameterization will
 ! be used without needing to duplicate the log entry.
-  type(param_file_type), intent(in) :: param_file
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
   call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log = .true.)
 end function kappa_shear_is_used

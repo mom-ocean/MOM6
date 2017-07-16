@@ -73,7 +73,7 @@ subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, &
        "The requested boundary condition value array is not associated.")
 
   Array_in => BC_struc%bc(BC_index)%field(BC_element)%values
-  
+
   if (present(is)) then ; is0 = is ; else ; is0 = LBOUND(array_out,1) ; endif
   if (present(ie)) then ; ie0 = ie ; else ; ie0 = UBOUND(array_out,1) ; endif
   if (present(js)) then ; js0 = js ; else ; js0 = LBOUND(array_out,2) ; endif
@@ -136,7 +136,7 @@ subroutine set_coupler_values(array_in, BC_struc, BC_index, BC_element, &
        "The requested boundary condition value array is not associated.")
 
   Array_out => BC_struc%bc(BC_index)%field(BC_element)%values
-  
+
   if (present(is)) then ; is0 = is ; else ; is0 = LBOUND(array_in,1) ; endif
   if (present(ie)) then ; ie0 = ie ; else ; ie0 = UBOUND(array_in,1) ; endif
   if (present(js)) then ; js0 = js ; else ; js0 = LBOUND(array_in,2) ; endif

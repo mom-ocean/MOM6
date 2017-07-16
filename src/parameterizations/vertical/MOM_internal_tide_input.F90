@@ -45,7 +45,7 @@ use MOM_cpu_clock, only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_diag_mediator, only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_diag_to_Z, only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
-use MOM_checksums, only : hchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -91,11 +91,11 @@ end type int_tide_input_type
 contains
 
 subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(in)    :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
+  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                     intent(in)    :: tv
   type(forcing),                             intent(in)    :: fluxes
   type(int_tide_input_type),                 intent(inout) :: itide
@@ -165,9 +165,9 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, CS)
 end subroutine set_int_tide_input
 
 subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, N2_bot)
-  type(ocean_grid_type),                    intent(in)   :: G
-  type(verticalGrid_type),                  intent(in)   :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h
+  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(thermo_var_ptrs),                    intent(in)   :: tv
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
   real, dimension(SZI_(G),SZJ_(G)),         intent(in)   :: h2
@@ -274,9 +274,9 @@ end subroutine find_N2_bottom
 
 subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(in)    :: G
-  type(verticalGrid_type),  intent(in)    :: GV
-  type(param_file_type),    intent(in)    :: param_file
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,  intent(inout) :: diag
   type(int_tide_input_CS),   pointer      :: CS
   type(int_tide_input_type), pointer      :: itide

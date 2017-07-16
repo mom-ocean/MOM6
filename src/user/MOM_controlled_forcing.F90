@@ -135,7 +135,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   day_end = day_start + set_time(floor(dt+0.5))
 
   do j=js,je ; do i=is,ie
-    virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0   
+    virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0
   enddo ; enddo
 
   if (CS%do_integrated) then
@@ -165,8 +165,8 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
         (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                           (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
 
-      virt_heat(i,j) = virt_heat(i,j) + CS%heat_0(i,j)   
-      virt_precip(i,j) = virt_precip(i,j) + CS%precip_0(i,j)   
+      virt_heat(i,j) = virt_heat(i,j) + CS%heat_0(i,j)
+      virt_precip(i,j) = virt_precip(i,j) + CS%precip_0(i,j)
     enddo ; enddo
   endif
 
@@ -175,7 +175,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     call get_date(day_start, yr, mon, day, hr, min, sec)
     mr_st = CS%num_cycle * (time_type_to_real(day_start - set_date(yr, 1, 1)) / &
                    time_type_to_real(set_date(yr+1, 1, 1) - set_date(yr, 1, 1)))
-    
+
     call get_date(day_end, yr, mon, day, hr, min, sec)
     mr_end = CS%num_cycle * (time_type_to_real(day_end - set_date(yr, 1, 1)) / &
                    time_type_to_real(set_date(yr+1, 1, 1) - set_date(yr, 1, 1)))
@@ -183,12 +183,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! The Chapeau functions are centered at whole integer values that are nominally
     ! the end of the month to enable simple conversion from the fractional-years times
     ! CS%num_cycle.
-    
+
     ! The month-average temperatures have as an index the month number.
 
     m_end = periodic_int(real(ceiling(mr_end)), CS%num_cycle)
     m_mid = periodic_int(real(ceiling(mr_st)), CS%num_cycle)
-    m_st = periodic_int(mr_st, CS%num_cycle) 
+    m_st = periodic_int(mr_st, CS%num_cycle)
 
     mr_st = periodic_real(mr_st, CS%num_cycle)
     mr_end = periodic_real(mr_end, CS%num_cycle)
@@ -199,7 +199,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     else ; mr_mid = periodic_real(real(m_mid), CS%num_cycle) ; endif
 
     ! There may be two cells that run from mr_st to mr_mid and mr_mid to mr_end.
-   
+
     ! The values of m for weights are all calculated relative to mr_prev, so
     ! check whether mr_mid, etc., need to be shifted by CS%num_cycle, so that these
     ! values satisfiy  mr_prev <= mr_st < mr_mid <= mr_end <= mr_next.
@@ -228,11 +228,11 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     if ((wt_st > 1.0) .or. (wt_end > 1.0) .or. (wt_mid > 1.0)) &
       call MOM_error(FATAL, "apply_ctrl_forcing: Excessive m weights")
 
-    ! Add to vert_heat and vert_precip.  
+    ! Add to vert_heat and vert_precip.
     do j=js,je ; do i=is,ie
       virt_heat(i,j) = virt_heat(i,j) + (wt_st * CS%heat_cyc(i,j,m_st) + &
                         (wt_mid * CS%heat_cyc(i,j,m_mid) + &
-                         wt_end * CS%heat_cyc(i,j,m_end))) 
+                         wt_end * CS%heat_cyc(i,j,m_end)))
       virt_precip(i,j) = virt_precip(i,j) + (wt_st * CS%precip_cyc(i,j,m_st) + &
                         (wt_mid * CS%precip_cyc(i,j,m_mid) + &
                          wt_end * CS%precip_cyc(i,j,m_end)))
@@ -244,7 +244,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! The Chapeau functions are centered at whole integer values that are nominally
     ! the end of the month to enable simple conversion from the fractional-years times
     ! CS%num_cycle.
-    
+
     ! The month-average temperatures have as an index the month number, so the averages
     ! apply to indicies m_end and m_mid.
 
@@ -314,7 +314,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       enddo ; enddo
       CS%avg_time(m_u3) = -1.0
     endif
-    
+
     dt1_heat_rate = wt_per1 * dt * CS%heat_cyc_rate
     dt1_prec_rate = wt_per1 * dt * CS%prec_cyc_rate
     dt2_heat_rate = (1.0-wt_per1) * dt * CS%heat_cyc_rate
@@ -446,11 +446,11 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
     "ENABLE_THERMODYNAMICS defined.")
 
   allocate(CS)
-  
+
   CS%do_integrated = .true. ; CS%num_cycle = 0
   call read_param(param_file, "CTRL_FORCE_INTEGRATED", CS%do_integrated)
   call read_param(param_file, "CTRL_FORCE_NUM_CYCLE", CS%num_cycle)
-  
+
   if (CS%do_integrated) then
     call safe_alloc_ptr(CS%heat_0,isd,ied,jsd,jed) ; CS%heat_0(:,:) = 0.0
     call safe_alloc_ptr(CS%precip_0,isd,ied,jsd,jed) ; CS%precip_0(:,:) = 0.0
@@ -530,7 +530,7 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   if (.not.associated(CS)) return
 
   CS%diag => diag
-  
+
   call get_param(param_file, mod, "CTRL_FORCE_HEAT_INT_RATE", CS%heat_int_rate, &
                  "The integrated rate at which heat flux anomalies are \n"//&
                  "accumulated.", units="s-1", default=0.0)
@@ -591,7 +591,7 @@ subroutine controlled_forcing_end(CS)
 
 end subroutine controlled_forcing_end
 
-!> \class MOM_controlled_forcing
+!> \namespace mom_controlled_forcing
 !!                                                                     *
 !!  By Robert Hallberg, July 2011                                      *
 !!                                                                     *
