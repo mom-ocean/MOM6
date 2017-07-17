@@ -134,15 +134,31 @@ end type set_visc_CS
 
 contains
 
+!>   The following subroutine calculates the thickness of the bottom
+!! boundary layer and the viscosity within that layer.  A drag law is
+!! used, either linearized about an assumed bottom velocity or using
+!! the actual near-bottom velocities combined with an assumed
+!! unresolved velocity.  The bottom boundary layer thickness is
+!! limited by a combination of stratification and rotation, as in the
+!! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
+!! calculate the thickness and viscosity every time step; instead
+!! previous values may be used.
 subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
-  type(ocean_grid_type),                  intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(in) :: tv
-  type(vertvisc_type),                    intent(inout) :: visc
-  type(set_visc_CS),                         pointer    :: CS
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                            intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                            intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),    intent(in)    :: tv   !< A structure containing pointers to any
+                                                  !! available thermodynamic fields. Absent fields
+                                                  !! have NULL ptrs..
+  type(vertvisc_type),      intent(inout) :: visc !< A structure containing vertical viscosities and
+                                                  !! related fields.
+  type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
+                                                  !! call to vertvisc_init.
 !   The following subroutine calculates the thickness of the bottom
 ! boundary layer and the viscosity within that layer.  A drag law is
 ! used, either linearized about an assumed bottom velocity or using
@@ -943,6 +959,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
 end subroutine set_viscous_BBL
 
+!> This subroutine finds a thickness-weighted value of v at the u-points.
 function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
@@ -967,6 +984,7 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv)
            (hwt(4) * v(i+1,J,k) + hwt(1) * v(i,J-1,k))) / hwt_tot
 end function set_v_at_u
 
+!> This subroutine finds a thickness-weighted value of u at the v-points.
 function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
@@ -991,17 +1009,32 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu)
            (hwt(1) * u(I-1,j,k) + hwt(4) * u(I,j+1,k))) / hwt_tot
 end function set_u_at_v
 
+!>   The following subroutine calculates the thickness of the surface boundary
+!! layer for applying an elevated viscosity.  A bulk Richardson criterion or
+!! the thickness of the topmost NKML layers (with a bulk mixed layer) are
+!! currently used.  The thicknesses are given in terms of fractional layers, so
+!! that this thickness will move as the thickness of the topmost layers change.
 subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
-  type(ocean_grid_type),               intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),             intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),               intent(in)    :: tv
-  type(forcing),                       intent(in)    :: fluxes
-  type(vertvisc_type),                 intent(inout) :: visc
-  real,                                intent(in)    :: dt
-  type(set_visc_CS),                   pointer       :: CS
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
+                                                 !! thermodynamic fields. Absent fields have
+                                                 !! NULL ptrs.
+  type(forcing),           intent(in)    :: fluxes !< A structure containing pointers to any
+                                                 !! possible forcing fields. Unused fields have
+                                                 !! NULL ptrs.
+  type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
+                                                 !! related fields.
+  real,                    intent(in)    :: dt   !< Time increment in s.
+  type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
+                                                 !! call to vertvisc_init.
+
 !   The following subroutine calculates the thickness of the surface boundary
 ! layer for applying an elevated viscosity.  A bulk Richardson criterion or
 ! the thickness of the topmost NKML layers (with a bulk mixed layer) are
@@ -1704,12 +1737,18 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
 end subroutine set_viscous_ML
 
+!>   This subroutine is used to register any fields associated with the
+!! vertvisc_type.
 subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
-  type(hor_index_type),    intent(in)    :: HI
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(vertvisc_type),     intent(inout) :: visc
-  type(MOM_restart_CS),    pointer       :: restart_CS
+  type(hor_index_type),    intent(in)    :: HI         !< A horizontal index type structure.
+  type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                       !! parameters.
+  type(vertvisc_type),     intent(inout) :: visc       !< A structure containing vertical
+                                                       !! viscosities and related fields.
+                                                       !! Allocated here.
+  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control
+                                                       !! structure.
 !   This subroutine is used to register any fields associated with the
 ! vertvisc_type.
 ! Arguments: HI - A horizontal index type structure.
@@ -1773,13 +1812,17 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 end subroutine set_visc_register_restarts
 
 subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(vertvisc_type),     intent(inout) :: visc
-  type(set_visc_CS),       pointer       :: CS
+  type(time_type), target, intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
+                                                 !! related fields.  Allocated here.
+  type(set_visc_CS),       pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module
   type(ocean_OBC_type),    pointer       :: OBC
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
