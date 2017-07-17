@@ -1176,7 +1176,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   do n=1,OBC%number_of_segments
      segment=>OBC%segment(n)
      if (.not. segment%on_pe) cycle
-     if (segment%oblique) call gradient_at_q_points(G,segment,u_old,v_old)
+     if (segment%oblique) call gradient_at_q_points(G, segment, u_new, v_new, u_old, v_old)
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IscB
        do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
@@ -1443,11 +1443,13 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
 end subroutine open_boundary_zero_normal_flow
 
 !> Calculate the tangential gradient of the normal flow at the boundary q-points.
-subroutine gradient_at_q_points(G,segment,uvel,vvel)
+subroutine gradient_at_q_points(G, segment, uvel, vvel, uold, vold)
   type(ocean_grid_type), intent(in) :: G !< Ocean grid structure
   type(OBC_segment_type), pointer :: segment !< OBC segment structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uvel !< zonal velocity
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vvel !< meridional velocity
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uold !< zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vold !< meridional velocity
   integer :: i,j,k
 
   if (.not. segment%on_pe) return
@@ -1463,7 +1465,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
           segment%grad_normal(J,1,k) = (uvel(I-1,j+1,k)-uvel(I-1,j,k)) * G%mask2dBu(I-1,J)
-          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
+          segment%grad_normal(J,2,k) = (uold(I,j+1,k)-uold(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! western segment
@@ -1471,7 +1473,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       do k=1,G%ke
         do J=segment%HI%JscB,segment%HI%JecB
           segment%grad_normal(J,1,k) = (uvel(I+1,j+1,k)-uvel(I+1,j,k)) * G%mask2dBu(I+1,J)
-          segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
+          segment%grad_normal(J,2,k) = (uold(I,j+1,k)-uold(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif
@@ -1486,7 +1488,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
           segment%grad_normal(I,1,k) = (vvel(i+1,J-1,k)-vvel(i,J-1,k)) * G%mask2dBu(I,J-1)
-          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
+          segment%grad_normal(I,2,k) = (vold(i+1,J,k)-vold(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! south segment
@@ -1494,7 +1496,7 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
       do k=1,G%ke
         do I=segment%HI%IscB,segment%HI%IecB
           segment%grad_normal(I,1,k) = (vvel(i+1,J+1,k)-vvel(i,J+1,k)) * G%mask2dBu(I,J+1)
-          segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
+          segment%grad_normal(I,2,k) = (vold(i+1,J,k)-vold(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     endif
