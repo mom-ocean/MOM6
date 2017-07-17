@@ -2404,8 +2404,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
-          grad(I-1,J) = (ubt_old(I-1,j+1) - ubt_old(I-1,j)) * G%mask2dBu(I-1,J)
-          grad(I-1,J-1) = (ubt_old(I-1,j) - ubt_old(I-1,j-1)) * G%mask2dBu(I-1,J-1)
+          grad(I-1,J) = (ubt(I-1,j+1) - ubt(I-1,j)) * G%mask2dBu(I-1,J)
+          grad(I-1,J-1) = (ubt(I-1,j) - ubt(I-1,j-1)) * G%mask2dBu(I-1,J-1)
           dhdt = ubt_old(I-1,j)-ubt(I-1,j) !old-new
           dhdx = ubt(I-1,j)-ubt(I-2,j) !in new time backward sasha for I-1
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
@@ -2448,8 +2448,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
-          grad(I+1,J) = (ubt_old(I+1,j+1) - ubt_old(I+1,j)) * G%mask2dBu(I+1,J)
-          grad(I+1,J-1) = (ubt_old(I+1,j) - ubt_old(I+1,j-1)) * G%mask2dBu(I+1,J-1)
+          grad(I+1,J) = (ubt(I+1,j+1) - ubt(I+1,j)) * G%mask2dBu(I+1,J)
+          grad(I+1,J-1) = (ubt(I+1,j) - ubt(I+1,j-1)) * G%mask2dBu(I+1,J-1)
           dhdt = ubt_old(I+1,j)-ubt(I+1,j) !old-new
           dhdx = ubt(I+1,j)-ubt(I+2,j) !in new time backward sasha for I+1
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
@@ -2513,8 +2513,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
-          grad(I,J-1) = (vbt_old(i+1,J-1) - vbt_old(i,J-1)) * G%mask2dBu(I,J-1)
-          grad(I-1,J-1) = (vbt_old(i,J-1) - vbt_old(i-1,J-1)) * G%mask2dBu(I-1,J-1)
+          grad(I,J-1) = (vbt(i+1,J-1) - vbt(i,J-1)) * G%mask2dBu(I,J-1)
+          grad(I-1,J-1) = (vbt(i,J-1) - vbt(i-1,J-1)) * G%mask2dBu(I-1,J-1)
           dhdt = vbt_old(i,J-1)-vbt(i,J-1) !old-new
           dhdy = vbt(i,J-1)-vbt(i,J-2) !in new time backward sasha for J-1
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
@@ -2558,8 +2558,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
-          grad(I,J+1) = (vbt_old(i+1,J+1) - vbt_old(i,J+1)) * G%mask2dBu(I,J+1)
-          grad(I-1,J+1) = (vbt_old(i,J+1) - vbt_old(i-1,J+1)) * G%mask2dBu(I-1,J+1)
+          grad(I,J+1) = (vbt(i+1,J+1) - vbt(i,J+1)) * G%mask2dBu(I,J+1)
+          grad(I-1,J+1) = (vbt(i,J+1) - vbt(i-1,J+1)) * G%mask2dBu(I-1,J+1)
           dhdt = vbt_old(i,J+1)-vbt(i,J+1) !old-new
           dhdy = vbt(i,J+1)-vbt(i,J+2) !in new time backward sasha for J+1
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
