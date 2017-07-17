@@ -1201,14 +1201,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps  ! avoid segv
-           Cx = min(dhdt/dhdx,rx_max) ! default to normal radiation
+           Cx = min(dhdt*dhdx,rx_max) ! default to normal radiation
 !          Cy = 0.0
            cff = max(dhdx*dhdx,eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
+             Cy = min(cff,max(dhdt*dhdy,-cff))
 !          endif
            segment%normal_vel(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
               (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
@@ -1250,14 +1248,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps  ! avoid segv
-           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+           Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !          Cy = 0.
            cff = max(dhdx*dhdx, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
+             Cy = min(cff,max(dhdt*dhdy,-cff))
 !          endif
            segment%normal_vel(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
              (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
@@ -1299,14 +1295,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps  ! avoid segv
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !          Cx = 0
            cff = max(dhdy*dhdy, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
+             Cx = min(cff,max(dhdt*dhdx,-cff))
 !          endif
            segment%normal_vel(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
@@ -1349,14 +1343,12 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps  ! avoid segv
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !          Cx = 0
            cff = max(dhdy*dhdy, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
+             Cx = min(cff,max(dhdt*dhdx,-cff))
 !          endif
            segment%normal_vel(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
