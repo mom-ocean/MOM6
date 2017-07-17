@@ -370,21 +370,33 @@ contains
 
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                            G, GV, CS, Kd, Kd_int)
-  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: u_h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: v_h
-  type(thermo_var_ptrs),                  intent(inout) :: tv  ! out is for tv%TempxPmE
-  type(forcing),                          intent(in)    :: fluxes
-  type(optics_type),                      pointer       :: optics
-  type(vertvisc_type),                    intent(inout) :: visc
-  real,                                   intent(in)    :: dt
-  type(set_diffusivity_CS),               pointer       :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out) :: Kd
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(out) :: Kd_int
+  type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                             intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                             intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                             intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                             intent(in)    :: u_h
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                             intent(in)    :: v_h
+  type(thermo_var_ptrs),     intent(inout) :: tv   !< Structure with pointers to thermodynamic
+                                                   !! fields. Out is for tv%TempxPmE.
+  type(forcing),             intent(in)    :: fluxes !< Structure of surface fluxes that may be
+                                                   !! used.
+  type(optics_type),         pointer       :: optics
+  type(vertvisc_type),       intent(inout) :: visc !< Structure containing vertical viscosities,
+                                                   !! bottom boundary layer properies, and related
+                                                   !! fields.
+  real,                      intent(in)    :: dt   !< Time increment (sec).
+  type(set_diffusivity_CS),  pointer       :: CS   !< Module control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(out)   :: Kd   !< Diapycnal diffusivity of each layer (m2/sec).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                   optional, intent(out)   :: Kd_int !< Diapycnal diffusivity at each interface
+                                                   !! (m2/sec).
 
 ! Arguments:
 !  (in)      u      - zonal velocity (m/s)
@@ -1299,16 +1311,33 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
 
 end subroutine find_N2
 
-
+!> This subroutine sets the additional diffusivities of temperature and
+!! salinity due to double diffusion, using the same functional form as is
+!! used in MOM4.1, and taken from an NCAR technical note (###REF?) that updates
+!! what was in Large et al. (1994).  All the coefficients here should probably
+!! be made run-time variables rather than hard-coded constants.
 subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, Kd_T_dd, Kd_S_dd)
-  type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV   !< The ocean's vertical grid structure
-  type(thermo_var_ptrs),                    intent(in)  :: tv
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: T_f, S_f
-  integer,                                  intent(in)  :: j
-  type(set_diffusivity_CS),                 pointer     :: CS
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(out) :: Kd_T_dd, Kd_S_dd
+  type(ocean_grid_type),    intent(in)  :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)  :: GV  !< The ocean's vertical grid structure.
+  type(thermo_var_ptrs),    intent(in)  :: tv  !< Structure containing pointers to any available
+                                               !! thermodynamic fields; absent fields have NULL
+                                               !! ptrs.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: T_f !< layer temp in C with the values in massless layers
+                                               !! filled vertically by diffusion.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)  :: S_f !< Layer salinities in PPT with values in massless
+                                               !! layers filled vertically by diffusion.
+  integer,                  intent(in)  :: j   !< Meridional index upon which to work.
+  type(set_diffusivity_CS), pointer     :: CS  !< Module control structure.
+  real, dimension(SZI_(G),SZK_(G)+1),       &
+                            intent(out) :: Kd_T_dd !< Interface double diffusion diapycnal
+                                               !! diffusivity for temp (m2/sec).
+  real, dimension(SZI_(G),SZK_(G)+1),       &
+                            intent(out) :: Kd_S_dd !< Interface double diffusion diapycnal
+                                               !! diffusivity for saln (m2/sec).
 
 ! Arguments:
 !  (in)      tv      - structure containing pointers to any available
@@ -1391,7 +1420,7 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, Kd_T_dd, Kd_S_dd)
   endif
 
 end subroutine double_diffusion
-
+!> This routine adds diffusion sustained by flow energy extracted by bottom drag.
 subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, &
                                 maxTKE, kb, G, GV, CS, Kd, Kd_int, Kd_BBL)
   type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
@@ -1761,7 +1790,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, &
   enddo ! i
 
 end subroutine add_LOTW_BBL_diffusivity
-
+!> This routine adds effects of mixed layer radiation to the layer diffusivities.
 subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd, TKE_to_Kd, Kd_int)
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -1879,6 +1908,12 @@ subroutine add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd, TKE_to_Kd, Kd_int)
 
 end subroutine add_MLrad_diffusivity
 
+  !> This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
+  !! The mechanisms considered are (1) local dissipation of internal waves generated by the
+  !! barotropic flow ("itidal"), (2) local dissipation of internal waves generated by the propagating
+  !! low modes (rays) of the internal tide ("lowmode"), and (3) local dissipation of internal lee waves.
+  !! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
+  !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     dd, N2_lay, Kd, Kd_int )
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
@@ -2263,7 +2298,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   endif ! Polzin
 
 end subroutine add_int_tide_diffusivity
-
+!> This subroutine calculates several properties related to bottom
+!! boundary layer turbulence.
 subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
   type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -2396,15 +2432,26 @@ subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
 end subroutine set_BBL_TKE
 
 subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
-  type(ocean_grid_type),                 intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                 intent(in)    :: tv
-  integer, dimension(SZI_(G)),            intent(in)   :: kb
-  type(set_diffusivity_CS),              pointer       :: CS
-  integer,                               intent(in)    :: j
-  real, dimension(SZI_(G),SZK_(G)),      intent(out)   :: ds_dsp1
-  real, dimension(SZI_(G),SZK_(G)), optional, intent(in) :: rho_0
+  type(ocean_grid_type),            intent(in)   :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),          intent(in)   :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                    intent(in)   :: h  !< Layer thicknesses, in H (usually m
+                                                       !! or kg m-2).
+  type(thermo_var_ptrs),            intent(in)   :: tv !< Structure containing pointers to any
+                                                       !! available thermodynamic fields; absent
+                                                       !! fields have NULL ptrs.
+  integer, dimension(SZI_(G)),      intent(in)   :: kb !< Index of lightest layer denser than the
+                                                       !! buffer layer.
+  type(set_diffusivity_CS),         pointer      :: CS !< Control structure returned by previous
+                                                       !! call to diabatic_entrain_init.
+  integer,                          intent(in)   :: j  !< Meridional index upon which to work.
+  real, dimension(SZI_(G),SZK_(G)), intent(out)  :: ds_dsp1 !< Coordinate variable (sigma-2)
+                                                       !! difference across an interface divided by
+                                                       !! the difference across the interface below
+                                                       !! it (nondimensional)
+  real, dimension(SZI_(G),SZK_(G)), &
+                          optional, intent(in)   :: rho_0 !< Layer potential densities relative to
+                                                       !! surface press (kg/m3).
 
 ! Arguments:
 !  (in)      h       - layer thickness (meter)
@@ -2504,13 +2551,17 @@ end subroutine set_density_ratios
 
 subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp, int_tide_CSp)
   type(time_type),          intent(in)    :: Time
-  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,  intent(inout) :: diag
-  type(set_diffusivity_CS), pointer       :: CS
-  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp
-  type(int_tide_CS),        pointer       :: int_tide_CSp
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),    intent(in)    :: param_file !< A structure to parse for run-time
+                                                  !! parameters.
+  type(diag_ctrl), target,  intent(inout) :: diag !< structure used to regulate diagnostic output.
+  type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
+                                                  !! structure.
+  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< pointer to the Z-diagnostics control
+                                                  !! structure.
+  type(int_tide_CS),        pointer       :: int_tide_CSp  !< pointer to the internal tides control
+                                                  !! structure (BDM)
 
 ! Arguments:
 !  (in)      Time          - current model time
