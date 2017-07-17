@@ -12,9 +12,12 @@ use MOM_error_handler,  only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type
+use MOM_remapping,      only : remapping_CS, initialize_remapping, build_reconstructions_1d
+use MOM_remapping,      only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,only : tracer_registry_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use PPM_functions,      only : PPM_reconstruction, PPM_boundary_extrapolation
+use regrid_edge_values, only : edge_values_implicit_h4
 
 implicit none ; private
 
@@ -53,6 +56,7 @@ type, public :: neutral_diffusion_CS ; private
 
   real    :: C_p ! heat capacity of seawater (J kg-1 K-1)
 
+  type(remapping_CS) :: remap_CS
 end type neutral_diffusion_CS
 
 ! This include declares and sets the variable "version".
@@ -73,6 +77,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
   ! Local variables
   character(len=256) :: mesg    ! Message for error messages.
+  character(len=80)  :: string  ! Temporary strings
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -92,7 +97,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
 
   allocate(CS)
   CS%diag => diag
-
+ ! call openParameterBlock(param_file,'NEUTRAL_DIFF')
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "NDIFF_CONTINUOUS", CS%continuous_reconstruction, &
@@ -101,11 +106,20 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                  "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
                  "is done which results in a higher order routine but exacts \n"//  &
                  "a higher computational cost.", default=.true.)
-! call openParameterBlock(param_file,'NEUTRAL_DIFF')
+  ! Initialize and configure remapping
+  if (CS%continuous_reconstruction .eqv. .false.) then
+    call get_param(param_file, mdl, "NDIFF_REMAPPING_SCHEME", string, &
+                   "This sets the reconstruction scheme used\n"//&
+                   "for vertical remapping for all variables.\n"//&
+                   "It can be one of the following schemes:\n"//&
+                   trim(remappingSchemesDoc), default=remappingDefaultScheme)
+    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=.true.)
+  endif
+
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
 !                "The background along-isopycnal tracer diffusivity.", &
 !                units="m2 s-1", default=0.0)
-! call closeParameterBlock(param_file)
+!  call closeParameterBlock(param_file)
   if (CS%continuous_reconstruction) then
     CS%nsurf = 2*G%ke+2 ! Continuous reconstruction means that every interface has two connections
   else
@@ -285,7 +299,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   real, dimension(:,:,:,:), allocatable        :: S_i     ! Top edge reconstruction of salinity (ppt)
   real, dimension(:,:,:,:), allocatable        :: dRdT_i     ! dRho/dT (kg/m3/degC) at top edge
   real, dimension(:,:,:,:), allocatable        :: dRdS_i     ! dRho/dS (kg/m3/ppt) at top edge
-  real, dimension(:,:),     allocatable        :: ppoly_coefficients ! PPM coefficients
+  ! Variables used for reconstructions
+  real, dimension(:,:), allocatable            :: ppoly_r_coefficients ! PPM coefficients
+  real, dimension(:,:), allocatable            :: ppoly_r_S            ! Reconstruction slopes
+  integer :: iMethod
   ! Allcoatable variables for continuous reconstructions
   real, dimension(:,:,:), allocatable        :: dRdT ! dRho/dT (kg/m3/degC) at interface
   real, dimension(:,:,:), allocatable        :: dRdS ! dRho/dS (kg/m3/ppt) at interfaces
@@ -300,13 +317,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     if (.not. ALLOCATED(S_i))     ALLOCATE(S_i(SZI_(G),SZJ_(G),SZK_(G),2))
     if (.not. ALLOCATED(dRdT_i))  ALLOCATE(dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2))
     if (.not. ALLOCATED(dRdS_i))  ALLOCATE(dRdS_i(SZI_(G),SZJ_(G),SZK_(G),2))
-    if (.not. ALLOCATED(ppoly_coefficients))  ALLOCATE(ppoly_coefficients(SZK_(G),3))
+    if (.not. ALLOCATED(ppoly_r_coefficients))  ALLOCATE(ppoly_r_coefficients(SZK_(G),5))
+    if (.not. ALLOCATED(ppoly_r_S))  ALLOCATE(ppoly_r_S(SZK_(G),2))
 
     T_i(:,:,:,:) = 0.
     S_i(:,:,:,:) = 0.
     dRdT_i(:,:,:,:) = 0.
     dRdS_i(:,:,:,:) = 0.
-    ppoly_coefficients(:,:) = 0.
+    ppoly_r_coefficients(:,:) = 0.
   endif
 
   do j = G%jsc-1, G%jec+1
@@ -316,14 +334,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
         call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint(i,j,:), 2)
         call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:), 2)
       else
-        call PPM_reconstruction(G%ke, h(i,j,:), T(i,j,:), T_i(i,j,:,:), ppoly_coefficients)
-        if (CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation(G%ke, h(i,j,:), T(i,j,:), T_i(i,j,:,:), ppoly_coefficients)
-        endif
-        call PPM_reconstruction(G%ke, h(i,j,:), S(i,j,:), S_i(i,j,:,:), ppoly_coefficients)
-        if (CS%boundary_extrapolation) then
-          call PPM_boundary_extrapolation(G%ke, h(i,j,:), S(i,j,:), S_i(i,j,:,:), ppoly_coefficients)
-        endif
+        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), T(i,j,:), ppoly_r_coefficients, T_i(i,j,:,:), ppoly_r_S, iMethod )
+        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), ppoly_r_coefficients, S_i(i,j,:,:), ppoly_r_S, iMethod )
       endif
     enddo
 
@@ -345,7 +357,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
         if (k<=G%ke) then
           Pint(:,j,k+1) = Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
           call calculate_density_derivs(T_i(:,j,k,2), S_i(:,j,k,2), Pint(:,j,k+1), &
-                                        dRdT_i(:,j,k,1), dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
+                                        dRdT_i(:,j,k,2), dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
         endif
       enddo
     endif
@@ -433,20 +445,24 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
 
   ! x-flux
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+    if (G%mask2dCu(I,j)>0.) then
       call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i+1,j,:),       &
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
                                 CS%uhEff(I,j,:), uFlx(I,j,:))
+    endif
   enddo ; enddo
 
   ! y-flux
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dCv(i,J)>0.) then
       call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i,j+1,:),       &
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
                                 CS%vhEff(i,J,:), vFlx(i,J,:))
+    endif
   enddo ; enddo
 
   ! Update the tracer concentration from divergence of neutral diffusive flux components
@@ -1021,7 +1037,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
     dRho = 0.5 * &
       ( ( dRdT_r(kl_right,ki_right) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,ki_right) - Tl(kl_left,ki_left) ) &
       + ( dRdS_r(kl_right,ki_right) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,ki_right) - Sl(kl_left,ki_left) ) )
-    if (debug_this_module)  write(*,'(A,I2,A,F6.3,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  kl_left=",kl_left,   &
+    if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  kl_left=",kl_left,   &
       "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
@@ -1063,7 +1079,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       else
         dRhoTopm1 = dRhoTop
       endif
-      if (debug_this_module)  write(*,'(A,I2,A,F6.2,A,F6.2,A,F6.2)') "Searching left layer", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
+      if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
                                              "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
       if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
       KoL(k_surface) = kl_left
@@ -1101,7 +1117,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       else
         dRhoTopm1 = dRhoTop
       endif
-      if (debug_this_module)  write(*,'(A,I2,A,F6.2,A,F6.2,A,F6.2)') "Searching right layer", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
+      if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
                                              "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
       if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_left, ki_left
       KoL(k_surface) = kl_left
@@ -1330,26 +1346,29 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
 
   ! Setup reconstruction edge values
   do k = 1, nk
-    aL_l(k) = Til(k)
-    aR_l(k) = Til(k+1)
-    if ( signum(1., aR_l(k) - Tl(k))*signum(1., Tl(k) - aL_l(k)) <= 0.0 ) then
-      aL_l(k) = Tl(k)
-      aR_l(k) = Tl(k)
-    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) > abs(aR_l(k) - aL_l(k)) ) then
-      aL_l(k) = Tl(k) + 2.0 * ( Tl(k) - aR_l(k) )
-    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) < -abs(aR_l(k) - aL_l(k)) ) then
-      aR_l(k) = Tl(k) + 2.0 * ( Tl(k) - aL_l(k) )
-    endif
-    aL_r(k) = Tir(k)
-    aR_r(k) = Tir(k+1)
-    if ( signum(1., aR_r(k) - Tr(k))*signum(1., Tr(k) - aL_r(k)) <= 0.0 ) then
-      aL_r(k) = Tr(k)
-      aR_r(k) = Tr(k)
-    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) > abs(aR_r(k) - aL_r(k)) ) then
-      aL_r(k) = Tr(k) + 2.0 * ( Tr(k) - aR_r(k) )
-    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) < -abs(aR_r(k) - aL_r(k)) ) then
-      aR_r(k) = Tr(k) + 2.0 * ( Tr(k) - aL_r(k) )
-    endif
+    call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
+    call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
+
+!    aL_l(k) = Til(k)
+!    aR_l(k) = Til(k+1)
+!    if ( signum(1., aR_l(k) - Tl(k))*signum(1., Tl(k) - aL_l(k)) <= 0.0 ) then
+!      aL_l(k) = Tl(k)
+!      aR_l(k) = Tl(k)
+!    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) > abs(aR_l(k) - aL_l(k)) ) then
+!      aL_l(k) = Tl(k) + 2.0 * ( Tl(k) - aR_l(k) )
+!    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) < -abs(aR_l(k) - aL_l(k)) ) then
+!      aR_l(k) = Tl(k) + 2.0 * ( Tl(k) - aL_l(k) )
+!    endif
+!    aL_r(k) = Tir(k)
+!    aR_r(k) = Tir(k+1)
+!    if ( signum(1., aR_r(k) - Tr(k))*signum(1., Tr(k) - aL_r(k)) <= 0.0 ) then
+!      aL_r(k) = Tr(k)
+!      aR_r(k) = Tr(k)
+!    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) > abs(aR_r(k) - aL_r(k)) ) then
+!      aL_r(k) = Tr(k) + 2.0 * ( Tr(k) - aR_r(k) )
+!    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) < -abs(aR_r(k) - aL_r(k)) ) then
+!      aR_r(k) = Tr(k) + 2.0 * ( Tr(k) - aL_r(k) )
+!    endif
   enddo
 
   do k_sublayer = 1, nsurf-1
