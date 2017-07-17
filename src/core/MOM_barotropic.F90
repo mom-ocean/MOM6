@@ -2418,14 +2418,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdx == 0.0) dhdx=eps  ! avoid segv
-          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+          Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !         Cy = 0
           cff = max(dhdx*dhdx, eps)
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdy==0.) dhdy=eps ! avoid segv
-            Cy = min(cff, max(dhdt/dhdy, -cff))
+            Cy = min(cff, max(dhdt*dhdy, -cff))
 !         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -2464,14 +2462,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdx == 0.0) dhdx=eps  ! avoid segv
-          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+          Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !         Cy = 0
           cff = max(dhdx*dhdx, eps)
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdy==0.) dhdy=eps ! avoid segv
-            Cy = min(cff,max(dhdt/dhdy,-cff))
+            Cy = min(cff,max(dhdt*dhdy,-cff))
 !         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -2531,14 +2527,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdy == 0.0) dhdy=eps  ! avoid segv
-          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+          Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !         Cx = 0
           cff = max(dhdy*dhdy, eps)
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdx==0.) dhdx=eps ! avoid segv
-            Cx = min(cff,max(dhdt/dhdx,-cff))
+            Cx = min(cff,max(dhdt*dhdx,-cff))
 !         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -2578,14 +2572,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdy == 0.0) dhdy=eps  ! avoid segv
-          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+          Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !         Cx = 0
           cff = max(dhdy*dhdy, eps)
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdx==0.) dhdx=eps ! avoid segv
-            Cx = min(cff,max(dhdt/dhdx,-cff))
+            Cx = min(cff,max(dhdt*dhdx,-cff))
 !         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
