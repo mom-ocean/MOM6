@@ -210,8 +210,12 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     if (present(Time_in)) Time = Time_in
     ! Otherwise leave Time at its input value.
 
-    ! h will be converted from m to H below
-    h(:,:,:) = GV%Angstrom_z
+    ! This initialization should not be needed. Certainly restricting it
+    ! to the computational domain helps detect possible uninitialized
+    ! data in halos which should be covered by the pass_var(h) later.
+    !do k = 1, nz; do j = js, je; do i = is, ie
+    !  h(i,j,k) = 0.
+    !enddo
   endif
 
   ! The remaining initialization calls are done, regardless of whether the
@@ -418,9 +422,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       call convert_thickness(h, G, GV, tv)
     elseif (GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      h(:,:,:) = h(:,:,:)*GV%m_to_H
+      do k = 1, nz; do j = js, je; do i = is, ie
+        h(i,j,k) = h(i,j,k)*GV%m_to_H
+      enddo ; enddo ; enddo
     else
-      h(:,:,:) = h(:,:,:)*GV%kg_m2_to_H
+      do k = 1, nz; do j = js, je; do i = is, ie
+        h(i,j,k) = h(i,j,k)*GV%kg_m2_to_H
+      enddo ; enddo ; enddo
     endif
   endif
 
