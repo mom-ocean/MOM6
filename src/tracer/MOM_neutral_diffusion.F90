@@ -450,7 +450,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
-                                CS%uhEff(I,j,:), uFlx(I,j,:))
+                                CS%uhEff(I,j,:), uFlx(I,j,:), &
+                                CS%continuous_reconstruction, CS%remap_CS)
     endif
   enddo ; enddo
 
@@ -461,7 +462,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
-                                CS%vhEff(i,J,:), vFlx(i,J,:))
+                                CS%vhEff(i,J,:), vFlx(i,J,:),   &
+                                CS%continuous_reconstruction, CS%remap_CS)
     endif
   enddo ; enddo
 
@@ -634,30 +636,58 @@ end function ppm_edge
 
 !> Returns the average of a PPM reconstruction between two
 !! fractional positions.
-real function ppm_ave(xL, xR, aL, aR, aMean)
-  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
-  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
-  real, intent(in) :: aL    !< Left edge scalar value, at x=0
-  real, intent(in) :: aR    !< Right edge scalar value, at x=1
-  real, intent(in) :: aMean !< Average scalar value of cell
+!real function ppm_ave(xL, xR, aL, aR, aMean)
+!  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
+!  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
+!  real, intent(in) :: aL    !< Left edge scalar value, at x=0
+!  real, intent(in) :: aR    !< Right edge scalar value, at x=1
+!  real, intent(in) :: aMean !< Average scalar value of cell
+!
+!  ! Local variables
+!  real :: dx, xave, a6, a6o3
+!
+!  dx = xR - xL
+!  xave = 0.5 * ( xR + xL )
+!  a6o3 = 2. * aMean - ( aL + aR ) ! a6 / 3.
+!  a6 = 3. * a6o3
+!
+!  if (dx<0.) then
+!    stop 'ppm_ave: dx<0 should not happend!'
+!  elseif (dx>1.) then
+!    stop 'ppm_ave: dx>1 should not happend!'
+!  elseif (dx==0.) then
+!    ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
+!  else
+!    ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
+!  endif
+!
+!end function ppm_ave
 
+real function ppm_ave(xa, xb, a_L, a_R, u_c)
+  real, intent(in) :: xa    !< Fraction position of left bound (0,1)
+  real, intent(in) :: xb    !< Fraction position of right bound (0,1)
+  real, intent(in) :: a_L    !< Left edge scalar value, at x=0
+  real, intent(in) :: a_R    !< Right edge scalar value, at x=1
+  real, intent(in) :: u_c !< Average scalar value of cell
   ! Local variables
-  real :: dx, xave, a6, a6o3
+  real :: mx, a_c, Ya, Yb, Ya2b2ab, xa2b2ab, my
 
-  dx = xR - xL
-  xave = 0.5 * ( xR + xL )
-  a6o3 = 2. * aMean - ( aL + aR ) ! a6 / 3.
-  a6 = 3. * a6o3
-
-  if (dx<0.) then
-    stop 'ppm_ave: dx<0 should not happend!'
-  elseif (dx>1.) then
-    stop 'ppm_ave: dx>1 should not happend!'
-  elseif (dx==0.) then
-    ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
+  mx = 0.5 * ( xa + xb )
+  a_c = 0.5 * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6 / 6
+  if (mx<0.5) then
+    ! This integration of the PPM reconstruction is expressed in distances from the left edge
+    xa2b2ab = (xa*xa+xb*xb)+xa*xb
+    ppm_ave = a_L + ( ( a_R - a_L ) * mx &
+                    + a_c * ( 3. * ( xb + xa ) - 2.*xa2b2ab ) )
   else
-    ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
-  endif
+    ! This integration of the PPM reconstruction is expressed in distances from the right edge
+    Ya = 1. - xa
+    Yb = 1. - xb
+    my = 0.5 * ( Ya + Yb )
+    Ya2b2ab = (Ya*Ya+Yb*Yb)+Ya*Yb
+    ppm_ave = a_R  + ( ( a_L - a_R ) * my &
+                     + a_c * ( 3. * ( Yb + Ya ) - 2.*Ya2b2ab ) )
+  endif  
 
 end function ppm_ave
 
@@ -1315,20 +1345,21 @@ end function interpolate_for_nondim_position
 
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx)
-  integer,                    intent(in)    :: nk    !< Number of levels
-  integer,                    intent(in)    :: nsurf !< Number of neutral surfaces
-  real, dimension(nk),        intent(in)    :: hl    !< Left-column layer thickness (Pa)
-  real, dimension(nk),        intent(in)    :: hr    !< Right-column layer thickness (Pa)
-  real, dimension(nk),        intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
-  real, dimension(nk),        intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
-  real, dimension(nsurf),     intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
-  real, dimension(nsurf),     intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
-  integer, dimension(nsurf),  intent(in)    :: KoL   !< Index of first left interface above neutral surface
-  integer, dimension(nsurf),  intent(in)    :: KoR   !< Index of first right interface above neutral surface
-  real, dimension(nsurf-1),   intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
-  real, dimension(nsurf-1),   intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
-
+subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
+  integer,                      intent(in)    :: nk    !< Number of levels
+  integer,                      intent(in)    :: nsurf !< Number of neutral surfaces
+  real, dimension(nk),          intent(in)    :: hl    !< Left-column layer thickness (Pa)
+  real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness (Pa)
+  real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
+  real, dimension(nk),          intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
+  real, dimension(nsurf),       intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
+  real, dimension(nsurf),       intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
+  integer, dimension(nsurf),    intent(in)    :: KoL   !< Index of first left interface above neutral surface
+  integer, dimension(nsurf),    intent(in)    :: KoR   !< Index of first right interface above neutral surface
+  real, dimension(nsurf-1),     intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
+  real, dimension(nsurf-1),     intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
+  logical,                      intent(in)    :: continuous !< True if using continuous reconstruction
+  type(remapping_CS), optional, intent(in)    :: remap_CS
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt, k
   real :: T_right_top, T_right_bottom, T_right_layer
@@ -1340,42 +1371,33 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
   real, dimension(nk) :: aR_l !< Left-column right edge value of tracer (conc, e.g. degC)
   real, dimension(nk) :: aL_r !< Right-column left edge value of tracer (conc, e.g. degC)
   real, dimension(nk) :: aR_r !< Right-column right edge value of tracer (conc, e.g. degC)
+  ! Discontinuous reconstruction
+  real, dimension(nk,2) :: Tid_l !< Left-column interface tracer (conc, e.g. degC)
+  real, dimension(nk,2) :: Tid_r !< Right-column interface tracer (conc, e.g. degC)
+  real, dimension(nk,5) :: ppoly_r_coeffs_l
+  real, dimension(nk,5) :: ppoly_r_coeffs_r
+  real, dimension(nk,5) :: ppoly_r_S_l
+  real, dimension(nk,5) :: ppoly_r_S_r
+  integer               :: iMethod
 
   call interface_scalar(nk, hl, Tl, Til, 2)
   call interface_scalar(nk, hr, Tr, Tir, 2)
 
   ! Setup reconstruction edge values
-  do k = 1, nk
-    call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
-    call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
-
-!    aL_l(k) = Til(k)
-!    aR_l(k) = Til(k+1)
-!    if ( signum(1., aR_l(k) - Tl(k))*signum(1., Tl(k) - aL_l(k)) <= 0.0 ) then
-!      aL_l(k) = Tl(k)
-!      aR_l(k) = Tl(k)
-!    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) > abs(aR_l(k) - aL_l(k)) ) then
-!      aL_l(k) = Tl(k) + 2.0 * ( Tl(k) - aR_l(k) )
-!    elseif ( sign(3., aR_l(k) - aL_l(k)) * ( (Tl(k) - aL_l(k)) + (Tl(k) - aR_l(k))) < -abs(aR_l(k) - aL_l(k)) ) then
-!      aR_l(k) = Tl(k) + 2.0 * ( Tl(k) - aL_l(k) )
-!    endif
-!    aL_r(k) = Tir(k)
-!    aR_r(k) = Tir(k+1)
-!    if ( signum(1., aR_r(k) - Tr(k))*signum(1., Tr(k) - aL_r(k)) <= 0.0 ) then
-!      aL_r(k) = Tr(k)
-!      aR_r(k) = Tr(k)
-!    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) > abs(aR_r(k) - aL_r(k)) ) then
-!      aL_r(k) = Tr(k) + 2.0 * ( Tr(k) - aR_r(k) )
-!    elseif ( sign(3., aR_r(k) - aL_r(k)) * ( (Tr(k) - aL_r(k)) + (Tr(k) - aR_r(k))) < -abs(aR_r(k) - aL_r(k)) ) then
-!      aR_r(k) = Tr(k) + 2.0 * ( Tr(k) - aL_r(k) )
-!    endif
-  enddo
+  if (continuous) then
+    do k = 1, nk
+      call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
+      call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
+    enddo
+  else
+    call build_reconstructions_1d( remap_CS, nk, hl, Tl, ppoly_r_coeffs_l, Tid_l, ppoly_r_S_l, iMethod )
+    call build_reconstructions_1d( remap_CS, nk, hr, Tr, ppoly_r_coeffs_r, Tid_r, ppoly_r_S_l, iMethod )
+  endif
 
   do k_sublayer = 1, nsurf-1
     if (hEff(k_sublayer) == 0.) then
       Flx(k_sublayer) = 0.
-    else
-
+    elseif (continuous) then
       klb = KoL(k_sublayer+1)
       T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
 
@@ -1404,6 +1426,25 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
         dT_ave = dT_layer
       endif
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
+    else ! Discontinuous reconstruction
+      klb = KoL(k_sublayer+1)
+      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
+      
+      klt = KoL(k_sublayer)
+      T_left_top = ( 1. - PiL(k_sublayer) ) * Tid_l(klt,1) + PiL(k_sublayer) * Tid_l(klt,2)
+
+      T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
+                             aL_l(klt), aR_l(klt), Tl(klt))
+
+      krb = KoR(k_sublayer+1)
+      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb,1) + PiR(k_sublayer+1) * Tir(krb,2)
+
+      krt = KoR(k_sublayer)
+      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt,1) + PiR(k_sublayer) * Tir(krt,2)
+
+      T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
+                              Tid_r(krt,1), Tid_l(krt,2), Tr(krt))
+      
     endif
   enddo
 
@@ -1512,12 +1553,12 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
