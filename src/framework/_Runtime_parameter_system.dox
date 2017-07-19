@@ -9,7 +9,7 @@ MOM6 has an extensive set of parameters that are set at run-time by parsing an i
 Run-time parameters are provided to the model in two phases:
 
 1. A very small set of logistical parameters are read as namelist variables from the FMS parameter file `input.nml`. One of these logistical parameters is a list of ascii files that contain all the other run-time parameters.
-1. All of the above-named parameter files are scanned for MOM6 model parameters, default values assigned and replaced, conflicts detected and various parameter summaries logged to files and/or the standard output.
+2. All of the above-named parameter files are scanned for MOM6 model parameters, default values assigned and replaced, conflicts detected and various parameter summaries logged to files and/or the standard output.
 
 \subsection mom6_namelist Namelist parameters (`input.nml`)
 
@@ -33,9 +33,7 @@ Parameter names must be constructed from the characters `[A-Za-z0-9_]` and by so
 
 Parameters that are not specified in the parameter files may assume a default value. It is not an error to specify a parameter more than once with the same value. It is an error to specify different values.
 
-The keyword `#override` indicates that this parameter specification takes precedence over other specifications. It is **not** an error to have two #override specifications for a single parameter with the same values. It is an error to have two #override statements with different values.
-
-The __soon to be deprecated__ #define keyword causes the parameter to assume the provided value (or in the case of logical parameters to be set to .TRUE.). If the parameter has a default value, the value provided will be assumed and the default value ignored. It is not an error to have two #define statements for a single parameter with the same values. It is an error to have two #define statements with different values.
+The keyword \#override indicates that this parameter specification takes precedence over other specifications. It is **not** an error to have two \#override specifications for a single parameter with the same values. It is an error to have two \#override statements with different values.
 
 Some illustrations:
 \code{.unparsed}
@@ -77,7 +75,7 @@ In addition, there are also calls that log derived quantities (e.g., a time-step
 There are several techniques that are used for error checking on MOM6 parameters:
 
 - Some parameters have internal error messages if they are set to nonsensical values.
-- No parameter can be set twice inconsistently without an explicit `#override` specification.
+- No parameter can be set twice inconsistently without an explicit \#override specification.
 - If the run-time parameter REPORT_UNUSED_PARAMS is true, a warning will be issued for any entries in the input parameter files that are not read in, for instance if they are misspelled.
 - Setting the run-time parameter FATAL_UNUSED_PARAMS to true causes a fatal error that will bring down the model if there are any unused entries in the input parameter files.
 
