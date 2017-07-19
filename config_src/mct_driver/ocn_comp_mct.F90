@@ -15,7 +15,9 @@ module ocn_comp_mct
   use seq_cdata_mod
   use mct_mod
   use seq_flds_mod,       only: seq_flds_x2o_fields,            &
-                                seq_flds_o2x_fields
+                                seq_flds_o2x_fields,            &
+                                SEQ_FLDS_DOM_COORD,             &
+                                SEQ_FLDS_DOM_other
   use seq_infodata_mod,   only: seq_infodata_type,              &
                                 seq_infodata_GetData,           &
                                 seq_infodata_start_type_start,  &
@@ -25,6 +27,7 @@ module ocn_comp_mct
   use seq_comm_mct,       only: seq_comm_name, seq_comm_inst, seq_comm_suffix
   use seq_timemgr_mod,    only: seq_timemgr_EClockGetData
   use perf_mod,           only: t_startf, t_stopf
+  use shr_kind_mod,       only: SHR_KIND_R8
 
 
   ! From MOM6
@@ -134,7 +137,7 @@ contains
   integer :: nx_block=0, ny_block=0 ! size of block domain in x,y dir including ghost cells
   integer :: nx_global, ny_global!  size of block domain in x,y dir including ghost cells
   integer :: max_blocks_clinic=0 !max number of blocks per processor in each distribution
-  integer :: ncouple_per_day = 24
+  integer :: ncouple_per_day = 48
   logical :: lsend_precip_fact ! if T,send precip_fact to cpl for use in fw balance
                                ! (partially-coupled option)
 
@@ -386,7 +389,7 @@ end subroutine ocn_SetGSMap_mct
 ! !IROUTINE: ocn_domain_mct
 ! !INTERFACE:
 
- subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
+subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
 
 ! !DESCRIPTION:
 !  This routine mct global seg maps for the pop decomposition
@@ -396,10 +399,83 @@ end subroutine ocn_SetGSMap_mct
 !
 ! !INPUT/OUTPUT PARAMETERS:
 
-    implicit none
-    integer        , intent(in)    :: lsize
-    type(mct_gsMap), intent(in)    :: gsMap_ocn
-    type(mct_ggrid), intent(inout) :: dom_ocn
+  implicit none
+  integer        , intent(in)    :: lsize
+  type(mct_gsMap), intent(in)    :: gsMap_ocn
+  type(mct_ggrid), intent(inout) :: dom_ocn
+
+! Local Variables
+  integer, parameter              :: SHR_REAL_R8 = selected_real_kind (12)
+  integer, pointer                :: idata(:)
+  integer                         :: i,j,k
+  real(kind=SHR_REAL_R8), pointer :: data(:)
+  real(kind=SHR_REAL_R8)          :: m2_to_rad2
+  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
+
+  call get_state_pointers(ocn_state, grid=grid)
+
+  ! set coords to lat and lon, and areas to rad^2
+  call mct_gGrid_init(GGrid=dom_ocn, CoordChars=trim(seq_flds_dom_coord), &
+                      OtherChars=trim(seq_flds_dom_other), lsize=lsize )
+
+  call mct_avect_zero(dom_ocn%data)
+  allocate(data(lsize))
+
+  ! Determine global gridpoint number attribute, GlobGridNum, which is set automatically by MCT
+  k = pe_here()
+  call mct_gsMap_orderedPoints(gsMap_ocn, k, idata)
+  call mct_gGrid_importIAttr(dom_ocn,'GlobGridNum',idata,lsize)
+
+  !initialization
+  data(:) = -9999.0
+  call mct_gGrid_importRAttr(dom_ocn,"lat"  ,data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn,"lon"  ,data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn,"area" ,data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn,"aream",data,lsize)
+  data(:) = 0.0
+  call mct_gGrid_importRAttr(dom_ocn,"mask",data,lsize)
+  call mct_gGrid_importRAttr(dom_ocn,"frac",data,lsize)
+
+  k = 0
+  do j = grid%jsc, grid%jec
+    do i = grid%isc, grid%iec
+      k = k + 1 ! Increment position within gindex
+      data(k) = grid%geoLonT(i,j)
+    enddo
+  enddo
+  call mct_gGrid_importRattr(dom_ocn,"lon",data,lsize)
+
+  k = 0
+  do j = grid%jsc, grid%jec
+    do i = grid%isc, grid%iec
+      k = k + 1 ! Increment position within gindex
+      data(k) = grid%geoLatT(i,j)
+    enddo
+  enddo
+  call mct_gGrid_importRattr(dom_ocn,"lat",data,lsize)
+
+  k = 0
+  m2_to_rad2 = 1./grid%Rad_Earth**2
+  do j = grid%jsc, grid%jec
+    do i = grid%isc, grid%iec
+      k = k + 1 ! Increment position within gindex
+      data(k) = grid%AreaT(i,j) * m2_to_rad2
+    enddo
+  enddo
+  call mct_gGrid_importRattr(dom_ocn,"area",data,lsize)
+
+  k = 0
+  do j = grid%jsc, grid%jec
+    do i = grid%isc, grid%iec
+      k = k + 1 ! Increment position within gindex
+      data(k) = grid%mask2dT(i,j)
+    enddo
+  enddo
+  call mct_gGrid_importRattr(dom_ocn,"mask",data,lsize)
+  call mct_gGrid_importRattr(dom_ocn,"frac",data,lsize)
+
+  deallocate(data)
+  deallocate(idata)
 
 !EOP
 !BOC
