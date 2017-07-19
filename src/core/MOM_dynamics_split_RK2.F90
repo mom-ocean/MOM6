@@ -1202,37 +1202,5 @@ end subroutine end_dyn_split_RK2
 !!  does not have its own control structure, but shares the same
 !!  control structure with MOM.F90 and the other MOM_dynamics_...
 !!  modules.
-!!
-!!  Macros written all in capital letters are defined in MOM_memory.h.
-!!
-!!  \section section_gridlayout MOM grid layout
-!!
-!!  A small fragment of the grid is shown below:
-!!
-!! \verbatim
-!!    j+1  x ^ x ^ x
-!!
-!!    j+1  > o > o >
-!!
-!!    j    x ^ x ^ x
-!!
-!!    j    > o > o >
-!!
-!!    j-1  x ^ x ^ x
-!!
-!!        i-1  i  i+1
-!!
-!!           i  i+1
-!!
-!! \endverbatim
-!!
-!!  Fields at each point
-!!  * x =  q, CoriolisBu
-!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
-!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
-!!  * o =  h, bathyT, eta, T, S, tr
-!!
-!!  The boundaries always run through q grid points (x).
-
 
 end module MOM_dynamics_split_RK2

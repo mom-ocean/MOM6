@@ -4093,37 +4093,6 @@ end subroutine MOM_end
 !!  * set_restart_fields is used to specify those fields that are
 !!    written to and read from the restart file.
 !!
-!!  Macros written all in capital letters are defined in MOM_memory.h.
-!!
-!!  \section section_gridlayout MOM grid layout
-!!
-!!  A small fragment of the grid is shown below:
-!!
-!! \verbatim
-!!    j+1  x ^ x ^ x
-!!
-!!    j+1  > o > o >
-!!
-!!    j    x ^ x ^ x
-!!
-!!    j    > o > o >
-!!
-!!    j-1  x ^ x ^ x
-!!
-!!        i-1  i  i+1
-!!
-!!           i  i+1
-!!
-!! \endverbatim
-!!
-!!  Fields at each point
-!!  * x =  q, CoriolisBu
-!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
-!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
-!!  * o =  h, bathyT, eta, T, S, tr
-!!
-!!  The boundaries always run through q grid points (x).
-!!
 !!  \section section_heat_budget Diagnosing MOM heat budget
 !!
 !!  Here are some example heat budgets for the ALE version of MOM6.

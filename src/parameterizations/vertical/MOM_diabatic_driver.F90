@@ -2381,36 +2381,5 @@ end subroutine diabatic_driver_end
 !!  the length of time over which to act (dt).  The velocities and
 !!  thickness are taken as inputs and modified within the subroutine.
 !!  There is no limit on the time step.
-!!
-!!
-!!  \section section_gridlayout MOM grid layout
-!!
-!!  A small fragment of the grid is shown below:
-!!
-!! \verbatim
-!!    j+1  x ^ x ^ x
-!!
-!!    j+1  > o > o >
-!!
-!!    j    x ^ x ^ x
-!!
-!!    j    > o > o >
-!!
-!!    j-1  x ^ x ^ x
-!!
-!!        i-1  i  i+1
-!!
-!!           i  i+1
-!!
-!! \endverbatim
-!!
-!!  Fields at each point
-!!  * x =  q, CoriolisBu
-!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
-!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
-!!  * o =  h, bathyT, eta, T, S, tr
-!!
-!!  The boundaries always run through q grid points (x).
-!!
 
 end module MOM_diabatic_driver

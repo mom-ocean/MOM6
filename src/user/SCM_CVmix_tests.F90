@@ -47,7 +47,7 @@ contains
 
 !> Initializes temperature and salinity for the SCM CVmix test example
 subroutine SCM_CVmix_tests_TS_init(T, S, h, G, GV, param_file, just_read_params)
-  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential tempera\ture (degC)
+  real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: T !< Potential temperature (degC)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(out) :: S !< Salinity (psu)
   real, dimension(NIMEM_,NJMEM_, NKMEM_), intent(in)  :: h !< Layer thickness (m or Pa)
   type(ocean_grid_type),                  intent(in)  :: G !< Grid structure

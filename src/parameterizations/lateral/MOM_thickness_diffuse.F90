@@ -1816,6 +1816,8 @@ end subroutine thickness_diffuse_end
 
 !> \namespace mom_thickness_diffuse
 !!
+!! \section section_gm Thickness diffusion (aka Gent-McWilliams)
+!!
 !! Thickness diffusion is implemented via along-layer mass fluxes
 !! \f[
 !! h^\dagger \leftarrow h^n - \Delta t \nabla \cdot ( \vec{uh}^* )
