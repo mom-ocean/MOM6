@@ -38,7 +38,7 @@ end type
 ! The following routines are visible to the outside world
 public remapping_core_h, remapping_core_w
 public initialize_remapping, end_remapping, remapping_set_param
-public remapping_unit_tests, build_reconstructions_1d
+public remapping_unit_tests, build_reconstructions_1d, average_value_ppoly
 public dzFromH1H2
 
 ! The following are private parameter constants
