@@ -1,0 +1,5 @@
+<map id="mom_boundary_update::obc_register_end" name="mom_boundary_update::obc_register_end">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#a55081f00e4a95f87ddc5dfe1d61f52e0" title="Clean up the file OBC from registry. " alt="" coords="211,5,365,47"/>
+<area shape="rect" id="node3" href="$namespacekelvin__initialization.html#a9c8e0745879d099cef92df7f16c67f9c" title="Clean up the Kelvin wave OBC from registry. " alt="" coords="223,71,353,112"/>
+<area shape="rect" id="node4" href="$namespacetidal__bay__initialization.html#a0c8bd22e72376c9f9af5bc5f628393f9" title="Clean up the tidal bay OBC from registry. " alt="" coords="213,136,363,177"/>
+</map>

@@ -1,0 +1,13 @@
+<map id="mom_diag_mediator::register_diag_field" name="mom_diag_mediator::register_diag_field">
+<area shape="rect" id="node2" href="$namespacemom__ale.html#a994efb3c62fc5f63da2617f29cbd6be1" title="Initialize diagnostics for the ALE module. " alt="" coords="232,5,383,47"/>
+<area shape="rect" id="node3" href="$namespacemom__coriolisadv.html#ad3ce07f23ce7b484a5a9e0c0abe8b1cd" title="Initializes the control structure for coriolisadv_cs. " alt="" coords="200,71,415,98"/>
+<area shape="rect" id="node4" href="$namespacemom__diapyc__energy__req.html#aa0ce122f4dc6d9a6ec9e17996484bb76" title="mom_diapyc_energy_req\l::diapyc_energy_req_init" alt="" coords="224,123,391,164"/>
+<area shape="rect" id="node5" href="$namespacemom__diffconvection.html#ac36d9d7fd69e4422e7de01242094ff34" title="mom_diffconvection\l::diffconvection_init" alt="" coords="238,188,377,229"/>
+<area shape="rect" id="node6" href="$namespacemom__int__tide__input.html#a29a707637da633ccee155b53557b5f17" title="mom_int_tide_input\l::int_tide_input_init" alt="" coords="240,253,375,295"/>
+<area shape="rect" id="node7" href="$namespacemom__kpp.html#a9c834424b6e067e280928db3700ec77e" title="Initialize the CVmix KPP module and set up diagnostics Returns True if KPP is to be used..." alt="" coords="241,319,373,346"/>
+<area shape="rect" id="node8" href="$namespacemom__neutral__diffusion.html#a87cf821c52ac1111493d4168f0a91d17" title="Diagnostic handles for neutral diffusion tendencies. " alt="" coords="217,371,397,412"/>
+<area shape="rect" id="node11" href="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c" title="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..." alt="" coords="234,436,381,477"/>
+<area shape="rect" id="node9" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="470,378,613,405"/>
+<area shape="rect" id="node10" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="668,378,755,405"/>
+<area shape="rect" id="node12" href="$namespacemom__diag__to__z.html#a90526b2f59f94c6af2f525a221029772" title="This subroutine registers a tracer to be output in depth space. " alt="" coords="463,436,620,477"/>
+</map>

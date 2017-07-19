@@ -1,0 +1,11 @@
+<map id="mom_sponge::initialize_sponge" name="mom_sponge::initialize_sponge">
+<area shape="rect" id="node2" href="$namespacebfb__initialization.html#a03de1f1af12eab371cc0e4336a749ccf" title="bfb_initialization\l::bfb_initialize_sponges\l_southonly" alt="" coords="222,5,381,61"/>
+<area shape="rect" id="node6" href="$namespacedome2d__initialization.html#ab0df2b602fe1c83baa66ba03cc2c6dd4" title="Set up sponges in 2d DOME configuration. " alt="" coords="208,86,395,127"/>
+<area shape="rect" id="node7" href="$namespacedome__initialization.html#a407c1b2429d1d5abd600d3d3cd35ac38" title="This subroutine sets the inverse restoration time (Idamp), and ! the values towards which the interfa..." alt="" coords="215,151,387,193"/>
+<area shape="rect" id="node8" href="$namespacemom__state__initialization.html#a99730b61ad00c449a56beff4d9e5ed0a" title="This subroutine sets the inverse restoration time (Idamp), and the values towards which the interface..." alt="" coords="220,217,383,258"/>
+<area shape="rect" id="node9" href="$namespaceisomip__initialization.html#a672219a0070f4491fc1a8d9c20c6c1e4" title="Sets up the the inverse restoration time (Idamp), and. " alt="" coords="212,282,391,323"/>
+<area shape="rect" id="node10" href="$namespacephillips__initialization.html#ab288e8ab915b23a2def100493d7ff434" title="Sets up the the inverse restoration time (Idamp), and. " alt="" coords="233,348,370,404"/>
+<area shape="rect" id="node3" href="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321" title="mom_state_initialization\l::mom_initialize_state" alt="" coords="443,151,605,193"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="653,159,796,185"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="844,159,931,185"/>
+</map>

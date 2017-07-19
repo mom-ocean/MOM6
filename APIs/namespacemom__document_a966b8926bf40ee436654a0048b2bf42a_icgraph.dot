@@ -1,0 +1,15 @@
+digraph "mom_document::real_string"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node235 [label="mom_document::real\l_string",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node235 -> Node236 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node236 [label="mom_document::doc_param_real",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__document.html#aae79ba23b83e7e2be3dcc46f50ee0f69"];
+  Node235 -> Node237 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node237 [label="mom_document::doc_param\l_real_array",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__document.html#a09ce71cb5106c9abb604c07b98e62863"];
+  Node235 -> Node238 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node238 [label="mom_document::real\l_array_string",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__document.html#a436486f7289eafc7b4e8ba65812f3459"];
+  Node238 -> Node237 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

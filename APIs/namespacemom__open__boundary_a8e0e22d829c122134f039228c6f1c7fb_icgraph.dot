@@ -1,0 +1,16 @@
+digraph "mom_open_boundary::register_obc"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node105 [label="mom_open_boundary::\lregister_obc",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node105 -> Node106 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node106 [label="mom_open_boundary::\lregister_file_obc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a05d15beca2ef2b44fb36d129166907fa",tooltip="Add file to OBC registry. "];
+  Node106 -> Node107 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node107 [label="mom_boundary_update\l::call_obc_register",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__boundary__update.html#a455e3d4565a6023e3c144eefb9bafac5",tooltip="The following subroutines and associated definitions provide the machinery to register and call the s..."];
+  Node107 -> Node108 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node108 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node108 -> Node109 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node109 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+}

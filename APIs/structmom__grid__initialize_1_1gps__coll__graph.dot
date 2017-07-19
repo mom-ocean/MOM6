@@ -1,0 +1,13 @@
+digraph "mom_grid_initialize::gps"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_grid_initialize::gps",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" isotropic\nequator_reference" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" niglobal\nnjglobal" ,fontname="Helvetica"];
+  Node3 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" west_lon\nlat_eq_enhance\nlen_lon\nsouth_lat\nlen_lat\nrad_earth\nlat_enhance\l_factor" ,fontname="Helvetica"];
+  Node4 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

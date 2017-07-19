@@ -1,0 +1,4 @@
+<map id="rossby_front_2d_initialization::rossby_front_initialize_temperature_salinity" name="rossby_front_2d_initialization::rossby_front_initialize_temperature_salinity">
+<area shape="rect" id="node2" href="$namespacerossby__front__2d__initialization.html#aa10adb0378184432ecaa78eb339c6c5a" title="Analytic prescription of mixed layer depth in 2d Rossby front test. " alt="" coords="244,20,463,47"/>
+<area shape="rect" id="node3" href="$namespacerossby__front__2d__initialization.html#a15a0b752df24fbae7deabe844a418239" title="Pseudo coordinate across domain used by Hml() and dTdy() returns a coordinate from &#45;PI/2 ..." alt="" coords="511,13,701,54"/>
+</map>

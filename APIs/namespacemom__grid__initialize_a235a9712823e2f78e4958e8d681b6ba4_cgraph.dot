@@ -1,0 +1,54 @@
+digraph "mom_grid_initialize::set_grid_metrics"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node85 [label="mom_grid_initialize\l::set_grid_metrics",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node85 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node86 [label="mom_error_handler::\lcalltree_enter",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a9cda07a87815f0e5594066162b4345c3",tooltip="Writes a message about entering a subroutine if call tree reporting is active. "];
+  Node86 -> Node87 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node87 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node85 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node88 [label="mom_error_handler::\lcalltree_leave",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a88ea67781e2ed9b73ab7eac8ea5e8578",tooltip="Writes a message about leaving a subroutine if call tree reporting is active. "];
+  Node88 -> Node87 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 -> Node89 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node89 [label="mom_grid_initialize\l::grid_metrics_chksum",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#aaa2e124bccd43d4f8735c4ef8e07f287",tooltip="grid_metrics_chksum performs a set of checksums on metrics on the grid for debugging. "];
+  Node85 -> Node90 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node90 [label="mom_dyn_horgrid::set\l_derived_dyn_horgrid",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dyn__horgrid.html#aefa448039e24b26fe06f9251848b6aac",tooltip="set_derived_dyn_horgrid calculates metric terms that are derived from other metrics. "];
+  Node90 -> Node91 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node91 [label="mom_dyn_horgrid::adcroft\l_reciprocal",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dyn__horgrid.html#aa6579f50769698067defbc3c676e0191",tooltip="Adcroft_reciprocal(x) = 1/x for |x|>0 or 0 for x=0. "];
+  Node85 -> Node92 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node92 [label="mom_grid_initialize\l::set_grid_metrics_cartesian",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a4f9a9f748316e1edd893da9c44cb940e"];
+  Node92 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node92 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 -> Node93 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node93 [label="mom_grid_initialize\l::set_grid_metrics_from\l_mosaic",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a59e71c4235b01cf3ad4fb6252ef74248",tooltip="set_grid_metrics_from_mosaic sets the grid metrics from a mosaic file. "];
+  Node93 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node93 -> Node94 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node94 [label="mom_grid_initialize\l::extrapolate_metric",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#ac78daa312636b0ef9a93694901b5c705",tooltip="extrapolate_metric extrapolates missing metric data into all the halo regions. "];
+  Node93 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 -> Node95 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node95 [label="mom_grid_initialize\l::set_grid_metrics_mercator",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#ac37d98379b33a9e95d0bbffc1d7a730f"];
+  Node95 -> Node96 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node96 [label="mom_grid_initialize\l::int_dj_dy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a8ed056787130f21f4b9c1bc81bd60c50"];
+  Node95 -> Node97 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node97 [label="mom_grid_initialize\l::find_root",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a25cb0001f061ef10b90e637f98ed9fcc"];
+  Node95 -> Node98 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node98 [label="mom_grid_initialize\l::dy_dj",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#aff493c70cca560bfefcdbfabdf778656"];
+  Node95 -> Node99 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node99 [label="mom_grid_initialize\l::int_di_dx",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#aee53e3cf4937fa86949aa376d5f3d82a"];
+  Node95 -> Node100 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node100 [label="mom_grid_initialize\l::dx_di",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#afa76ec84052508b78fde53cd6ed70161"];
+  Node95 -> Node101 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node101 [label="mom_grid_initialize\l::ds_di",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a5a50815c6d1d0948dfbae076da654b94"];
+  Node101 -> Node100 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node95 -> Node102 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node102 [label="mom_grid_initialize\l::ds_dj",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#aaa3a376606d5067107c3a43beb6f8032"];
+  Node102 -> Node98 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node95 -> Node103 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node103 [label="mom_grid_initialize::dl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#aac9e8e21e95ba01e853569e3060ee8d3"];
+  Node85 -> Node104 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node104 [label="mom_grid_initialize\l::set_grid_metrics_spherical",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a3ede1d607f09115204c0ea0fbde5e9f8"];
+  Node104 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

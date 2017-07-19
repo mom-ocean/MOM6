@@ -1,0 +1,28 @@
+digraph "shelf_triangular_festuff::ice_shelf_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="shelf_triangular_festuff\l::ice_shelf_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" override_shelf_movement\nshelf_mass_is_dynamic\nthreeeq\nwrite_output_to_file\nisthermo\nisshelf" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" eqn_of_state" ,fontname="Helvetica"];
+  Node4 [label="type(eos_type), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" restart_csp" ,fontname="Helvetica"];
+  Node5 [label="type(mom_restart_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" user_cs" ,fontname="Helvetica"];
+  Node6 [label="type(user_ice_shelf\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node7 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" restart_output_dir" ,fontname="Helvetica"];
+  Node8 [label="character(len=128)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_bathym\nid_exch_vel_s\nid_melt\nid_exch_vel_t\ncg_max_iterations\nid_tfl_shelf\nid_col_thick\nid_h_shelf\nid_u_shelf\nid_surf_elev\n..." ,fontname="Helvetica"];
+  Node9 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" input_thickness\ngamma_t\ntaub_beta_eff_upper\l_tri\nv_face_mask\nh_shelf\nsalt_flux\nice_visc_lower\l_tri\na_glen_isothermal\ntemp_ice\nthresh_float_col\l_depth\n..." ,fontname="Helvetica"];
+  Node10 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" grid" ,fontname="Helvetica"];
+  Node11 [label="ocean_grid_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

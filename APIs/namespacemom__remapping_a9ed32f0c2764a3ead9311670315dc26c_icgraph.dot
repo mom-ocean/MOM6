@@ -1,0 +1,40 @@
+digraph "mom_remapping::remapping_core_h"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node257 [label="mom_remapping::remapping\l_core_h",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node257 -> Node258 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node258 [label="coord_rho::build_rho\l_column",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacecoord__rho.html#a6f5a56ba973e5e36820222a709614e40"];
+  Node258 -> Node259 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node259 [label="mom_diag_remap::diag\l_remap_update",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__remap.html#a1fb71d2982777f33bcbf183187e1819b",tooltip="Build/update target vertical grids for diagnostic remapping. "];
+  Node257 -> Node260 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node260 [label="mom_state_initialization\l::cut_off_column_top",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#a71ee3c056ca59c1c3529a4ec22e09fe3",tooltip="Adjust the layer thicknesses by cutting away the top at the depth where the hydrostatic pressure matc..."];
+  Node260 -> Node261 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node261 [label="mom_state_initialization\l::trim_for_ice",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#ac29cd3c6b5de2b36b9690d800ac98a09",tooltip="Adjust the layer thicknesses by cutting away the top of each model column at the depth where the hydr..."];
+  Node261 -> Node262 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node262 [label="mom_state_initialization\l::mom_initialize_state",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321"];
+  Node262 -> Node263 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node263 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node263 -> Node264 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node264 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node260 -> Node265 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node265 [label="mom_state_initialization\l::mom_state_init_tests",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#a5c77bf2b0ea9d28e28b661a2a42d3f88",tooltip="Run simple unit tests. "];
+  Node257 -> Node266 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node266 [label="mom_diag_remap::diag\l_remap_do_remap",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__remap.html#a4b76283906971bcb94e85c0ed25f4e7b",tooltip="Remap diagnostic field to alternative vertical grid. "];
+  Node257 -> Node267 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node267 [label="mom_wave_speed::wave\l_speed",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__wave__speed.html#a72302e356c47c5055ba0b1a8714c772a",tooltip="Calculates the wave speed of the first baroclinic mode. "];
+  Node267 -> Node268 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node268 [label="mom_diagnostics::calculate\l_diagnostic_fields",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diagnostics.html#abb6644248c28ab2e952361bfec436063",tooltip="Diagnostics not more naturally calculated elsewhere are computed here. "];
+  Node267 -> Node269 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node269 [label="mom_lateral_mixing\l_coeffs::calc_resoln\l_function",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#af206bc656869b4fc27d4d7e8a15d438e",tooltip="Calculates and stores the non-dimensional resolution functions. "];
+  Node269 -> Node270 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node270 [label="mom::step_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a",tooltip="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..."];
+  Node270 -> Node264 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node269 -> Node271 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node271 [label="mom::step_offline",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#ad56e17a755c7078ccea29ccbae4d5803",tooltip="step_offline is the main driver for running tracers offline in MOM6. This has been primarily develope..."];
+  Node271 -> Node264 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node271 -> Node272 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node272 [label="ocean_model_mod::update\l_ocean_model",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#ac9dc1795fc4799d6682f462857b42d62"];
+}

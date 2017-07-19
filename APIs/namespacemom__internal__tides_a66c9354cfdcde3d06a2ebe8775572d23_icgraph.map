@@ -1,0 +1,4 @@
+<map id="mom_internal_tides::propagate_corner_spread" name="mom_internal_tides::propagate_corner_spread">
+<area shape="rect" id="node2" href="$namespacemom__internal__tides.html#a22caa92b67ed4077ce78eac34d15b14d" title="This subroutine does refraction on the internal waves at a single frequency. " alt="" coords="229,5,364,47"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2" title="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. " alt="" coords="412,5,548,47"/>
+</map>

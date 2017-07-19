@@ -1,0 +1,22 @@
+digraph "mom_vert_friction::vertvisc_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_vert_friction::\lvertvisc_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" cfl_based_trunc\ndirect_stress\nsplit\nharmonic_visc\ndynamic_viscous\l_ml\nbottomdraglaw\nchannel_drag\ncflrampingisactivated\ndebug" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" rampstarttime" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" v_trunc_file\nu_trunc_file" ,fontname="Helvetica"];
+  Node4 [label="character(len=200)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node5 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_dv_dt_visc\nid_hml_u\nid_hml_v\nid_av_vv\nid_au_vv\nid_tauy_bot\nid_ray_u\nid_h_u\nid_taux_bot\nid_ray_v\n..." ,fontname="Helvetica"];
+  Node6 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" a_u\na_v\nhmix\na1_shelf_u\nhbbl\nharm_bl_val\na1_shelf_v\ncfl_trunc\nh_u\nh_v\n..." ,fontname="Helvetica"];
+  Node7 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" pointaccel_csp" ,fontname="Helvetica"];
+  Node8 [label="type(pointaccel_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

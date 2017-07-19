@@ -1,0 +1,24 @@
+<map id="mom_io::var_desc" name="mom_io::var_desc">
+<area shape="rect" id="node2" href="$namespacemom__diabatic__driver.html#afa0b30bd6f0e080bcacbd6dcb15ff990" title="This routine initializes the diabatic driver module. " alt="" coords="204,5,347,47"/>
+<area shape="rect" id="node3" href="$namespacemom__meke.html#a1900316331157e48f1a6029bac63fbd0" title="Allocates memory and register restart fields for the MOM_MEKE module. " alt="" coords="427,248,591,289"/>
+<area shape="rect" id="node6" href="$namespacemom__mixed__layer__restrat.html#aea597553dfa98cc7c972784f476ad3fc" title="Allocate and register fields in the mixed layer restratification structure for restarts. " alt="" coords="416,498,603,554"/>
+<area shape="rect" id="node7" href="$namespaceadvection__test__tracer.html#a6cc3e00a5d5cb9e31339c784eb966c91" title="advection_test_tracer\l::register_advection\l_test_tracer" alt="" coords="202,173,349,229"/>
+<area shape="rect" id="node8" href="$namespacemom__barotropic.html#a28fa2e7600a471735c3b827ac08ed94b" title="This subroutine is used to register any fields from MOM_barotropic.F90 that should be written to or r..." alt="" coords="192,253,359,295"/>
+<area shape="rect" id="node9" href="$namespaceboundary__impulse__tracer.html#a8c333281de8a3f7a255a0da4187427ad" title="Read in runtime options and add boundary impulse tracer to tracer registry. " alt="" coords="183,319,368,375"/>
+<area shape="rect" id="node10" href="$namespacemom__controlled__forcing.html#a8bfffde62f6a555439eba94884a1fc2e" title="This subroutine is used to allocate and register any fields in this module that should be written to ..." alt="" coords="195,399,355,455"/>
+<area shape="rect" id="node11" href="$namespacedome__tracer.html#a2a6918ef09b8674c6ad56f80dfc370ff" title="dome_tracer::register\l_dome_tracer" alt="" coords="203,480,348,521"/>
+<area shape="rect" id="node12" href="$namespaceregional__dyes.html#af9da6e5dbe58dedce4ede6f0533fe702" title="regional_dyes::register\l_dye_tracer" alt="" coords="199,545,352,587"/>
+<area shape="rect" id="node13" href="$namespaceideal__age__example.html#a58d550a02148b87b1d1ce979fcaf6c00" title="ideal_age_example::\lregister_ideal_age_tracer" alt="" coords="192,611,359,652"/>
+<area shape="rect" id="node14" href="$namespaceisomip__tracer.html#a7d66fe5ba12076654324a7e7d8ab2e4f" title="This subroutine is used to register tracer fields. " alt="" coords="200,676,351,717"/>
+<area shape="rect" id="node15" href="$namespacemom__ocmip2__cfc.html#ac04494ce35222c8583a7ee7589e1cf13" title="mom_ocmip2_cfc::register\l_ocmip2_cfc" alt="" coords="187,741,363,783"/>
+<area shape="rect" id="node16" href="$namespaceoil__tracer.html#ae9bef348e3fea3af157e841a0c9f6aeb" title="oil_tracer::register\l_oil_tracer" alt="" coords="212,807,339,848"/>
+<area shape="rect" id="node17" href="$namespacepseudo__salt__tracer.html#a147eabcabc9a787c01310dd67a5bab08" title="pseudo_salt_tracer\l::register_pseudo_salt\l_tracer" alt="" coords="200,873,351,929"/>
+<area shape="rect" id="node18" href="$namespacemom__set__visc.html#ae2d9d9f74c1e9aec56257cfad372b0fd" title="This subroutine is used to register any fields associated with the vertvisc_type. ..." alt="" coords="427,945,591,987"/>
+<area shape="rect" id="node19" href="$namespaceuser__tracer__example.html#a71efc349b3fbeb6f4cb2155de1f8bbe5" title="user_tracer_example\l::user_register_tracer\l_example" alt="" coords="203,1003,348,1059"/>
+<area shape="rect" id="node20" href="$namespacemom__shared__initialization.html#abef3d6e722e67f47ebdd3f989b9e90b8" title="Write out a file describing the topography, Coriolis parameter, grid locations and various other fixe..." alt="" coords="183,1084,368,1125"/>
+<area shape="rect" id="node22" href="$namespacemom__coord__initialization.html#a45fb62504679264febbaa0617332ecc1" title="This subroutine writes out a file containing any available data related to the vertical grid used by ..." alt="" coords="193,1149,358,1191"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="651,953,793,979"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="841,953,928,979"/>
+<area shape="rect" id="node21" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="429,1047,590,1088"/>
+<area shape="rect" id="node23" href="$namespacemom__coord__initialization.html#a6e2f4c11bc99476ea9c64a9aceac3b81" title="MOM_initialize_coord sets up time&#45;invariant quantities related to MOM6&#39;s vertical coordinate..." alt="" coords="427,1131,592,1172"/>
+</map>

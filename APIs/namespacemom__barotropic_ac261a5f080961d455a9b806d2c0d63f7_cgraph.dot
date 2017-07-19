@@ -1,0 +1,16 @@
+digraph "mom_barotropic::set_up_bt_obc"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node98 [label="mom_barotropic::set\l_up_bt_obc",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node98 -> Node99 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node99 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node99 -> Node100 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node100 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node98 -> Node101 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node101 [label="mom_barotropic::uhbt\l_to_ubt",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__barotropic.html#a0311f0f3d4e27f4017582d6a8c01298c",tooltip="This function inverts the transport function to determine the barotopic velocity that is consistent w..."];
+  Node98 -> Node102 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node102 [label="mom_barotropic::vhbt\l_to_vbt",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__barotropic.html#aeed3e618781611b448105a122e1a358c",tooltip="This function inverts the transport function to determine the barotopic velocity that is consistent w..."];
+}

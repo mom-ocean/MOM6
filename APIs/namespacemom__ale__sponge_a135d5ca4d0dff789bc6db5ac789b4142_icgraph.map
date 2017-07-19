@@ -1,0 +1,8 @@
+<map id="mom_ale_sponge::initialize_ale_sponge" name="mom_ale_sponge::initialize_ale_sponge">
+<area shape="rect" id="node2" href="$namespacedense__water__initialization.html#ad2b426d6c4abc03ad3adf965cb9cf7f0" title="Initialize the restoring sponges for the dense water experiment. " alt="" coords="240,5,411,61"/>
+<area shape="rect" id="node6" href="$namespacedome2d__initialization.html#ab0df2b602fe1c83baa66ba03cc2c6dd4" title="Set up sponges in 2d DOME configuration. " alt="" coords="232,86,419,127"/>
+<area shape="rect" id="node7" href="$namespaceisomip__initialization.html#a672219a0070f4491fc1a8d9c20c6c1e4" title="Sets up the the inverse restoration time (Idamp), and. " alt="" coords="236,151,415,193"/>
+<area shape="rect" id="node3" href="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321" title="mom_state_initialization\l::mom_initialize_state" alt="" coords="467,50,629,91"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="677,57,820,84"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="868,57,955,84"/>
+</map>

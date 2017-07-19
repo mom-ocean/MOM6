@@ -1,0 +1,12 @@
+<map id="mom_internal_tides::propagate" name="mom_internal_tides::propagate">
+<area shape="rect" id="node2" href="$namespacemom__internal__tides.html#a66c9354cfdcde3d06a2ebe8775572d23" title="This subroutine does first&#45;order corner advection. It was written with the hopes of smoothing out the..." alt="" coords="188,71,364,112"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a487e6cad7cea4c5095f198c236628d6d" title="mom_internal_tides\l::propagate_x" alt="" coords="209,136,343,177"/>
+<area shape="rect" id="node9" href="$namespacemom__internal__tides.html#a5f63667c6d87b8ae6d51076ea2942aca" title="mom_internal_tides\l::propagate_y" alt="" coords="209,201,343,243"/>
+<area shape="rect" id="node4" href="$namespacemom__internal__tides.html#afa863318cc960c0be08672731ce6f225" title="This subroutine calculates left/right edge values for PPM reconstruction. " alt="" coords="412,5,571,47"/>
+<area shape="rect" id="node6" href="$namespacemom__internal__tides.html#a11b6fedbef7fd03428f8dfc404252792" title="This subroutines evaluates the zonal mass or volume fluxes in a layer. " alt="" coords="424,71,559,112"/>
+<area shape="rect" id="node7" href="$namespacemom__internal__tides.html#a6c622bfe3863b8fcea98c78104477491" title="This subroutine does reflection of the internal waves at a single frequency. " alt="" coords="424,136,559,177"/>
+<area shape="rect" id="node8" href="$namespacemom__internal__tides.html#a0a20d26531e245a26385d1c056b6a5b6" title="This subroutine moves energy across lines of partial reflection to prevent reflection of energy that ..." alt="" coords="424,201,559,243"/>
+<area shape="rect" id="node5" href="$namespacemom__internal__tides.html#a16dd5b071e0fc87eb04c32f602c08aa5" title="This subroutine limits the left/right edge values of the PPM reconstruction to give a reconstruction ..." alt="" coords="619,136,753,177"/>
+<area shape="rect" id="node10" href="$namespacemom__internal__tides.html#a6c3dc6d74dfd6e5b13d5f710899be278" title="This subroutine calculates left/right edge valus for PPM reconstruction. " alt="" coords="412,267,571,308"/>
+<area shape="rect" id="node11" href="$namespacemom__internal__tides.html#a08d375b914ce03bed1b317c9b7371f77" title="This subroutines evaluates the meridional mass or volume fluxes in a layer. " alt="" coords="424,332,559,373"/>
+</map>

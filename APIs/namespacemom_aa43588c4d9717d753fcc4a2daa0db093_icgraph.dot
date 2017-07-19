@@ -1,0 +1,12 @@
+digraph "mom::post_surface_diagnostics"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node320 [label="mom::post_surface_diagnostics",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node320 -> Node321 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node321 [label="mom::step_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a",tooltip="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..."];
+  Node321 -> Node322 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node322 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+}

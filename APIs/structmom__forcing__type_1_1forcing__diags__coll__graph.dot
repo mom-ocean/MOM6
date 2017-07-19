@@ -1,0 +1,9 @@
+digraph "mom_forcing_type::forcing_diags"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_forcing_type::forcing\l_diags",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_total_saltfluxin\nid_lat_ga\nid_total_heat_content\l_massout\nid_hfrainds\nid_heat_content\l_frunoff\nid_ustar_berg\nid_lwlatsens\nid_lprec_ga\nid_total_precip\nid_frunoff\n..." ,fontname="Helvetica"];
+  Node2 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

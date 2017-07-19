@@ -1,0 +1,6 @@
+<map id="mom_grid_initialize::adcroft_reciprocal" name="mom_grid_initialize::adcroft_reciprocal">
+<area shape="rect" id="node2" href="$namespacemom__grid__initialize.html#a3b1ac6c7cfc9f3401cbb020d1b4e87b5" title="initialize_masks initializes the grid masks and any metrics that come with masks already applied..." alt="" coords="187,5,320,47"/>
+<area shape="rect" id="node3" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="368,5,529,47"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="577,13,720,39"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="768,13,855,39"/>
+</map>

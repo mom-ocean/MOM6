@@ -1,0 +1,8 @@
+<map id="mom_diag_mediator::post_data_3d" name="mom_diag_mediator::post_data_3d">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6" title="Issues a FATAL error if the assertion fails, i.e. the first argument is false. " alt="" coords="836,111,977,153"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="1025,111,1167,153"/>
+<area shape="rect" id="node5" href="$namespacemom__diag__mediator.html#ae11cae949c3f8cf68d2c70f656aa9c54" title="mom_diag_mediator::\lpost_data_3d_low" alt="" coords="200,119,347,161"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="1215,111,1356,153"/>
+<area shape="rect" id="node6" href="$namespacemom__diag__mediator.html#ab41a1779c5edb50aa7256477cef952ae" title="Post the horizontally area&#45;averaged diagnostic. " alt="" coords="395,145,541,186"/>
+<area shape="rect" id="node7" href="$namespacemom__diag__remap.html#ab39f06d222661c6fc9175e3787f40525" title="Horizontally average field. " alt="" coords="589,195,788,237"/>
+</map>

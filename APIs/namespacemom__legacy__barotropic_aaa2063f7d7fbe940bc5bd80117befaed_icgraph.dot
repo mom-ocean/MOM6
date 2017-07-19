@@ -1,0 +1,12 @@
+digraph "mom_legacy_barotropic::legacy_set_dtbt"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node66 [label="mom_legacy_barotropic\l::legacy_set_dtbt",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node66 -> Node67 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node67 [label="mom_legacy_barotropic\l::legacy_barotropic_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__legacy__barotropic.html#aa9771b1e4e725afa95ab8ada8538a064"];
+  Node66 -> Node68 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node68 [label="mom_dynamics_legacy\l_split::step_mom_dyn\l_legacy_split",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dynamics__legacy__split.html#ae34fe0561f87dc05c2fad64bf6d5a1ee"];
+}

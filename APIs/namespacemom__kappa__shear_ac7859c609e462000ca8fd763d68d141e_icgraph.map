@@ -1,0 +1,8 @@
+<map id="mom_kappa_shear::kappa_shear_is_used" name="mom_kappa_shear::kappa_shear_is_used">
+<area shape="rect" id="node2" href="$namespacemom__cvmix__shear.html#ae7d13b4c15ffa26cf0b9641a3477ae36" title="Initialized the cvmix internal shear mixing routine. " alt="" coords="235,5,409,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diabatic__driver.html#afa0b30bd6f0e080bcacbd6dcb15ff990" title="This routine initializes the diabatic driver module. " alt="" coords="251,71,393,112"/>
+<area shape="rect" id="node4" href="$namespacemom__set__visc.html#a32bc2da5d0aa35ed289f955c79a5f4fc" title="mom_set_visc::set_visc_init" alt="" coords="228,137,416,163"/>
+<area shape="rect" id="node5" href="$namespacemom__set__visc.html#ae2d9d9f74c1e9aec56257cfad372b0fd" title="This subroutine is used to register any fields associated with the vertvisc_type. ..." alt="" coords="240,188,404,229"/>
+<area shape="rect" id="node6" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="464,195,607,222"/>
+<area shape="rect" id="node7" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="655,195,741,222"/>
+</map>

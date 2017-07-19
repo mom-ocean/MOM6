@@ -1,0 +1,15 @@
+digraph "mom_open_boundary::setup_segment_indices"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node116 [label="mom_open_boundary::\lsetup_segment_indices",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node116 -> Node117 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node117 [label="mom_open_boundary::\lsetup_u_point_obc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ab7c14cc1f67490ff9326c35471fb7ef7",tooltip="Parse an OBC_SEGMENT_%%% string starting with \"I=\" and configure placement and type of OBC accordingl..."];
+  Node117 -> Node118 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node118 [label="mom_open_boundary::\lopen_boundary_config",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f",tooltip="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..."];
+  Node116 -> Node119 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node119 [label="mom_open_boundary::\lsetup_v_point_obc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ae298511b7acc78ed5cd780ad967318cc",tooltip="Parse an OBC_SEGMENT_%%% string starting with \"J=\" and configure placement and type of OBC accordingl..."];
+  Node119 -> Node118 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

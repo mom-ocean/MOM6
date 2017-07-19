@@ -1,0 +1,15 @@
+digraph "mom_diabatic_aux::diabatic_aux_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_diabatic_aux::diabatic\l_aux_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" pressure_dependent\l_frazil\nreclaim_frazil\ndo_rivermix\nuse_river_heat\l_content\nuse_calving_heat\l_content\nignore_fluxes\l_over_land" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node3 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_brine_lay\nid_nonpensw_diag\nid_createdh\nid_pensw_diag\nid_penswflux_diag" ,fontname="Helvetica"];
+  Node4 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" penswflux_diag\npensw_diag\nrivermix_depth\nnonpensw_diag\ncreatedh" ,fontname="Helvetica"];
+  Node5 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

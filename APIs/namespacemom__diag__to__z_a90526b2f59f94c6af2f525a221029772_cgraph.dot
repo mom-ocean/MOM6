@@ -1,0 +1,56 @@
+digraph "mom_diag_to_z::ocean_register_diag_with_z"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node48 [label="mom_diag_to_z::ocean\l_register_diag_with_z",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node48 -> Node49 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 [label="mom_io::modify_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#af96b29cb8410d557e8e452b81586223b",tooltip="This routine modifies the named elements of a vardesc type. All arguments are optional, except the vardesc type to be modified. "];
+  Node49 -> Node50 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 [label="mom_io::safe_string_copy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88",tooltip="Copies a string. "];
+  Node50 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node51 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node51 -> Node52 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node52 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node48 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node48 -> Node53 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node53 [label="mom_diag_mediator::\locean_register_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c",tooltip="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..."];
+  Node53 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node53 -> Node54 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node54 [label="mom_io::query_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508",tooltip="This routine queries vardesc. "];
+  Node54 -> Node50 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node53 -> Node55 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node55 [label="mom_diag_mediator::\lregister_diag_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#aa791f75f899ae9b7cd4756165a9c2a1b",tooltip="Returns the \"diag_mediator\" handle for a group (native, CMOR, z-coord, ...) of diagnostics derived fr..."];
+  Node55 -> Node56 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node56 [label="mom_diag_mediator::\lregister_diag_field\l_expand_cmor",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae50b35cba800ac5fd8975929fd2b9f4a",tooltip="Returns True if either the native of CMOr version of the diagnostic were registered. Updates &#39;dm_id&#39; after calling register_diag_field_expand_axes() for both native and CMOR variants of the field. "];
+  Node56 -> Node57 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node57 [label="mom_diag_mediator::\ladd_diag_to_list",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a8415b33a337b1fbc7535688eca85ab37",tooltip="Create a diagnostic type and attached to list. "];
+  Node57 -> Node58 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node58 [label="mom_diag_mediator::\lalloc_diag_with_id",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a1b0bed2113a0c268eafd1bafbb48bd4f"];
+  Node57 -> Node59 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node59 [label="mom_error_handler::\lassert",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6",tooltip="Issues a FATAL error if the assertion fails, i.e. the first argument is false. "];
+  Node59 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node57 -> Node60 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node60 [label="mom_diag_mediator::\lget_new_diag_id",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a3f7442639213320f7429e2288a79fda2",tooltip="Returns a new diagnostic id, it may be necessary to expand the diagnostics array. ..."];
+  Node60 -> Node59 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node60 -> Node61 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node61 [label="mom_diag_mediator::\linitialize_diag_type",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a883862f004e30bbc5211f38635511ba0",tooltip="Initializes a diag_type (used after allocating new memory) "];
+  Node57 -> Node62 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node62 [label="mom_diag_mediator::\lset_diag_mask",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a085f313357879a914af6450f2ab8ec79",tooltip="Associates the mask pointers within diag with the appropriate mask based on the axes group..."];
+  Node56 -> Node63 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node63 [label="mom_diag_mediator::\lattach_cell_methods",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae0f04c145cb120fc2ab6cbfe9f166392",tooltip="Attaches \"cell_methods\" attribute to a variable based on defaults for axes_grp or optional arguments..."];
+  Node63 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node56 -> Node52 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node56 -> Node64 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node64 [label="mom_diag_mediator::\llog_available_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a65fe8d329cf5dbfd08c98874a7a64407",tooltip="Log a diagnostic to the available diagnostics file. "];
+  Node64 -> Node65 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node65 [label="mom_diag_mediator::\ldescribe_option",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae002ca447acba252bf7bdc042e75a01e"];
+  Node56 -> Node66 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node66 [label="mom_diag_mediator::\lregister_diag_field\l_expand_axes",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#aca4a32fea8dade9f51e076a56b9bad2b",tooltip="Returns an FMS id from register_diag_field_fms (the diag_manager routine) after expanding axes (axes-..."];
+  Node48 -> Node54 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node48 -> Node67 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node67 [label="mom_diag_to_z::register\l_z_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a4dda95a2d7577d6d347e94ec54638bb5"];
+  Node67 -> Node54 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node67 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

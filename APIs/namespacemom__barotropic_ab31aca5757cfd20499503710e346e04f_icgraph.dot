@@ -1,0 +1,10 @@
+digraph "mom_barotropic::adjust_local_bt_cont_types"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_barotropic::adjust\l_local_bt_cont_types",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="mom_barotropic::btstep",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__barotropic.html#a98cdf3c559146cc9485fcb9daa4cdbca",tooltip="This subroutine time steps the barotropic equations explicitly. For gravity waves, anything between a forwards-backwards scheme and a simulated backwards Euler scheme is used, with bebt between 0.0 and 1.0 determining the scheme. In practice, bebt must be of order 0.2 or greater. A forwards-backwards treatment of the Coriolis terms is always used. "];
+}

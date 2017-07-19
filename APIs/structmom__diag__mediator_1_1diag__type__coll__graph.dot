@@ -1,0 +1,40 @@
+digraph "mom_diag_mediator::diag_type"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_diag_mediator::\ldiag_type",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" v_extensive\nin_use" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node1 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" next" ,fontname="Helvetica"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" debug_str" ,fontname="Helvetica"];
+  Node3 [label="character(32)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" axes" ,fontname="Helvetica"];
+  Node4 [label="mom_diag_mediator::\laxes_grp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structmom__diag__mediator_1_1axes__grp.html",tooltip="A group of 1D axes that comprise a 1D/2D/3D mesh. "];
+  Node2 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" needs_remapping\nis_q_point\nis_interface\nis_u_point\nis_v_point\nis_layer\nis_native\nneeds_interpolating\nis_h_point" ,fontname="Helvetica"];
+  Node5 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag_cs" ,fontname="Helvetica"];
+  Node5 [label="mom_diag_mediator::\ldiag_ctrl",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structmom__diag__mediator_1_1diag__ctrl.html",tooltip="The following data type a list of diagnostic fields an their variants, as well as variables that cont..."];
+  Node2 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ave_enabled" ,fontname="Helvetica"];
+  Node1 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diags" ,fontname="Helvetica"];
+  Node6 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time_end" ,fontname="Helvetica"];
+  Node6 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" eqn_of_state" ,fontname="Helvetica"];
+  Node7 [label="type(eos_type), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag_remap_cs" ,fontname="Helvetica"];
+  Node8 [label="diag_remap_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" remap_axescvi\nremap_axesbi\naxeszi\naxescui\naxest1\nremap_axesti\nremap_axescvl\nremap_axesbl\naxesb1\naxeszl\n..." ,fontname="Helvetica"];
+  Node9 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" g" ,fontname="Helvetica"];
+  Node9 [label="ocean_grid_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" mask3dbl\nh\nmask3dtl\ntime_int\nmask3dcvi\nmask3dcui\nmask2dt\nmask3dcvl\nmask3dcul\nh_old\n..." ,fontname="Helvetica"];
+  Node10 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node5 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ied\njed\ndoc_unit\nisd\njsd\njs\nis\nje\nie\nnum_diag\l_coords\n..." ,fontname="Helvetica"];
+  Node11 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node12 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" v_cell_method\ny_cell_method\nx_cell_method" ,fontname="Helvetica"];
+  Node12 [label="character(len=9)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" xyave_axes" ,fontname="Helvetica"];
+  Node11 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" vertical_coordinate\l_number\nhandles\nid_volume\nnz\nrank\nid_area" ,fontname="Helvetica"];
+  Node13 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id" ,fontname="Helvetica"];
+  Node13 [label="character(len=15)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" mask3d\nmask2d\nconversion_factor" ,fontname="Helvetica"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" fms_xyave_diag_id\nfms_diag_id" ,fontname="Helvetica"];
+}

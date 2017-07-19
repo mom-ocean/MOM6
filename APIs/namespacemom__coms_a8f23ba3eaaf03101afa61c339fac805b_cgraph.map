@@ -1,0 +1,5 @@
+<map id="mom_coms::efp_real_diff" name="mom_coms::efp_real_diff">
+<area shape="rect" id="node2" href="$namespacemom__coms.html#a4aaf51b372bcaf7b46939145577eff92" title="mom_coms::efp_to_real" alt="" coords="223,31,385,57"/>
+<area shape="rect" id="node3" href="$namespacemom__coms.html#ab8feff19e782af36bb7ccccd5ba9eddc" title="mom_coms::regularize_ints" alt="" coords="433,5,616,32"/>
+<area shape="rect" id="node4" href="$namespacemom__coms.html#a24ac5b7cc37b1498f23b61eea03fb8c3" title="mom_coms::ints_to_real" alt="" coords="442,56,607,83"/>
+</map>

@@ -1,0 +1,4 @@
+<map id="mom_ocmip2_cfc::ocmip2_cfc_column_physics" name="mom_ocmip2_cfc::ocmip2_cfc_column_physics">
+<area shape="rect" id="node2" href="$namespacemom__tracer__diabatic.html#ad4d3d4de0f2b84c15bccc5eb2f767df3" title="This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90 NOTE: Please note that..." alt="" coords="228,5,439,47"/>
+<area shape="rect" id="node3" href="$namespacemom__tracer__diabatic.html#ac5d57973547cc4ed3a89808d3910943e" title="This subroutine solves a tridiagonal equation for the final tracer concentrations after the dual&#45;entr..." alt="" coords="262,71,405,112"/>
+</map>

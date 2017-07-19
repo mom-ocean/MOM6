@@ -1,0 +1,12 @@
+digraph "user_shelf_init::user_initialize_shelf_mass"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node6 [label="user_shelf_init::user\l_initialize_shelf_mass",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node6 -> Node7 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 [label="user_shelf_init::user\l_update_shelf_mass",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__shelf__init.html#abd99438d24c4a57aa3fbab3b067a7c81"];
+  Node6 -> Node8 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node8 [label="user_shelf_init::write\l_user_log",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__shelf__init.html#a04dc4958214e8b07da385f8be785d706"];
+}

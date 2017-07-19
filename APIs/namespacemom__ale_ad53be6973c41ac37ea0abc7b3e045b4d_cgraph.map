@@ -1,0 +1,8 @@
+<map id="mom_ale::ale_regrid_accelerated" name="mom_ale::ale_regrid_accelerated">
+<area shape="rect" id="node2" href="$namespacemom__domains.html#ac90ecdd1f8397352dfa996ae7198b0ef" title="mom_domains::do_group_pass" alt="" coords="192,19,395,46"/>
+<area shape="rect" id="node3" href="$namespacemom__ale.html#af95685cdfb7505b09300795da2336dbe" title="This routine takes care of remapping all variable between the old and the new grids. When velocity components need to be remapped, thicknesses at velocity points are taken to be arithmetic averages of tracer thicknesses. This routine is called during initialization of the model at time=0, to remap initiali conditions to the model grid. It is also called during a time step to update the state. " alt="" coords="224,71,363,112"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#a9cda07a87815f0e5594066162b4345c3" title="Writes a message about entering a subroutine if call tree reporting is active. " alt="" coords="443,5,584,47"/>
+<area shape="rect" id="node6" href="$namespacemom__error__handler.html#a34a02e601a60f03cb97a72fe25a32853" title="Writes a message about reaching a milestone if call tree reporting is active. " alt="" coords="443,71,584,112"/>
+<area shape="rect" id="node7" href="$namespacemom__error__handler.html#a88ea67781e2ed9b73ab7eac8ea5e8578" title="Writes a message about leaving a subroutine if call tree reporting is active. " alt="" coords="443,136,584,177"/>
+<area shape="rect" id="node5" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="632,71,773,112"/>
+</map>

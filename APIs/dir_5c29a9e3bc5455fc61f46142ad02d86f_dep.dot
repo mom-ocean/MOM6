@@ -1,0 +1,11 @@
+digraph "/home/adcroft/GitHub/workspace/Gaea-stats-MOM6-examples/MOM6-examples/src/MOM6/src/ice_shelf" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_68267d1309a1af8e8297ef4c3efbcdba {
+    graph [ bgcolor="#ddddee", pencolor="black", label="src" fontname="Helvetica", fontsize="10", URL="dir_68267d1309a1af8e8297ef4c3efbcdba.html"]
+  dir_5c29a9e3bc5455fc61f46142ad02d86f [shape=box, label="ice_shelf", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_5c29a9e3bc5455fc61f46142ad02d86f.html"];
+  }
+  dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [shape=box label="config_src" fillcolor="white" style="filled" color="red" URL="dir_bbbeac63f53ec5ea699fa4cbaa8c4afb.html"];
+  dir_5c29a9e3bc5455fc61f46142ad02d86f->dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [headlabel="4", labeldistance=1.5 headhref="dir_000010_000000.html"];
+}

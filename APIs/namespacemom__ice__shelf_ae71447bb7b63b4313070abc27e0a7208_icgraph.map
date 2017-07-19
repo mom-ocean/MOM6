@@ -1,0 +1,7 @@
+<map id="mom_ice_shelf::update_velocity_masks" name="mom_ice_shelf::update_velocity_masks">
+<area shape="rect" id="node2" href="$namespacemom__ice__shelf.html#a6a07543d5e828b759f18def33ca4feda" title="mom_ice_shelf::ice\l_shelf_advect" alt="" coords="226,12,361,53"/>
+<area shape="rect" id="node5" href="$namespacemom__ice__shelf.html#ac084bdc5be4e708e3263488e9574a3c9" title="mom_ice_shelf::solo\l_time_step" alt="" coords="426,71,569,112"/>
+<area shape="rect" id="node6" href="$namespacemom__ice__shelf.html#ae315e8464ef8a20062e3bccb61886755" title="Initializes shelf model data, parameters and diagnostics. " alt="" coords="211,129,376,171"/>
+<area shape="rect" id="node3" href="$namespacemom__ice__shelf.html#a3b0e0cc9f36c5197236cc05867b780df" title="Calculates fluxes between the ocean and ice&#45;shelf using the three&#45;equations formulation (optional to ..." alt="" coords="424,5,571,47"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="619,75,705,102"/>
+</map>

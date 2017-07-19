@@ -1,0 +1,4 @@
+<map id="mom_legacy_barotropic::vhbt_to_vbt" name="mom_legacy_barotropic::vhbt_to_vbt">
+<area shape="rect" id="node2" href="$namespacemom__legacy__barotropic.html#ae039a54a1c82e3f4f53539e5dc2de6ea" title="mom_legacy_barotropic\l::legacy_btstep" alt="" coords="421,5,581,47"/>
+<area shape="rect" id="node3" href="$namespacemom__legacy__barotropic.html#a4ec7ded997089119e526b3c0542d21bb" title="This subroutine sets up the private structure used to apply the open boundary conditions, as developed by Mehmet Ilicak. " alt="" coords="213,35,373,76"/>
+</map>

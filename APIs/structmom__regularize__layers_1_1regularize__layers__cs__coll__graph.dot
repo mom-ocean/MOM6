@@ -1,0 +1,19 @@
+digraph "mom_regularize_layers::regularize_layers_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_regularize_layers\l::regularize_layers_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" regularize_surface\l_layers\nallow_clocks_in\l_omp_loops\ndebug\nreg_sfc_detrain" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" pass_h" ,fontname="Helvetica"];
+  Node4 [label="group_pass_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node5 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_def_rat_v_3b\nid_def_rat_u_3b\nid_def_rat_v_2b\nid_def_rat_u_2b\nid_def_rat_v_1b\nid_def_rat_u\nid_def_rat_u_1b\nid_def_rat_v\nid_def_rat_2\nid_def_rat_3\n..." ,fontname="Helvetica"];
+  Node6 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" h_def_tol1\nh_def_tol2\nh_def_tol3\nh_def_tol4\nhmix_min" ,fontname="Helvetica"];
+  Node7 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

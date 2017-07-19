@@ -1,0 +1,32 @@
+<map id="mom_io::query_vardesc" name="mom_io::query_vardesc">
+<area shape="rect" id="node2" href="$namespaceadvection__test__tracer.html#a1e3884b030df6c5107380b4ddd2fbce2" title="advection_test_tracer\l::advection_test_stock" alt="" coords="230,5,385,47"/>
+<area shape="rect" id="node6" href="$namespaceboundary__impulse__tracer.html#a9c170481eec5074f1a3b2b5e09a142fc" title="Calculate total inventory of tracer. " alt="" coords="220,71,395,112"/>
+<area shape="rect" id="node7" href="$namespaceideal__age__example.html#a2300d82e30802a3127f4a63277d37776" title="ideal_age_example::\lideal_age_stock" alt="" coords="237,136,378,177"/>
+<area shape="rect" id="node8" href="$namespaceadvection__test__tracer.html#adad96933565e1ee601662052ad3f6943" title="advection_test_tracer\l::initialize_advection\l_test_tracer" alt="" coords="234,202,381,258"/>
+<area shape="rect" id="node9" href="$namespaceboundary__impulse__tracer.html#a3e9d605e0a7bed7bb6028cb916ded161" title="Initialize tracer from restart or set to 1 at surface to initialize. " alt="" coords="224,282,391,338"/>
+<area shape="rect" id="node10" href="$namespacedome__tracer.html#acbbc86d4dbc4997c0cd55aa498d2c668" title="dome_tracer::initialize\l_dome_tracer" alt="" coords="233,363,382,404"/>
+<area shape="rect" id="node11" href="$namespaceregional__dyes.html#aeef37afe2f348fc7d94fe977d74d6d0b" title="regional_dyes::initialize\l_dye_tracer" alt="" coords="229,428,386,469"/>
+<area shape="rect" id="node12" href="$namespaceideal__age__example.html#abec4db7c44f7a6d5c891a6d8a17a99b3" title="ideal_age_example::\linitialize_ideal_age\l_tracer" alt="" coords="237,494,378,550"/>
+<area shape="rect" id="node13" href="$namespaceisomip__tracer.html#a6083b2b081277f46013d9a22b32b7741" title="Initializes the NTR tracer fields in tr(:,:,:,:) " alt="" coords="230,575,385,616"/>
+<area shape="rect" id="node14" href="$namespacemom__ocmip2__cfc.html#a0c916b2f0835bd79002803f246d2ef49" title="This subroutine initializes the NTR tracer fields in tr(:,:,:,:) and it sets up the tracer output..." alt="" coords="217,640,397,681"/>
+<area shape="rect" id="node15" href="$namespaceoil__tracer.html#a2bb5dd516d506706c1e67e1206e389b5" title="oil_tracer::initialize\l_oil_tracer" alt="" coords="242,705,373,747"/>
+<area shape="rect" id="node16" href="$namespacepseudo__salt__tracer.html#adaef10fff7bd433eab35152075b3f166" title="pseudo_salt_tracer\l::initialize_pseudo\l_salt_tracer" alt="" coords="241,771,373,827"/>
+<area shape="rect" id="node17" href="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c" title="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..." alt="" coords="234,983,381,1024"/>
+<area shape="rect" id="node18" href="$namespacemom__diag__to__z.html#a90526b2f59f94c6af2f525a221029772" title="This subroutine registers a tracer to be output in depth space. " alt="" coords="453,1041,611,1083"/>
+<area shape="rect" id="node19" href="$namespacemom__ocmip2__cfc.html#ac3c9967ff09b37934eb5ef51535e7ee3" title="This function calculates the mass&#45;weighted integral of all tracer stocks, returning the number of sto..." alt="" coords="220,852,395,893"/>
+<area shape="rect" id="node20" href="$namespacepseudo__salt__tracer.html#a282f3c84b7e7ccdaa6d9344342705a6e" title="pseudo_salt_tracer\l::pseudo_salt_stock" alt="" coords="238,917,377,959"/>
+<area shape="rect" id="node21" href="$namespaceboundary__impulse__tracer.html#a8c333281de8a3f7a255a0da4187427ad" title="Read in runtime options and add boundary impulse tracer to tracer registry. " alt="" coords="215,1099,400,1155"/>
+<area shape="rect" id="node22" href="$namespaceregional__dyes.html#af9da6e5dbe58dedce4ede6f0533fe702" title="regional_dyes::register\l_dye_tracer" alt="" coords="231,1180,384,1221"/>
+<area shape="rect" id="node23" href="$namespaceideal__age__example.html#a58d550a02148b87b1d1ce979fcaf6c00" title="ideal_age_example::\lregister_ideal_age_tracer" alt="" coords="224,1245,391,1287"/>
+<area shape="rect" id="node24" href="$namespaceoil__tracer.html#ae9bef348e3fea3af157e841a0c9f6aeb" title="oil_tracer::register\l_oil_tracer" alt="" coords="244,1311,371,1352"/>
+<area shape="rect" id="node25" href="$namespacepseudo__salt__tracer.html#a147eabcabc9a787c01310dd67a5bab08" title="pseudo_salt_tracer\l::register_pseudo_salt\l_tracer" alt="" coords="232,1377,383,1433"/>
+<area shape="rect" id="node26" href="$namespacemom__tracer__registry.html#a6a753792521378d63e3dd5ca73f3574a" title="This subroutine registers a tracer to be advected and laterally diffused. " alt="" coords="237,1457,378,1499"/>
+<area shape="rect" id="node27" href="$namespacemom__diag__to__z.html#a4dda95a2d7577d6d347e94ec54638bb5" title="mom_diag_to_z::register\l_z_diag" alt="" coords="225,1523,390,1564"/>
+<area shape="rect" id="node28" href="$namespacemom__diag__to__z.html#a12bc76d5b29b6b3292a802946b7dd6fc" title="mom_diag_to_z::register\l_zint_diag" alt="" coords="225,1588,390,1629"/>
+<area shape="rect" id="node30" href="$namespaceuser__tracer__example.html#a16d417b6068f44605caf3573bf5f4de9" title="user_tracer_example\l::user_initialize_tracer" alt="" coords="233,1653,382,1695"/>
+<area shape="rect" id="node31" href="$namespaceuser__tracer__example.html#a040e2b8e8c5a41ccb6398e66d820c4be" title="user_tracer_example\l::user_tracer_stock" alt="" coords="236,1719,379,1760"/>
+<area shape="rect" id="node3" href="$namespacemom__tracer__flow__control.html#afd8526344e928c8c9505c921bf37447f" title="This subroutine calls all registered tracer packages to enable them to add to the surface state retur..." alt="" coords="448,495,616,536"/>
+<area shape="rect" id="node4" href="$namespacemom__sum__output.html#aef94e597f85f3ee439b2ddc2b46a043a" title="This subroutine calculates and writes the total model energy, the energy and mass of each layer..." alt="" coords="664,495,827,536"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="875,502,961,529"/>
+<area shape="rect" id="node29" href="$namespacemom__diabatic__driver.html#afa0b30bd6f0e080bcacbd6dcb15ff990" title="This routine initializes the diabatic driver module. " alt="" coords="461,1588,603,1629"/>
+</map>

@@ -1,0 +1,7 @@
+<map id="mom_internal_tides::propagate_x" name="mom_internal_tides::propagate_x">
+<area shape="rect" id="node2" href="$namespacemom__internal__tides.html#afa863318cc960c0be08672731ce6f225" title="This subroutine calculates left/right edge values for PPM reconstruction. " alt="" coords="188,5,347,47"/>
+<area shape="rect" id="node4" href="$namespacemom__internal__tides.html#a6c622bfe3863b8fcea98c78104477491" title="This subroutine does reflection of the internal waves at a single frequency. " alt="" coords="200,71,335,112"/>
+<area shape="rect" id="node5" href="$namespacemom__internal__tides.html#a0a20d26531e245a26385d1c056b6a5b6" title="This subroutine moves energy across lines of partial reflection to prevent reflection of energy that ..." alt="" coords="200,136,335,177"/>
+<area shape="rect" id="node6" href="$namespacemom__internal__tides.html#a11b6fedbef7fd03428f8dfc404252792" title="This subroutines evaluates the zonal mass or volume fluxes in a layer. " alt="" coords="200,201,335,243"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a16dd5b071e0fc87eb04c32f602c08aa5" title="This subroutine limits the left/right edge values of the PPM reconstruction to give a reconstruction ..." alt="" coords="395,5,529,47"/>
+</map>

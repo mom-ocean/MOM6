@@ -1,0 +1,5 @@
+<map id="mom_open_boundary::setup_segment_indices" name="mom_open_boundary::setup_segment_indices">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#ab7c14cc1f67490ff9326c35471fb7ef7" title="Parse an OBC_SEGMENT_%%% string starting with &quot;I=&quot; and configure placement and type of OBC accordingl..." alt="" coords="212,5,367,47"/>
+<area shape="rect" id="node4" href="$namespacemom__open__boundary.html#ae298511b7acc78ed5cd780ad967318cc" title="Parse an OBC_SEGMENT_%%% string starting with &quot;J=&quot; and configure placement and type of OBC accordingl..." alt="" coords="212,71,367,112"/>
+<area shape="rect" id="node3" href="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f" title="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..." alt="" coords="415,39,569,80"/>
+</map>

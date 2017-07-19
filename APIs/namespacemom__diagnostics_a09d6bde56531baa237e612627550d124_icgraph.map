@@ -1,0 +1,4 @@
+<map id="mom_diagnostics::register_time_deriv" name="mom_diagnostics::register_time_deriv">
+<area shape="rect" id="node2" href="$namespacemom__diagnostics.html#ab2108574e351f6deb812da3faf437278" title="mom_diagnostics::mom\l_diagnostics_init" alt="" coords="439,5,600,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diagnostics.html#a90a92410576d955e89d2aa4e3f6d7402" title="This subroutine sets up diagnostics upon which other diagnostics depend. " alt="" coords="228,35,391,76"/>
+</map>

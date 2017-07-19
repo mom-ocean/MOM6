@@ -1,0 +1,24 @@
+digraph "mom_legacy_barotropic::legacy_barotropic_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_legacy_barotropic\l::legacy_barotropic_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" bound_bt_corr\nuse_wide_halos\nclip_velocity\ndynamic_psurf\nsadourny\nsplit\ndebug_bt\nbt_project_velocity\ntides\nlinearized_bt\l_pv\n..." ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" debug_bt_hi" ,fontname="Helvetica"];
+  Node3 [label="hor_index_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time" ,fontname="Helvetica"];
+  Node4 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node5 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tides_csp" ,fontname="Helvetica"];
+  Node6 [label="type(tidal_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_gtotn\nid_ubt_hifreq\nid_vbt_st\nid_ubtav\nnonlin_cont_update\l_period\nid_ubt_st\nid_vbtav\nid_ubt\nid_vhbt\nid_vbt\n..." ,fontname="Helvetica"];
+  Node7 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" dtbt\ndmin_dyn_psurf\nidatu\nidatv\ng_extra\nubtav\nallocable\l_\nmaxcfl_bt\l_cont\nbebt\ndtbt_fraction\n..." ,fontname="Helvetica"];
+  Node8 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" bt_domain" ,fontname="Helvetica"];
+  Node9 [label="type(mom_domain_type)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

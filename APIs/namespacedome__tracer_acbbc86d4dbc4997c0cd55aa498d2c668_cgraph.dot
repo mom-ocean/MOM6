@@ -1,0 +1,32 @@
+digraph "dome_tracer::initialize_dome_tracer"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node7 [label="dome_tracer::initialize\l_dome_tracer",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node7 -> Node8 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node8 [label="mom_tracer_registry\l::add_tracer_diagnostics",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__registry.html#ac008525fee272a225a19998ae437b5bf",tooltip="This subroutine adds diagnostic arrays for a tracer that has previously been registered by a call to ..."];
+  Node8 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node9 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node9 -> Node10 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node10 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node7 -> Node11 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node11 [label="mom_tracer_registry\l::add_tracer_obc_values",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__registry.html#a6210b799ee25a114d4b87bdfaa6d0c7a",tooltip="This subroutine adds open boundary condition concentrations for a tracer that has previously been reg..."];
+  Node11 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 -> Node12 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node12 [label="mom_io::query_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508",tooltip="This routine queries vardesc. "];
+  Node12 -> Node13 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node13 [label="mom_io::safe_string_copy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88",tooltip="Copies a string. "];
+  Node13 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 -> Node14 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node14 [label="mom_diag_to_z::register\l_z_tracer",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a6946a3316715041c5944df17db1aef74",tooltip="This subroutine registers a tracer to be output in depth space. "];
+  Node14 -> Node15 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node15 [label="mom_diag_to_z::register\l_z_tracer_low",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#adde57f2503f5c182af511fba0f4c83ea",tooltip="This subroutine registers a tracer to be output in depth space. "];
+  Node15 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 -> Node16 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node16 [label="mom_sponge::set_up\l_sponge_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__sponge.html#af3da4a8b352c4130919d7bfedf1a5a3e"];
+  Node16 -> Node9 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node16 -> Node10 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

@@ -1,0 +1,8 @@
+<map id="mom_internal_tides::ppm_limit_pos" name="mom_internal_tides::ppm_limit_pos">
+<area shape="rect" id="node2" href="$namespacemom__internal__tides.html#afa863318cc960c0be08672731ce6f225" title="This subroutine calculates left/right edge values for PPM reconstruction. " alt="" coords="188,5,347,47"/>
+<area shape="rect" id="node6" href="$namespacemom__internal__tides.html#a6c3dc6d74dfd6e5b13d5f710899be278" title="This subroutine calculates left/right edge valus for PPM reconstruction. " alt="" coords="188,71,347,112"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a487e6cad7cea4c5095f198c236628d6d" title="mom_internal_tides\l::propagate_x" alt="" coords="395,5,529,47"/>
+<area shape="rect" id="node4" href="$namespacemom__internal__tides.html#a22caa92b67ed4077ce78eac34d15b14d" title="This subroutine does refraction on the internal waves at a single frequency. " alt="" coords="577,39,712,80"/>
+<area shape="rect" id="node5" href="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2" title="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. " alt="" coords="760,39,896,80"/>
+<area shape="rect" id="node7" href="$namespacemom__internal__tides.html#a5f63667c6d87b8ae6d51076ea2942aca" title="mom_internal_tides\l::propagate_y" alt="" coords="395,71,529,112"/>
+</map>

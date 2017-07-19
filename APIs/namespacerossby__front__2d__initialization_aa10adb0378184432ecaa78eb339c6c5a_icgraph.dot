@@ -1,0 +1,20 @@
+digraph "rossby_front_2d_initialization::hml"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node9 [label="rossby_front_2d_initialization::hml",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node9 -> Node10 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node10 [label="rossby_front_2d_initialization\l::rossby_front_initialize\l_temperature_salinity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacerossby__front__2d__initialization.html#ab490a4f15755ef97420badc32419a14d",tooltip="Initialization of temperature and salinity in the Rossby front test. "];
+  Node9 -> Node11 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node11 [label="rossby_front_2d_initialization\l::rossby_front_initialize\l_thickness",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacerossby__front__2d__initialization.html#a5bb2f6319c079e75f6f2f8201105f082",tooltip="Initialization of thicknesses in 2D Rossby front test. "];
+  Node9 -> Node12 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node12 [label="rossby_front_2d_initialization\l::rossby_front_initialize\l_velocity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacerossby__front__2d__initialization.html#ae2ab8919c882f7b3f0da46758f0b33bf",tooltip="Initialization of u and v in the Rossby front test. "];
+  Node12 -> Node13 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node13 [label="mom_state_initialization\l::mom_initialize_state",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321"];
+  Node13 -> Node14 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node14 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node14 -> Node15 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node15 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+}

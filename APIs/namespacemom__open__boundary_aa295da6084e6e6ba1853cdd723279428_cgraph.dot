@@ -1,0 +1,12 @@
+digraph "mom_open_boundary::radiation_open_bdry_conds"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node92 [label="mom_open_boundary::\lradiation_open_bdry_conds",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node92 -> Node93 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node93 [label="mom_open_boundary::\lgradient_at_q_points",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a151df14c3b8b1094ddf8f44c86493fd5",tooltip="Calculate the tangential gradient of the normal flow at the boundary q-points. "];
+  Node92 -> Node94 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node94 [label="mom_open_boundary::\lopen_boundary_apply\l_normal_flow",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a11acc9ede6f2b975bfc6b849a2603b46",tooltip="Applies OBC values stored in segments to 3d u,v fields. "];
+}

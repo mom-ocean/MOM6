@@ -1,0 +1,8 @@
+<map id="mom_dyn_horgrid::adcroft_reciprocal" name="mom_dyn_horgrid::adcroft_reciprocal">
+<area shape="rect" id="node2" href="$namespacemom__dyn__horgrid.html#aefa448039e24b26fe06f9251848b6aac" title="set_derived_dyn_horgrid calculates metric terms that are derived from other metrics. " alt="" coords="227,39,377,80"/>
+<area shape="rect" id="node3" href="$namespacemom__transcribe__grid.html#a426ae345ad289eabaf68aeff02019753" title="Copies information from an ocean_grid_type into a dynamic (shared) horizontal grid type..." alt="" coords="607,5,796,47"/>
+<area shape="rect" id="node6" href="$namespacemom__grid__initialize.html#a235a9712823e2f78e4958e8d681b6ba4" title="set_grid_metrics is used to set the primary values in the model&#39;s horizontal grid. The bathymetry, land&#45;sea mask and any restricted channel widths are not known yet, so these are set later. " alt="" coords="425,68,559,109"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="844,46,987,73"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="1035,46,1121,73"/>
+<area shape="rect" id="node7" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="621,71,782,112"/>
+</map>

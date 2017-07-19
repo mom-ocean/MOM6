@@ -1,0 +1,30 @@
+digraph "mom_diag_mediator::register_diag_field"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node304 [label="mom_diag_mediator::\lregister_diag_field",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node304 -> Node305 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node305 [label="mom_ale::ale_register\l_diags",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a994efb3c62fc5f63da2617f29cbd6be1",tooltip="Initialize diagnostics for the ALE module. "];
+  Node304 -> Node306 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node306 [label="mom_coriolisadv::coriolisadv_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coriolisadv.html#ad3ce07f23ce7b484a5a9e0c0abe8b1cd",tooltip="Initializes the control structure for coriolisadv_cs. "];
+  Node304 -> Node307 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node307 [label="mom_diapyc_energy_req\l::diapyc_energy_req_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diapyc__energy__req.html#aa0ce122f4dc6d9a6ec9e17996484bb76"];
+  Node304 -> Node308 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node308 [label="mom_diffconvection\l::diffconvection_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diffconvection.html#ac36d9d7fd69e4422e7de01242094ff34"];
+  Node304 -> Node309 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node309 [label="mom_int_tide_input\l::int_tide_input_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__int__tide__input.html#a29a707637da633ccee155b53557b5f17"];
+  Node304 -> Node310 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node310 [label="mom_kpp::kpp_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__kpp.html#a9c834424b6e067e280928db3700ec77e",tooltip="Initialize the CVmix KPP module and set up diagnostics Returns True if KPP is to be used..."];
+  Node304 -> Node311 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node311 [label="mom_neutral_diffusion\l::neutral_diffusion_diag_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__neutral__diffusion.html#a87cf821c52ac1111493d4168f0a91d17",tooltip="Diagnostic handles for neutral diffusion tendencies. "];
+  Node311 -> Node312 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node312 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node312 -> Node313 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node313 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node304 -> Node314 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node314 [label="mom_diag_mediator::\locean_register_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c",tooltip="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..."];
+  Node314 -> Node315 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node315 [label="mom_diag_to_z::ocean\l_register_diag_with_z",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a90526b2f59f94c6af2f525a221029772",tooltip="This subroutine registers a tracer to be output in depth space. "];
+}

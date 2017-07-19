@@ -1,0 +1,29 @@
+digraph "advection_test_tracer::advection_test_tracer_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="advection_test_tracer\l::advection_test_tracer_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" use_sponge\ncoupled_tracers\ntracers_may_reinit\nmask_tracers" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_reg" ,fontname="Helvetica"];
+  Node4 [label="tracer_registry_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tracer_ic_file" ,fontname="Helvetica"];
+  Node5 [label="character(len=200)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_desc" ,fontname="Helvetica"];
+  Node6 [label="vardesc",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" restart_csp" ,fontname="Helvetica"];
+  Node7 [label="type(mom_restart_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node8 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_adx\ntr_dfx\ntr_ady\ntr_dfy" ,fontname="Helvetica"];
+  Node9 [label="advection_test_tracer::p3d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structadvection__test__tracer_1_1p3d.html"];
+  Node10 -> Node9 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" p" ,fontname="Helvetica"];
+  Node10 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" y_origin\ntr_aux\nland_val\nx_width\ny_width\ntr\nx_origin" ,fontname="Helvetica"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_tracer\nid_tr_dfx\nntr\nid_tr_dfy\nid_tr_adx\nind_tr\nid_tr_ady" ,fontname="Helvetica"];
+  Node11 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

@@ -1,0 +1,10 @@
+digraph "mom_vert_friction::find_coupling_coef"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_vert_friction::\lfind_coupling_coef",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="mom_vert_friction::\lvertvisc_coef",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__vert__friction.html#a5c29ca42705b12654f06005afb84fdfa",tooltip="Calculate the coupling coefficients (CSa_u and CSa_v) and effective layer thicknesses (CSh_u and CSh_..."];
+}

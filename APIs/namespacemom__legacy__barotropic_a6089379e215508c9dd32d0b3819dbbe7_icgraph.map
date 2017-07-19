@@ -1,0 +1,4 @@
+<map id="mom_legacy_barotropic::find_uhbt" name="mom_legacy_barotropic::find_uhbt">
+<area shape="rect" id="node2" href="$namespacemom__legacy__barotropic.html#a272a849d7cde70c0da337ad5ebdc0f62" title="This subroutine applies the open boundary conditions on barotropic velocities and mass transports..." alt="" coords="213,5,373,47"/>
+<area shape="rect" id="node3" href="$namespacemom__legacy__barotropic.html#ae039a54a1c82e3f4f53539e5dc2de6ea" title="mom_legacy_barotropic\l::legacy_btstep" alt="" coords="421,35,581,76"/>
+</map>

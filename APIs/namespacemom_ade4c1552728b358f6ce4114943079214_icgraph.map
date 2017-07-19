@@ -1,0 +1,5 @@
+<map id="mom::post_diags_ts_vardec" name="mom::post_diags_ts_vardec">
+<area shape="rect" id="node2" href="$namespacemom.html#a02eac5c5c3ad33f0a786b3e357e31433" title="MOM_step_thermo orchestrates the thermodynamic time stepping and vertical remapping, via calls to diabatic (or adiabatic) and ALE_main. " alt="" coords="193,13,360,39"/>
+<area shape="rect" id="node3" href="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a" title="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..." alt="" coords="408,13,528,39"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="576,13,663,39"/>
+</map>

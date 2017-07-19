@@ -1,0 +1,7 @@
+<map id="mom_domains::start_group_pass" name="mom_domains::start_group_pass">
+<area shape="rect" id="node2" href="$namespacemom__barotropic.html#a98cdf3c559146cc9485fcb9daa4cdbca" title="This subroutine time steps the barotropic equations explicitly. For gravity waves, anything between a forwards&#45;backwards scheme and a simulated backwards Euler scheme is used, with bebt between 0.0 and 1.0 determining the scheme. In practice, bebt must be of order 0.2 or greater. A forwards&#45;backwards treatment of the Coriolis terms is always used. " alt="" coords="215,5,374,32"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2" title="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. " alt="" coords="227,57,363,98"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a" title="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..." alt="" coords="235,123,355,149"/>
+<area shape="rect" id="node6" href="$namespacemom__dynamics__split__rk2.html#a81cce65643a8cf94979d68354a9a1979" title="RK2 splitting for time stepping MOM adiabatic dynamics. " alt="" coords="195,174,395,215"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="443,123,529,149"/>
+</map>

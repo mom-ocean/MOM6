@@ -1,0 +1,19 @@
+<map id="mom_legacy_barotropic::legacy_btstep" name="mom_legacy_barotropic::legacy_btstep">
+<area shape="rect" id="node2" href="$namespacemom__legacy__barotropic.html#a11b9afeb7e6e0775d8958639488a4456" title="This subroutine applies the open boundary conditions on the free surface height, as coded by Mehmet I..." alt="" coords="219,5,379,47"/>
+<area shape="rect" id="node3" href="$namespacemom__legacy__barotropic.html#a272a849d7cde70c0da337ad5ebdc0f62" title="This subroutine applies the open boundary conditions on barotropic velocities and mass transports..." alt="" coords="219,123,379,164"/>
+<area shape="rect" id="node4" href="$namespacemom__legacy__barotropic.html#a6089379e215508c9dd32d0b3819dbbe7" title="mom_legacy_barotropic\l::find_uhbt" alt="" coords="432,77,592,119"/>
+<area shape="rect" id="node5" href="$namespacemom__legacy__barotropic.html#a381d788c4648d9b4aa94a12319623030" title="mom_legacy_barotropic\l::find_vhbt" alt="" coords="432,168,592,209"/>
+<area shape="rect" id="node6" href="$namespacemom__legacy__barotropic.html#aa06249abf57a70498ab07eee534e5e52" title="mom_legacy_barotropic\l::bt_cont_to_face_areas" alt="" coords="217,240,380,281"/>
+<area shape="rect" id="node7" href="$namespacemom__legacy__barotropic.html#ae08f338ae6066f7eb91ce45e9a0218b4" title="mom_legacy_barotropic\l::destroy_bt_obc" alt="" coords="219,305,379,347"/>
+<area shape="rect" id="node8" href="$namespacemom__diag__mediator.html#a91244f765f2964dfb11f8787f65042f1" title="mom_diag_mediator::\lenable_averaging" alt="" coords="225,371,372,412"/>
+<area shape="rect" id="node9" href="$namespacemom__legacy__barotropic.html#ab334a4e8ef23ec6d784b24b6336d22f7" title="mom_legacy_barotropic\l::find_face_areas" alt="" coords="219,436,379,477"/>
+<area shape="rect" id="node10" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="441,553,583,595"/>
+<area shape="rect" id="node11" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="228,553,369,595"/>
+<area shape="rect" id="node12" href="$namespacemom__error__handler.html#a1c462df7b61f1296407b4af51dfeceab" title="mom_error_handler::\lmom_mesg" alt="" coords="228,619,369,660"/>
+<area shape="rect" id="node13" href="$namespacemom__legacy__barotropic.html#a6e0524c05da903129f241c22f666d058" title="mom_legacy_barotropic\l::set_local_bt_cont_types" alt="" coords="213,684,384,725"/>
+<area shape="rect" id="node14" href="$namespacemom__legacy__barotropic.html#ac501c7f590b7b9f0cedb48da7d14c0aa" title="mom_legacy_barotropic\l::swap" alt="" coords="432,731,592,772"/>
+<area shape="rect" id="node15" href="$namespacemom__legacy__barotropic.html#a4ec7ded997089119e526b3c0542d21bb" title="This subroutine sets up the private structure used to apply the open boundary conditions, as developed by Mehmet Ilicak. " alt="" coords="219,852,379,893"/>
+<area shape="rect" id="node16" href="$namespacemom__legacy__barotropic.html#ad9add945a282d75804293003405f794d" title="mom_legacy_barotropic\l::uhbt_to_ubt" alt="" coords="432,805,592,847"/>
+<area shape="rect" id="node17" href="$namespacemom__legacy__barotropic.html#aa500b44df0ce8db775bed7840dfb436c" title="mom_legacy_barotropic\l::vhbt_to_vbt" alt="" coords="432,889,592,931"/>
+<area shape="rect" id="node18" href="$namespacemom__tidal__forcing.html#a0a1564c68489a35802c626a07f4629d7" title="This subroutine calculates returns the partial derivative of the local geopotential height with the i..." alt="" coords="219,969,378,1011"/>
+</map>

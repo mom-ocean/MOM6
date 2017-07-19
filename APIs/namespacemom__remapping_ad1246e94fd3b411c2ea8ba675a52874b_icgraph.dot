@@ -1,0 +1,16 @@
+digraph "mom_remapping::dumpgrid"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node95 [label="mom_remapping::dumpgrid",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node95 -> Node96 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node96 [label="mom_remapping::remapping\l_unit_tests",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__remapping.html#a5849f564453d5ed76fb4feffd41eca26",tooltip="Runs unit tests on remapping functions. Should only be called from a single/root thread Returns True ..."];
+  Node96 -> Node97 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node97 [label="mom_unit_tests::unit\l_tests",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__unit__tests.html#a71f3a2080872634c14a25a9411b59fe0",tooltip="Calls unit tests for other modules. Note that if a unit test returns true, a FATAL error is triggered..."];
+  Node97 -> Node98 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node98 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node98 -> Node99 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node99 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+}

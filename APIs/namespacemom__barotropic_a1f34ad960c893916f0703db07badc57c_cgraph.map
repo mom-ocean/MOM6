@@ -1,0 +1,4 @@
+<map id="mom_barotropic::apply_velocity_obcs" name="mom_barotropic::apply_velocity_obcs">
+<area shape="rect" id="node2" href="$namespacemom__barotropic.html#a8ad2b12e885746401a97fd65ad189722" title="The function find_uhbt determines the zonal transport for a given velocity. " alt="" coords="208,5,384,32"/>
+<area shape="rect" id="node3" href="$namespacemom__barotropic.html#ae96b701027f6f77feed0f68515b31e55" title="The function find_vhbt determines the meridional transport for a given velocity. " alt="" coords="208,56,384,83"/>
+</map>

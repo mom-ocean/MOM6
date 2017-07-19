@@ -1,0 +1,4 @@
+<map id="mom_open_boundary::open_boundary_dealloc" name="mom_open_boundary::open_boundary_dealloc">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f" title="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..." alt="" coords="212,5,367,47"/>
+<area shape="rect" id="node3" href="$namespacemom__open__boundary.html#afb86d9ee7fc99dea787b88cfdb70f139" title="Close open boundary data. " alt="" coords="212,71,367,112"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="mom_wave_speed::wave_speed_set_param" name="mom_wave_speed::wave_speed_set_param">
+<area shape="rect" id="node2" href="$namespacemom__wave__speed.html#a46e21529ec8098b0b19053afa133b971" title="Initialize control structure for MOM_wave_speed. " alt="" coords="224,39,395,80"/>
+<area shape="rect" id="node3" href="$namespacemom__diagnostics.html#ab2108574e351f6deb812da3faf437278" title="mom_diagnostics::mom\l_diagnostics_init" alt="" coords="443,5,604,47"/>
+<area shape="rect" id="node4" href="$namespacemom__lateral__mixing__coeffs.html#aeb658054e8d4d723dff397f8ae186e4a" title="Initializes the variables mixing coefficients container. " alt="" coords="454,71,593,112"/>
+</map>

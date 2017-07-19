@@ -1,0 +1,19 @@
+<map id="mom_sum_output::write_energy" name="mom_sum_output::write_energy">
+<area shape="rect" id="node2" href="$namespacemom__tracer__flow__control.html#afd8526344e928c8c9505c921bf37447f" title="This subroutine calls all registered tracer packages to enable them to add to the surface state retur..." alt="" coords="216,253,384,295"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="1101,479,1243,520"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="1291,605,1432,647"/>
+<area shape="rect" id="node14" href="$namespacemom__coms.html#a4aaf51b372bcaf7b46939145577eff92" title="mom_coms::efp_to_real" alt="" coords="219,638,381,665"/>
+<area shape="rect" id="node17" href="$namespacemom__coms.html#ac8f1b5be23b128cd8bb956ebda917edb" title="mom_coms::real_to_efp" alt="" coords="665,537,828,563"/>
+<area shape="rect" id="node5" href="$namespacemom__tracer__flow__control.html#ad43ea30fa52fcb930db39037f5d7e6b9" title="This routine stores the stocks and does error handling for call_tracer_stocks. " alt="" coords="663,436,831,477"/>
+<area shape="rect" id="node6" href="$namespaceideal__age__example.html#a2300d82e30802a3127f4a63277d37776" title="ideal_age_example::\lideal_age_stock" alt="" coords="453,123,594,164"/>
+<area shape="rect" id="node9" href="$namespaceregional__dyes.html#a0641ff9c663bcfacdd597a79f63d15e0" title="regional_dyes::dye\l_stock" alt="" coords="458,5,589,47"/>
+<area shape="rect" id="node10" href="$namespaceoil__tracer.html#ac8964b16549dba8fc850e4af15af8029" title="oil_tracer::oil_stock" alt="" coords="456,71,591,98"/>
+<area shape="rect" id="node11" href="$namespacemom__ocmip2__cfc.html#ac3c9967ff09b37934eb5ef51535e7ee3" title="This function calculates the mass&#45;weighted integral of all tracer stocks, returning the number of sto..." alt="" coords="436,188,611,229"/>
+<area shape="rect" id="node12" href="$namespaceadvection__test__tracer.html#a1e3884b030df6c5107380b4ddd2fbce2" title="advection_test_tracer\l::advection_test_stock" alt="" coords="446,253,601,295"/>
+<area shape="rect" id="node13" href="$namespacepseudo__salt__tracer.html#a282f3c84b7e7ccdaa6d9344342705a6e" title="pseudo_salt_tracer\l::pseudo_salt_stock" alt="" coords="454,319,593,360"/>
+<area shape="rect" id="node7" href="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508" title="This routine queries vardesc. " alt="" coords="666,261,827,287"/>
+<area shape="rect" id="node8" href="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88" title="Copies a string. " alt="" coords="879,298,1053,325"/>
+<area shape="rect" id="node15" href="$namespacemom__coms.html#a24ac5b7cc37b1498f23b61eea03fb8c3" title="mom_coms::ints_to_real" alt="" coords="441,689,606,715"/>
+<area shape="rect" id="node16" href="$namespacemom__coms.html#ab8feff19e782af36bb7ccccd5ba9eddc" title="mom_coms::regularize_ints" alt="" coords="432,638,615,665"/>
+<area shape="rect" id="node18" href="$namespacemom__coms.html#a0cc261620495abf3313937726883b95e" title="mom_coms::real_to_ints" alt="" coords="883,537,1049,563"/>
+</map>

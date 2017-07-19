@@ -1,0 +1,8 @@
+<map id="bfb_initialization::write_bfb_log" name="bfb_initialization::write_bfb_log">
+<area shape="rect" id="node2" href="$namespacebfb__initialization.html#a03de1f1af12eab371cc0e4336a749ccf" title="bfb_initialization\l::bfb_initialize_sponges\l_southonly" alt="" coords="168,5,327,61"/>
+<area shape="rect" id="node6" href="$namespacebfb__initialization.html#a681cb69f1a6fe142e5baa6aee5f57060" title="bfb_initialization\l::bfb_set_coord" alt="" coords="190,86,305,127"/>
+<area shape="rect" id="node3" href="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321" title="mom_state_initialization\l::mom_initialize_state" alt="" coords="376,15,539,57"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="588,56,731,83"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="779,56,865,83"/>
+<area shape="rect" id="node7" href="$namespacemom__coord__initialization.html#a6e2f4c11bc99476ea9c64a9aceac3b81" title="MOM_initialize_coord sets up time&#45;invariant quantities related to MOM6&#39;s vertical coordinate..." alt="" coords="375,82,540,123"/>
+</map>

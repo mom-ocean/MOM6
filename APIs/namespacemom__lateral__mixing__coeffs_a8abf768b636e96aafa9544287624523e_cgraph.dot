@@ -1,0 +1,28 @@
+digraph "mom_lateral_mixing_coeffs::calc_slope_functions"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node37 [label="mom_lateral_mixing\l_coeffs::calc_slope\l_functions",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node37 -> Node38 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 [label="mom_isopycnal_slopes\l::calc_isoneutral_slopes",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__isopycnal__slopes.html#ad8b145434d470eceaf9a151a65a74dd5"];
+  Node38 -> Node39 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 [label="mom_eos::calculate\l_density_derivs",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__eos.html#a204529f8434a0322314e6ce2a9762436",tooltip="Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs. "];
+  Node39 -> Node40 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node40 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node40 -> Node41 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node41 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node38 -> Node42 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node42 [label="mom_isopycnal_slopes\l::vert_fill_ts",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__isopycnal__slopes.html#a4a5a4ea71140c8e115264614305840c9"];
+  Node37 -> Node43 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node43 [label="mom_lateral_mixing\l_coeffs::calc_slope\l_functions_using_just_e",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#a99c2bbbd90d46bebeb2e8bd4c29817dd",tooltip="The original calc_slope_function() that calculated slopes using interface positions only..."];
+  Node43 -> Node40 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node37 -> Node44 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node44 [label="mom_lateral_mixing\l_coeffs::calc_visbeck\l_coeffs",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#ae625fee7e36d68e290b3af57697d0afe",tooltip="Calculates factors used when setting diffusivity coefficients similar to Visbeck et al..."];
+  Node44 -> Node40 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node44 -> Node45 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node45 [label="mom_diag_mediator::\lquery_averaging_enabled",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a0be5d1cbc6c6f8f63950ce7d9bc6455a"];
+  Node37 -> Node40 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node37 -> Node45 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

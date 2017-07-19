@@ -1,0 +1,6 @@
+<map id="mom_diag_mediator::i2s" name="mom_diag_mediator::i2s">
+<area shape="rect" id="node2" href="$namespacemom__diag__mediator.html#ab9f767ec24a860cb71cae264560272a8" title="Defines a group of &quot;axes&quot; from list of handles. " alt="" coords="217,5,364,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diag__mediator.html#a4d8d23e602166167b393e19453ded5bf" title="Sets up diagnostics axes. " alt="" coords="412,5,559,47"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="607,13,749,39"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="797,13,884,39"/>
+</map>

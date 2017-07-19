@@ -1,0 +1,7 @@
+<map id="mom_boundary_update::call_obc_register" name="mom_boundary_update::call_obc_register">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="217,5,359,47"/>
+<area shape="rect" id="node4" href="$namespacemom__open__boundary.html#a05d15beca2ef2b44fb36d129166907fa" title="Add file to OBC registry. " alt="" coords="211,71,365,112"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="420,5,561,47"/>
+<area shape="rect" id="node5" href="$namespacemom__open__boundary.html#a8e0e22d829c122134f039228c6f1c7fb" title="register open boundary objects for boundary updates. " alt="" coords="413,71,568,112"/>
+<area shape="rect" id="node6" href="$namespacemom__open__boundary.html#a0a6e28bbfec6ab82bfe2fd2848902945" title="This routine include declares and sets the variable &quot;version&quot;. " alt="" coords="616,71,771,112"/>
+</map>

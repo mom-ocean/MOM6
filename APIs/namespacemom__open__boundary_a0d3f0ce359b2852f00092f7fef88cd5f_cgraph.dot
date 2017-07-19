@@ -1,0 +1,44 @@
+digraph "mom_open_boundary::open_boundary_config"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node30 [label="mom_open_boundary::\lopen_boundary_config",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node30 -> Node31 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node31 [label="mom_open_boundary::\linitialize_segment_data",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#adb17aba34a8aaceb524910d2e1196a0c"];
+  Node31 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node32 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node32 -> Node33 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node33 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node31 -> Node34 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node34 [label="mom_open_boundary::\lparse_segment_data_str",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a0aee21537ad757ce15e602d8fd55eb4d",tooltip="Parse an OBC_SEGMENT_%%_DATA string. "];
+  Node34 -> Node35 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node35 [label="mom_string_functions\l::extract_word",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__string__functions.html#aad76dee92b69dab4488da049fe11cdb8",tooltip="Returns the string corresponding to the nth word in the argument or \"\" if the string is not long enou..."];
+  Node34 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node30 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node30 -> Node36 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node36 [label="mom_open_boundary::\lopen_boundary_dealloc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a709a33b9e33b5689d5ca73349ed51fb6",tooltip="Deallocate open boundary data. "];
+  Node30 -> Node37 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node37 [label="mom_string_functions\l::remove_spaces",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__string__functions.html#a60262e56f544e4613754df43bf50652e",tooltip="Returns string with all spaces removed. "];
+  Node30 -> Node38 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 [label="mom_open_boundary::\lsetup_u_point_obc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ab7c14cc1f67490ff9326c35471fb7ef7",tooltip="Parse an OBC_SEGMENT_%%% string starting with \"I=\" and configure placement and type of OBC accordingl..."];
+  Node38 -> Node39 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 [label="mom_open_boundary::\lparse_segment_str",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ad40be6b6ce4c94040b7de59bde9be77f",tooltip="Parse an OBC_SEGMENT_%%% string. "];
+  Node39 -> Node35 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 -> Node40 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node40 [label="interpret_int_expr",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__open__boundary_8F90.html#a0793b1a5746e6ead6bff50c3a52cae90"];
+  Node40 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 -> Node41 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node41 [label="mom_open_boundary::\lsetup_segment_indices",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ac357a1fb341db3aaffdfeca2eacab60b"];
+  Node38 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 -> Node42 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node42 [label="mom_open_boundary::\lallocate_obc_segment_data",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#aa7f532a65dd8ae4db981f2ef4791fc56",tooltip="Allocate segment data fields. "];
+  Node30 -> Node43 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node43 [label="mom_open_boundary::\lsetup_v_point_obc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#ae298511b7acc78ed5cd780ad967318cc",tooltip="Parse an OBC_SEGMENT_%%% string starting with \"J=\" and configure placement and type of OBC accordingl..."];
+  Node43 -> Node39 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node43 -> Node41 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node43 -> Node32 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node43 -> Node42 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

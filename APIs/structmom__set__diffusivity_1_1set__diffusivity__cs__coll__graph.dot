@@ -1,0 +1,28 @@
+digraph "mom_set_diffusivity::set_diffusivity_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_set_diffusivity\l::set_diffusivity_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" use_lotw_bbl_diffusivity\nhenyey_igw_background\l_new\ndouble_diffusion\nint_tide_dissipation\nml_use_omega\nbulkmixedlayer\nml_radiation\nsimple_tke_to_kd\nlee_wave_dissipation\nlotw_bbl_use_omega\n..." ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" inputdir" ,fontname="Helvetica"];
+  Node3 [label="character(len=200)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag_to_z_csp" ,fontname="Helvetica"];
+  Node4 [label="type(diag_to_z_cs),\l pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" user_change_diff_csp" ,fontname="Helvetica"];
+  Node5 [label="type(user_change_diff\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" kappashear_csp" ,fontname="Helvetica"];
+  Node6 [label="type(kappa_shear_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" cvmix_shear_csp" ,fontname="Helvetica"];
+  Node7 [label="type(cvmix_shear_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node8 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_polzin_decay_scale\l_scaled\nid_kd_user\nid_kd_lowmode\nid_polzin_decay\l_scale\nid_kt_extra_z\nid_maxtke\nid_nb\nid_kd_niku_work\nid_tke_to_kd\nid_ks_extra_z\n..." ,fontname="Helvetica"];
+  Node9 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" kappa_itides\ngamma_itides\ncdrag\npolzin_decay_scale\l_factor\nmu_itides\nmax_rrho_salt\l_fingers\nbryan_lewis_width\l_trans\nbryan_lewis_depth\l_cent\nhmix\nml_rad_coeff\n..." ,fontname="Helvetica"];
+  Node10 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" int_tide_csp" ,fontname="Helvetica"];
+  Node11 [label="type(int_tide_cs),\l pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

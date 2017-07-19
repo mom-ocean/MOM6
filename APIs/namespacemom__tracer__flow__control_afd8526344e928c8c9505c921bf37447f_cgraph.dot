@@ -1,0 +1,35 @@
+digraph "mom_tracer_flow_control::call_tracer_stocks"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node17 [label="mom_tracer_flow_control\l::call_tracer_stocks",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node17 -> Node18 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node18 [label="advection_test_tracer\l::advection_test_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceadvection__test__tracer.html#a1e3884b030df6c5107380b4ddd2fbce2"];
+  Node18 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node19 [label="mom_io::query_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508",tooltip="This routine queries vardesc. "];
+  Node19 -> Node20 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node20 [label="mom_io::safe_string_copy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88",tooltip="Copies a string. "];
+  Node20 -> Node21 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node21 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node21 -> Node22 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node22 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node17 -> Node23 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node23 [label="regional_dyes::dye\l_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceregional__dyes.html#a0641ff9c663bcfacdd597a79f63d15e0"];
+  Node17 -> Node24 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node24 [label="ideal_age_example::\lideal_age_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceideal__age__example.html#a2300d82e30802a3127f4a63277d37776"];
+  Node24 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 -> Node21 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 -> Node25 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node25 [label="mom_ocmip2_cfc::ocmip2\l_cfc_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ocmip2__cfc.html#ac3c9967ff09b37934eb5ef51535e7ee3",tooltip="This function calculates the mass-weighted integral of all tracer stocks, returning the number of sto..."];
+  Node25 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 -> Node26 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node26 [label="oil_tracer::oil_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceoil__tracer.html#ac8964b16549dba8fc850e4af15af8029"];
+  Node17 -> Node27 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node27 [label="pseudo_salt_tracer\l::pseudo_salt_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacepseudo__salt__tracer.html#a282f3c84b7e7ccdaa6d9344342705a6e"];
+  Node27 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 -> Node28 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node28 [label="mom_tracer_flow_control\l::store_stocks",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__flow__control.html#ad43ea30fa52fcb930db39037f5d7e6b9",tooltip="This routine stores the stocks and does error handling for call_tracer_stocks. "];
+  Node28 -> Node21 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

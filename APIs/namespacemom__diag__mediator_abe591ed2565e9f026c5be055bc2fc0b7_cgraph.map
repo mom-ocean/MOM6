@@ -1,0 +1,10 @@
+<map id="mom_diag_mediator::register_static_field" name="mom_diag_mediator::register_static_field">
+<area shape="rect" id="node2" href="$namespacemom__diag__mediator.html#a1b0bed2113a0c268eafd1bafbb48bd4f" title="mom_diag_mediator::\lalloc_diag_with_id" alt="" coords="200,5,347,47"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6" title="Issues a FATAL error if the assertion fails, i.e. the first argument is false. " alt="" coords="397,57,539,99"/>
+<area shape="rect" id="node5" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="779,136,920,177"/>
+<area shape="rect" id="node6" href="$namespacemom__diag__mediator.html#a3f7442639213320f7429e2288a79fda2" title="Returns a new diagnostic id, it may be necessary to expand the diagnostics array. ..." alt="" coords="200,123,347,164"/>
+<area shape="rect" id="node8" href="$namespacemom__diag__mediator.html#a65fe8d329cf5dbfd08c98874a7a64407" title="Log a diagnostic to the available diagnostics file. " alt="" coords="200,240,347,281"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="589,91,731,132"/>
+<area shape="rect" id="node7" href="$namespacemom__diag__mediator.html#a883862f004e30bbc5211f38635511ba0" title="Initializes a diag_type (used after allocating new memory) " alt="" coords="395,123,541,164"/>
+<area shape="rect" id="node9" href="$namespacemom__diag__mediator.html#ae002ca447acba252bf7bdc042e75a01e" title="mom_diag_mediator::\ldescribe_option" alt="" coords="395,240,541,281"/>
+</map>

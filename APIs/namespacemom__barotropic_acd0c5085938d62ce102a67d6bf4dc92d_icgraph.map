@@ -1,0 +1,3 @@
+<map id="mom_barotropic::apply_eta_obcs" name="mom_barotropic::apply_eta_obcs">
+<area shape="rect" id="node2" href="$namespacemom__barotropic.html#a98cdf3c559146cc9485fcb9daa4cdbca" title="This subroutine time steps the barotropic equations explicitly. For gravity waves, anything between a forwards&#45;backwards scheme and a simulated backwards Euler scheme is used, with bebt between 0.0 and 1.0 determining the scheme. In practice, bebt must be of order 0.2 or greater. A forwards&#45;backwards treatment of the Coriolis terms is always used. " alt="" coords="208,13,367,39"/>
+</map>

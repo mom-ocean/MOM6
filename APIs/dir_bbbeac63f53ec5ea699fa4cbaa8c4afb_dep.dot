@@ -1,0 +1,18 @@
+digraph "/home/adcroft/GitHub/workspace/Gaea-stats-MOM6-examples/MOM6-examples/src/MOM6/config_src" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_bbbeac63f53ec5ea699fa4cbaa8c4afb {
+    graph [ bgcolor="#eeeeff", pencolor="black", label="" URL="dir_bbbeac63f53ec5ea699fa4cbaa8c4afb.html"];
+    dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [shape=plaintext label="config_src"];
+    dir_a19e664d9f2d0f5526bad3c5f3c3e9c4 [shape=box label="coupled_driver" color="black" fillcolor="white" style="filled" URL="dir_a19e664d9f2d0f5526bad3c5f3c3e9c4.html"];
+    dir_67fed18fa7f74247fef50848ceb46cee [shape=box label="dynamic_symmetric" color="black" fillcolor="white" style="filled" URL="dir_67fed18fa7f74247fef50848ceb46cee.html"];
+    dir_ccbaa27a715db0631841e4cd1db1cd75 [shape=box label="solo_driver" color="black" fillcolor="white" style="filled" URL="dir_ccbaa27a715db0631841e4cd1db1cd75.html"];
+  }
+  dir_68267d1309a1af8e8297ef4c3efbcdba [shape=box label="src" fillcolor="white" style="filled" color="red" URL="dir_68267d1309a1af8e8297ef4c3efbcdba.html"];
+  dir_68267d1309a1af8e8297ef4c3efbcdba->dir_67fed18fa7f74247fef50848ceb46cee [headlabel="108", labeldistance=1.5 headhref="dir_000004_000002.html"];
+  dir_ccbaa27a715db0631841e4cd1db1cd75->dir_68267d1309a1af8e8297ef4c3efbcdba [headlabel="3", labeldistance=1.5 headhref="dir_000003_000004.html"];
+  dir_ccbaa27a715db0631841e4cd1db1cd75->dir_67fed18fa7f74247fef50848ceb46cee [headlabel="2", labeldistance=1.5 headhref="dir_000003_000002.html"];
+  dir_67fed18fa7f74247fef50848ceb46cee->dir_68267d1309a1af8e8297ef4c3efbcdba [headlabel="1", labeldistance=1.5 headhref="dir_000002_000004.html"];
+  dir_a19e664d9f2d0f5526bad3c5f3c3e9c4->dir_67fed18fa7f74247fef50848ceb46cee [headlabel="1", labeldistance=1.5 headhref="dir_000001_000002.html"];
+}

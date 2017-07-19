@@ -1,0 +1,4 @@
+<map id="mom_open_boundary::radiation_open_bdry_conds" name="mom_open_boundary::radiation_open_bdry_conds">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#a151df14c3b8b1094ddf8f44c86493fd5" title="Calculate the tangential gradient of the normal flow at the boundary q&#45;points. " alt="" coords="233,5,388,47"/>
+<area shape="rect" id="node3" href="$namespacemom__open__boundary.html#a11acc9ede6f2b975bfc6b849a2603b46" title="Applies OBC values stored in segments to 3d u,v fields. " alt="" coords="233,71,388,127"/>
+</map>

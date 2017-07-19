@@ -1,0 +1,5 @@
+<map id="coord_sigma::build_sigma_column" name="coord_sigma::build_sigma_column">
+<area shape="rect" id="node2" href="$namespacemom__regridding.html#a455d807ccfbbfd109be231321bec1038" title="mom_regridding::build\l_sigma_grid" alt="" coords="188,5,337,47"/>
+<area shape="rect" id="node4" href="$namespacemom__diag__remap.html#a1fb71d2982777f33bcbf183187e1819b" title="Build/update target vertical grids for diagnostic remapping. " alt="" coords="184,71,341,112"/>
+<area shape="rect" id="node3" href="$namespacemom__regridding.html#ab354fe3423a39fef6f2b66f409b1682c" title="mom_regridding::regridding_main" alt="" coords="389,13,603,39"/>
+</map>

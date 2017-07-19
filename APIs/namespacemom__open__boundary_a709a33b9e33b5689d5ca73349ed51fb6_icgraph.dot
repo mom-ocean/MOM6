@@ -1,0 +1,12 @@
+digraph "mom_open_boundary::open_boundary_dealloc"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node46 [label="mom_open_boundary::\lopen_boundary_dealloc",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node46 -> Node47 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node47 [label="mom_open_boundary::\lopen_boundary_config",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f",tooltip="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..."];
+  Node46 -> Node48 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node48 [label="mom_open_boundary::\lopen_boundary_end",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__open__boundary.html#afb86d9ee7fc99dea787b88cfdb70f139",tooltip="Close open boundary data. "];
+}

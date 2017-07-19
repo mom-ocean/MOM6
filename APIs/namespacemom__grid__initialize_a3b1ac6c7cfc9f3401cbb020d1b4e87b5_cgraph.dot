@@ -1,0 +1,10 @@
+digraph "mom_grid_initialize::initialize_masks"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node65 [label="mom_grid_initialize\l::initialize_masks",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node65 -> Node66 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node66 [label="mom_grid_initialize\l::adcroft_reciprocal",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#ac5445d58b86d259f4c352255849d7fe0",tooltip="This function implements Adcroft&#39;s rule for reciprocals, namely that Adcroft_Inv(x) = 1/x for |x|>0 o..."];
+}

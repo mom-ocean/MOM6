@@ -1,0 +1,53 @@
+digraph "mom_error_handler::calltree_waypoint"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node169 [label="mom_error_handler::\lcalltree_waypoint",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node169 -> Node170 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node170 [label="mom_ale::ale_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a85ced017378248ea6db867aa03220a1d",tooltip="Takes care of (1) building a new grid and (2) remapping all variables between the old grid and the ne..."];
+  Node169 -> Node171 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node171 [label="mom_ale::ale_main_offline",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a5a39781fe9a087c4ab8b4b2ea86ef05c",tooltip="Takes care of (1) building a new grid and (2) remapping all variables between the old grid and the ne..."];
+  Node171 -> Node172 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node172 [label="mom_offline_main::offline\l_advection_ale",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__offline__main.html#ae85546d26ceb447742abe3c528cad2d7",tooltip="3D advection is done by doing flux-limited nonlinear horizontal advection interspersed with an ALE re..."];
+  Node169 -> Node173 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node173 [label="mom_ale::ale_offline\l_inputs",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a1e8b6f82cdc9d20abf0506b3ab7004b6",tooltip="Regrid/remap stored fields used for offline tracer integrations. These input fields are assumed to ha..."];
+  Node169 -> Node174 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node174 [label="mom_ale::ale_offline\l_tracer_final",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a785da1afa50677a8b9e6125e100028ce",tooltip="Remaps all tracers from h onto h_target. This is intended to be called when tracers are done offline..."];
+  Node174 -> Node175 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node175 [label="mom::step_offline",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#ad56e17a755c7078ccea29ccbae4d5803",tooltip="step_offline is the main driver for running tracers offline in MOM6. This has been primarily develope..."];
+  Node175 -> Node176 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node176 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node175 -> Node177 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node177 [label="ocean_model_mod::update\l_ocean_model",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#ac9dc1795fc4799d6682f462857b42d62"];
+  Node169 -> Node178 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node178 [label="mom_diabatic_driver\l::diabatic",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7",tooltip="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..."];
+  Node169 -> Node179 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node179 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node179 -> Node176 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node169 -> Node176 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node169 -> Node180 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node180 [label="mom_ale::remap_all\l_state_vars",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#af95685cdfb7505b09300795da2336dbe",tooltip="This routine takes care of remapping all variable between the old and the new grids. When velocity components need to be remapped, thicknesses at velocity points are taken to be arithmetic averages of tracer thicknesses. This routine is called during initialization of the model at time=0, to remap initiali conditions to the model grid. It is also called during a time step to update the state. "];
+  Node180 -> Node170 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node180 -> Node171 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node180 -> Node173 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node180 -> Node174 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node180 -> Node181 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node181 [label="mom_ale::ale_regrid\l_accelerated",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#ad53be6973c41ac37ea0abc7b3e045b4d",tooltip="For a state-based coordinate, accelerate the process of regridding by repeatedly applying the grid ca..."];
+  Node181 -> Node182 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node182 [label="mom_state_initialization\l::mom_initialize_state",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321"];
+  Node182 -> Node179 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node169 -> Node183 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node183 [label="mom_set_diffusivity\l::set_diffusivity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__set__diffusivity.html#a8b1f646393f0ec717ca690e4f04d96e8"];
+  Node169 -> Node184 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node184 [label="mom::step_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a",tooltip="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..."];
+  Node184 -> Node176 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node169 -> Node185 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node185 [label="mom_dynamics_split\l_rk2::step_mom_dyn_split_rk2",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dynamics__split__rk2.html#a81cce65643a8cf94979d68354a9a1979",tooltip="RK2 splitting for time stepping MOM adiabatic dynamics. "];
+  Node169 -> Node186 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node186 [label="mom::step_mom_thermo",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a02eac5c5c3ad33f0a786b3e357e31433",tooltip="MOM_step_thermo orchestrates the thermodynamic time stepping and vertical remapping, via calls to diabatic (or adiabatic) and ALE_main. "];
+  Node186 -> Node184 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node169 -> Node187 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node187 [label="mom_tracer_hor_diff\l::tracer_hordiff",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__hor__diff.html#a069e22612062290389c2630c7f90ede2",tooltip="Compute along-coordinate diffusion of all tracers using the diffusivity in CSKhTr, or using space-dependent diffusivity. Multiple iterations are used (if necessary) so that there is no limit on the acceptable time increment. "];
+}

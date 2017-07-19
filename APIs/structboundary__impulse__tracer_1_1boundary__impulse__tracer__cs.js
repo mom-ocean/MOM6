@@ -1,0 +1,27 @@
+var structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs =
+[
+    [ "coupled_tracers", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a0b05ea70e3cda8cb941da47ff1de4eaa", null ],
+    [ "diag", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a5244fa909213cc1380e9f4e18a3c9009", null ],
+    [ "id_tr_adx", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a2c278e67dfa030396e69089332d2d85a", null ],
+    [ "id_tr_ady", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a6b7612f35bab03372a875b1043a7503a", null ],
+    [ "id_tr_dfx", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a32e38c8aa56f57ef176b49ddb34f8068", null ],
+    [ "id_tr_dfy", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a1d47db3c18af8a937ff1f3035536cad7", null ],
+    [ "id_tracer", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a14de2e7bab994a1e3f5558d6b43b784a", null ],
+    [ "ind_tr", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#ae5f5d262c486290faf9e67db8a5671ea", null ],
+    [ "kw_eff", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#abcc79d6eca2b257ca4e92a989637e63c", null ],
+    [ "land_val", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a798f52307c4e6d65450fad7b5778b34d", null ],
+    [ "mask_tracers", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#af442083f04dc4578157c9fee13881b14", null ],
+    [ "nkml", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#af7451dd47b0284b54117b06452dd545f", null ],
+    [ "ntr", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#afd67940920321b4446f0940907abee97", null ],
+    [ "remaining_source_time", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#ac226fdafc173e7f5deb6760bb584143e", null ],
+    [ "restart_csp", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a93c4f121291de954074ae39fc59be8d1", null ],
+    [ "time", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#aab0256bbba02275fce781f999278a82a", null ],
+    [ "tr", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a7b57ff617633f1e082631eb4cb9e2f17", null ],
+    [ "tr_adx", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#aeeb3df7bd207e0d834d3d3b86658047a", null ],
+    [ "tr_ady", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#aeb55ac2c6b0be3a5acc682c5936d4629", null ],
+    [ "tr_desc", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a9e6e86e6b52fced193032c12b5eee0f7", null ],
+    [ "tr_dfx", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#a126940ab638017c01f6f132302389798", null ],
+    [ "tr_dfy", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#ae47f188b242702a82c6b40263dd931b0", null ],
+    [ "tr_reg", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#ab7d1e67277a417d6b4c7fc5d11446515", null ],
+    [ "tracers_may_reinit", "structboundary__impulse__tracer_1_1boundary__impulse__tracer__cs.html#afe63ef5dc9a995166299d487cbb46de3", null ]
+];

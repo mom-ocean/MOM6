@@ -1,0 +1,10 @@
+digraph "user_initialization::user_set_obc_data"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node40 [label="user_initialization\l::user_set_obc_data",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node40 -> Node41 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node41 [label="user_initialization\l::write_user_log",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#aebfc0db710e83bae83f08e1a774256dd",tooltip="Write output about the parameter values being used. "];
+}

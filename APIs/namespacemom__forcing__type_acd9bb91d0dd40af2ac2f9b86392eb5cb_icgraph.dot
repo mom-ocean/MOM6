@@ -1,0 +1,22 @@
+digraph "mom_forcing_type::extractfluxes1d"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node36 [label="mom_forcing_type::extractfluxes1d",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node36 -> Node37 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node37 [label="mom_diabatic_aux::applyboundaryfluxesinout",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__aux.html#aed2e2c3c0c73c160399e7de6f84c2c7f",tooltip="Update the thickness, temperature, and salinity due to thermodynamic boundary forcing (contained in f..."];
+  Node37 -> Node38 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 [label="mom_diabatic_driver\l::diabatic",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7",tooltip="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..."];
+  Node36 -> Node39 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 [label="mom_bulk_mixed_layer\l::bulkmixedlayer",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__bulk__mixed__layer.html#af4ea9156c3759dd0328f0f994fe64e71",tooltip="This subroutine partially steps the bulk mixed layer model. The following processes are executed..."];
+  Node39 -> Node38 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node36 -> Node40 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node40 [label="mom_forcing_type::calculatebuoyancyflux1d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#a6ded1dc1c125f54daf335b2c42792883",tooltip="This routine calculates surface buoyancy flux by adding up the heat, FW & salt fluxes. These are actual fluxes, with units of stuff per time. Setting dt=1 in the call to extractFluxes routine allows us to get \"stuf per time\" rather than the time integrated fluxes needed in other routines that call extractFluxes. "];
+  Node40 -> Node41 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node41 [label="mom_forcing_type::calculatebuoyancyflux2d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#a8318da970059fe577d2db0bb5f91cd6b",tooltip="Calculates surface buoyancy flux by adding up the heat, FW and salt fluxes, for 2d arrays..."];
+  Node41 -> Node38 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node36 -> Node42 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node42 [label="mom_forcing_type::extractfluxes2d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#a6f249aced2e22622e4c2913b4c86b43f",tooltip="2d wrapper for 1d extract fluxes from surface fluxes type. This subroutine extracts fluxes from the s..."];
+}

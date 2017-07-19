@@ -1,0 +1,19 @@
+digraph "mom_ice_shelf::ice_shelf_solve_outer"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node212 [label="mom_ice_shelf::ice\l_shelf_solve_outer",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node212 -> Node213 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node213 [label="mom_ice_shelf::initialize\l_diagnostic_fields",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ice__shelf.html#ae7611e3515ecf0eae0c5d6d17330fd6f"];
+  Node212 -> Node214 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node214 [label="mom_ice_shelf::initialize\l_ice_shelf",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ice__shelf.html#ae315e8464ef8a20062e3bccb61886755",tooltip="Initializes shelf model data, parameters and diagnostics. "];
+  Node214 -> Node215 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node215 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node212 -> Node216 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node216 [label="mom_ice_shelf::shelf\l_calc_flux",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ice__shelf.html#a3b0e0cc9f36c5197236cc05867b780df",tooltip="Calculates fluxes between the ocean and ice-shelf using the three-equations formulation (optional to ..."];
+  Node216 -> Node215 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node212 -> Node217 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node217 [label="mom_ice_shelf::solo\l_time_step",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ice__shelf.html#ac084bdc5be4e708e3263488e9574a3c9"];
+}

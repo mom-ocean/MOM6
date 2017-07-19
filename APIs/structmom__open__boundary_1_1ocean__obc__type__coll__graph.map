@@ -1,0 +1,6 @@
+<map id="mom_open_boundary::ocean_obc_type" name="mom_open_boundary::ocean_obc_type">
+<area shape="rect" id="node2" href="$structmom__open__boundary_1_1obc__registry__type.html" title="Type to carry basic OBC information needed for updating values. " alt="" coords="576,5,731,47"/>
+<area shape="rect" id="node8" href="$structmom__open__boundary_1_1obc__segment__type.html" title="Open boundary segment data structure. " alt="" coords="576,601,731,643"/>
+<area shape="rect" id="node4" href="$structmom__open__boundary_1_1obc__struct__type.html" title="Type to carry something (what] for the OBC registry. " alt="" coords="243,27,398,68"/>
+<area shape="rect" id="node9" href="$structmom__open__boundary_1_1obc__segment__data__type.html" title="Open boundary segment data from files (mostly). " alt="" coords="239,671,403,712"/>
+</map>

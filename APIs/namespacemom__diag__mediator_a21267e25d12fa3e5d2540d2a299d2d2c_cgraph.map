@@ -1,0 +1,18 @@
+<map id="mom_diag_mediator::ocean_register_diag" name="mom_diag_mediator::ocean_register_diag">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="1216,94,1357,135"/>
+<area shape="rect" id="node4" href="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508" title="This routine queries vardesc. " alt="" coords="200,43,361,69"/>
+<area shape="rect" id="node6" href="$namespacemom__diag__mediator.html#aa791f75f899ae9b7cd4756165a9c2a1b" title="Returns the &quot;diag_mediator&quot; handle for a group (native, CMOR, z&#45;coord, ...) of diagnostics derived fr..." alt="" coords="207,239,354,281"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="1405,242,1547,283"/>
+<area shape="rect" id="node5" href="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88" title="Copies a string. " alt="" coords="409,43,584,69"/>
+<area shape="rect" id="node7" href="$namespacemom__diag__mediator.html#ae50b35cba800ac5fd8975929fd2b9f4a" title="Returns True if either the native of CMOr version of the diagnostic were registered. Updates &#39;dm_id&#39; after calling register_diag_field_expand_axes() for both native and CMOR variants of the field. " alt="" coords="423,320,570,376"/>
+<area shape="rect" id="node8" href="$namespacemom__diag__mediator.html#aca4a32fea8dade9f51e076a56b9bad2b" title="Returns an FMS id from register_diag_field_fms (the diag_manager routine) after expanding axes (axes&#45;..." alt="" coords="632,447,779,503"/>
+<area shape="rect" id="node9" href="$namespacemom__diag__mediator.html#ae0f04c145cb120fc2ab6cbfe9f166392" title="Attaches &quot;cell_methods&quot; attribute to a variable based on defaults for axes_grp or optional arguments..." alt="" coords="1021,94,1168,135"/>
+<area shape="rect" id="node10" href="$namespacemom__diag__mediator.html#a65fe8d329cf5dbfd08c98874a7a64407" title="Log a diagnostic to the available diagnostics file. " alt="" coords="632,527,779,569"/>
+<area shape="rect" id="node12" href="$namespacemom__diag__mediator.html#a8415b33a337b1fbc7535688eca85ab37" title="Create a diagnostic type and attached to list. " alt="" coords="632,265,779,306"/>
+<area shape="rect" id="node11" href="$namespacemom__diag__mediator.html#ae002ca447acba252bf7bdc042e75a01e" title="mom_diag_mediator::\ldescribe_option" alt="" coords="827,527,973,569"/>
+<area shape="rect" id="node13" href="$namespacemom__diag__mediator.html#a1b0bed2113a0c268eafd1bafbb48bd4f" title="mom_diag_mediator::\lalloc_diag_with_id" alt="" coords="827,265,973,306"/>
+<area shape="rect" id="node14" href="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6" title="Issues a FATAL error if the assertion fails, i.e. the first argument is false. " alt="" coords="1024,159,1165,201"/>
+<area shape="rect" id="node15" href="$namespacemom__diag__mediator.html#a3f7442639213320f7429e2288a79fda2" title="Returns a new diagnostic id, it may be necessary to expand the diagnostics array. ..." alt="" coords="827,199,973,241"/>
+<area shape="rect" id="node17" href="$namespacemom__diag__mediator.html#a085f313357879a914af6450f2ab8ec79" title="Associates the mask pointers within diag with the appropriate mask based on the axes group..." alt="" coords="827,330,973,371"/>
+<area shape="rect" id="node16" href="$namespacemom__diag__mediator.html#a883862f004e30bbc5211f38635511ba0" title="Initializes a diag_type (used after allocating new memory) " alt="" coords="1021,225,1168,266"/>
+</map>

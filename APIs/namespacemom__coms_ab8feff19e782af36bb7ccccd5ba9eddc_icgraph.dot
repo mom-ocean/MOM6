@@ -1,0 +1,22 @@
+digraph "mom_coms::regularize_ints"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node78 [label="mom_coms::regularize_ints",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node78 -> Node79 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node79 [label="mom_coms::efp_to_real",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a4aaf51b372bcaf7b46939145577eff92"];
+  Node79 -> Node80 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node80 [label="mom_coms::efp_list\l_sum_across_pes",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a6cbcab29d87b134dcd5c4bdb922b4344"];
+  Node79 -> Node81 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node81 [label="mom_coms::efp_real_diff",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a8f23ba3eaaf03101afa61c339fac805b"];
+  Node79 -> Node82 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node82 [label="mom_sum_output::write\l_energy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__sum__output.html#aef94e597f85f3ee439b2ddc2b46a043a",tooltip="This subroutine calculates and writes the total model energy, the energy and mass of each layer..."];
+  Node82 -> Node83 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node83 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node78 -> Node84 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node84 [label="mom_coms::reproducing\l_sum_2d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a99e145acc9227dad1bddc6cf211e4daf"];
+  Node78 -> Node85 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 [label="mom_coms::reproducing\l_sum_3d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#aa21533e0badf43b331b5f7a9730c005f"];
+}

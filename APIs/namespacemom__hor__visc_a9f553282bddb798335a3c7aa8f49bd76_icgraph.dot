@@ -1,0 +1,14 @@
+digraph "mom_hor_visc::horizontal_viscosity"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node9 [label="mom_hor_visc::horizontal\l_viscosity",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node9 -> Node10 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node10 [label="mom_dynamics_split\l_rk2::step_mom_dyn_split_rk2",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dynamics__split__rk2.html#a81cce65643a8cf94979d68354a9a1979",tooltip="RK2 splitting for time stepping MOM adiabatic dynamics. "];
+  Node9 -> Node11 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node11 [label="mom_dynamics_unsplit\l::step_mom_dyn_unsplit",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dynamics__unsplit.html#a53a72861e61f049479fdec46ea11227b"];
+  Node9 -> Node12 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node12 [label="mom_dynamics_unsplit\l_rk2::step_mom_dyn_unsplit_rk2",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dynamics__unsplit__rk2.html#ae10d75d92c1ec7783df7e5d8965b86a0"];
+}

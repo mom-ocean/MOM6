@@ -1,0 +1,12 @@
+digraph "mom_legacy_barotropic::apply_velocity_obcs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node3 [label="mom_legacy_barotropic\l::apply_velocity_obcs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node3 -> Node4 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="mom_legacy_barotropic\l::find_uhbt",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__legacy__barotropic.html#a6089379e215508c9dd32d0b3819dbbe7"];
+  Node3 -> Node5 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="mom_legacy_barotropic\l::find_vhbt",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__legacy__barotropic.html#a381d788c4648d9b4aa94a12319623030"];
+}

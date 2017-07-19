@@ -1,0 +1,10 @@
+digraph "phillips_initialization::sech"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node20 [label="phillips_initialization\l::sech",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node20 -> Node21 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node21 [label="phillips_initialization\l::phillips_initialize\l_velocity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacephillips__initialization.html#ac252f719fe65dbc64de20ab31bd65c6c",tooltip="Initialize velocity fields. "];
+}

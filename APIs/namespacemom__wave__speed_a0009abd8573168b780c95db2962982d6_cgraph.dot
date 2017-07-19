@@ -1,0 +1,10 @@
+digraph "mom_wave_speed::wave_speeds"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node60 [label="mom_wave_speed::wave\l_speeds",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node60 -> Node61 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node61 [label="mom_wave_speed::tridiag_det",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__wave__speed.html#a1d633de4db3e5c4e4a7d313c428c7a56",tooltip="Calculate the determinant of a tridiagonal matrix with diagonals a,b-lam,c where lam is constant acro..."];
+}

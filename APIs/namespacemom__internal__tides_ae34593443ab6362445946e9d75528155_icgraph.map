@@ -1,0 +1,4 @@
+<map id="mom_internal_tides::ppm_angular_advect" name="mom_internal_tides::ppm_angular_advect">
+<area shape="rect" id="node2" href="$namespacemom__internal__tides.html#a1008324f9434f216ded4fbd182cbae28" title="This subroutine does refraction on the internal waves at a single frequency. " alt="" coords="204,5,339,47"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2" title="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. " alt="" coords="387,5,523,47"/>
+</map>

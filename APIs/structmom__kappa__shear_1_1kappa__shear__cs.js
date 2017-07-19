@@ -1,0 +1,25 @@
+var structmom__kappa__shear_1_1kappa__shear__cs =
+[
+    [ "c_n", "structmom__kappa__shear_1_1kappa__shear__cs.html#a49b4f2a412de46ff7531583aec2f03b5", null ],
+    [ "c_s", "structmom__kappa__shear_1_1kappa__shear__cs.html#a0cfb5a78acd2f7d3fcea840b2edbdec7", null ],
+    [ "debug", "structmom__kappa__shear_1_1kappa__shear__cs.html#a0e1484cd57989de6303cc1c24edb69a2", null ],
+    [ "diag", "structmom__kappa__shear_1_1kappa__shear__cs.html#a245452ab8c99a84ebbccc8ebb0f4c590", null ],
+    [ "eliminate_massless", "structmom__kappa__shear_1_1kappa__shear__cs.html#a1a668dc437b4b87e046fc088024833e8", null ],
+    [ "fri_curvature", "structmom__kappa__shear_1_1kappa__shear__cs.html#a65226e799a40c10870c11b831052f6ed", null ],
+    [ "id_dz_int", "structmom__kappa__shear_1_1kappa__shear__cs.html#a7b2ef906ba3b419cb511b1063bec8d88", null ],
+    [ "id_ild2", "structmom__kappa__shear_1_1kappa__shear__cs.html#a5066a683cd996d202d31c640e18e64c6", null ],
+    [ "id_kd_shear", "structmom__kappa__shear_1_1kappa__shear__cs.html#a8238f2e205503820c866c5693834782d", null ],
+    [ "id_tke", "structmom__kappa__shear_1_1kappa__shear__cs.html#a60da5de0469d0d3353d8773eb6a47501", null ],
+    [ "kappa_0", "structmom__kappa__shear_1_1kappa__shear__cs.html#a90af795e54b8483d7ba8c57a135dba69", null ],
+    [ "kappa_tol_err", "structmom__kappa__shear_1_1kappa__shear__cs.html#a85eb6ca200b51907b88e69b380477910", null ],
+    [ "lambda", "structmom__kappa__shear_1_1kappa__shear__cs.html#af1f8f118ffcf3e664bab07d31681e65a", null ],
+    [ "lambda2_n_s", "structmom__kappa__shear_1_1kappa__shear__cs.html#a7b0ae399d88d8bc12e028f10802e86e6", null ],
+    [ "layer_stagger", "structmom__kappa__shear_1_1kappa__shear__cs.html#a7f962cf5b7f36fa0478c68824d951634", null ],
+    [ "max_ks_it", "structmom__kappa__shear_1_1kappa__shear__cs.html#a4e0784f28ce83cf8fb0abb017efa7b54", null ],
+    [ "max_rino_it", "structmom__kappa__shear_1_1kappa__shear__cs.html#a63413e965f0c1526d3a4170408451b23", null ],
+    [ "nkml", "structmom__kappa__shear_1_1kappa__shear__cs.html#ac697fae6d49039b8815ceb94d77bb36b", null ],
+    [ "prandtl_turb", "structmom__kappa__shear_1_1kappa__shear__cs.html#ae7500bc8991569fa645086735169e1d2", null ],
+    [ "rino_crit", "structmom__kappa__shear_1_1kappa__shear__cs.html#a491d4c0fb8ad0dc9be7d323f30d6084f", null ],
+    [ "shearmix_rate", "structmom__kappa__shear_1_1kappa__shear__cs.html#ab6dffe0dd4034d809c1bbd9e014cba50", null ],
+    [ "tke_bg", "structmom__kappa__shear_1_1kappa__shear__cs.html#a8ccda2619491b65d5f99be96bb50c329", null ]
+];

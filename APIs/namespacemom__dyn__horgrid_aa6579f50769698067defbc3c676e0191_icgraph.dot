@@ -1,0 +1,21 @@
+digraph "mom_dyn_horgrid::adcroft_reciprocal"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_dyn_horgrid::adcroft\l_reciprocal",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="mom_dyn_horgrid::set\l_derived_dyn_horgrid",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__dyn__horgrid.html#aefa448039e24b26fe06f9251848b6aac",tooltip="set_derived_dyn_horgrid calculates metric terms that are derived from other metrics. "];
+  Node2 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="mom_transcribe_grid\l::copy_mom_grid_to_dyngrid",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__transcribe__grid.html#a426ae345ad289eabaf68aeff02019753",tooltip="Copies information from an ocean_grid_type into a dynamic (shared) horizontal grid type..."];
+  Node3 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node4 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node2 -> Node6 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node6 [label="mom_grid_initialize\l::set_grid_metrics",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid__initialize.html#a235a9712823e2f78e4958e8d681b6ba4",tooltip="set_grid_metrics is used to set the primary values in the model&#39;s horizontal grid. The bathymetry, land-sea mask and any restricted channel widths are not known yet, so these are set later. "];
+  Node6 -> Node7 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 [label="mom_fixed_initialization\l::mom_initialize_fixed",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92",tooltip="MOM_initialize_fixed sets up time-invariant quantities related to MOM6&#39;s horizontal grid..."];
+  Node7 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

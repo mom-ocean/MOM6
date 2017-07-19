@@ -1,0 +1,5 @@
+<map id="mom_shortwave_abs::absorbremainingsw" name="mom_shortwave_abs::absorbremainingsw">
+<area shape="rect" id="node2" href="$namespacemom__diabatic__aux.html#aed2e2c3c0c73c160399e7de6f84c2c7f" title="Update the thickness, temperature, and salinity due to thermodynamic boundary forcing (contained in f..." alt="" coords="208,5,495,32"/>
+<area shape="rect" id="node4" href="$namespacemom__bulk__mixed__layer.html#af4ea9156c3759dd0328f0f994fe64e71" title="This subroutine partially steps the bulk mixed layer model. The following processes are executed..." alt="" coords="272,57,431,98"/>
+<area shape="rect" id="node3" href="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7" title="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..." alt="" coords="543,27,685,69"/>
+</map>

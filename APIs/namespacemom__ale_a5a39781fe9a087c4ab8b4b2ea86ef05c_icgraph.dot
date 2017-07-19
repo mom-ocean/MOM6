@@ -1,0 +1,10 @@
+digraph "mom_ale::ale_main_offline"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node46 [label="mom_ale::ale_main_offline",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node46 -> Node47 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node47 [label="mom_offline_main::offline\l_advection_ale",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__offline__main.html#ae85546d26ceb447742abe3c528cad2d7",tooltip="3D advection is done by doing flux-limited nonlinear horizontal advection interspersed with an ALE re..."];
+}

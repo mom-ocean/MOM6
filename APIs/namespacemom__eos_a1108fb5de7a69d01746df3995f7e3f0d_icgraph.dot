@@ -1,0 +1,10 @@
+digraph "mom_eos::eos_allocate"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node100 [label="mom_eos::eos_allocate",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node100 -> Node101 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node101 [label="mom_eos::eos_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__eos.html#a6686ef94d0db1f1dcfb4284ebfc2be88",tooltip="Initializes EOS_type by allocating and reading parameters. "];
+}

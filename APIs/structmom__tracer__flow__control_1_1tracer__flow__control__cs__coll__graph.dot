@@ -1,0 +1,30 @@
+digraph "mom_tracer_flow_control::tracer_flow_control_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_tracer_flow_control\l::tracer_flow_control_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ideal_age_tracer_csp" ,fontname="Helvetica"];
+  Node2 [label="type(ideal_age_tracer\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" use_ocmip2_cfc\nuse_oil\nuse_regional_dyes\nuse_user_tracer\l_example\nuse_pseudo_salt\l_tracer\nuse_isomip_tracer\nuse_advection_test\l_tracer\nuse_boundary_impulse\l_tracer\nuse_mom_generic\l_tracer\nuse_dome_tracer\n..." ,fontname="Helvetica"];
+  Node3 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" isomip_tracer_csp" ,fontname="Helvetica"];
+  Node4 [label="type(isomip_tracer\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" boundary_impulse_tracer_csp" ,fontname="Helvetica"];
+  Node5 [label="type(boundary_impulse\l_tracer_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" oil_tracer_csp" ,fontname="Helvetica"];
+  Node6 [label="type(oil_tracer_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" user_tracer_example_csp" ,fontname="Helvetica"];
+  Node7 [label="type(user_tracer_example\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ocmip2_cfc_csp" ,fontname="Helvetica"];
+  Node8 [label="type(ocmip2_cfc_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" pseudo_salt_tracer_csp" ,fontname="Helvetica"];
+  Node9 [label="type(pseudo_salt_tracer\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" advection_test_tracer_csp" ,fontname="Helvetica"];
+  Node10 [label="type(advection_test\l_tracer_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" dye_tracer_csp" ,fontname="Helvetica"];
+  Node11 [label="type(dye_tracer_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node12 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" dome_tracer_csp" ,fontname="Helvetica"];
+  Node12 [label="type(dome_tracer_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

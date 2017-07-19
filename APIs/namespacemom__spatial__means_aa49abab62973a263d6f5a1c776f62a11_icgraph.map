@@ -1,0 +1,5 @@
+<map id="mom_spatial_means::global_area_mean" name="mom_spatial_means::global_area_mean">
+<area shape="rect" id="node2" href="$namespacemom__diagnostics.html#abb6644248c28ab2e952361bfec436063" title="Diagnostics not more naturally calculated elsewhere are computed here. " alt="" coords="204,5,388,47"/>
+<area shape="rect" id="node3" href="$namespacemom__forcing__type.html#aa685fdcd5863af264335aa60b5b4c210" title="Offer buoyancy forcing fields for diagnostics for those fields registered as part of register_forcing..." alt="" coords="208,71,384,112"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="436,78,523,105"/>
+</map>

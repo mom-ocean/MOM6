@@ -1,0 +1,10 @@
+digraph "mom_internal_tides::propagate"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node53 [label="mom_internal_tides\l::propagate",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node53 -> Node54 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node54 [label="mom_internal_tides\l::propagate_int_tide",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2",tooltip="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. "];
+}

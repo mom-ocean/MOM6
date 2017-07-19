@@ -1,0 +1,6 @@
+<map id="mom_cvmix_shear::cvmix_shear_is_used" name="mom_cvmix_shear::cvmix_shear_is_used">
+<area shape="rect" id="node2" href="$namespacemom__diabatic__driver.html#afa0b30bd6f0e080bcacbd6dcb15ff990" title="This routine initializes the diabatic driver module. " alt="" coords="239,5,381,47"/>
+<area shape="rect" id="node3" href="$namespacemom__set__visc.html#ae2d9d9f74c1e9aec56257cfad372b0fd" title="This subroutine is used to register any fields associated with the vertvisc_type. ..." alt="" coords="228,71,392,112"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="440,78,583,105"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="631,78,717,105"/>
+</map>

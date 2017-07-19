@@ -1,0 +1,6 @@
+<map id="mom_grid_initialize::set_grid_metrics_from_mosaic" name="mom_grid_initialize::set_grid_metrics_from_mosaic">
+<area shape="rect" id="node2" href="$namespacemom__grid__initialize.html#a235a9712823e2f78e4958e8d681b6ba4" title="set_grid_metrics is used to set the primary values in the model&#39;s horizontal grid. The bathymetry, land&#45;sea mask and any restricted channel widths are not known yet, so these are set later. " alt="" coords="212,13,345,54"/>
+<area shape="rect" id="node3" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="393,13,555,54"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="603,20,745,47"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="793,20,880,47"/>
+</map>

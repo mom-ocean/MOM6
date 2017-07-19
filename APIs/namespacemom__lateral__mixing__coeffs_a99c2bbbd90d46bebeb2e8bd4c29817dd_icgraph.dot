@@ -1,0 +1,10 @@
+digraph "mom_lateral_mixing_coeffs::calc_slope_functions_using_just_e"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node50 [label="mom_lateral_mixing\l_coeffs::calc_slope\l_functions_using_just_e",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node50 -> Node51 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node51 [label="mom_lateral_mixing\l_coeffs::calc_slope\l_functions",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#a8abf768b636e96aafa9544287624523e",tooltip="Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et ..."];
+}

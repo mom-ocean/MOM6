@@ -1,0 +1,19 @@
+digraph "mom_tracer_registry::tracer_registry_type"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_tracer_registry\l::tracer_registry_type",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" locked" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr" ,fontname="Helvetica"];
+  Node3 [label="mom_tracer_registry\l::tracer_type",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structmom__tracer__registry_1_1tracer__type.html",tooltip="The tracer type. "];
+  Node4 -> Node3 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" vd" ,fontname="Helvetica"];
+  Node4 [label="vardesc",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node3 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" name" ,fontname="Helvetica"];
+  Node5 [label="character(len=32)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node3 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" advection_xy\nobc_inflow_conc\ndf2d_x\ndf2d_y\ndf_x\nad2d_x\ndf_y\nad2d_y\nad_x\nad_y\n..." ,fontname="Helvetica"];
+  Node6 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ntr" ,fontname="Helvetica"];
+  Node7 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

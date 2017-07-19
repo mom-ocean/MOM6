@@ -1,0 +1,16 @@
+<map id="user_initialization::write_user_log" name="user_initialization::write_user_log">
+<area shape="rect" id="node2" href="$namespaceuser__initialization.html#aa6db7133a474bd7832e85ad5bd9df0ca" title="This function puts the initial layer temperatures and salinities into T(:,:,:) and S(:..." alt="" coords="189,5,343,61"/>
+<area shape="rect" id="node3" href="$namespaceuser__initialization.html#a7b14806f2c4db32faadeaebc6363aa64" title="Set up the sponges. " alt="" coords="183,86,349,127"/>
+<area shape="rect" id="node7" href="$namespaceuser__initialization.html#af042062e141adcd72d3fe7a14b9284e0" title="initialize thicknesses. " alt="" coords="180,151,352,193"/>
+<area shape="rect" id="node8" href="$namespaceuser__initialization.html#a7b7630e690c942f2961e45e19c4f69fc" title="Initialize topography. " alt="" coords="176,217,356,258"/>
+<area shape="rect" id="node11" href="$namespaceuser__initialization.html#a45e373a6e0147bb93d41bf9ba2618c77" title="initialize velocities. " alt="" coords="185,282,347,323"/>
+<area shape="rect" id="node12" href="$namespaceuser__initialization.html#a541d25539cbb198ae0ed7c1356f267cf" title="Set vertical coordinates. " alt="" coords="205,347,327,389"/>
+<area shape="rect" id="node14" href="$namespaceuser__initialization.html#a257e5194c434ba287d296f7a228c6a0c" title="This subroutine sets the properties of flow at open boundary conditions. " alt="" coords="196,413,336,454"/>
+<area shape="rect" id="node15" href="$namespaceuser__initialization.html#a83f001dcb5625d866c1265120a248e3c" title="user_initialization\l::user_set_rotation" alt="" coords="201,478,331,519"/>
+<area shape="rect" id="node4" href="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321" title="mom_state_initialization\l::mom_initialize_state" alt="" coords="636,135,799,177"/>
+<area shape="rect" id="node5" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="847,224,989,251"/>
+<area shape="rect" id="node6" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="1037,224,1124,251"/>
+<area shape="rect" id="node9" href="$namespacemom__fixed__initialization.html#a4f19c092d796f0cbb036c96575299b11" title="MOM_initialize_topography makes the appropriate call to set up the bathymetry. " alt="" coords="404,217,588,258"/>
+<area shape="rect" id="node10" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="637,217,798,258"/>
+<area shape="rect" id="node13" href="$namespacemom__coord__initialization.html#a6e2f4c11bc99476ea9c64a9aceac3b81" title="MOM_initialize_coord sets up time&#45;invariant quantities related to MOM6&#39;s vertical coordinate..." alt="" coords="413,314,579,355"/>
+</map>

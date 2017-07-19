@@ -1,0 +1,34 @@
+digraph "ocean_model_mod::ocean_state_type"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="ocean_model_mod::ocean\l_state_type",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" icebergs_apply_rigid\l_boundary\nrestore_temp\nrestore_salinity\nis_ocean_pe\nuse_ice_shelf" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" energysavedays\nwrite_energy_time\ntime" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" dirs" ,fontname="Helvetica"];
+  Node4 [label="directories",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" state" ,fontname="Helvetica"];
+  Node5 [label="surface",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" flux_tmp\nfluxes" ,fontname="Helvetica"];
+  Node6 [label="forcing",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" sum_output_csp" ,fontname="Helvetica"];
+  Node7 [label="type(sum_output_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" mom_csp" ,fontname="Helvetica"];
+  Node8 [label="type(mom_control_struct)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" forcing_csp" ,fontname="Helvetica"];
+  Node9 [label="type(surface_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" gv" ,fontname="Helvetica"];
+  Node10 [label="type(verticalgrid_type)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" grid" ,fontname="Helvetica"];
+  Node11 [label="ocean_grid_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node12 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" press_to_z\nkv_iceberg\nlatent_heat_fusion\nberg_area_threshold\ndensity_iceberg\nc_p" ,fontname="Helvetica"];
+  Node12 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node13 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" nstep\nrestart_control" ,fontname="Helvetica"];
+  Node13 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node14 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ice_shelf_csp" ,fontname="Helvetica"];
+  Node14 [label="type(ice_shelf_cs),\l pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

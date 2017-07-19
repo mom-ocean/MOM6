@@ -1,0 +1,5 @@
+<map id="user_shelf_init::user_init_ice_thickness" name="user_shelf_init::user_init_ice_thickness">
+<area shape="rect" id="node2" href="$namespaceuser__shelf__init.html#a160ee7639522c12c10408f853ff4d897" title="user_shelf_init::user\l_initialize_shelf_mass" alt="" coords="192,39,343,80"/>
+<area shape="rect" id="node3" href="$namespaceuser__shelf__init.html#a04dc4958214e8b07da385f8be785d706" title="user_shelf_init::write\l_user_log" alt="" coords="391,5,533,47"/>
+<area shape="rect" id="node4" href="$namespaceuser__shelf__init.html#abd99438d24c4a57aa3fbab3b067a7c81" title="user_shelf_init::user\l_update_shelf_mass" alt="" coords="391,71,533,112"/>
+</map>

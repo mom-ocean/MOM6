@@ -1,0 +1,9 @@
+<map id="mom_ice_shelf::ice_shelf_advect" name="mom_ice_shelf::ice_shelf_advect">
+<area shape="rect" id="node2" href="$namespacemom__ice__shelf.html#ae577f1cfafb12ba9b009523fcf43cda7" title="mom_ice_shelf::calve\l_to_mask" alt="" coords="207,5,356,47"/>
+<area shape="rect" id="node3" href="$namespacemom__ice__shelf.html#a8bd6d78f530289dc90ffbdb0b80e7883" title="mom_ice_shelf::ice\l_shelf_advect_thickness_x" alt="" coords="191,71,371,112"/>
+<area shape="rect" id="node5" href="$namespacemom__ice__shelf.html#a0663fa04e4a2df8b6676a0c5364ac8ee" title="mom_ice_shelf::ice\l_shelf_advect_thickness_y" alt="" coords="191,136,371,177"/>
+<area shape="rect" id="node6" href="$namespacemom__ice__shelf.html#a850dc882bb94f5b3eacdfdbf25cb19b8" title="Apply a very simple calving law using a minimum thickness rule. " alt="" coords="188,201,375,243"/>
+<area shape="rect" id="node7" href="$namespacemom__ice__shelf.html#aafa24b7ba297a29d9897576939282815" title="mom_ice_shelf::shelf\l_advance_front" alt="" coords="208,267,355,308"/>
+<area shape="rect" id="node8" href="$namespacemom__ice__shelf.html#ae71447bb7b63b4313070abc27e0a7208" title="mom_ice_shelf::update\l_velocity_masks" alt="" coords="203,332,360,373"/>
+<area shape="rect" id="node4" href="$namespacemom__ice__shelf.html#ac30ce29228457ec8a19679f25960ef21" title="used for flux limiting in advective subroutines Van Leer limiter (source: Wikipedia) ..." alt="" coords="423,104,572,145"/>
+</map>

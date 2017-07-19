@@ -1,0 +1,40 @@
+digraph "mom_surface_forcing::surface_forcing_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_surface_forcing\l::surface_forcing_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" scm_cvmix_tests_csp" ,fontname="Helvetica"];
+  Node2 [label="type(scm_cvmix_tests\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" handles" ,fontname="Helvetica"];
+  Node3 [label="forcing_diags",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" first_call_set_forcing\nvariable_winds\nrestorebuoy\nread_gust_2d\nuse_temperature\narchaic_omip_file\nadiabatic\ndataoverrideisinitialized\nvariable_buoyforce" ,fontname="Helvetica"];
+  Node4 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" user_forcing_csp" ,fontname="Helvetica"];
+  Node5 [label="type(user_surface_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tracer_flow_csp" ,fontname="Helvetica"];
+  Node6 [label="type(tracer_flow_control\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" shortwaveup_file\nrunoff_file\nlatentheat_file\nshortwave_file\nsalinityrestore_file\nevaporation_file\nsnow_file\nsensibleheat_file\nwind_config\nrain_file\n..." ,fontname="Helvetica"];
+  Node7 [label="character(len=200)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" bfb_forcing_csp" ,fontname="Helvetica"];
+  Node8 [label="type(bfb_surface_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" snow_var\nlw_var\nrain_var\nsens_var\nlatent_var\nustar_var\nsst_restore\l_var\nfrunoff_var\nsw_var\nlrunoff_var\n..." ,fontname="Helvetica"];
+  Node9 [label="character(len=80)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" restart_csp" ,fontname="Helvetica"];
+  Node10 [label="type(mom_restart_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node11 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node12 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" wind_stagger" ,fontname="Helvetica"];
+  Node12 [label="character(len=8)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node13 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" scm_idealized_hurricane_csp" ,fontname="Helvetica"];
+  Node13 [label="type(scm_idealized\l_hurricane_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node14 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" meso_forcing_csp" ,fontname="Helvetica"];
+  Node14 [label="type(meso_surface_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node15 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" urf_cs" ,fontname="Helvetica"];
+  Node15 [label="type(user_revise_forcing\l_cs), pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node16 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" sss_last_lev\nwind_nlev\nsw_last_lev\nlw_nlev\nsst_nlev\nprecip_last_lev\nsss_nlev\nrunoff_nlev\nlatent_last_lev\nevap_nlev\n..." ,fontname="Helvetica"];
+  Node16 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node17 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" wind_scale\ngyres_taux_const\nlatent_heat_fusion\nflux_const\ngyres_taux_n_pis\ngyres_taux_sin_amp\ndens_restore\ngyres_taux_cos_amp\ngust_const\ntau_y0\n..." ,fontname="Helvetica"];
+  Node17 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

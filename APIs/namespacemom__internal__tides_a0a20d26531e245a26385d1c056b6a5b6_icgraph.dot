@@ -1,0 +1,17 @@
+digraph "mom_internal_tides::teleport"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node116 [label="mom_internal_tides\l::teleport",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node116 -> Node117 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node117 [label="mom_internal_tides\l::propagate_x",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a487e6cad7cea4c5095f198c236628d6d"];
+  Node117 -> Node118 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node118 [label="mom_internal_tides\l::propagate",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a22caa92b67ed4077ce78eac34d15b14d",tooltip="This subroutine does refraction on the internal waves at a single frequency. "];
+  Node118 -> Node119 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node119 [label="mom_internal_tides\l::propagate_int_tide",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2",tooltip="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. "];
+  Node116 -> Node120 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node120 [label="mom_internal_tides\l::propagate_y",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a5f63667c6d87b8ae6d51076ea2942aca"];
+  Node120 -> Node118 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

@@ -1,0 +1,15 @@
+<map id="mom_open_boundary::open_boundary_config" name="mom_open_boundary::open_boundary_config">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#adb17aba34a8aaceb524910d2e1196a0c" title="mom_open_boundary::\linitialize_segment_data" alt="" coords="208,105,367,146"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="845,163,987,205"/>
+<area shape="rect" id="node7" href="$namespacemom__open__boundary.html#a709a33b9e33b5689d5ca73349ed51fb6" title="Deallocate open boundary data. " alt="" coords="208,353,367,394"/>
+<area shape="rect" id="node8" href="$namespacemom__string__functions.html#a60262e56f544e4613754df43bf50652e" title="Returns string with all spaces removed. " alt="" coords="212,418,363,459"/>
+<area shape="rect" id="node9" href="$namespacemom__open__boundary.html#ab7c14cc1f67490ff9326c35471fb7ef7" title="Parse an OBC_SEGMENT_%%% string starting with &quot;I=&quot; and configure placement and type of OBC accordingl..." alt="" coords="210,287,365,329"/>
+<area shape="rect" id="node14" href="$namespacemom__open__boundary.html#ae298511b7acc78ed5cd780ad967318cc" title="Parse an OBC_SEGMENT_%%% string starting with &quot;J=&quot; and configure placement and type of OBC accordingl..." alt="" coords="210,222,365,263"/>
+<area shape="rect" id="node5" href="$namespacemom__open__boundary.html#a0aee21537ad757ce15e602d8fd55eb4d" title="Parse an OBC_SEGMENT_%%_DATA string. " alt="" coords="424,105,589,146"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="1035,163,1176,205"/>
+<area shape="rect" id="node6" href="$namespacemom__string__functions.html#aad76dee92b69dab4488da049fe11cdb8" title="Returns the string corresponding to the nth word in the argument or &quot;&quot; if the string is not long enou..." alt="" coords="647,222,797,263"/>
+<area shape="rect" id="node10" href="$namespacemom__open__boundary.html#ad40be6b6ce4c94040b7de59bde9be77f" title="Parse an OBC_SEGMENT_%%% string. " alt="" coords="429,287,584,329"/>
+<area shape="rect" id="node12" href="$namespacemom__open__boundary.html#ac357a1fb341db3aaffdfeca2eacab60b" title="mom_open_boundary::\lsetup_segment_indices" alt="" coords="427,353,586,394"/>
+<area shape="rect" id="node13" href="$namespacemom__open__boundary.html#aa7f532a65dd8ae4db981f2ef4791fc56" title="Allocate segment data fields. " alt="" coords="415,222,599,263"/>
+<area shape="rect" id="node11" href="$MOM__open__boundary_8F90.html#a0793b1a5746e6ead6bff50c3a52cae90" title="interpret_int_expr" alt="" coords="661,339,783,365"/>
+</map>

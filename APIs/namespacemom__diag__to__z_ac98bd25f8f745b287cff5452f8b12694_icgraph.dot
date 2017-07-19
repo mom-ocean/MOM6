@@ -1,0 +1,10 @@
+digraph "mom_diag_to_z::global_z_mean"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node39 [label="mom_diag_to_z::global\l_z_mean",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node39 -> Node40 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node40 [label="mom_diag_to_z::calculate\l_z_diag_fields",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#afd0d7dad23b70714a349db2216c86a92",tooltip="This subroutine maps tracers and velocities into depth space for diagnostics. "];
+}

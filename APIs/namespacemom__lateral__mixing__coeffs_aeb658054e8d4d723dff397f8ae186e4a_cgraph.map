@@ -1,0 +1,6 @@
+<map id="mom_lateral_mixing_coeffs::varmix_init" name="mom_lateral_mixing_coeffs::varmix_init">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="207,5,348,47"/>
+<area shape="rect" id="node4" href="$namespacemom__wave__speed.html#a46e21529ec8098b0b19053afa133b971" title="Initialize control structure for MOM_wave_speed. " alt="" coords="192,71,363,112"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="425,5,567,47"/>
+<area shape="rect" id="node5" href="$namespacemom__wave__speed.html#a035c9e3306d6b21809e240a5b24a2db0" title="Sets internal parameters for MOM_wave_speed. " alt="" coords="411,71,581,112"/>
+</map>

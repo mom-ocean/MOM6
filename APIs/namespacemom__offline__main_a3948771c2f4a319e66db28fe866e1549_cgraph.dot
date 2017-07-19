@@ -1,0 +1,10 @@
+digraph "mom_offline_main::offline_transport_init"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node47 [label="mom_offline_main::offline\l_transport_init",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node47 -> Node48 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node48 [label="mom_offline_main::read\l_all_input",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__offline__main.html#abc6fd7e877d8e70014cbad2d4e3f11c5",tooltip="Coordinates the allocation and reading in all time levels of uh, vh, hend, temp, and salt from files..."];
+}

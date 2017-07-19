@@ -1,0 +1,11 @@
+<map id="mom_remapping::initialize_remapping" name="mom_remapping::initialize_remapping">
+<area shape="rect" id="node2" href="$namespacemom__ale__sponge.html#a135d5ca4d0dff789bc6db5ac789b4142" title="This subroutine determines the number of points which are within. " alt="" coords="231,101,409,142"/>
+<area shape="rect" id="node9" href="$namespacemom__remapping.html#a5849f564453d5ed76fb4feffd41eca26" title="Runs unit tests on remapping functions. Should only be called from a single/root thread Returns True ..." alt="" coords="227,181,413,222"/>
+<area shape="rect" id="node3" href="$namespacedense__water__initialization.html#ad2b426d6c4abc03ad3adf965cb9cf7f0" title="Initialize the restoring sponges for the dense water experiment. " alt="" coords="469,5,640,61"/>
+<area shape="rect" id="node7" href="$namespacedome2d__initialization.html#ab0df2b602fe1c83baa66ba03cc2c6dd4" title="Set up sponges in 2d DOME configuration. " alt="" coords="461,86,648,127"/>
+<area shape="rect" id="node8" href="$namespaceisomip__initialization.html#a672219a0070f4491fc1a8d9c20c6c1e4" title="Sets up the the inverse restoration time (Idamp), and. " alt="" coords="465,151,644,193"/>
+<area shape="rect" id="node4" href="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321" title="mom_state_initialization\l::mom_initialize_state" alt="" coords="696,86,859,127"/>
+<area shape="rect" id="node5" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="907,127,1049,153"/>
+<area shape="rect" id="node6" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="1097,127,1184,153"/>
+<area shape="rect" id="node10" href="$namespacemom__unit__tests.html#a71f3a2080872634c14a25a9411b59fe0" title="Calls unit tests for other modules. Note that if a unit test returns true, a FATAL error is triggered..." alt="" coords="705,181,849,222"/>
+</map>

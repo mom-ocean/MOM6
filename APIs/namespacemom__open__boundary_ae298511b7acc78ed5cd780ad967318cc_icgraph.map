@@ -1,0 +1,3 @@
+<map id="mom_open_boundary::setup_v_point_obc" name="mom_open_boundary::setup_v_point_obc">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f" title="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..." alt="" coords="208,5,363,47"/>
+</map>

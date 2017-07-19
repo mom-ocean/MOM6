@@ -1,0 +1,36 @@
+digraph "mom_diag_mediator::set_diag_mask"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node388 [label="mom_diag_mediator::\lset_diag_mask",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node388 -> Node389 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node389 [label="mom_diag_mediator::\ladd_diag_to_list",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a8415b33a337b1fbc7535688eca85ab37",tooltip="Create a diagnostic type and attached to list. "];
+  Node389 -> Node390 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node390 [label="mom_diag_mediator::\lregister_diag_field\l_expand_cmor",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae50b35cba800ac5fd8975929fd2b9f4a",tooltip="Returns True if either the native of CMOr version of the diagnostic were registered. Updates &#39;dm_id&#39; after calling register_diag_field_expand_axes() for both native and CMOR variants of the field. "];
+  Node390 -> Node391 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node391 [label="mom_diag_mediator::\lregister_diag_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#aa791f75f899ae9b7cd4756165a9c2a1b",tooltip="Returns the \"diag_mediator\" handle for a group (native, CMOR, z-coord, ...) of diagnostics derived fr..."];
+  Node391 -> Node392 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node392 [label="mom_ale::ale_register\l_diags",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a994efb3c62fc5f63da2617f29cbd6be1",tooltip="Initialize diagnostics for the ALE module. "];
+  Node391 -> Node393 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node393 [label="mom_coriolisadv::coriolisadv_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coriolisadv.html#ad3ce07f23ce7b484a5a9e0c0abe8b1cd",tooltip="Initializes the control structure for coriolisadv_cs. "];
+  Node391 -> Node394 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node394 [label="mom_diapyc_energy_req\l::diapyc_energy_req_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diapyc__energy__req.html#aa0ce122f4dc6d9a6ec9e17996484bb76"];
+  Node391 -> Node395 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node395 [label="mom_diffconvection\l::diffconvection_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diffconvection.html#ac36d9d7fd69e4422e7de01242094ff34"];
+  Node391 -> Node396 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node396 [label="mom_int_tide_input\l::int_tide_input_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__int__tide__input.html#a29a707637da633ccee155b53557b5f17"];
+  Node391 -> Node397 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node397 [label="mom_kpp::kpp_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__kpp.html#a9c834424b6e067e280928db3700ec77e",tooltip="Initialize the CVmix KPP module and set up diagnostics Returns True if KPP is to be used..."];
+  Node391 -> Node398 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node398 [label="mom_neutral_diffusion\l::neutral_diffusion_diag_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__neutral__diffusion.html#a87cf821c52ac1111493d4168f0a91d17",tooltip="Diagnostic handles for neutral diffusion tendencies. "];
+  Node398 -> Node399 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node399 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node399 -> Node400 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node400 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node391 -> Node401 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node401 [label="mom_diag_mediator::\locean_register_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c",tooltip="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..."];
+  Node401 -> Node402 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node402 [label="mom_diag_to_z::ocean\l_register_diag_with_z",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a90526b2f59f94c6af2f525a221029772",tooltip="This subroutine registers a tracer to be output in depth space. "];
+}

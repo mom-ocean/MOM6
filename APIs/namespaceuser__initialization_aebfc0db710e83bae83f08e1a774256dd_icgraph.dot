@@ -1,0 +1,38 @@
+digraph "user_initialization::write_user_log"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node49 [label="user_initialization\l::write_user_log",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node49 -> Node50 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 [label="user_initialization\l::user_init_temperature\l_salinity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#aa6db7133a474bd7832e85ad5bd9df0ca",tooltip="This function puts the initial layer temperatures and salinities into T(:,:,:) and S(:..."];
+  Node49 -> Node51 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node51 [label="user_initialization\l::user_initialize_sponges",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a7b14806f2c4db32faadeaebc6363aa64",tooltip="Set up the sponges. "];
+  Node51 -> Node52 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node52 [label="mom_state_initialization\l::mom_initialize_state",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321"];
+  Node52 -> Node53 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node53 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node53 -> Node54 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node54 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node49 -> Node55 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node55 [label="user_initialization\l::user_initialize_thickness",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#af042062e141adcd72d3fe7a14b9284e0",tooltip="initialize thicknesses. "];
+  Node49 -> Node56 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node56 [label="user_initialization\l::user_initialize_topography",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a7b7630e690c942f2961e45e19c4f69fc",tooltip="Initialize topography. "];
+  Node56 -> Node57 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node57 [label="mom_fixed_initialization\l::mom_initialize_topography",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__fixed__initialization.html#a4f19c092d796f0cbb036c96575299b11",tooltip="MOM_initialize_topography makes the appropriate call to set up the bathymetry. "];
+  Node57 -> Node58 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node58 [label="mom_fixed_initialization\l::mom_initialize_fixed",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92",tooltip="MOM_initialize_fixed sets up time-invariant quantities related to MOM6&#39;s horizontal grid..."];
+  Node58 -> Node53 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 -> Node59 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node59 [label="user_initialization\l::user_initialize_velocity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a45e373a6e0147bb93d41bf9ba2618c77",tooltip="initialize velocities. "];
+  Node49 -> Node60 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node60 [label="user_initialization\l::user_set_coord",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a541d25539cbb198ae0ed7c1356f267cf",tooltip="Set vertical coordinates. "];
+  Node60 -> Node61 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node61 [label="mom_coord_initialization\l::mom_initialize_coord",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coord__initialization.html#a6e2f4c11bc99476ea9c64a9aceac3b81",tooltip="MOM_initialize_coord sets up time-invariant quantities related to MOM6&#39;s vertical coordinate..."];
+  Node61 -> Node53 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 -> Node62 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node62 [label="user_initialization\l::user_set_obc_data",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a257e5194c434ba287d296f7a228c6a0c",tooltip="This subroutine sets the properties of flow at open boundary conditions. "];
+  Node49 -> Node63 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node63 [label="user_initialization\l::user_set_rotation",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__initialization.html#a83f001dcb5625d866c1265120a248e3c"];
+}

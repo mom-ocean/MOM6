@@ -1,0 +1,15 @@
+digraph "/home/adcroft/GitHub/workspace/Gaea-stats-MOM6-examples/MOM6-examples/src/MOM6/src/diagnostics" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_68267d1309a1af8e8297ef4c3efbcdba {
+    graph [ bgcolor="#ddddee", pencolor="black", label="src" fontname="Helvetica", fontsize="10", URL="dir_68267d1309a1af8e8297ef4c3efbcdba.html"]
+  dir_941f38c4e38886800e591b0dff3cead0 [shape=box, label="diagnostics", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_941f38c4e38886800e591b0dff3cead0.html"];
+  }
+  dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [shape=box label="config_src" fillcolor="white" style="filled" color="red" URL="dir_bbbeac63f53ec5ea699fa4cbaa8c4afb.html"];
+  dir_5752cadd8276ecfd63d9b924f2a4d4b5 [shape=box label="framework" URL="dir_5752cadd8276ecfd63d9b924f2a4d4b5.html"];
+  dir_bbbeac63f53ec5ea699fa4cbaa8c4afb->dir_5752cadd8276ecfd63d9b924f2a4d4b5 [headlabel="4", labeldistance=1.5 headhref="dir_000000_000009.html"];
+  dir_941f38c4e38886800e591b0dff3cead0->dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [headlabel="8", labeldistance=1.5 headhref="dir_000007_000000.html"];
+  dir_941f38c4e38886800e591b0dff3cead0->dir_5752cadd8276ecfd63d9b924f2a4d4b5 [headlabel="4", labeldistance=1.5 headhref="dir_000007_000009.html"];
+  dir_5752cadd8276ecfd63d9b924f2a4d4b5->dir_bbbeac63f53ec5ea699fa4cbaa8c4afb [headlabel="1", labeldistance=1.5 headhref="dir_000009_000000.html"];
+}

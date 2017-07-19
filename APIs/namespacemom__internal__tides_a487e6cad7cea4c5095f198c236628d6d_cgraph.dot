@@ -1,0 +1,18 @@
+digraph "mom_internal_tides::propagate_x"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node84 [label="mom_internal_tides\l::propagate_x",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node84 -> Node85 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 [label="mom_internal_tides\l::ppm_reconstruction_x",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#afa863318cc960c0be08672731ce6f225",tooltip="This subroutine calculates left/right edge values for PPM reconstruction. "];
+  Node85 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node86 [label="mom_internal_tides\l::ppm_limit_pos",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a16dd5b071e0fc87eb04c32f602c08aa5",tooltip="This subroutine limits the left/right edge values of the PPM reconstruction to give a reconstruction ..."];
+  Node84 -> Node87 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node87 [label="mom_internal_tides\l::reflect",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a6c622bfe3863b8fcea98c78104477491",tooltip="This subroutine does reflection of the internal waves at a single frequency. "];
+  Node84 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node88 [label="mom_internal_tides\l::teleport",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a0a20d26531e245a26385d1c056b6a5b6",tooltip="This subroutine moves energy across lines of partial reflection to prevent reflection of energy that ..."];
+  Node84 -> Node89 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node89 [label="mom_internal_tides\l::zonal_flux_en",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#a11b6fedbef7fd03428f8dfc404252792",tooltip="This subroutines evaluates the zonal mass or volume fluxes in a layer. "];
+}

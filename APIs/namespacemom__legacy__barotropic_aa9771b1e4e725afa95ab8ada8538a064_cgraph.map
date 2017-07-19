@@ -1,0 +1,6 @@
+<map id="mom_legacy_barotropic::legacy_barotropic_init" name="mom_legacy_barotropic::legacy_barotropic_init">
+<area shape="rect" id="node2" href="$namespacemom__legacy__barotropic.html#ab334a4e8ef23ec6d784b24b6336d22f7" title="mom_legacy_barotropic\l::find_face_areas" alt="" coords="423,5,583,47"/>
+<area shape="rect" id="node3" href="$namespacemom__legacy__barotropic.html#a22c219e251401bfcd6ca49f5899e181b" title="This subroutine calculates the barotropic velocities from the full velocity and thickness fields..." alt="" coords="213,35,373,76"/>
+<area shape="rect" id="node4" href="$namespacemom__legacy__barotropic.html#aaa2063f7d7fbe940bc5bd80117befaed" title="mom_legacy_barotropic\l::legacy_set_dtbt" alt="" coords="213,100,373,141"/>
+<area shape="rect" id="node5" href="$namespacemom__legacy__barotropic.html#aa06249abf57a70498ab07eee534e5e52" title="mom_legacy_barotropic\l::bt_cont_to_face_areas" alt="" coords="421,100,584,141"/>
+</map>

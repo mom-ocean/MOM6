@@ -1,0 +1,24 @@
+<map id="mom_ice_shelf::initialize_ice_shelf" name="mom_ice_shelf::initialize_ice_shelf">
+<area shape="rect" id="node2" href="$namespacemom__ice__shelf.html#a850dc882bb94f5b3eacdfdbf25cb19b8" title="Apply a very simple calving law using a minimum thickness rule. " alt="" coords="219,302,405,343"/>
+<area shape="rect" id="node3" href="$namespacemom__ice__shelf.html#a5d64b696412c0bfd8ded2e2eacaa917c" title="mom_ice_shelf::ice\l_shelf_solve_outer" alt="" coords="245,367,379,408"/>
+<area shape="rect" id="node21" href="$namespacemom__ice__shelf.html#a2ac08ec833782d98eeda1c91caf833d8" title="Initializes shelf mass based on three options (file, zero and user) " alt="" coords="229,432,395,474"/>
+<area shape="rect" id="node22" href="$namespacemom__ice__shelf.html#a1a323e884141c533e729dc44c6bbf91d" title="mom_ice_shelf::update\l_od_ffrac_uncoupled" alt="" coords="233,498,391,539"/>
+<area shape="rect" id="node23" href="$namespacemom__ice__shelf.html#ae71447bb7b63b4313070abc27e0a7208" title="mom_ice_shelf::update\l_velocity_masks" alt="" coords="233,563,391,604"/>
+<area shape="rect" id="node4" href="$namespacemom__ice__shelf.html#a5d534895698ad80a68be9a1b992c4d0b" title="mom_ice_shelf::apply\l_boundary_values_bilinear" alt="" coords="684,236,859,278"/>
+<area shape="rect" id="node5" href="$namespacemom__ice__shelf.html#a9f77faf4c64078c8bce0546bb024f34e" title="mom_ice_shelf::bilinear\l_shape_functions" alt="" coords="925,139,1083,180"/>
+<area shape="rect" id="node8" href="$namespacemom__ice__shelf.html#a6d1174213d77aef09d2eaae2fd138edd" title="mom_ice_shelf::apply\l_boundary_values_triangle" alt="" coords="683,40,859,82"/>
+<area shape="rect" id="node9" href="$namespacemom__ice__shelf.html#a4714299e786f7e62fa2c82916dac2316" title="mom_ice_shelf::bilinear\l_shape_functions_subgrid" alt="" coords="456,396,629,438"/>
+<area shape="rect" id="node10" href="$namespacemom__ice__shelf.html#a9ccd473e87beaec693c8d90e7d68ed8f" title="mom_ice_shelf::calc\l_shelf_driving_stress" alt="" coords="470,514,615,555"/>
+<area shape="rect" id="node11" href="$namespacemom__ice__shelf.html#a55464f46b7f452abe25f8dde166cee51" title="mom_ice_shelf::savearray2" alt="" coords="680,492,863,518"/>
+<area shape="rect" id="node12" href="$namespacemom__ice__shelf.html#ac7bf50703bb671dbde1016061a04e3c9" title="mom_ice_shelf::calc\l_shelf_visc_bilinear" alt="" coords="471,579,614,620"/>
+<area shape="rect" id="node13" href="$namespacemom__ice__shelf.html#a69286817781f164a0af096b050e3ccc4" title="mom_ice_shelf::calc\l_shelf_visc_triangular" alt="" coords="469,644,617,686"/>
+<area shape="rect" id="node14" href="$namespacemom__ice__shelf.html#a08bef308dd58f20b81330c5706f71e1f" title="mom_ice_shelf::cg_action\l_bilinear" alt="" coords="684,302,859,343"/>
+<area shape="rect" id="node15" href="$namespacemom__ice__shelf.html#a0ad3713e3c3ee71d987d6cd82c45181e" title="mom_ice_shelf::cg_action\l_triangular" alt="" coords="684,367,859,408"/>
+<area shape="rect" id="node16" href="$namespacemom__ice__shelf.html#a95d21b019a635ad3a8ef060d765362e1" title="mom_ice_shelf::ice\l_shelf_solve_inner" alt="" coords="475,178,610,219"/>
+<area shape="rect" id="node20" href="$namespacemom__ice__shelf.html#a8fc399c376152f2d639b506ff8a7ee24" title="mom_ice_shelf::interpolate\l_h_to_b" alt="" coords="453,710,632,751"/>
+<area shape="rect" id="node7" href="$namespacemom__ice__shelf.html#a925d19b978b5368c3b0d5cae3b542bfe" title="mom_ice_shelf::cg_action\l_subgrid_basal_bilinear" alt="" coords="917,270,1091,311"/>
+<area shape="rect" id="node6" href="$namespacemom__ice__shelf.html#a43bcb4adfaabc54cd57ad8d96b71c224" title="Calculate area of quadrilateral. " alt="" coords="1145,146,1324,173"/>
+<area shape="rect" id="node17" href="$namespacemom__ice__shelf.html#a0fa0e5e0225816e5e5e87994371f11f1" title="mom_ice_shelf::matrix\l_diagonal_bilinear" alt="" coords="694,106,849,147"/>
+<area shape="rect" id="node19" href="$namespacemom__ice__shelf.html#abc77d7c18a2919c9308c39aa26f916bf" title="mom_ice_shelf::matrix\l_diagonal_triangle" alt="" coords="694,171,849,212"/>
+<area shape="rect" id="node18" href="$namespacemom__ice__shelf.html#af109d5577049ff4ded3b07d5ab25a771" title="mom_ice_shelf::cg_diagonal\l_subgrid_basal_bilinear" alt="" coords="911,74,1097,115"/>
+</map>

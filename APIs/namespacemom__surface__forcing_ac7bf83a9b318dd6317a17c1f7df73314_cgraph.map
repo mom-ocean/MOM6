@@ -1,0 +1,4 @@
+<map id="mom_surface_forcing::buoyancy_forcing_allocate" name="mom_surface_forcing::buoyancy_forcing_allocate">
+<area shape="rect" id="node2" href="$namespacemom__forcing__type.html#a4258a1dc8dc6733eb8269d771efe837d" title="Conditionally allocate fields within the forcing type. " alt="" coords="237,5,420,47"/>
+<area shape="rect" id="node3" href="$MOM__forcing__type_8F90.html#aede7c3d8c91ec3e8a8a3b68824a5e9e8" title="Allocates and zeroes&#45;out array. " alt="" coords="468,13,535,39"/>
+</map>

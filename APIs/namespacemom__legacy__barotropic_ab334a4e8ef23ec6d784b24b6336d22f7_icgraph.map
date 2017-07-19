@@ -1,0 +1,6 @@
+<map id="mom_legacy_barotropic::find_face_areas" name="mom_legacy_barotropic::find_face_areas">
+<area shape="rect" id="node2" href="$namespacemom__legacy__barotropic.html#aa9771b1e4e725afa95ab8ada8538a064" title="mom_legacy_barotropic\l::legacy_barotropic_init" alt="" coords="421,5,581,47"/>
+<area shape="rect" id="node3" href="$namespacemom__legacy__barotropic.html#ae039a54a1c82e3f4f53539e5dc2de6ea" title="mom_legacy_barotropic\l::legacy_btstep" alt="" coords="213,39,373,80"/>
+<area shape="rect" id="node4" href="$namespacemom__legacy__barotropic.html#aaa2063f7d7fbe940bc5bd80117befaed" title="mom_legacy_barotropic\l::legacy_set_dtbt" alt="" coords="213,104,373,145"/>
+<area shape="rect" id="node5" href="$namespacemom__dynamics__legacy__split.html#ae34fe0561f87dc05c2fad64bf6d5a1ee" title="mom_dynamics_legacy\l_split::step_mom_dyn\l_legacy_split" alt="" coords="422,97,581,153"/>
+</map>

@@ -1,0 +1,10 @@
+digraph "mom_entrain_diffusive::set_ent_bl"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node50 [label="mom_entrain_diffusive\l::set_ent_bl",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node50 -> Node51 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node51 [label="mom_entrain_diffusive\l::entrainment_diffusive",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__entrain__diffusive.html#acf36bae78e6175d37c3de0d61b0ac32f",tooltip="This subroutine calculates ea and eb, the rates at which a layer entrains from the layers above and b..."];
+}

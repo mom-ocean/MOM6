@@ -1,0 +1,21 @@
+<map id="mom_barotropic::btstep" name="mom_barotropic::btstep">
+<area shape="rect" id="node2" href="$namespacemom__barotropic.html#ab31aca5757cfd20499503710e346e04f" title="Adjust_local_BT_cont_types sets up reordered versions of the BT_cont type in the local_BT_cont types..." alt="" coords="217,5,375,47"/>
+<area shape="rect" id="node3" href="$namespacemom__barotropic.html#acd0c5085938d62ce102a67d6bf4dc92d" title="This subroutine applies the open boundary conditions on the free surface height, as coded by Mehmet I..." alt="" coords="219,71,373,112"/>
+<area shape="rect" id="node4" href="$namespacemom__barotropic.html#a1f34ad960c893916f0703db07badc57c" title="The following 4 subroutines apply the open boundary conditions. This subroutine applies the open boun..." alt="" coords="219,188,373,229"/>
+<area shape="rect" id="node5" href="$namespacemom__barotropic.html#a8ad2b12e885746401a97fd65ad189722" title="The function find_uhbt determines the zonal transport for a given velocity. " alt="" coords="428,166,604,193"/>
+<area shape="rect" id="node6" href="$namespacemom__barotropic.html#ae96b701027f6f77feed0f68515b31e55" title="The function find_vhbt determines the meridional transport for a given velocity. " alt="" coords="428,235,604,262"/>
+<area shape="rect" id="node7" href="$namespacemom__barotropic.html#a69af48d24759b679d0431f09dc9da503" title="This subroutine uses the BTCL types to find typical or maximum face areas, which can then be used for..." alt="" coords="225,305,367,347"/>
+<area shape="rect" id="node8" href="$namespacemom__domains.html#ad6fe013fb609fbb74bfeb66852d26796" title="mom_domains::complete\l_group_pass" alt="" coords="212,371,380,412"/>
+<area shape="rect" id="node9" href="$namespacemom__diag__mediator.html#a91244f765f2964dfb11f8787f65042f1" title="mom_diag_mediator::\lenable_averaging" alt="" coords="223,436,369,477"/>
+<area shape="rect" id="node10" href="$namespacemom__barotropic.html#a75ff2563aedd553f2799c1cfc320129e" title="This subroutine determines the open face areas of cells for calculating the barotropic transport..." alt="" coords="224,501,368,543"/>
+<area shape="rect" id="node11" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="652,611,793,652"/>
+<area shape="rect" id="node12" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="445,772,587,813"/>
+<area shape="rect" id="node13" href="$namespacemom__error__handler.html#a1c462df7b61f1296407b4af51dfeceab" title="mom_error_handler::\lmom_mesg" alt="" coords="445,552,587,593"/>
+<area shape="rect" id="node14" href="$namespacemom__barotropic.html#ab2af2b39d88ecc3011a5e906daefc810" title="This subroutine sets up reordered versions of the BT_cont type in the local_BT_cont types..." alt="" coords="223,720,369,761"/>
+<area shape="rect" id="node15" href="$namespacemom__barotropic.html#af1813744cf2034c2413ef904bf628263" title="mom_barotropic::swap" alt="" coords="439,695,593,722"/>
+<area shape="rect" id="node16" href="$namespacemom__barotropic.html#ac261a5f080961d455a9b806d2c0d63f7" title="This subroutine sets up the private structure used to apply the open boundary conditions, as developed by Mehmet Ilicak. " alt="" coords="225,837,367,879"/>
+<area shape="rect" id="node19" href="$namespacemom__domains.html#aee5ecb920463220ac2622e011151f8cd" title="mom_domains::start\l_group_pass" alt="" coords="225,903,367,944"/>
+<area shape="rect" id="node20" href="$namespacemom__tidal__forcing.html#a0a1564c68489a35802c626a07f4629d7" title="This subroutine calculates returns the partial derivative of the local geopotential height with the i..." alt="" coords="217,968,375,1009"/>
+<area shape="rect" id="node17" href="$namespacemom__barotropic.html#a0311f0f3d4e27f4017582d6a8c01298c" title="This function inverts the transport function to determine the barotopic velocity that is consistent w..." alt="" coords="442,837,590,879"/>
+<area shape="rect" id="node18" href="$namespacemom__barotropic.html#aeed3e618781611b448105a122e1a358c" title="This function inverts the transport function to determine the barotopic velocity that is consistent w..." alt="" coords="442,903,590,944"/>
+</map>

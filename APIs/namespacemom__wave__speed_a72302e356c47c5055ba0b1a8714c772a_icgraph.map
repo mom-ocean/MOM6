@@ -1,0 +1,8 @@
+<map id="mom_wave_speed::wave_speed" name="mom_wave_speed::wave_speed">
+<area shape="rect" id="node2" href="$namespacemom__lateral__mixing__coeffs.html#af206bc656869b4fc27d4d7e8a15d438e" title="Calculates and stores the non&#45;dimensional resolution functions. " alt="" coords="247,16,385,72"/>
+<area shape="rect" id="node7" href="$namespacemom__diagnostics.html#abb6644248c28ab2e952361bfec436063" title="Diagnostics not more naturally calculated elsewhere are computed here. " alt="" coords="224,97,408,138"/>
+<area shape="rect" id="node3" href="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a" title="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..." alt="" coords="459,5,579,32"/>
+<area shape="rect" id="node5" href="$namespacemom.html#ad56e17a755c7078ccea29ccbae4d5803" title="step_offline is the main driver for running tracers offline in MOM6. This has been primarily develope..." alt="" coords="456,56,583,83"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="677,5,763,32"/>
+<area shape="rect" id="node6" href="$namespaceocean__model__mod.html#ac9dc1795fc4799d6682f462857b42d62" title="ocean_model_mod::update\l_ocean_model" alt="" coords="631,57,809,98"/>
+</map>

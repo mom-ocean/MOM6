@@ -1,0 +1,5 @@
+<map id="mom_diag_mediator::post_data_1d_k" name="mom_diag_mediator::post_data_1d_k">
+<area shape="rect" id="node2" href="$namespacemom__diapyc__energy__req.html#ae781d0079acfadcd996aaff8d63957da" title="This subroutine uses a substantially refactored tridiagonal equation for diapycnal mixing of temperat..." alt="" coords="200,5,371,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diapyc__energy__req.html#afe7d4fc70231c1812ffd38faef76558e" title="mom_diapyc_energy_req\l::diapyc_energy_req_test" alt="" coords="419,5,587,47"/>
+<area shape="rect" id="node4" href="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7" title="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..." alt="" coords="635,5,777,47"/>
+</map>

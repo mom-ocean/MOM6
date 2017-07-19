@@ -1,0 +1,22 @@
+digraph "mom_grid::mom_grid_init"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node17 [label="mom_grid::mom_grid_init",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node17 -> Node18 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node18 [label="mom_grid::allocate\l_metrics",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid.html#a4a0b721d65abedfe5208a1e0904cd327",tooltip="Allocate memory used by the ocean_grid_type and related structures. "];
+  Node17 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node19 [label="mom_domains::get_domain\l_extent",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__domains.html#a1f1063ac5a049926d4ad00b43752aee6"];
+  Node17 -> Node20 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node20 [label="mom_hor_index::hor\l_index_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__hor__index.html#a8e3912351dbf2be2659f3561de341f49",tooltip="Sets various index values in a hor_index_type. "];
+  Node20 -> Node19 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node17 -> Node21 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node21 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node21 -> Node22 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node22 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node17 -> Node23 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node23 [label="mom_error_handler::\lmom_mesg",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a1c462df7b61f1296407b4af51dfeceab"];
+  Node23 -> Node22 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

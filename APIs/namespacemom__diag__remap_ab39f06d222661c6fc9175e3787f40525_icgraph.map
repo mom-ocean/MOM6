@@ -1,0 +1,5 @@
+<map id="mom_diag_remap::horizontally_average_diag_field" name="mom_diag_remap::horizontally_average_diag_field">
+<area shape="rect" id="node2" href="$namespacemom__diag__mediator.html#ab41a1779c5edb50aa7256477cef952ae" title="Post the horizontally area&#45;averaged diagnostic. " alt="" coords="252,5,399,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diag__mediator.html#ae11cae949c3f8cf68d2c70f656aa9c54" title="mom_diag_mediator::\lpost_data_3d_low" alt="" coords="447,5,593,47"/>
+<area shape="rect" id="node4" href="$namespacemom__diag__mediator.html#a70116fa6034dcf977a8bdcb4d81f9207" title="mom_diag_mediator::\lpost_data_3d" alt="" coords="641,5,788,47"/>
+</map>

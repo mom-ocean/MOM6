@@ -1,0 +1,12 @@
+digraph "ocean_model_mod::convert_state_to_ocean_type"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node4 [label="ocean_model_mod::convert\l_state_to_ocean_type",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node4 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="ocean_model_mod::ocean\l_model_init_sfc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#a2fca652469ca65c63305060534a14c0e"];
+  Node4 -> Node6 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node6 [label="ocean_model_mod::update\l_ocean_model",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#ac9dc1795fc4799d6682f462857b42d62"];
+}

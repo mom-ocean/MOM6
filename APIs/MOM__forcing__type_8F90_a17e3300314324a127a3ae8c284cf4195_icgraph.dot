@@ -1,0 +1,14 @@
+digraph "locmsg"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="locmsg",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="mom_forcing_type::forcing\l_singlepointprint",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#a1048a8e80ebd47f83b91772c02aedba2",tooltip="Write out values of the fluxes arrays at the i,j location. This is a debugging tool. "];
+  Node2 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="mom_diabatic_aux::applyboundaryfluxesinout",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__aux.html#aed2e2c3c0c73c160399e7de6f84c2c7f",tooltip="Update the thickness, temperature, and salinity due to thermodynamic boundary forcing (contained in f..."];
+  Node3 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="mom_diabatic_driver\l::diabatic",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7",tooltip="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..."];
+}

@@ -1,0 +1,7 @@
+<map id="mom_tracer_z_init::read_z_edges" name="mom_tracer_z_init::read_z_edges">
+<area shape="rect" id="node2" href="$namespacemom__tracer__z__init.html#a153c8859a6918fc350976a4a7c279c79" title="mom_tracer_z_init::\ltracer_z_init" alt="" coords="191,86,328,127"/>
+<area shape="rect" id="node3" href="$namespaceideal__age__example.html#abec4db7c44f7a6d5c891a6d8a17a99b3" title="ideal_age_example::\linitialize_ideal_age\l_tracer" alt="" coords="381,5,522,61"/>
+<area shape="rect" id="node4" href="$namespacemom__ocmip2__cfc.html#a403331f12c4b16682f42f284bf57f330" title="This subroutine initializes a tracer array. " alt="" coords="376,86,527,127"/>
+<area shape="rect" id="node6" href="$namespaceoil__tracer.html#a2bb5dd516d506706c1e67e1206e389b5" title="oil_tracer::initialize\l_oil_tracer" alt="" coords="386,151,517,193"/>
+<area shape="rect" id="node5" href="$namespacemom__ocmip2__cfc.html#a0c916b2f0835bd79002803f246d2ef49" title="This subroutine initializes the NTR tracer fields in tr(:,:,:,:) and it sets up the tracer output..." alt="" coords="575,86,755,127"/>
+</map>

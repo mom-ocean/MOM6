@@ -1,0 +1,5 @@
+<map id="rossby_front_2d_initialization::rossby_front_initialize_velocity" name="rossby_front_2d_initialization::rossby_front_initialize_velocity">
+<area shape="rect" id="node2" href="$namespacerossby__front__2d__initialization.html#a587a5f5c3f4694558d3d5206840ccab2" title="Analytic prescription of mixed layer temperature gradient in 2d Rossby front test. " alt="" coords="258,5,449,47"/>
+<area shape="rect" id="node4" href="$namespacerossby__front__2d__initialization.html#aa10adb0378184432ecaa78eb339c6c5a" title="Analytic prescription of mixed layer depth in 2d Rossby front test. " alt="" coords="244,71,463,98"/>
+<area shape="rect" id="node3" href="$namespacerossby__front__2d__initialization.html#a15a0b752df24fbae7deabe844a418239" title="Pseudo coordinate across domain used by Hml() and dTdy() returns a coordinate from &#45;PI/2 ..." alt="" coords="511,35,701,76"/>
+</map>

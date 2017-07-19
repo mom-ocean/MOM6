@@ -1,0 +1,6 @@
+<map id="mom_diag_mediator::get_new_diag_id" name="mom_diag_mediator::get_new_diag_id">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6" title="Issues a FATAL error if the assertion fails, i.e. the first argument is false. " alt="" coords="203,5,344,47"/>
+<area shape="rect" id="node5" href="$namespacemom__diag__mediator.html#a883862f004e30bbc5211f38635511ba0" title="Initializes a diag_type (used after allocating new memory) " alt="" coords="200,71,347,112"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="395,5,536,47"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="584,5,725,47"/>
+</map>

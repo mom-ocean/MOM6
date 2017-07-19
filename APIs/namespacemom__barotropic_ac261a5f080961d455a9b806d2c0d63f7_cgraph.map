@@ -1,0 +1,6 @@
+<map id="mom_barotropic::set_up_bt_obc" name="mom_barotropic::set_up_bt_obc">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="198,5,339,47"/>
+<area shape="rect" id="node4" href="$namespacemom__barotropic.html#a0311f0f3d4e27f4017582d6a8c01298c" title="This function inverts the transport function to determine the barotopic velocity that is consistent w..." alt="" coords="195,71,343,112"/>
+<area shape="rect" id="node5" href="$namespacemom__barotropic.html#aeed3e618781611b448105a122e1a358c" title="This function inverts the transport function to determine the barotopic velocity that is consistent w..." alt="" coords="195,136,343,177"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="391,5,532,47"/>
+</map>

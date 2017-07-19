@@ -1,0 +1,30 @@
+digraph "mom_remapping::remapping_set_param"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node310 [label="mom_remapping::remapping\l_set_param",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node310 -> Node311 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node311 [label="mom_remapping::initialize\l_remapping",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__remapping.html#a6847e0c44ccb54fb72587677f90d95b6",tooltip="Constructor for remapping control structure. "];
+  Node311 -> Node312 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node312 [label="mom_ale_sponge::initialize\l_ale_sponge",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale__sponge.html#a135d5ca4d0dff789bc6db5ac789b4142",tooltip="This subroutine determines the number of points which are within. "];
+  Node312 -> Node313 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node313 [label="dense_water_initialization\l::dense_water_initialize\l_sponges",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacedense__water__initialization.html#ad2b426d6c4abc03ad3adf965cb9cf7f0",tooltip="Initialize the restoring sponges for the dense water experiment. "];
+  Node313 -> Node314 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node314 [label="mom_state_initialization\l::mom_initialize_state",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__state__initialization.html#af4e854627c6572332ba3fd895f169321"];
+  Node314 -> Node315 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node315 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node315 -> Node316 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node316 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node312 -> Node317 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node317 [label="dome2d_initialization\l::dome2d_initialize_sponges",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacedome2d__initialization.html#ab0df2b602fe1c83baa66ba03cc2c6dd4",tooltip="Set up sponges in 2d DOME configuration. "];
+  Node317 -> Node314 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node312 -> Node318 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node318 [label="isomip_initialization\l::isomip_initialize_sponges",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceisomip__initialization.html#a672219a0070f4491fc1a8d9c20c6c1e4",tooltip="Sets up the the inverse restoration time (Idamp), and. "];
+  Node311 -> Node319 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node319 [label="mom_remapping::remapping\l_unit_tests",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__remapping.html#a5849f564453d5ed76fb4feffd41eca26",tooltip="Runs unit tests on remapping functions. Should only be called from a single/root thread Returns True ..."];
+  Node319 -> Node320 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node320 [label="mom_unit_tests::unit\l_tests",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__unit__tests.html#a71f3a2080872634c14a25a9411b59fe0",tooltip="Calls unit tests for other modules. Note that if a unit test returns true, a FATAL error is triggered..."];
+  Node320 -> Node315 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

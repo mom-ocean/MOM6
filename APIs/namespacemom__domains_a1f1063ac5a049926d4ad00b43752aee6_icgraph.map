@@ -1,0 +1,6 @@
+<map id="mom_domains::get_domain_extent" name="mom_domains::get_domain_extent">
+<area shape="rect" id="node2" href="$namespacemom__hor__index.html#a8e3912351dbf2be2659f3561de341f49" title="Sets various index values in a hor_index_type. " alt="" coords="236,5,376,47"/>
+<area shape="rect" id="node5" href="$namespacemom__grid.html#a06d585b4319f18d7d7fac2afceb08205" title="MOM_grid_init initializes the ocean grid array sizes and grid memory. " alt="" coords="424,63,592,90"/>
+<area shape="rect" id="node3" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="640,38,783,65"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="831,38,917,65"/>
+</map>

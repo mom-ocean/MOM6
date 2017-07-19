@@ -1,0 +1,51 @@
+digraph "mom_sum_output::write_energy"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node49 [label="mom_sum_output::write\l_energy",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node49 -> Node50 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 [label="mom_tracer_flow_control\l::call_tracer_stocks",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__flow__control.html#afd8526344e928c8c9505c921bf37447f",tooltip="This subroutine calls all registered tracer packages to enable them to add to the surface state retur..."];
+  Node50 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node51 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node51 -> Node52 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node52 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node50 -> Node53 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node53 [label="mom_tracer_flow_control\l::store_stocks",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__tracer__flow__control.html#ad43ea30fa52fcb930db39037f5d7e6b9",tooltip="This routine stores the stocks and does error handling for call_tracer_stocks. "];
+  Node53 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 -> Node54 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node54 [label="ideal_age_example::\lideal_age_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceideal__age__example.html#a2300d82e30802a3127f4a63277d37776"];
+  Node54 -> Node55 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node55 [label="mom_io::query_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508",tooltip="This routine queries vardesc. "];
+  Node55 -> Node56 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node56 [label="mom_io::safe_string_copy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88",tooltip="Copies a string. "];
+  Node56 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 -> Node57 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node57 [label="regional_dyes::dye\l_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceregional__dyes.html#a0641ff9c663bcfacdd597a79f63d15e0"];
+  Node50 -> Node58 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node58 [label="oil_tracer::oil_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceoil__tracer.html#ac8964b16549dba8fc850e4af15af8029"];
+  Node50 -> Node59 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node59 [label="mom_ocmip2_cfc::ocmip2\l_cfc_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ocmip2__cfc.html#ac3c9967ff09b37934eb5ef51535e7ee3",tooltip="This function calculates the mass-weighted integral of all tracer stocks, returning the number of sto..."];
+  Node59 -> Node55 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 -> Node60 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node60 [label="advection_test_tracer\l::advection_test_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceadvection__test__tracer.html#a1e3884b030df6c5107380b4ddd2fbce2"];
+  Node60 -> Node55 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node50 -> Node61 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node61 [label="pseudo_salt_tracer\l::pseudo_salt_stock",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacepseudo__salt__tracer.html#a282f3c84b7e7ccdaa6d9344342705a6e"];
+  Node61 -> Node55 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 -> Node62 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node62 [label="mom_coms::efp_to_real",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a4aaf51b372bcaf7b46939145577eff92"];
+  Node62 -> Node63 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node63 [label="mom_coms::ints_to_real",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a24ac5b7cc37b1498f23b61eea03fb8c3"];
+  Node62 -> Node64 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node64 [label="mom_coms::regularize_ints",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#ab8feff19e782af36bb7ccccd5ba9eddc"];
+  Node49 -> Node52 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node49 -> Node65 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node65 [label="mom_coms::real_to_efp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#ac8f1b5be23b128cd8bb956ebda917edb"];
+  Node65 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node65 -> Node66 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node66 [label="mom_coms::real_to_ints",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coms.html#a0cc261620495abf3313937726883b95e"];
+  Node66 -> Node51 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

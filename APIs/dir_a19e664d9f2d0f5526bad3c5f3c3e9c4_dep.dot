@@ -1,0 +1,11 @@
+digraph "/home/adcroft/GitHub/workspace/Gaea-stats-MOM6-examples/MOM6-examples/src/MOM6/config_src/coupled_driver" {
+  compound=true
+  node [ fontsize="10", fontname="Helvetica"];
+  edge [ labelfontsize="10", labelfontname="Helvetica"];
+  subgraph clusterdir_bbbeac63f53ec5ea699fa4cbaa8c4afb {
+    graph [ bgcolor="#ddddee", pencolor="black", label="config_src" fontname="Helvetica", fontsize="10", URL="dir_bbbeac63f53ec5ea699fa4cbaa8c4afb.html"]
+  dir_a19e664d9f2d0f5526bad3c5f3c3e9c4 [shape=box, label="coupled_driver", style="filled", fillcolor="#eeeeff", pencolor="black", URL="dir_a19e664d9f2d0f5526bad3c5f3c3e9c4.html"];
+  }
+  dir_67fed18fa7f74247fef50848ceb46cee [shape=box label="dynamic_symmetric" URL="dir_67fed18fa7f74247fef50848ceb46cee.html"];
+  dir_a19e664d9f2d0f5526bad3c5f3c3e9c4->dir_67fed18fa7f74247fef50848ceb46cee [headlabel="1", labeldistance=1.5 headhref="dir_000001_000002.html"];
+}

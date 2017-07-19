@@ -1,0 +1,5 @@
+<map id="mom_forcing_type::forcing_diagnostics" name="mom_forcing_type::forcing_diagnostics">
+<area shape="rect" id="node2" href="$namespacemom__spatial__means.html#aee0e9ccdac32367f6ae1064f49e41771" title="mom_spatial_means::\lglobal_area_integral" alt="" coords="239,5,389,47"/>
+<area shape="rect" id="node3" href="$namespacemom__spatial__means.html#aa49abab62973a263d6f5a1c776f62a11" title="mom_spatial_means::\lglobal_area_mean" alt="" coords="239,71,389,112"/>
+<area shape="rect" id="node4" href="$namespacemom__diag__mediator.html#a0be5d1cbc6c6f8f63950ce7d9bc6455a" title="mom_diag_mediator::\lquery_averaging_enabled" alt="" coords="229,136,399,177"/>
+</map>

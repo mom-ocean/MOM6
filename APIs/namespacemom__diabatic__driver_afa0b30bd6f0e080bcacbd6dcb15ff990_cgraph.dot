@@ -1,0 +1,58 @@
+digraph "mom_diabatic_driver::diabatic_driver_init"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node84 [label="mom_diabatic_driver\l::diabatic_driver_init",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node84 -> Node85 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node85 [label="mom_bulk_mixed_layer\l::bulkmixedlayer_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__bulk__mixed__layer.html#a7ec83a26f4ae95305e414057235a1e69"];
+  Node84 -> Node86 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node86 [label="mom_cvmix_shear::cvmix\l_shear_is_used",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__cvmix__shear.html#aa8084ded891a4e6e33ceeec0f240233f",tooltip="Reads the parameters \"LMD94\" and \"PP81\" and returns state. This function allows other modules to know..."];
+  Node84 -> Node87 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node87 [label="mom_geothermal::geothermal_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__geothermal.html#a0abbb7953860e3357bbd3d35f46fd851"];
+  Node87 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node88 [label="mom_error_handler::\lmom_error",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67"];
+  Node88 -> Node89 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node89 [label="mom_error_handler::\lis_root_pe",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71"];
+  Node87 -> Node90 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node90 [label="mom_diag_mediator::\lregister_static_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#abe591ed2565e9f026c5be055bc2fc0b7",tooltip="Registers a static diagnostic, returning an integer handle. "];
+  Node90 -> Node91 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node91 [label="mom_diag_mediator::\lget_new_diag_id",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a3f7442639213320f7429e2288a79fda2",tooltip="Returns a new diagnostic id, it may be necessary to expand the diagnostics array. ..."];
+  Node91 -> Node92 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node92 [label="mom_error_handler::\lassert",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__error__handler.html#a33bcd190d460095104954f2e654f9fe6",tooltip="Issues a FATAL error if the assertion fails, i.e. the first argument is false. "];
+  Node92 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node91 -> Node93 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node93 [label="mom_diag_mediator::\linitialize_diag_type",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a883862f004e30bbc5211f38635511ba0",tooltip="Initializes a diag_type (used after allocating new memory) "];
+  Node90 -> Node94 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node94 [label="mom_diag_mediator::\lalloc_diag_with_id",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a1b0bed2113a0c268eafd1bafbb48bd4f"];
+  Node90 -> Node92 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node90 -> Node89 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node90 -> Node95 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node95 [label="mom_diag_mediator::\llog_available_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a65fe8d329cf5dbfd08c98874a7a64407",tooltip="Log a diagnostic to the available diagnostics file. "];
+  Node95 -> Node96 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node96 [label="mom_diag_mediator::\ldescribe_option",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae002ca447acba252bf7bdc042e75a01e"];
+  Node84 -> Node97 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node97 [label="mom_internal_tides\l::internal_tides_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__internal__tides.html#ad59f7f55a0f0e6b259523175f1c8b7d1"];
+  Node84 -> Node98 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node98 [label="mom_kappa_shear::kappa\l_shear_is_used",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__kappa__shear.html#ac7859c609e462000ca8fd763d68d141e"];
+  Node84 -> Node99 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node99 [label="mom_opacity::opacity_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__opacity.html#ab8dbcd70b93f5bd77b2a525cd73f0eb9"];
+  Node84 -> Node100 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node100 [label="mom_diag_to_z::register\l_zint_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a12bc76d5b29b6b3292a802946b7dd6fc"];
+  Node100 -> Node101 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node101 [label="mom_io::query_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508",tooltip="This routine queries vardesc. "];
+  Node101 -> Node102 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node102 [label="mom_io::safe_string_copy",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88",tooltip="Copies a string. "];
+  Node102 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node100 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node84 -> Node103 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node103 [label="mom_regularize_layers\l::regularize_layers_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__regularize__layers.html#aacef23c9ae71c05caf0ffac9e907e91b"];
+  Node103 -> Node88 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node84 -> Node104 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node104 [label="mom_io::var_desc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#a39c3ccc06bb1a6e446af2ee9010eba16",tooltip="Returns a vardesc type whose elements have been filled with the provided fields. The argument name is..."];
+  Node104 -> Node102 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node104 -> Node105 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node105 [label="mom_io::modify_vardesc",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__io.html#af96b29cb8410d557e8e452b81586223b",tooltip="This routine modifies the named elements of a vardesc type. All arguments are optional, except the vardesc type to be modified. "];
+  Node105 -> Node102 [color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

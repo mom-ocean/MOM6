@@ -1,0 +1,9 @@
+<map id="regional_dyes::initialize_dye_tracer" name="regional_dyes::initialize_dye_tracer">
+<area shape="rect" id="node2" href="$namespacemom__tracer__registry.html#ac008525fee272a225a19998ae437b5bf" title="This subroutine adds diagnostic arrays for a tracer that has previously been registered by a call to ..." alt="" coords="429,5,593,47"/>
+<area shape="rect" id="node5" href="$namespacemom__io.html#a23e82d1d89d9bb1c9bdf802ce80d4508" title="This routine queries vardesc. " alt="" coords="213,71,374,98"/>
+<area shape="rect" id="node7" href="$namespacemom__diag__to__z.html#a6946a3316715041c5944df17db1aef74" title="This subroutine registers a tracer to be output in depth space. " alt="" coords="211,123,376,164"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="647,64,788,105"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="836,64,977,105"/>
+<area shape="rect" id="node6" href="$namespacemom__io.html#ac4bc408e8b38dbd669842753f26ebf88" title="Copies a string. " alt="" coords="424,71,599,98"/>
+<area shape="rect" id="node8" href="$namespacemom__diag__to__z.html#adde57f2503f5c182af511fba0f4c83ea" title="This subroutine registers a tracer to be output in depth space. " alt="" coords="429,123,594,164"/>
+</map>

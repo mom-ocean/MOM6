@@ -1,0 +1,5 @@
+<map id="mom_ice_shelf_initialize::initialize_ice_thickness_from_file" name="mom_ice_shelf_initialize::initialize_ice_thickness_from_file">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="217,5,359,47"/>
+<area shape="rect" id="node4" href="$namespacemom__error__handler.html#a1c462df7b61f1296407b4af51dfeceab" title="mom_error_handler::\lmom_mesg" alt="" coords="217,71,359,112"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="407,39,548,80"/>
+</map>

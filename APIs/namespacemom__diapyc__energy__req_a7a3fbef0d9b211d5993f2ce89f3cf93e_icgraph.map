@@ -1,0 +1,5 @@
+<map id="mom_diapyc_energy_req::find_pe_chg" name="mom_diapyc_energy_req::find_pe_chg">
+<area shape="rect" id="node2" href="$namespacemom__diapyc__energy__req.html#ae781d0079acfadcd996aaff8d63957da" title="This subroutine uses a substantially refactored tridiagonal equation for diapycnal mixing of temperat..." alt="" coords="220,5,391,47"/>
+<area shape="rect" id="node3" href="$namespacemom__diapyc__energy__req.html#afe7d4fc70231c1812ffd38faef76558e" title="mom_diapyc_energy_req\l::diapyc_energy_req_test" alt="" coords="439,5,607,47"/>
+<area shape="rect" id="node4" href="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7" title="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..." alt="" coords="655,5,797,47"/>
+</map>

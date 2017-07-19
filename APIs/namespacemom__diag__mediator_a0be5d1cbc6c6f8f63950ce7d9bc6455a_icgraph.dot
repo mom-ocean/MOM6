@@ -1,0 +1,35 @@
+digraph "mom_diag_mediator::query_averaging_enabled"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node278 [label="mom_diag_mediator::\lquery_averaging_enabled",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node278 -> Node279 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node279 [label="mom_lateral_mixing\l_coeffs::calc_resoln\l_function",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#af206bc656869b4fc27d4d7e8a15d438e",tooltip="Calculates and stores the non-dimensional resolution functions. "];
+  Node279 -> Node280 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node280 [label="mom::step_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a4c8332b095c6d295084089aa6b3b678a",tooltip="This subroutine orchestrates the time stepping of MOM. The adiabatic dynamics are stepped by calls to..."];
+  Node280 -> Node281 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node281 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node279 -> Node282 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node282 [label="mom::step_offline",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#ad56e17a755c7078ccea29ccbae4d5803",tooltip="step_offline is the main driver for running tracers offline in MOM6. This has been primarily develope..."];
+  Node282 -> Node281 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node282 -> Node283 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node283 [label="ocean_model_mod::update\l_ocean_model",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#ac9dc1795fc4799d6682f462857b42d62"];
+  Node278 -> Node284 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node284 [label="mom_lateral_mixing\l_coeffs::calc_slope\l_functions",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#a8abf768b636e96aafa9544287624523e",tooltip="Calculates and stores functions of isopycnal slopes, e.g. Sx, Sy, S*N, mostly used in the Visbeck et ..."];
+  Node278 -> Node285 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node285 [label="mom_lateral_mixing\l_coeffs::calc_visbeck\l_coeffs",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__lateral__mixing__coeffs.html#ae625fee7e36d68e290b3af57697d0afe",tooltip="Calculates factors used when setting diffusivity coefficients similar to Visbeck et al..."];
+  Node285 -> Node284 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node278 -> Node286 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node286 [label="mom_diabatic_driver\l::diabatic",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7",tooltip="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..."];
+  Node278 -> Node287 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node287 [label="mom_forcing_type::forcing\l_diagnostics",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#aa685fdcd5863af264335aa60b5b4c210",tooltip="Offer buoyancy forcing fields for diagnostics for those fields registered as part of register_forcing..."];
+  Node287 -> Node281 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node278 -> Node288 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node288 [label="mom_forcing_type::mech\l_forcing_diags",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__forcing__type.html#ab19017105329a14ad5130e2f2aa8e475",tooltip="Offer mechanical forcing fields for diagnostics for those fields registered as part of register_forci..."];
+  Node288 -> Node281 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node278 -> Node289 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node289 [label="mom_opacity::set_opacity",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__opacity.html#aefadc7465f74c0cab731cf1adf5f3a57"];
+  Node289 -> Node286 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

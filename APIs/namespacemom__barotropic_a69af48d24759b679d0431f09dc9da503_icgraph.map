@@ -1,0 +1,6 @@
+<map id="mom_barotropic::bt_cont_to_face_areas" name="mom_barotropic::bt_cont_to_face_areas">
+<area shape="rect" id="node2" href="$namespacemom__barotropic.html#a98cdf3c559146cc9485fcb9daa4cdbca" title="This subroutine time steps the barotropic equations explicitly. For gravity waves, anything between a forwards&#45;backwards scheme and a simulated backwards Euler scheme is used, with bebt between 0.0 and 1.0 determining the scheme. In practice, bebt must be of order 0.2 or greater. A forwards&#45;backwards treatment of the Coriolis terms is always used. " alt="" coords="202,5,361,32"/>
+<area shape="rect" id="node3" href="$namespacemom__barotropic.html#a5bbc20372a46408b8e61cbc1fd49e8e0" title="This subroutine automatically determines an optimal value for dtbt based on some state of the ocean..." alt="" coords="196,56,367,83"/>
+<area shape="rect" id="node4" href="$namespacemom__barotropic.html#a8bf1849bbd33dbc234b6eeae40392ded" title="barotropic_init initializes a number of time&#45;invariant fields used in the barotropic calculation and ..." alt="" coords="415,27,619,53"/>
+<area shape="rect" id="node5" href="$namespacemom__dynamics__split__rk2.html#a81cce65643a8cf94979d68354a9a1979" title="RK2 splitting for time stepping MOM adiabatic dynamics. " alt="" coords="417,78,617,119"/>
+</map>

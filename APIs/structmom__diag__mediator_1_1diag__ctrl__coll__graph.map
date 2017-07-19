@@ -1,0 +1,4 @@
+<map id="mom_diag_mediator::diag_ctrl" name="mom_diag_mediator::diag_ctrl">
+<area shape="rect" id="node5" href="$structmom__diag__mediator_1_1axes__grp.html" title="A group of 1D axes that comprise a 1D/2D/3D mesh. " alt="" coords="613,429,760,470"/>
+<area shape="rect" id="node3" href="$structmom__diag__mediator_1_1diag__type.html" title="This type is used to represent a diagnostic at the diag_mediator level. There can be both &#39;primary&#39; a..." alt="" coords="869,367,1016,409"/>
+</map>

@@ -1,0 +1,10 @@
+digraph "mom_barotropic::destroy_bt_obc"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node62 [label="mom_barotropic::destroy\l_bt_obc",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node62 -> Node63 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node63 [label="mom_barotropic::barotropic_end",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__barotropic.html#aee694cdef3a20b960aff1ec4fa5da28f",tooltip="Clean up the barotropic control structure. "];
+}

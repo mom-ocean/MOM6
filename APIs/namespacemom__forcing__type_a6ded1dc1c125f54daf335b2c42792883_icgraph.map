@@ -1,0 +1,4 @@
+<map id="mom_forcing_type::calculatebuoyancyflux1d" name="mom_forcing_type::calculatebuoyancyflux1d">
+<area shape="rect" id="node2" href="$namespacemom__forcing__type.html#a8318da970059fe577d2db0bb5f91cd6b" title="Calculates surface buoyancy flux by adding up the heat, FW and salt fluxes, for 2d arrays..." alt="" coords="333,13,613,39"/>
+<area shape="rect" id="node3" href="$namespacemom__diabatic__driver.html#af76fe90c618a04d7806bc53fe0f7a2a7" title="This subroutine imposes the diapycnal mass fluxes and the accompanying diapycnal advection of momentu..." alt="" coords="661,5,804,47"/>
+</map>

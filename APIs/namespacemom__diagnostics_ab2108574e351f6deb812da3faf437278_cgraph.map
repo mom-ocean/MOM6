@@ -1,0 +1,8 @@
+<map id="mom_diagnostics::mom_diagnostics_init" name="mom_diagnostics::mom_diagnostics_init">
+<area shape="rect" id="node2" href="$namespacemom__error__handler.html#a460cfb79a06c29fc249952c2a3710d67" title="mom_error_handler::\lmom_error" alt="" coords="656,5,797,47"/>
+<area shape="rect" id="node4" href="$namespacemom__diagnostics.html#a09d6bde56531baa237e612627550d124" title="This subroutine registers fields to calculate a diagnostic time derivative. " alt="" coords="433,35,608,76"/>
+<area shape="rect" id="node5" href="$namespacemom__diagnostics.html#a90a92410576d955e89d2aa4e3f6d7402" title="This subroutine sets up diagnostics upon which other diagnostics depend. " alt="" coords="219,85,381,127"/>
+<area shape="rect" id="node6" href="$namespacemom__wave__speed.html#a46e21529ec8098b0b19053afa133b971" title="Initialize control structure for MOM_wave_speed. " alt="" coords="215,151,385,192"/>
+<area shape="rect" id="node3" href="$namespacemom__error__handler.html#ad5f00a53059c72fe2332d1436c80ca71" title="mom_error_handler::\lis_root_pe" alt="" coords="845,5,987,47"/>
+<area shape="rect" id="node7" href="$namespacemom__wave__speed.html#a035c9e3306d6b21809e240a5b24a2db0" title="Sets internal parameters for MOM_wave_speed. " alt="" coords="435,151,606,192"/>
+</map>

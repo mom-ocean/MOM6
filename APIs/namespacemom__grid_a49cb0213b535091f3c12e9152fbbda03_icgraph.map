@@ -1,0 +1,6 @@
+<map id="mom_grid::adcroft_reciprocal" name="mom_grid::adcroft_reciprocal">
+<area shape="rect" id="node2" href="$namespacemom__grid.html#ad5c6da36363b3908694605da62811a4b" title="set_derived_metrics calculates metric terms that are derived from other metrics. " alt="" coords="244,5,399,47"/>
+<area shape="rect" id="node3" href="$namespacemom__transcribe__grid.html#aa794cd7c93cc632380b95fa142884288" title="Copies information from a dynamic (shared) horizontal grid type into an ocean_grid_type. " alt="" coords="447,5,636,47"/>
+<area shape="rect" id="node4" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="684,13,827,39"/>
+<area shape="rect" id="node5" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="875,13,961,39"/>
+</map>

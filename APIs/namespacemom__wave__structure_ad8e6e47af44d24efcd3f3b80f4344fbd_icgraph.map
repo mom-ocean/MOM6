@@ -1,0 +1,4 @@
+<map id="mom_wave_structure::tridiag_solver" name="mom_wave_structure::tridiag_solver">
+<area shape="rect" id="node2" href="$namespacemom__wave__structure.html#a6dab6eaab930bb622d4462d5f51f8ab4" title="This subroutine determines the internal wave velocity structure for any mode. " alt="" coords="200,5,347,47"/>
+<area shape="rect" id="node3" href="$namespacemom__internal__tides.html#a6cae26da43d0539e8ac959105cf125c2" title="This subroutine calls other subroutines in this file that are needed to refract, propagate, and dissipate energy density of the internal tide. " alt="" coords="395,5,531,47"/>
+</map>

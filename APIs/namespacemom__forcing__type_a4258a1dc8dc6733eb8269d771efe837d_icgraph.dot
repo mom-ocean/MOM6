@@ -1,0 +1,30 @@
+digraph "mom_forcing_type::allocate_forcing_type"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node2 [label="mom_forcing_type::allocate\l_forcing_type",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="mom_surface_forcing\l::buoyancy_forcing_allocate",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__surface__forcing.html#ac7bf83a9b318dd6317a17c1f7df73314"];
+  Node3 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="mom_surface_forcing\l::set_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__surface__forcing.html#a82bece05671a4155b220fb57fd4cfcc0"];
+  Node4 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node2 -> Node6 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node6 [label="meso_surface_forcing\l::meso_wind_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemeso__surface__forcing.html#a7ab86d21960889d83d245685153dffc6"];
+  Node2 -> Node7 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node7 [label="ocean_model_mod::ocean\l_model_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceocean__model__mod.html#aced9c77abd80a4a509c7cc317af707a7"];
+  Node2 -> Node8 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node8 [label="scm_cvmix_tests::scm\l_cvmix_tests_buoyancy\l_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacescm__cvmix__tests.html#a013e19729529fd6656ca7a270563a698"];
+  Node2 -> Node9 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node9 [label="scm_cvmix_tests::scm\l_cvmix_tests_wind_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacescm__cvmix__tests.html#a4ab083e8a54fae735fc1b89203e475ca"];
+  Node2 -> Node10 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node10 [label="scm_idealized_hurricane\l::scm_idealized_hurricane\l_wind_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacescm__idealized__hurricane.html#a1b6dd086c93c41b18d9b367af63d642a"];
+  Node2 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 -> Node11 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node11 [label="user_surface_forcing\l::user_wind_forcing",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespaceuser__surface__forcing.html#af90ed498eee23495e43778c9609be44b"];
+  Node2 -> Node12 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node12 [label="mom_surface_forcing\l::wind_forcing_by_data\l_override",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__surface__forcing.html#a4ddc50ed40b1c13197acf1e465ca0abe"];
+  Node12 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+}

@@ -1,0 +1,7 @@
+<map id="mom_dyn_horgrid::set_derived_dyn_horgrid" name="mom_dyn_horgrid::set_derived_dyn_horgrid">
+<area shape="rect" id="node2" href="$namespacemom__transcribe__grid.html#a426ae345ad289eabaf68aeff02019753" title="Copies information from an ocean_grid_type into a dynamic (shared) horizontal grid type..." alt="" coords="385,5,575,47"/>
+<area shape="rect" id="node5" href="$namespacemom__grid__initialize.html#a235a9712823e2f78e4958e8d681b6ba4" title="set_grid_metrics is used to set the primary values in the model&#39;s horizontal grid. The bathymetry, land&#45;sea mask and any restricted channel widths are not known yet, so these are set later. " alt="" coords="204,68,337,109"/>
+<area shape="rect" id="node3" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="623,46,765,73"/>
+<area shape="rect" id="node4" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="813,46,900,73"/>
+<area shape="rect" id="node6" href="$namespacemom__fixed__initialization.html#a6c1c054d9cda9f1bd11abba748614c92" title="MOM_initialize_fixed sets up time&#45;invariant quantities related to MOM6&#39;s horizontal grid..." alt="" coords="399,71,561,112"/>
+</map>

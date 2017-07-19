@@ -1,0 +1,16 @@
+digraph "mom_grid::adcroft_reciprocal"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="mom_grid::adcroft_reciprocal",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="mom_grid::set_derived\l_metrics",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__grid.html#ad5c6da36363b3908694605da62811a4b",tooltip="set_derived_metrics calculates metric terms that are derived from other metrics. "];
+  Node2 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="mom_transcribe_grid\l::copy_dyngrid_to_mom_grid",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__transcribe__grid.html#aa794cd7c93cc632380b95fa142884288",tooltip="Copies information from a dynamic (shared) horizontal grid type into an ocean_grid_type. "];
+  Node3 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node4 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+}

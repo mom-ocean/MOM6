@@ -1,0 +1,44 @@
+digraph "mom_diag_mediator::alloc_diag_with_id"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node23 [label="mom_diag_mediator::\lalloc_diag_with_id",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node23 -> Node24 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node24 [label="mom_diag_mediator::\ladd_diag_to_list",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a8415b33a337b1fbc7535688eca85ab37",tooltip="Create a diagnostic type and attached to list. "];
+  Node24 -> Node25 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node25 [label="mom_diag_mediator::\lregister_diag_field\l_expand_cmor",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#ae50b35cba800ac5fd8975929fd2b9f4a",tooltip="Returns True if either the native of CMOr version of the diagnostic were registered. Updates &#39;dm_id&#39; after calling register_diag_field_expand_axes() for both native and CMOR variants of the field. "];
+  Node25 -> Node26 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node26 [label="mom_diag_mediator::\lregister_diag_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#aa791f75f899ae9b7cd4756165a9c2a1b",tooltip="Returns the \"diag_mediator\" handle for a group (native, CMOR, z-coord, ...) of diagnostics derived fr..."];
+  Node26 -> Node27 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node27 [label="mom_ale::ale_register\l_diags",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__ale.html#a994efb3c62fc5f63da2617f29cbd6be1",tooltip="Initialize diagnostics for the ALE module. "];
+  Node26 -> Node28 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node28 [label="mom_coriolisadv::coriolisadv_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__coriolisadv.html#ad3ce07f23ce7b484a5a9e0c0abe8b1cd",tooltip="Initializes the control structure for coriolisadv_cs. "];
+  Node26 -> Node29 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node29 [label="mom_diag_mediator::\locean_register_diag",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#a21267e25d12fa3e5d2540d2a299d2d2c",tooltip="Registers a diagnostic using the information encapsulated in the vardesc type argument and returns an..."];
+  Node29 -> Node30 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node30 [label="mom_diag_to_z::ocean\l_register_diag_with_z",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__to__z.html#a90526b2f59f94c6af2f525a221029772",tooltip="This subroutine registers a tracer to be output in depth space. "];
+  Node26 -> Node31 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node31 [label="mom_diapyc_energy_req\l::diapyc_energy_req_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diapyc__energy__req.html#aa0ce122f4dc6d9a6ec9e17996484bb76"];
+  Node26 -> Node32 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node32 [label="mom_diffconvection\l::diffconvection_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diffconvection.html#ac36d9d7fd69e4422e7de01242094ff34"];
+  Node26 -> Node33 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node33 [label="mom_int_tide_input\l::int_tide_input_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__int__tide__input.html#a29a707637da633ccee155b53557b5f17"];
+  Node26 -> Node34 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node34 [label="mom_kpp::kpp_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__kpp.html#a9c834424b6e067e280928db3700ec77e",tooltip="Initialize the CVmix KPP module and set up diagnostics Returns True if KPP is to be used..."];
+  Node26 -> Node35 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node35 [label="mom_neutral_diffusion\l::neutral_diffusion_diag_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__neutral__diffusion.html#a87cf821c52ac1111493d4168f0a91d17",tooltip="Diagnostic handles for neutral diffusion tendencies. "];
+  Node35 -> Node36 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node36 [label="mom::initialize_mom",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d",tooltip="This subroutine initializes MOM. "];
+  Node36 -> Node37 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node37 [label="mom_main",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6"];
+  Node23 -> Node38 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node38 [label="mom_diag_mediator::\lregister_scalar_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#afb4254e1cfbbcfc43028f14915173f80"];
+  Node23 -> Node39 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node39 [label="mom_diag_mediator::\lregister_static_field",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diag__mediator.html#abe591ed2565e9f026c5be055bc2fc0b7",tooltip="Registers a static diagnostic, returning an integer handle. "];
+  Node39 -> Node40 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node40 [label="mom_geothermal::geothermal_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__geothermal.html#a0abbb7953860e3357bbd3d35f46fd851"];
+  Node40 -> Node41 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node41 [label="mom_diabatic_driver\l::diabatic_driver_init",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$namespacemom__diabatic__driver.html#afa0b30bd6f0e080bcacbd6dcb15ff990",tooltip="This routine initializes the diabatic driver module. "];
+}

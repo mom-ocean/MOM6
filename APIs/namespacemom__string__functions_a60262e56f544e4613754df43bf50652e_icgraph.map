@@ -1,0 +1,7 @@
+<map id="mom_string_functions::remove_spaces" name="mom_string_functions::remove_spaces">
+<area shape="rect" id="node2" href="$namespacemom__open__boundary.html#a0d3f0ce359b2852f00092f7fef88cd5f" title="Enables OBC module and reads configuration parameters This routine is called from MOM_initialize_fixe..." alt="" coords="220,5,375,47"/>
+<area shape="rect" id="node3" href="$namespacemom__string__functions.html#a7b7aa802a4da2021801267f6c6f890bf" title="Returns true if a unit test of string_functions fails. " alt="" coords="204,71,391,112"/>
+<area shape="rect" id="node4" href="$namespacemom__unit__tests.html#a71f3a2080872634c14a25a9411b59fe0" title="Calls unit tests for other modules. Note that if a unit test returns true, a FATAL error is triggered..." alt="" coords="439,71,583,112"/>
+<area shape="rect" id="node5" href="$namespacemom.html#a0be2869fef30e1e0604facfe1b41555d" title="This subroutine initializes MOM. " alt="" coords="631,78,773,105"/>
+<area shape="rect" id="node6" href="$MOM__driver_8F90.html#a08fffeb2d8e8acbf9ed4609be6d258c6" title="mom_main" alt="" coords="821,78,908,105"/>
+</map>

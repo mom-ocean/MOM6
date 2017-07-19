@@ -1,0 +1,29 @@
+digraph "ideal_age_example::ideal_age_tracer_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  rankdir="LR";
+  Node1 [label="ideal_age_example::\lideal_age_tracer_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tracer_ages\nz_ic_file\ncoupled_tracers\ntracers_may_reinit\nmask_tracers" ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" time" ,fontname="Helvetica"];
+  Node3 [label="time_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_adx\ntr_dfx\ntr_ady\ntr_dfy" ,fontname="Helvetica"];
+  Node4 [label="ideal_age_example::p3d",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structideal__age__example_1_1p3d.html"];
+  Node5 -> Node4 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" p" ,fontname="Helvetica"];
+  Node5 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_reg" ,fontname="Helvetica"];
+  Node6 [label="tracer_registry_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" ic_file" ,fontname="Helvetica"];
+  Node7 [label="character(len=200)",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node8 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_desc" ,fontname="Helvetica"];
+  Node8 [label="vardesc",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node9 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" restart_csp" ,fontname="Helvetica"];
+  Node9 [label="type(mom_restart_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node10 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node10 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" tr_aux\nland_val\ntracer_start_year\nic_val\nyoung_val\ntr\nsfc_growth\l_rate" ,fontname="Helvetica"];
+  Node11 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_tracer\nid_tr_dfx\nntr\nid_tr_dfy\nnkml\nid_tr_adx\nind_tr\nid_tr_ady" ,fontname="Helvetica"];
+  Node11 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}

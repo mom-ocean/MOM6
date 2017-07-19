@@ -1,0 +1,7 @@
+<map id="mom_neutral_diffusion::interface_scalar" name="mom_neutral_diffusion::interface_scalar">
+<area shape="rect" id="node2" href="$namespacemom__neutral__diffusion.html#ac211ae488cb6e3c6685df85d24ecd0dd" title="Returns PLM slopes for a column where the slopes are the difference in value across each cell..." alt="" coords="207,71,360,112"/>
+<area shape="rect" id="node6" href="$namespacemom__neutral__diffusion.html#a87d3d020b56a98f3f0c143701f76c86e" title="Returns the PPM quasi&#45;fourth order edge value at k+1/2 following equation 1.6 in Colella &amp; Woodward..." alt="" coords="207,136,360,177"/>
+<area shape="rect" id="node3" href="$namespacemom__neutral__diffusion.html#a1c5ac28d7c54581cdd872fe58ef0b204" title="Returns the cell&#45;centered second&#45;order finite volume (unlimited PLM) slope using three consecutive ce..." alt="" coords="408,5,561,47"/>
+<area shape="rect" id="node4" href="$namespacemom__neutral__diffusion.html#a6ed3814088af470ad6fc4a3a80926fd7" title="Returns the cell&#45;centered second&#45;order weighted least squares slope using three consecutive cell widt..." alt="" coords="408,71,561,112"/>
+<area shape="rect" id="node5" href="$namespacemom__neutral__diffusion.html#a118ace85483009d5b7a1841e3c745499" title="A true signum function that returns either &#45;abs(a), when x&lt;0; or abs(a) when x&gt;0; or 0 when x=0..." alt="" coords="408,136,561,177"/>
+</map>

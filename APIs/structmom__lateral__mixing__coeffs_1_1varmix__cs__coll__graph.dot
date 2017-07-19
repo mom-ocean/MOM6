@@ -1,0 +1,19 @@
+digraph "mom_lateral_mixing_coeffs::varmix_cs"
+{
+ // INTERACTIVE_SVG=YES
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="mom_lateral_mixing\l_coeffs::varmix_cs",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black"];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" calculate_cg1\nuse_stored_slopes\ncalculate_eady_growth\l_rate\ncalculate_rd_dx\nkhth_use_ebt_struct\nresoln_scaled_khtr\nresoln_scaled_kh\nuse_variable_mixing\ndebug\nuse_visbeck_slope\l_bug\n..." ,fontname="Helvetica"];
+  Node2 [label="logical",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" wave_speed_csp" ,fontname="Helvetica"];
+  Node3 [label="type(wave_speed_cs)\l, pointer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node4 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" pass_cg1" ,fontname="Helvetica"];
+  Node4 [label="group_pass_type",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node5 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" diag" ,fontname="Helvetica"];
+  Node5 [label="diag_ctrl",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node6 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" id_s2_u\nid_s2_v\nid_n2_u\nres_fn_power\l_khth\nid_n2_v\nid_l2u\nid_l2v\nvarmix_ktop\nid_rd_dx\nid_sn_u\n..." ,fontname="Helvetica"];
+  Node6 [label="integer",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+  Node7 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" beta_dx2_u\nbeta_dx2_h\nsn_u\nf2_dx2_h\nbeta_dx2_v\nsn_v\nres_coef_visc\nvisbeck_l_scale\nres_fn_q\nvisbeck_s_max\n..." ,fontname="Helvetica"];
+  Node7 [label="real",height=0.2,width=0.4,color="grey75", fillcolor="white", style="filled"];
+}
