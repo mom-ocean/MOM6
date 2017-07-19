@@ -47,6 +47,7 @@ module ocn_comp_mct
   public :: ocn_run_mct
   public :: ocn_final_mct
   private                              ! By default make data private
+  logical, parameter :: debug=.true.
 
 !
 ! ! PUBLIC DATA:
@@ -109,6 +110,7 @@ contains
   integer             :: i, errorCode
   integer             :: lsize, nsend, nrecv
   logical             :: ldiag_cpl = .false.
+  integer             :: ni, nj
 
   ! mct variables (these are local for now)
   integer                   :: MOM_MCT_ID
@@ -133,14 +135,14 @@ contains
   character(len=16)   :: inst_suffix
 
   !!!DANGER!!!: change the following vars with the corresponding MOM6 vars
-  integer :: km=62 ! number of vertical levels
+  integer :: km=1 ! number of vertical levels
   integer :: nx_block=0, ny_block=0 ! size of block domain in x,y dir including ghost cells
-  integer :: nx_global, ny_global!  size of block domain in x,y dir including ghost cells
   integer :: max_blocks_clinic=0 !max number of blocks per processor in each distribution
   integer :: ncouple_per_day = 48
   logical :: lsend_precip_fact ! if T,send precip_fact to cpl for use in fw balance
                                ! (partially-coupled option)
 
+  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
 
 !-----------------------------------------------------------------------
 
@@ -209,6 +211,8 @@ contains
 
   call t_startf('MOM_mct_init')
 
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_SetGSMap_mct"
+
   ! Set mct global seg maps:
 
   call ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, MOM_MCT_GSMap, MOM_MCT_GSMap3d)
@@ -216,15 +220,20 @@ contains
 
   ! Initialize mct ocn domain (needs ocn initialization info)
 
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_domain_mct"
   call ocn_domain_mct(lsize, MOM_MCT_gsmap, MOM_MCT_dom)
-  call ocn_domain_mct(lsize*km, MOM_MCT_gsmap3d, MOM_MCT_dom3d)
+  call ocn_domain_mct(lsize*km, MOM_MCT_gsmap3d, MOM_MCT_dom3d) !TODO: this is not used
 
   ! Inialize mct attribute vectors
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling mct_avect_init a"
 
   ! Initialize the mct attribute vector x2o_o, given Attribute list and length:
   call mct_aVect_init(x2o_o, rList=seq_flds_x2o_fields, lsize=lsize)
   ! set the mct attribute vector x2o_o to zero:
   call mct_aVect_zero(x2o_o)
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling mct_avect_init b"
 
   ! Initialize the mct attribute vector o2x_o, given Attribute list and length:
   call mct_aVect_init(o2x_o, rList=seq_flds_o2x_fields, lsize=lsize)
@@ -237,6 +246,8 @@ contains
   allocate (SBUFF_SUM(nx_block,ny_block,max_blocks_clinic,nsend))
 
   ! initialize necessary coupling info
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_timemgr_eclockgetdata"
 
   call seq_timemgr_EClockGetData(EClock, dtime=ocn_cpl_dt)
   mom_cpl_dt = seconds_in_day / ncouple_per_day
@@ -252,21 +263,31 @@ contains
   !    call seq_infodata_PutData( infodata, precip_fact=precip_fact)
   ! end if
 
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling momo_sum_buffer"
 
   call mom_sum_buffer
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
 
   call ocn_export(o2x_o%rattr, ldiag_cpl, errorCode)
 
   call t_stopf('MOM_mct_init')
 
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling get_state_pointers"
 
+  ! Size of global domain
+  call get_state_pointers(ocn_state, grid=grid)
+  call get_global_grid_size(grid, ni, nj)
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
    call seq_infodata_PutData( infodata, &
-        ocn_nx = nx_global , ocn_ny = ny_global)
+        ocn_nx = ni , ocn_ny = nj)
    call seq_infodata_PutData( infodata, &
         ocn_prognostic=.true., ocnrof_prognostic=.true.)
 
 
+  if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
 
 !-----------------------------------------------------------------------
 !EOC
