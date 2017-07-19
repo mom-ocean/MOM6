@@ -6715,7 +6715,7 @@ end subroutine ice_shelf_advect_temp_y
 !!                  (ISSUE:  No need to use control structure - add arguments.
 !!      matrix_diagonal_triangle - LET'S TAKE THIS OUT
 !!  ice_shelf_advect - Given the melt rate and velocities, it advects the ice shelf THICKNESS
-!!        - modified h_shelf, area_shelf_h, hmask
+!!      - modified h_shelf, area_shelf_h, hmask
 !!        (maybe should updater mass_shelf as well ???)
 !!    ice_shelf_advect_thickness_x, ice_shelf_advect_thickness_y - These
 !!        subroutines determine the mass fluxes through the faces.
