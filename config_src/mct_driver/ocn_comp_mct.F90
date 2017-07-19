@@ -37,7 +37,7 @@ module ocn_comp_mct
   use MOM_grid,           only: ocean_grid_type, get_global_grid_size
   use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
   use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
-  use coupler_indices,    only: coupler_indices_init
+  use coupler_indices,    only: coupler_indices_init, cpl_indices
   use ocn_import_export,  only: SBUFF_SUM, ocn_Export, mom_sum_buffer
 
 !
@@ -61,11 +61,16 @@ module ocn_comp_mct
   private :: ocn_domain_mct
 
 ! !PRIVATE MODULE VARIABLES
-  type(ocean_state_type), pointer  :: ocn_state => NULL()   ! Private state of ocean
-  type(ocean_public_type), pointer :: ocn_surface => NULL() ! Public surface state of ocean
+  type MCT_MOM_Data 
+    type(ocean_state_type), pointer  :: ocn_state => NULL()   !< Private state of ocean
+    type(ocean_public_type), pointer :: ocn_surface => NULL() !< Public surface state of ocean
 
-  type(seq_infodata_type), pointer :: &
-      infodata
+    type(seq_infodata_type), pointer :: infodata
+
+    type(cpl_indices), public :: ind !< Variable IDs
+
+  end type 
+  type(MCT_MOM_Data) :: glb
 
 !=======================================================================
 
@@ -148,17 +153,17 @@ contains
 
   ! set (actually, get from mct) the cdata pointers:
   call seq_cdata_setptrs(cdata_o, id=MOM_MCT_ID, mpicom=mpicom_ocn, &
-                         gsMap=MOM_MCT_gsMap, dom=MOM_MCT_dom, infodata=infodata)
+                         gsMap=MOM_MCT_gsMap, dom=MOM_MCT_dom, infodata=glb%infodata)
 
   !---------------------------------------------------------------------
   ! Initialize the model run
   !---------------------------------------------------------------------
 
-  call coupler_indices_init()
+  call coupler_indices_init(glb%ind)
 
-  call seq_infodata_GetData( infodata, case_name=runid )
+  call seq_infodata_GetData( glb%infodata, case_name=runid )
 
-  call seq_infodata_GetData( infodata, start_type=starttype)
+  call seq_infodata_GetData( glb%infodata, start_type=starttype)
 
   if (     trim(starttype) == trim(seq_infodata_start_type_start)) then
      runtype = "initial"
@@ -195,13 +200,13 @@ contains
   npes = num_pes()
   pe0 = root_pe()
 
-  allocate(ocn_surface)
-  ocn_surface%is_ocean_PE = .true.
-  allocate(ocn_surface%pelist(npes))
-  ocn_surface%pelist(:) = (/(i,i=pe0,pe0+npes)/)
+  allocate(glb%ocn_surface)
+  glb%ocn_surface%is_ocean_PE = .true.
+  allocate(glb%ocn_surface%pelist(npes))
+  glb%ocn_surface%pelist(:) = (/(i,i=pe0,pe0+npes)/)
 
   ! initialize the MOM6 model
-  call ocean_model_init(ocn_surface, ocn_state, time_init, time_in)
+  call ocean_model_init(glb%ocn_surface, glb%ocn_state, time_init, time_in)
 
   call t_stopf('MOM_init')
 
@@ -276,14 +281,14 @@ contains
   if (debug .and. root_pe().eq.pe_here()) print *, "calling get_state_pointers"
 
   ! Size of global domain
-  call get_state_pointers(ocn_state, grid=grid)
+  call get_state_pointers(glb%ocn_state, grid=grid)
   call get_global_grid_size(grid, ni, nj)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
-   call seq_infodata_PutData( infodata, &
+   call seq_infodata_PutData( glb%infodata, &
         ocn_nx = ni , ocn_ny = nj)
-   call seq_infodata_PutData( infodata, &
+   call seq_infodata_PutData( glb%infodata, &
         ocn_prognostic=.true., ocnrof_prognostic=.true.)
 
 
@@ -373,7 +378,7 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
   integer, allocatable :: gindex(:) ! Indirect indices
 
-  call get_state_pointers(ocn_state, grid=grid)
+  call get_state_pointers(glb%ocn_state, grid=grid)
   if (.not. associated(grid)) call MOM_error(FATAL, 'ocn_comp_mct.F90, ocn_SetGSMap_mct():' // &
       'grid returned from get_state_pointers() was not associated!')
 
@@ -433,7 +438,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   real(kind=SHR_REAL_R8)          :: m2_to_rad2
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
 
-  call get_state_pointers(ocn_state, grid=grid)
+  call get_state_pointers(glb%ocn_state, grid=grid)
 
   ! set coords to lat and lon, and areas to rad^2
   call mct_gGrid_init(GGrid=dom_ocn, CoordChars=trim(seq_flds_dom_coord), &

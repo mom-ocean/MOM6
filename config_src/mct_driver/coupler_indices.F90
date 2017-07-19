@@ -79,12 +79,13 @@ module coupler_indices
 
   end type cpl_indices
 
-  ! Module data for storing
-  type(cpl_indices), public :: ind
-
 contains
 
-  subroutine coupler_indices_init( )
+  subroutine coupler_indices_init(ind)
+
+    type(cpl_indices), intent(inout) :: ind
+
+    ! Local Variables
 
     type(mct_aVect) :: o2x      ! temporary
     type(mct_aVect) :: x2o      ! temporary
