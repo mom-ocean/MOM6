@@ -13,9 +13,10 @@ use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type
 use MOM_remapping,      only : remapping_CS, initialize_remapping, build_reconstructions_1d
-use MOM_remapping,      only : remappingSchemesDoc, remappingDefaultScheme
+use MOM_remapping,      only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,only : tracer_registry_type
 use MOM_verticalGrid,   only : verticalGrid_type
+use polynomial_functions, only : evaluation_polynomial
 use PPM_functions,      only : PPM_reconstruction, PPM_boundary_extrapolation
 use regrid_edge_values, only : edge_values_implicit_h4
 
@@ -113,7 +114,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                    "for vertical remapping for all variables.\n"//&
                    "It can be one of the following schemes:\n"//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
-    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=.true.)
+    call initialize_remapping( CS%remap_CS, string )
   endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
@@ -334,8 +335,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
         call interface_scalar(G%ke, h(i,j,:), T(i,j,:), Tint(i,j,:), 2)
         call interface_scalar(G%ke, h(i,j,:), S(i,j,:), Sint(i,j,:), 2)
       else
-        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), T(i,j,:), ppoly_r_coefficients, T_i(i,j,:,:), ppoly_r_S, iMethod )
-        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), ppoly_r_coefficients, S_i(i,j,:,:), ppoly_r_S, iMethod )
+        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), T(i,j,:), ppoly_r_coefficients, &
+                                       T_i(i,j,:,:), ppoly_r_S, iMethod )
+        call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), ppoly_r_coefficients, &
+                                       S_i(i,j,:,:), ppoly_r_S, iMethod )
       endif
     enddo
 
@@ -363,33 +366,48 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     endif
   enddo
 
+  CS%uhEff(:,:,:) = 0.
+  CS%vhEff(:,:,:) = 0.
+  CS%uPoL(:,:,:) = 0.
+  CS%vPoL(:,:,:) = 0.
+  CS%uPoR(:,:,:) = 0.
+  CS%vPoR(:,:,:) = 0.
+  CS%uKoL(:,:,:) = 1
+  CS%vKoL(:,:,:) = 1
+  CS%uKoR(:,:,:) = 1
+  CS%vKoR(:,:,:) = 1
+
   ! Neutral surface factors at U points
   do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-    if (CS%continuous_reconstruction) then
-      call find_neutral_surface_positions_continuous(G%ke,                                    &
-              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),            &
-              Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT(i+1,j,:), dRdS(i+1,j,:),  &
+    if (G%mask2dCu(I,j) > 0.) then
+      if (CS%continuous_reconstruction) then
+        call find_neutral_surface_positions_continuous(G%ke,                                    &
+                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),            &
+                Pint(i+1,j,:), Tint(i+1,j,:), Sint(i+1,j,:), dRdT(i+1,j,:), dRdS(i+1,j,:),  &
+                CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      else
+        call find_neutral_surface_positions_discontinuous(G%ke,                                     &
+              Pint(i,j,:), T_i(i,j,:,:), S_i(i,j,:,:), dRdT_i(i,j,:,:), dRdS_i(i,j,:,:),            &
+              Pint(i+1,j,:), T_i(i+1,j,:,:), S_i(i+1,j,:,:), dRdT_i(i+1,j,:,:), dRdS_i(i+1,j,:,:),  &
               CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
-    else
-      call find_neutral_surface_positions_discontinuous(G%ke,                                     &
-            Pint(i,j,:), T_i(i,j,:,:), S_i(i,j,:,:), dRdT_i(i,j,:,:), dRdS_i(i,j,:,:),            &
-            Pint(i+1,j,:), T_i(i+1,j,:,:), S_i(i+1,j,:,:), dRdT_i(i+1,j,:,:), dRdS_i(i+1,j,:,:),  &
-            CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:) )
+      endif
     endif
   enddo ; enddo
 
   ! Neutral surface factors at V points
   do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-    if (CS%continuous_reconstruction) then
-      call find_neutral_surface_positions_continuous(G%ke,                                   &
-              Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),           &
-              Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT(i,j+1,:), dRdS(i,j+1,:), &
-              CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
-    else
-      call find_neutral_surface_positions_discontinuous(G%ke,                                  &
-          Pint(i,j,:), T_i(i,j,:,:), S_i(i,j,:,:), dRdT_i(i,j,:,:), dRdS_i(i,j,:,:),           &
-          Pint(i,j+1,:), T_i(i,j+1,:,:), S_i(i,j+1,:,:), dRdT_i(i,j+1,:,:), dRdS_i(i,j+1,:,:), &
-          CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
+    if (G%mask2dCv(i,J) > 0.) then
+      if (CS%continuous_reconstruction) then
+        call find_neutral_surface_positions_continuous(G%ke,                                   &
+                Pint(i,j,:), Tint(i,j,:), Sint(i,j,:), dRdT(i,j,:), dRdS(i,j,:),           &
+                Pint(i,j+1,:), Tint(i,j+1,:), Sint(i,j+1,:), dRdT(i,j+1,:), dRdS(i,j+1,:), &
+                CS%vPoL(i,J,:), CS%vPoR(i,J,:), CS%vKoL(i,J,:), CS%vKoR(i,J,:), CS%vhEff(i,J,:) )
+      else
+        call find_neutral_surface_positions_discontinuous(G%ke,                                  &
+            Pint(i,j,:), T_i(i,j,:,:), S_i(i,j,:,:), dRdT_i(i,j,:,:), dRdS_i(i,j,:,:),           &
+            Pint(i,j+1,:), T_i(i,j+1,:,:), S_i(i,j+1,:,:), dRdT_i(i,j+1,:,:), dRdS_i(i,j+1,:,:), &
+            CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
+      endif
     endif
   enddo ; enddo
 
@@ -442,6 +460,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
      if(trim(name) == 'S') convert = ppt2mks * GV%H_to_kg_m2
   endif
 
+  uFlx(:,:,:) = 0.
+  vFlx(:,:,:) = 0.
 
   ! x-flux
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
@@ -636,60 +656,60 @@ end function ppm_edge
 
 !> Returns the average of a PPM reconstruction between two
 !! fractional positions.
-!real function ppm_ave(xL, xR, aL, aR, aMean)
-!  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
-!  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
-!  real, intent(in) :: aL    !< Left edge scalar value, at x=0
-!  real, intent(in) :: aR    !< Right edge scalar value, at x=1
-!  real, intent(in) :: aMean !< Average scalar value of cell
-!
+real function ppm_ave(xL, xR, aL, aR, aMean)
+  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
+  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
+  real, intent(in) :: aL    !< Left edge scalar value, at x=0
+  real, intent(in) :: aR    !< Right edge scalar value, at x=1
+  real, intent(in) :: aMean !< Average scalar value of cell
+
+  ! Local variables
+  real :: dx, xave, a6, a6o3
+
+  dx = xR - xL
+  xave = 0.5 * ( xR + xL )
+  a6o3 = 2. * aMean - ( aL + aR ) ! a6 / 3.
+  a6 = 3. * a6o3
+
+  if (dx<0.) then
+    stop 'ppm_ave: dx<0 should not happend!'
+  elseif (dx>1.) then
+    stop 'ppm_ave: dx>1 should not happend!'
+  elseif (dx==0.) then
+    ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
+  else
+    ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
+  endif
+
+end function ppm_ave
+
+!real function ppm_ave(xa, xb, a_L, a_R, u_c)
+!  real, intent(in) :: xa    !< Fraction position of left bound (0,1)
+!  real, intent(in) :: xb    !< Fraction position of right bound (0,1)
+!  real, intent(in) :: a_L    !< Left edge scalar value, at x=0
+!  real, intent(in) :: a_R    !< Right edge scalar value, at x=1
+!  real, intent(in) :: u_c !< Average scalar value of cell
 !  ! Local variables
-!  real :: dx, xave, a6, a6o3
+!  real :: mx, a_c, Ya, Yb, Ya2b2ab, xa2b2ab, my
 !
-!  dx = xR - xL
-!  xave = 0.5 * ( xR + xL )
-!  a6o3 = 2. * aMean - ( aL + aR ) ! a6 / 3.
-!  a6 = 3. * a6o3
-!
-!  if (dx<0.) then
-!    stop 'ppm_ave: dx<0 should not happend!'
-!  elseif (dx>1.) then
-!    stop 'ppm_ave: dx>1 should not happend!'
-!  elseif (dx==0.) then
-!    ppm_ave = aL + ( aR - aL ) * xR + a6 * xR * ( 1. - xR )
+!  mx = 0.5 * ( xa + xb )
+!  a_c = 0.5 * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6 / 6
+!  if (mx<0.5) then
+!    ! This integration of the PPM reconstruction is expressed in distances from the left edge
+!    xa2b2ab = (xa*xa+xb*xb)+xa*xb
+!    ppm_ave = a_L + ( ( a_R - a_L ) * mx &
+!                    + a_c * ( 3. * ( xb + xa ) - 2.*xa2b2ab ) )
 !  else
-!    ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
+!    ! This integration of the PPM reconstruction is expressed in distances from the right edge
+!    Ya = 1. - xa
+!    Yb = 1. - xb
+!    my = 0.5 * ( Ya + Yb )
+!    Ya2b2ab = (Ya*Ya+Yb*Yb)+Ya*Yb
+!    ppm_ave = a_R  + ( ( a_L - a_R ) * my &
+!                     + a_c * ( 3. * ( Yb + Ya ) - 2.*Ya2b2ab ) )
 !  endif
 !
 !end function ppm_ave
-
-real function ppm_ave(xa, xb, a_L, a_R, u_c)
-  real, intent(in) :: xa    !< Fraction position of left bound (0,1)
-  real, intent(in) :: xb    !< Fraction position of right bound (0,1)
-  real, intent(in) :: a_L    !< Left edge scalar value, at x=0
-  real, intent(in) :: a_R    !< Right edge scalar value, at x=1
-  real, intent(in) :: u_c !< Average scalar value of cell
-  ! Local variables
-  real :: mx, a_c, Ya, Yb, Ya2b2ab, xa2b2ab, my
-
-  mx = 0.5 * ( xa + xb )
-  a_c = 0.5 * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6 / 6
-  if (mx<0.5) then
-    ! This integration of the PPM reconstruction is expressed in distances from the left edge
-    xa2b2ab = (xa*xa+xb*xb)+xa*xb
-    ppm_ave = a_L + ( ( a_R - a_L ) * mx &
-                    + a_c * ( 3. * ( xb + xa ) - 2.*xa2b2ab ) )
-  else
-    ! This integration of the PPM reconstruction is expressed in distances from the right edge
-    Ya = 1. - xa
-    Yb = 1. - xb
-    my = 0.5 * ( Ya + Yb )
-    Ya2b2ab = (Ya*Ya+Yb*Yb)+Ya*Yb
-    ppm_ave = a_R  + ( ( a_L - a_R ) * my &
-                     + a_c * ( 3. * ( Yb + Ya ) - 2.*Ya2b2ab ) )
-  endif  
-
-end function ppm_ave
 
 !> A true signum function that returns either -abs(a), when x<0; or abs(a) when x>0; or 0 when x=0.
 real function signum(a,x)
@@ -1080,12 +1100,13 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
         searching_right_column = .true.
         searching_left_column = .false.
       else ! dRho == 0.
-        if (kl_left + kl_left + ki_left + ki_right == 4) then ! Still at surface
+        if ((kl_left + kl_left == 2) .and. (ki_left + ki_right == 2)) then ! Still at surface
           searching_left_column = .true.
           searching_right_column = .false.
         else ! Not the surface so we simply change direction
-          searching_left_column = .not.  searching_left_column
-          searching_right_column = .not.  searching_right_column
+          same_direction = .false.
+          searching_left_column = .not. searching_left_column
+          searching_right_column = .not. searching_right_column
         endif
       endif
     else
@@ -1112,8 +1133,9 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
                                              "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
       if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
+
       KoL(k_surface) = kl_left
-      KoR(k_surface) = kl_right
+      KoR(k_surfacE) = kl_right
 
       ! Perform a check to make sure that the neutral surface does not connect to top of discontinuity
       if ( (lastP_left == 1.) .and. (dRhoTopm1 == 0.) ) then
@@ -1126,8 +1148,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
         KoL(k_surface) = kl_left
         call search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, lastP_left, lastK_left, &
                                  Pl(kl_left,1), Pl(kl_left,2), ki_left, ki_right, kl_left, PoL(k_surface))
-        PoR(k_surface) = REAL(ki_right-1)
       endif
+      KoR(k_surface) = kl_right
       PoR(k_surface) = REAL(ki_right-1)
       call increment_interface(nk, kl_right, ki_right, reached_bottom, searching_right_column, searching_left_column)
 
@@ -1150,6 +1172,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
                                              "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
       if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_left, ki_left
+
       KoL(k_surface) = kl_left
       KoR(k_surface) = kl_right
 
@@ -1157,15 +1180,16 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       if ( (lastP_right == 1.) .and. (dRhoTopm1 == 0.) ) then
         KoR(k_surface) = lastK_right
         PoR(k_surface) = 1.
-        PoL(k_surface) = REAL(ki_left-1)
+        PoL(k_surface) = REAL(ki_left - 1)
         if (debug_this_module)  write(*,*) "Searching across discontinuity"
       ! Search within the layer for the neutral surface
       else
         KoR(k_surface) = kl_right
         call search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, lastP_right, lastK_right, &
                                  Pr(kl_right,1), Pr(kl_right,2), ki_right, ki_left, kl_right, PoR(k_surface))
-        PoL(k_surface) = REAL(ki_left-1)
       endif
+      KoL(k_surface) = kl_left
+      PoL(k_surface) = REAL(ki_left-1)
       call increment_interface(nk, kl_left, ki_left, reached_bottom, searching_left_column, searching_right_column)
 
       ! Potential density difference, rho(kr) - rho(kl) (will be positive)
@@ -1173,10 +1197,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       stop 'Else what?'
     endif
     ! Store layer indices and positions for next iteration
-    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
-    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
+!    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
+!    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
+
     if (debug_this_module)  write(*,'(A,I2,A,F6.2,A,I2,A,F6.2)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
       KoR(k_surface), " PoR:", PoR(k_surface)
     if (debug_this_module)  write(*,*)
@@ -1190,10 +1215,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
            absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean
-        if (hEff(k_surface-1) < 0.) then
-          call MOM_error(FATAL,"MAYDAY")
-        endif
-
       else
         hEff(k_surface-1) = 0.
       endif
@@ -1236,7 +1257,7 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
     searching_this_column = .true.
     searching_other_column = .false.
   else
-!    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
+    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
   endif
 
 end subroutine increment_interface
@@ -1266,7 +1287,12 @@ subroutine search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, o
       other_kl = other_lastK
       if (debug_this_module)  write(*,*) "Perfectly unstratified same direction"
     else
-      other_P = REAL(this_ki-1) ! Connect a top interface to a top interface, bottom to bottom
+      if (other_lastP == 0.) then
+        other_P = 1.
+      else
+        other_P = 0.
+      endif
+      !other_P = REAL(this_ki-1) ! Connect a top interface to a top interface, bottom to bottom
       if (debug_this_module)  write(*,*) "Perfectly unstratified different direction"
     endif
   elseif (dRhoTop > dRhoBot) then ! Layer is unstably stratified
@@ -1380,42 +1406,68 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
   real, dimension(nk,5) :: ppoly_r_S_r
   integer               :: iMethod
 
-  call interface_scalar(nk, hl, Tl, Til, 2)
-  call interface_scalar(nk, hr, Tr, Tir, 2)
-
   ! Setup reconstruction edge values
   if (continuous) then
-    do k = 1, nk
-      call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
-      call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
-    enddo
+    call interface_scalar(nk, hl, Tl, Til, 2)
+    call interface_scalar(nk, hr, Tr, Tir, 2)
+    call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
+    call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
   else
+    ppoly_r_coeffs_l(:,:) = 0.
+    ppoly_r_coeffs_r(:,:) = 0.
+    Tid_l(:,:) = 0.
+    Tid_r(:,:) = 0.
+
     call build_reconstructions_1d( remap_CS, nk, hl, Tl, ppoly_r_coeffs_l, Tid_l, ppoly_r_S_l, iMethod )
-    call build_reconstructions_1d( remap_CS, nk, hr, Tr, ppoly_r_coeffs_r, Tid_r, ppoly_r_S_l, iMethod )
+    call build_reconstructions_1d( remap_CS, nk, hr, Tr, ppoly_r_coeffs_r, Tid_r, ppoly_r_S_r, iMethod )
   endif
 
   do k_sublayer = 1, nsurf-1
     if (hEff(k_sublayer) == 0.) then
       Flx(k_sublayer) = 0.
-    elseif (continuous) then
-      klb = KoL(k_sublayer+1)
-      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
+    else
+      if (continuous) then
+        klb = KoL(k_sublayer+1)
+        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
 
-      klt = KoL(k_sublayer)
-      T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
+        klt = KoL(k_sublayer)
+        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
 
-      T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
-                             aL_l(klt), aR_l(klt), Tl(klt))
+        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
+                               aL_l(klt), aR_l(klt), Tl(klt))
 
-      krb = KoR(k_sublayer+1)
-      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
+        krb = KoR(k_sublayer+1)
+        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
 
-      krt = KoR(k_sublayer)
-      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
+        krt = KoR(k_sublayer)
+        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
 
-      T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
-                              aL_r(krt), aR_r(krt), Tr(krt))
+        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
+                                aL_r(krt), aR_r(krt), Tr(krt))
 
+      else ! Discontinuous reconstruction
+        klb = KoL(k_sublayer+1)
+        klt = KoL(k_sublayer)
+        if (klt /= klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+!        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
+!        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
+        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
+        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
+!        T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
+!                                           PiL(k_sublayer), PiL(k_sublayer+1))
+!        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
+
+        krb = KoR(k_sublayer+1)
+        krt = KoR(k_sublayer)
+        if (krt /= krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+!        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
+!        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
+        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
+        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
+!        T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
+!                                            PiR(k_sublayer), PiL(k_sublayer+1))
+!        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
+      endif
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
@@ -1426,25 +1478,6 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
         dT_ave = dT_layer
       endif
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
-    else ! Discontinuous reconstruction
-      klb = KoL(k_sublayer+1)
-      T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
-      
-      klt = KoL(k_sublayer)
-      T_left_top = ( 1. - PiL(k_sublayer) ) * Tid_l(klt,1) + PiL(k_sublayer) * Tid_l(klt,2)
-
-      T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
-                             aL_l(klt), aR_l(klt), Tl(klt))
-
-      krb = KoR(k_sublayer+1)
-      T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb,1) + PiR(k_sublayer+1) * Tir(krb,2)
-
-      krt = KoR(k_sublayer)
-      T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt,1) + PiR(k_sublayer) * Tir(krt,2)
-
-      T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
-                              Tid_r(krt,1), Tid_l(krt,2), Tr(krt))
-      
     endif
   enddo
 
