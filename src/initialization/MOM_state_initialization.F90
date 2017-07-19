@@ -103,22 +103,33 @@ contains
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
                                 ALE_sponge_CSp, OBC, Time_in)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: u    !< The zonal velocity that is being initialized, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: v    !< The meridional velocity that is being initialized, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(out)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                     intent(inout) :: tv   !< A structure pointing to various thermodynamic variables
-  type(time_type),                           intent(inout) :: Time
-  type(param_file_type),                     intent(in)    :: PF
-  type(directories),                         intent(in)    :: dirs
-  type(MOM_restart_CS),                      pointer       :: restart_CS
-  type(ALE_CS),                              pointer       :: ALE_CSp
-  type(tracer_registry_type),                pointer       :: tracer_Reg
-  type(sponge_CS),                           pointer       :: sponge_CSp
-  type(ALE_sponge_CS),                       pointer       :: ALE_sponge_CSp
-  type(ocean_OBC_type),                      pointer       :: OBC
-  type(time_type), optional,                 intent(in)    :: Time_in
+  type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                              intent(out)   :: u    !< The zonal velocity that is being initialized,
+                                                    !! in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                              intent(out)   :: v    !< The meridional velocity that is being
+                                                    !! initialized, in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                              intent(out)   :: h    !< Layer thicknesses, in H (usually m or
+                                                    !! kg m-2)
+  type(thermo_var_ptrs),      intent(inout) :: tv   !< A structure pointing to various thermodynamic
+                                                    !! variables
+  type(time_type),            intent(inout) :: Time !< Time at the start of the run segment.
+  type(param_file_type),      intent(in)    :: PF   !< A structure indicating the open file to parse
+                                                    !! for model parameter values.
+  type(directories),          intent(in)    :: dirs !< A structure containing several relevant
+                                                    !! directory paths.
+  type(MOM_restart_CS),       pointer       :: restart_CS !< A pointer to the restart control
+                                                    !! structure.
+  type(ALE_CS),               pointer       :: ALE_CSp
+  type(tracer_registry_type), pointer       :: tracer_Reg
+  type(sponge_CS),            pointer       :: sponge_CSp
+  type(ALE_sponge_CS),        pointer       :: ALE_sponge_CSp
+  type(ocean_OBC_type),       pointer       :: OBC
+  type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
+                                                     !! Time_in overrides any value set for Time.
 ! Arguments: u  - Zonal velocity, in m s-1.
 !  (out)     v  - Meridional velocity, in m s-1.
 !  (out)     h  - Layer thickness, in m.
@@ -806,8 +817,12 @@ end subroutine initialize_thickness_search
 subroutine convert_thickness(h, G, GV, tv)
   type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(inout) :: h    !< Layer thicknesses, being converted from m to H (m or kg m-2)
-  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+                                          intent(inout) :: h    !< Layer thicknesses, being
+                                                                !! converted from m to H (m or kg
+                                                                !! m-2)
+  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various
+                                                                !! thermodynamic variables
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -1315,7 +1330,8 @@ end subroutine initialize_velocity_circular
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< The potential temperature that is being initialized.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< The salinity that is being initialized.
   type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
@@ -1432,14 +1448,20 @@ end subroutine initialize_temp_salt_from_profile
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_fit(T, S, G, GV, param_file, eqn_of_state, P_Ref, just_read_params)
-  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)  :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
-  type(EOS_type),                         pointer     :: eqn_of_state
-  real,                                   intent(in)  :: P_Ref
+  type(ocean_grid_type),   intent(in)  :: G            !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV           !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+                           intent(out) :: T            !< The potential temperature that is being
+                                                       !! initialized.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+                           intent(out) :: S            !< The salinity that is being initialized.
+  type(param_file_type),   intent(in)  :: param_file   !< A structure to parse for run-time
+                                                       !! parameters.
+  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the equatio of state.
+  real,                    intent(in)  :: P_Ref        !< The coordinate-density reference pressure
+                                                       !! in Pa.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                       !! only read parameters without changing h.
 !  This function puts the initial layer temperatures and salinities  !
 ! into T(:,:,:) and S(:,:,:).                                        !
 
@@ -1526,11 +1548,14 @@ end subroutine initialize_temp_salt_fit
 
 ! -----------------------------------------------------------------------------
 subroutine initialize_temp_salt_linear(T, S, G, param_file, just_read_params)
-  type(ocean_grid_type),                  intent(in)  :: G    !< The ocean's grid structure
+  type(ocean_grid_type),                     intent(in)  :: G          !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T, S
-  type(param_file_type),                  intent(in)  :: param_file !< A structure to parse for run-time parameters
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  type(param_file_type),                     intent(in)  :: param_file !< A structure to parse for
+                                                                       !! run-time parameters
+  logical,       optional,                   intent(in)  :: just_read_params !< If present and true,
+                                                                       !! this call will only read
+                                                                       !! parameters without
+                                                                       !! changing h.
 
   ! This subroutine initializes linear profiles for T and S according to
   ! reference surface layer salinity and temperature and a specified range.
@@ -1587,13 +1612,20 @@ end subroutine initialize_temp_salt_linear
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the inverse restoration time (Idamp), and
+!! the values towards which the interface heights and an arbitrary
+!! number of tracers should be restored within each sponge. The
+!!interface height is always subject to damping, and must always be
+!! the first registered field.
 subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
-  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   logical,                 intent(in) :: use_temperature
-  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(sponge_CS),         pointer    :: CSp
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
+                                              !! variables.
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
+  type(sponge_CS),         pointer    :: CSp  !! A pointer that is set to point to the control
+                                              !! structure for this module.
 !   This subroutine sets the inverse restoration time (Idamp), and   !
 ! the values towards which the interface heights and an arbitrary    !
 ! number of tracers should be restored within each sponge. The       !
@@ -2217,9 +2249,9 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 !> Run simple unit tests
 subroutine MOM_state_init_tests(G, GV, tv)
-  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(thermo_var_ptrs),     intent(in)    :: tv !< Thermodynamics structure
+  type(ocean_grid_type),     intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(thermo_var_ptrs),     intent(in)    :: tv   !< Thermodynamics structure.
   ! Local variables
   integer, parameter :: nk=5
   real, dimension(nk) :: T, T_t, T_b, S, S_t, S_b, rho, h, z
