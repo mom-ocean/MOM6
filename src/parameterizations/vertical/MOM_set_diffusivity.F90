@@ -1313,9 +1313,11 @@ end subroutine find_N2
 
 !> This subroutine sets the additional diffusivities of temperature and
 !! salinity due to double diffusion, using the same functional form as is
-!! used in MOM4.1, and taken from an NCAR technical note (###REF?) that updates
+!! used in MOM4.1, and taken from an NCAR technical note (REF?) that updates
 !! what was in Large et al. (1994).  All the coefficients here should probably
 !! be made run-time variables rather than hard-coded constants.
+!!
+!! \todo Find reference for NCAR tech note above.
 subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, Kd_T_dd, Kd_S_dd)
   type(ocean_grid_type),    intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)  :: GV  !< The ocean's vertical grid structure.
