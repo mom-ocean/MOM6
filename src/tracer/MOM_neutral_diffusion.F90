@@ -114,7 +114,7 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                    "for vertical remapping for all variables.\n"//&
                    "It can be one of the following schemes:\n"//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
-    call initialize_remapping( CS%remap_CS, string )
+    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = .false. )
   endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
@@ -1197,8 +1197,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
       stop 'Else what?'
     endif
     ! Store layer indices and positions for next iteration
-!    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
-!    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
+    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
+    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
@@ -1448,25 +1448,25 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
       else ! Discontinuous reconstruction
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
-        if (klt /= klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
-!        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
-!        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
-        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
-        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
+        if (klt .ne. klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
+        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
+!        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
+!        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
 !        T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
 !                                           PiL(k_sublayer), PiL(k_sublayer+1))
-!        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
+        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
 
         krb = KoR(k_sublayer+1)
         krt = KoR(k_sublayer)
-        if (krt /= krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
-!        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
-!        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
-        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
-        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
+        if (krt .ne. krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
+        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
+!        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
+!        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
 !        T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
 !                                            PiR(k_sublayer), PiL(k_sublayer+1))
-!        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
+        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
       endif
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
@@ -1477,6 +1477,7 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
       else
         dT_ave = dT_layer
       endif
+!      dT_ave = dT_layer
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
     endif
   enddo
