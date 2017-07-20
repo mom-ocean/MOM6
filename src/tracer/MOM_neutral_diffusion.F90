@@ -1412,6 +1412,16 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
     call interface_scalar(nk, hr, Tr, Tir, 2)
     call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
     call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
+
+    do k=1,nk
+      ppoly_r_coeffs_l(k,1) = aL_l(k)
+      ppoly_r_coeffs_l(k,2) = 4.0 * ( Tl(k) - aL_l(k) ) + 2.0 * ( Tl(k) - aR_l(k) )
+      ppoly_r_coeffs_l(k,3) = 3.0 * ( ( aR_l(k) - Tl(k) ) + ( aL_l(k) - Tl(k) ) )
+      ppoly_r_coeffs_r(k,1) = aL_r(k)
+      ppoly_r_coeffs_r(k,2) = 4.0 * ( Tr(k) - aL_r(k) ) + 2.0 * ( Tr(k) - aR_r(k) )
+      ppoly_r_coeffs_r(k,3) = 3.0 * ( ( aR_r(k) - Tr(k) ) + ( aL_r(k) - Tr(k) ) )
+    enddo
+
   else
     ppoly_r_coeffs_l(:,:) = 0.
     ppoly_r_coeffs_r(:,:) = 0.
@@ -1429,18 +1439,22 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
       if (continuous) then
         klb = KoL(k_sublayer+1)
         T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
+        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
 
         klt = KoL(k_sublayer)
-        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
+!        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
+        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
 
         T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
                                aL_l(klt), aR_l(klt), Tl(klt))
 
         krb = KoR(k_sublayer+1)
-        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
+!        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
+        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
 
         krt = KoR(k_sublayer)
-        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
+!        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
+        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
 
         T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
                                 aL_r(krt), aR_r(krt), Tr(krt))
