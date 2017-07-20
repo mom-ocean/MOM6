@@ -1,14 +1,22 @@
 module coupler_indices
  
+  ! From MCT:
   use seq_flds_mod, only : seq_flds_x2o_fields, seq_flds_o2x_fields 
   use seq_flds_mod, only : seq_flds_i2o_per_cat, ice_ncat 
   use mct_mod
+
+  ! From MOM:
+  use MOM_grid,       only : ocean_grid_type
+  use MOM_domains,    only : pass_var
+  use MOM_variables,  only : surface
 
   implicit none
 
   private
 
+  public alloc_sbuffer
   public coupler_indices_init
+  public time_avg_state
 
   type, public :: cpl_indices
 
@@ -77,14 +85,20 @@ module coupler_indices
     integer, dimension(:), allocatable :: x2o_fracr_col     ! fraction of ocean cell used in radiation computations, per column
     integer, dimension(:), allocatable :: x2o_qsw_fracr_col ! qsw * fracr, per column
 
-  end type cpl_indices
+    real, dimension(:,:,:),allocatable :: time_avg_sbuffer  !< time averages of send buffer 
+    real                               :: accum_time        !< time for accumulation
 
-  ! Module data for storing
-  type(cpl_indices), public :: ind
+  end type cpl_indices
 
 contains
 
-  subroutine coupler_indices_init( )
+
+
+  subroutine coupler_indices_init(ind)
+
+    type(cpl_indices), intent(inout) :: ind
+
+    ! Local Variables
 
     type(mct_aVect) :: o2x      ! temporary
     type(mct_aVect) :: x2o      ! temporary
@@ -190,5 +204,155 @@ contains
 
 
   end subroutine coupler_indices_init
+
+
+  subroutine alloc_sbuffer(ind, grid, nsend)
+
+    ! Parameters
+    type(cpl_indices), intent(inout)  :: ind
+    type(ocean_grid_type), intent(in) :: grid
+    integer, intent(in)               :: nsend
+
+    allocate(ind%time_avg_sbuffer(grid%isd:grid%ied,grid%jsd:grid%jed,nsend))
+
+  end subroutine alloc_sbuffer
+
+ 
+  subroutine time_avg_state(ind, grid, surf_state, dt, reset, last)
+  
+    type(cpl_indices), intent(inout)      :: ind        !< module control structure
+    type(ocean_grid_type), intent(inout)  :: grid       !< ocean grid (inout in order to do halo update)
+    type(surface), intent(in)             :: surf_state !< ocean surface state
+    real, intent(in)                      :: dt         !< time interval to accumulate (seconds)
+    logical, optional, intent(in)         :: reset      !< if present and true, reset accumulations
+    logical, optional, intent(in)         :: last       !< if present and true, divide by accumulated time
+
+    ! local variables
+    integer :: i,j,nvar  
+    real    :: rtime, slp_L, slp_R, slp_C, u_min, u_max, slope
+    real, dimension(grid%isd:grid%ied, grid%jsd:grid%jed) :: ssh
+
+    if (present(reset)) then
+      if (reset) then
+        ind%time_avg_sbuffer(:,:,:) = 0.
+        ind%accum_time = 0.
+      end if
+    end if 
+
+    ! sst
+    nvar = ind%o2x_So_t 
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * surf_state%sst(i,j)
+    end do; end do
+
+    ! sss
+    nvar = ind%o2x_So_s 
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * surf_state%sss(i,j)
+    end do; end do
+  
+
+    ! u
+    nvar = ind%o2x_So_u 
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * &
+                                          0.5*(surf_state%u(I,j)+surf_state%u(I-1,j))
+    end do; end do
+    
+    ! v
+    nvar = ind%o2x_So_v 
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * &
+                                          0.5*(surf_state%v(i,J)+surf_state%v(i,J-1))
+    end do; end do
+
+    ! ssh
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ssh(i,j) = surf_state%sea_lev(i,j)
+    end do; end do
+    call pass_var(ssh, grid%domain)
+      
+    ! d/dx ssh
+    nvar = ind%o2x_So_dhdx
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ! This is a simple second-order difference
+    ! ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * &
+    !              0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+      ! This is a PLM slope which might be less prone to the A-grid null mode
+      slp_L = ssh(i,j) - ssh(i-1,j)
+      slp_R = ssh(i+1,j) - ssh(i,j)
+      slp_C = 0.5 * (slp_L + slp_R)
+      if ( (slp_L * slp_R) > 0.0 ) then
+        ! This limits the slope so that the edge values are bounded by the
+        ! two cell averages spanning the edge.
+        u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+        u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+        slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+      else
+        ! Extrema in the mean values require a PCM reconstruction avoid generating
+        ! larger extreme values.
+        slope = 0.0
+      end if
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    end do; end do
+    
+    ! d/dy ssh
+    nvar = ind%o2x_So_dhdy
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      ! This is a simple second-order difference
+    ! ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * &
+    !              0.5 * (ssh(i,j+1) + ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+      ! This is a PLM slope which might be less prone to the A-grid null mode
+      slp_L = ssh(i,j) - ssh(i,j-1)
+      slp_R = ssh(i,j+1) - ssh(i,j)
+      slp_C = 0.5 * (slp_L + slp_R)
+      if ( (slp_L * slp_R) > 0.0 ) then
+        ! This limits the slope so that the edge values are bounded by the
+        ! two cell averages spanning the edge.
+        u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+        u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+        slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+      else
+        ! Extrema in the mean values require a PCM reconstruction avoid generating
+        ! larger extreme values.
+        slope = 0.0
+      end if
+      ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    end do; end do
+    
+    ! Divide by total accumulated time
+    ind%accum_time = ind%accum_time + dt  
+    if (present(last)) then
+
+      !! \todo Do dhdx,dhdy need to be rotated before sending to the coupler?
+      !! \todo Do u,v need to be rotated before sending to the coupler?
+
+      rtime = 1./ind%accum_time
+      if (last) ind%time_avg_sbuffer(:,:,:) = ind%time_avg_sbuffer(:,:,:) * rtime
+    end if 
+
+  end subroutine time_avg_state
+
+
+  subroutine ocn_export(ind, grid, o2x)
+
+    type(cpl_indices), intent(in)     :: ind
+    type(ocean_grid_type), intent(in) :: grid
+    real(kind=8), intent(inout)       :: o2x(:,:)
+
+    integer :: i, j, n
+     
+    n = 0
+    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+      n = n+1
+      o2x(ind%o2x_So_t, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_t)
+      o2x(ind%o2x_So_s, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_s)
+      o2x(ind%o2x_So_u, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_u)
+      o2x(ind%o2x_So_v, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_v)
+      o2x(ind%o2x_So_dhdx, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_dhdx)
+      o2x(ind%o2x_So_dhdy, n) = ind%time_avg_sbuffer(i,j,ind%o2x_So_dhdy)
+    end do; end do
+
+  end subroutine ocn_export
 
 end module coupler_indices
