@@ -11,9 +11,13 @@ module ocn_comp_mct
 ! !REVISION HISTORY:
 !
 ! !USES:
-  use esmf
-  use seq_cdata_mod
-  use mct_mod
+  use ESMF,               only: ESMF_clock, ESMF_time
+  use ESMF,               only: ESMF_ClockGet, ESMF_TimeGet
+  use seq_cdata_mod,      only: seq_cdata
+  use seq_cdata_mod,      only: seq_cdata_setptrs
+  use mct_mod,            only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, mct_gsmap_orderedpoints
+  use mct_mod,            only: mct_aVect, mct_aVect_init, mct_aVect_zero, mct_aVect_nRattr
+  use mct_mod,            only: mct_gGrid, mct_gGrid_init, mct_gGrid_importRAttr, mct_gGrid_importIAttr
   use seq_flds_mod,       only: seq_flds_x2o_fields,            &
                                 seq_flds_o2x_fields,            &
                                 SEQ_FLDS_DOM_COORD,             &
@@ -92,7 +96,7 @@ contains
 !
 ! !INPUT/OUTPUT PARAMETERS:
 
-  type(ESMF_Clock)            , intent(inout) :: EClock
+  type(ESMF_clock)            , intent(inout) :: EClock
   type(seq_cdata)             , intent(inout) :: cdata_o
   type(mct_aVect)             , intent(inout) :: x2o_o, o2x_o
   character(len=*), optional  , intent(in)    :: NLFilename ! Namelist filename
@@ -442,7 +446,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   type(mct_ggrid), intent(inout) :: dom_ocn
 
 ! Local Variables
-  integer, parameter              :: SHR_REAL_R8 = selected_real_kind (12)
+  integer, parameter              :: SHR_REAL_R8 = selected_real_kind(12)
   integer, pointer                :: idata(:)
   integer                         :: i,j,k
   real(kind=SHR_REAL_R8), pointer :: data(:)
