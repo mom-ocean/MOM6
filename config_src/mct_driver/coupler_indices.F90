@@ -1,12 +1,15 @@
 module coupler_indices
  
-  ! From MCT:
+  ! MCT types
+  use mct_mod, only : mct_aVect
+  ! MCT fucntions
+  use mct_mod, only : mct_avect_indexra, mct_aVect_init, mct_aVect_clean
   use seq_flds_mod, only : seq_flds_x2o_fields, seq_flds_o2x_fields 
   use seq_flds_mod, only : seq_flds_i2o_per_cat, ice_ncat 
-  use mct_mod
 
-  ! From MOM:
+  ! MOM types
   use MOM_grid,       only : ocean_grid_type
+  ! MOM functions
   use MOM_domains,    only : pass_var
   use MOM_variables,  only : surface
 
