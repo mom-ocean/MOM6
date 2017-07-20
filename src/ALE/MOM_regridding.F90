@@ -479,7 +479,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                  "When regridding, this is the minimum layer\n"//&
                  "thickness allowed.", units="m",&
                  default=regriddingDefaultMinThickness )
-    call set_regrid_params(CS, min_thickness=tmpReal)
+    call set_regrid_params(CS, min_thickness=tmpReal*GV%m_to_H)
   else
     call set_regrid_params(CS, min_thickness=0.)
   endif
@@ -1138,14 +1138,16 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
       if (ice_shelf) then
         if (frac_shelf_h(i,j) > 0.) then ! under ice shelf
-           call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew, &
+          call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew, &
                                 z_rigid_top = totalThickness-nominalDepth, &
-                                eta_orig = zOld(1))
+                                eta_orig=zOld(1), zScale=GV%m_to_H)
         else
-           call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew)
+          call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, &
+                                zNew, zScale=GV%m_to_H)
         endif
       else
-        call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew)
+        call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, &
+                                zNew, zScale=GV%m_to_H)
       endif
 
       ! Calculate the final change in grid position after blending new and old grids
@@ -1307,7 +1309,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      call build_rho_column(CS%rho_CS, remapCS, nz, nominalDepth, h(i, j, :)*GV%H_to_m, &
+      call build_rho_column(CS%rho_CS, remapCS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
 
       if (CS%integrate_downward_for_e) then

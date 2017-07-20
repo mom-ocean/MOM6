@@ -56,16 +56,19 @@ subroutine set_zlike_params(CS, min_thickness)
 end subroutine set_zlike_params
 
 !> Builds a z* coordinate with a minimum thickness
-subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigid_top, eta_orig)
+subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, &
+              z_rigid_top, eta_orig, zScale)
   type(zlike_CS),        intent(in)    :: CS !< Coordinate control structure
   integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real,                  intent(in)    :: total_thickness !< Column thickness (positive in m)
+  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m or H)
+  real,                  intent(in)    :: total_thickness !< Column thickness (positive in m or H)
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in m)
-  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top (m)
+  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in m or H)
+  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top (m or H)
+  real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
+                                                 !! to desired units for zInterface, perhaps m_to_H.
   ! Local variables
-  real :: eta, stretching, dh, min_thickness, z0_top, z_star
+  real :: eta, stretching, dh, min_thickness, z0_top, z_star, z_scale
   integer :: k
   logical :: new_zstar_def
 
@@ -76,7 +79,9 @@ subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigi
     z0_top = z_rigid_top
     new_zstar_def = .true.
   endif
-
+  
+  z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
+  
   ! Position of free-surface (or the rigid top, for which eta ~ z0_top)
   eta = total_thickness - depth
   if (present(eta_orig)) eta = eta_orig
@@ -95,7 +100,7 @@ subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigi
     z_star = 0. ! z*=0 at the free-surface
     zInterface(1) = eta ! The actual position of the top of the column
     do k = 2,nz
-      z_star = z_star - CS%coordinateResolution(k-1)
+      z_star = z_star - CS%coordinateResolution(k-1)*z_scale
       ! This ensures that z is below a rigid upper surface (ice shelf bottom)
       zInterface(k) = min( eta + stretching * ( z_star - z0_top ), z0_top )
       ! This ensures that the layer in inflated
@@ -111,7 +116,7 @@ subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, z_rigi
     ! interfaces above the rigid boundary.
     zInterface(1) = eta
     do k = 1,nz
-      dh = stretching * CS%coordinateResolution(k) ! Notional grid spacing
+      dh = stretching * CS%coordinateResolution(k)*z_scale ! Notional grid spacing
       zInterface(k+1) = zInterface(k) - dh
     enddo
 
