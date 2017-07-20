@@ -79,9 +79,9 @@ subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, &
     z0_top = z_rigid_top
     new_zstar_def = .true.
   endif
-  
+
   z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
-  
+
   ! Position of free-surface (or the rigid top, for which eta ~ z0_top)
   eta = total_thickness - depth
   if (present(eta_orig)) eta = eta_orig
