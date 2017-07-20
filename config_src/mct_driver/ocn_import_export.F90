@@ -136,33 +136,6 @@ contains
 !***********************************************************************
 
 
- subroutine MOM_sum_buffer
-
-! !DESCRIPTION:
-!  This routine accumulates sums for averaging fields to
-!  be sent to the coupler
-!
-! !REVISION HISTORY:
-!  same as module
-! 
-!EOP
-!BOC
-
-!-----------------------------------------------------------------------
-!
-!  local variables
-!
-!-----------------------------------------------------------------------
-
-!-----------------------------------------------------------------------
-!EOC
-
- end subroutine MOM_sum_buffer
-
-!***********************************************************************
-
-
-
 
 end module ocn_import_export
 

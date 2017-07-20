@@ -31,14 +31,15 @@ module ocn_comp_mct
 
 
   ! From MOM6
-  use ocean_model_mod,    only: ocean_state_type, ocean_public_type
+  use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
   use ocean_model_mod,    only: ocean_model_init, get_state_pointers
   use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
   use MOM_grid,           only: ocean_grid_type, get_global_grid_size
+  use MOM_variables,      only: surface
   use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
   use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
-  use coupler_indices,    only: coupler_indices_init, cpl_indices
-  use ocn_import_export,  only: SBUFF_SUM, ocn_Export, mom_sum_buffer
+  use coupler_indices,    only: coupler_indices_init, cpl_indices, alloc_sbuffer, time_avg_state
+  use ocn_import_export,  only: ocn_Export 
 
 !
 ! !PUBLIC MEMBER FUNCTIONS:
@@ -63,7 +64,9 @@ module ocn_comp_mct
 ! !PRIVATE MODULE VARIABLES
   type MCT_MOM_Data 
     type(ocean_state_type), pointer  :: ocn_state => NULL()   !< Private state of ocean
-    type(ocean_public_type), pointer :: ocn_surface => NULL() !< Public surface state of ocean
+    type(ocean_public_type), pointer :: ocn_public => NULL()  !< Public state of ocean
+    type(ocean_grid_type), pointer   :: grid => NULL() ! A pointer to a grid structure
+    type(surface), pointer           :: ocn_surface => NULL() !< A pointer to the ocean surface state
 
     type(seq_infodata_type), pointer :: infodata
 
@@ -147,8 +150,6 @@ contains
   logical :: lsend_precip_fact ! if T,send precip_fact to cpl for use in fw balance
                                ! (partially-coupled option)
 
-  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
-
 !-----------------------------------------------------------------------
 
   ! set (actually, get from mct) the cdata pointers:
@@ -200,13 +201,19 @@ contains
   npes = num_pes()
   pe0 = root_pe()
 
-  allocate(glb%ocn_surface)
-  glb%ocn_surface%is_ocean_PE = .true.
-  allocate(glb%ocn_surface%pelist(npes))
-  glb%ocn_surface%pelist(:) = (/(i,i=pe0,pe0+npes)/)
+  allocate(glb%ocn_public)
+  glb%ocn_public%is_ocean_PE = .true.
+  allocate(glb%ocn_public%pelist(npes))
+  glb%ocn_public%pelist(:) = (/(i,i=pe0,pe0+npes)/)
 
-  ! initialize the MOM6 model
-  call ocean_model_init(glb%ocn_surface, glb%ocn_state, time_init, time_in)
+  ! Initialize the MOM6 model
+  call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in)
+
+  ! Initialize ocn_state%state out of sight
+  call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
+
+  ! store pointers to components inside MOM
+  call get_state_pointers(glb%ocn_state, grid=glb%grid, surf=glb%ocn_surface)
 
   call t_stopf('MOM_init')
 
@@ -248,7 +255,11 @@ contains
   ! allocate send buffer
   nsend = mct_avect_nRattr(o2x_o)
   nrecv = mct_avect_nRattr(x2o_o)
-  allocate (SBUFF_SUM(nx_block,ny_block,max_blocks_clinic,nsend))
+
+  if (debug .and. root_pe().eq.pe_here()) print *, "calling alloc_sbuffer()", nsend
+
+  call alloc_sbuffer(glb%ind,glb%grid,nsend)
+  
 
   ! initialize necessary coupling info
 
@@ -269,8 +280,9 @@ contains
   ! end if
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling momo_sum_buffer"
-
-  call mom_sum_buffer
+  
+  ! Reset time average of send buffer
+  call time_avg_state(glb%ind, glb%grid, glb%ocn_surface, 1., reset=.true., last=.true.)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
 
@@ -281,8 +293,7 @@ contains
   if (debug .and. root_pe().eq.pe_here()) print *, "calling get_state_pointers"
 
   ! Size of global domain
-  call get_state_pointers(glb%ocn_state, grid=grid)
-  call get_global_grid_size(grid, ni, nj)
+  call get_global_grid_size(glb%grid, ni, nj)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
@@ -378,7 +389,7 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
   integer, allocatable :: gindex(:) ! Indirect indices
 
-  call get_state_pointers(glb%ocn_state, grid=grid)
+  grid => glb%grid ! for convenience
   if (.not. associated(grid)) call MOM_error(FATAL, 'ocn_comp_mct.F90, ocn_SetGSMap_mct():' // &
       'grid returned from get_state_pointers() was not associated!')
 
@@ -394,9 +405,9 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   ! Set indirect indices in gindex
   k = 0
   do j = grid%jsc, grid%jec
-    jg = j - grid%jdg_offset ! TODO: check this calculation
+    jg = j + grid%jdg_offset ! TODO: check this calculation
     do i = grid%isc, grid%iec
-      ig = i - grid%idg_offset ! TODO: check this calculation
+      ig = i + grid%idg_offset ! TODO: check this calculation
       k = k + 1 ! Increment position within gindex
       gindex(k) = ni * ( jg - 1 ) + ig
     enddo
@@ -438,7 +449,7 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   real(kind=SHR_REAL_R8)          :: m2_to_rad2
   type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
 
-  call get_state_pointers(glb%ocn_state, grid=grid)
+  grid => glb%grid ! for convenience
 
   ! set coords to lat and lon, and areas to rad^2
   call mct_gGrid_init(GGrid=dom_ocn, CoordChars=trim(seq_flds_dom_coord), &

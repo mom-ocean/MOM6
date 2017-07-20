@@ -1086,11 +1086,13 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 end subroutine ocean_public_type_chksum
 
 !> Returns pointers to objects within ocean_state_type
-subroutine get_state_pointers(OS, grid)
+subroutine get_state_pointers(OS, grid, surf)
   type(ocean_state_type),          pointer :: OS !< Ocean state type
   type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
+  type(surface), optional, pointer         :: surf !< Ocean surface state
 
   if (present(grid)) grid => OS%grid
+  if (present(surf)) surf=> OS%state
 
 end subroutine get_state_pointers
 
