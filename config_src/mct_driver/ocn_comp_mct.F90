@@ -11,8 +11,8 @@ module ocn_comp_mct
 ! !REVISION HISTORY:
 !
 ! !USES:
-  use ESMF,               only: ESMF_clock, ESMF_time
-  use ESMF,               only: ESMF_ClockGet, ESMF_TimeGet
+  use ESMF,               only: ESMF_clock, ESMF_time, ESMF_timeInterval
+  use ESMF,               only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
   use seq_cdata_mod,      only: seq_cdata
   use seq_cdata_mod,      only: seq_cdata_setptrs
   use mct_mod,            only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, mct_gsmap_orderedpoints
@@ -29,7 +29,7 @@ module ocn_comp_mct
                                 seq_infodata_start_type_brnch,  &
                                 seq_infodata_PutData
   use seq_comm_mct,       only: seq_comm_name, seq_comm_inst, seq_comm_suffix
-  use seq_timemgr_mod,    only: seq_timemgr_EClockGetData
+  use seq_timemgr_mod,    only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
   use perf_mod,           only: t_startf, t_stopf
   use shr_kind_mod,       only: SHR_KIND_R8
 
@@ -37,6 +37,7 @@ module ocn_comp_mct
   ! From MOM6
   use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
   use ocean_model_mod,    only: ocean_model_init, get_state_pointers
+  use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
   use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
   use MOM_grid,           only: ocean_grid_type, get_global_grid_size
   use MOM_variables,      only: surface
@@ -96,7 +97,7 @@ contains
 !
 ! !INPUT/OUTPUT PARAMETERS:
 
-  type(ESMF_clock)            , intent(inout) :: EClock
+  type(ESMF_Clock),             intent(inout) :: EClock  !< Time and time step ? \todo Why must this be intent(inout)?
   type(seq_cdata)             , intent(inout) :: cdata_o
   type(mct_aVect)             , intent(inout) :: x2o_o, o2x_o
   character(len=*), optional  , intent(in)    :: NLFilename ! Namelist filename
@@ -112,8 +113,8 @@ contains
   type(time_type)     :: time_init ! Start time of coupled model's calendar
   type(time_type)     :: time_in   ! Start time for ocean model at initialization
   type(ESMF_time)     :: current_time
-  integer             :: year, month, day, hour, minute, seconds, rc
-  character(len=128)  :: errMsg
+  type(ESMF_timeInterval) :: time_interval
+  integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=384)  :: runid
   character(len=384)  :: runtype
   character(len=32)   :: starttype          ! infodata start type
@@ -153,6 +154,7 @@ contains
   integer :: ncouple_per_day = 48
   logical :: lsend_precip_fact ! if T,send precip_fact to cpl for use in fw balance
                                ! (partially-coupled option)
+  character(len=128) :: err_msg
 
 !-----------------------------------------------------------------------
 
@@ -199,8 +201,26 @@ contains
   call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
-  time_init = set_date(year, month, day, hour, minute, seconds, err_msg=errMsg)
-  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=errMsg)
+
+  time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Debugging clocks
+  if (debug .and. is_root_pe()) then
+    write(6,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, TimeStep=time_interval, rc=rc)
+    call ESMF_TimeIntervalGet(time_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+    write(6,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+  endif
 
   npes = num_pes()
   pe0 = root_pe()
@@ -270,6 +290,8 @@ contains
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_timemgr_eclockgetdata"
 
   call seq_timemgr_EClockGetData(EClock, dtime=ocn_cpl_dt)
+
+  ! \todo Need interface to get dt from MOM6
   mom_cpl_dt = seconds_in_day / ncouple_per_day
   if (mom_cpl_dt /= ocn_cpl_dt) then
      write(*,*) 'ERROR pop_cpl_dt and ocn_cpl_dt must be identical'
@@ -314,35 +336,64 @@ contains
 
  end subroutine ocn_init_mct
 
-!***********************************************************************
-!BOP
-!
-! !IROUTINE: ocn_run_mct
-!
-! !INTERFACE:
+  !> Step forward ocean model for coupling interval
   subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
-!
-! !DESCRIPTION:
-! Run POP for a coupling interval
-!
-! !INPUT/OUTPUT PARAMETERS:
-    type(ESMF_Clock)            , intent(inout) :: EClock
-    type(seq_cdata)             , intent(inout) :: cdata_o
-    type(mct_aVect)             , intent(inout) :: x2o_o
-    type(mct_aVect)             , intent(inout) :: o2x_o
+  type(ESMF_Clock), intent(inout) :: EClock  !< Time and time step ? \todo Why must this be intent(inout)?
+  type(seq_cdata),  intent(inout) :: cdata_o
+  type(mct_aVect),  intent(inout) :: x2o_o
+  type(mct_aVect),  intent(inout) :: o2x_o
+  ! Local variables
+  type(ESMF_time) :: current_time
+  type(ESMF_timeInterval) :: time_interval
+  integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
+  logical :: write_restart_at_eod
+  type(time_type) :: time_start ! Start of coupled time interval to pass to MOM6
+  type(time_type) :: coupling_timestep ! Coupled time interval to pass to MOM6
+  character(len=128) :: err_msg
 
-!
-! !REVISION HISTORY:
-! Author: Mariana Vertenstein
-!EOP
-!-----------------------------------------------------------------------
-!
-!  local variables
-!
-!-----------------------------------------------------------------------
+  ! Might need to be in glb to live on heap
+  type(ice_ocean_boundary_type) :: Ice_ocean_boundary
 
-!-----------------------------------------------------------------------
-!EOC
+  ! Translate the current time (start of coupling interval)
+  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
+  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Debugging clocks
+  if (debug .and. is_root_pe()) then
+    write(6,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    write(6,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+  endif
+
+  ! Translate the coupling time interval
+  call ESMF_ClockGet(EClock, TimeStep=time_interval, rc=rc)
+  call ESMF_TimeIntervalGet(time_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+  time_start = set_date(year, month, day, 0, 0, seconds, err_msg=err_msg)
+  if (debug .and. is_root_pe()) then
+    write(6,*) 'ocn_run_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+  endif
+
+  ! set (actually, get from mct) the cdata pointers:
+  ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
+  call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
+
+  ! Check alarms for flag to write restart at end of day
+  write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
+  ! \todo Let MOM6 know to write restart...
+  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
+
+  !call ocn_imprt goes her
+
+  !call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
+  !                        time_start, coupling_timestep)
 
   end subroutine ocn_run_mct
 
