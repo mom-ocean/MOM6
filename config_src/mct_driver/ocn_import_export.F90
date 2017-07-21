@@ -5,12 +5,12 @@ module ocn_import_export
    save
 
    ! accumulated sum of send buffer quantities for averaging before being sent
-   !real (r8), dimension(:,:,:,:), allocatable ::  SBUFF_SUM 
-   !real (r8) :: tlast_coupled 
+   !real (r8), dimension(:,:,:,:), allocatable ::  SBUFF_SUM
+   !real (r8) :: tlast_coupled
 
    !TODO: update the types of following vars
-   double precision, dimension(:,:,:,:), allocatable ::  SBUFF_SUM 
-   double precision :: tlast_coupled 
+   double precision, dimension(:,:,:,:), allocatable ::  SBUFF_SUM
+   double precision :: tlast_coupled
 contains
 
 !***********************************************************************
@@ -25,7 +25,7 @@ contains
 !  This routine receives message from cpl7 driver
 !
 !    The following fields are always received from the coupler:
-! 
+!
 !    o  taux   -- zonal wind stress (taux)                 (W/m2   )
 !    o  tauy   -- meridonal wind stress (tauy)             (W/m2   )
 !    o  snow   -- water flux due to snow                   (kg/m2/s)
@@ -41,15 +41,15 @@ contains
 !    o  ifrac  -- ice fraction
 !    o  rofl   -- river runoff flux                        (kg/m2/s)
 !    o  rofi   -- ice runoff flux                          (kg/m2/s)
-! 
+!
 !    The following fields are sometimes received from the coupler,
 !      depending on model options:
-! 
+!
 !    o  pslv   -- sea-level pressure                       (Pa)
 !    o  duu10n -- 10m wind speed squared                   (m^2/s^2)
 !    o  co2prog-- bottom atm level prognostic co2
 !    o  co2diag-- bottom atm level diagnostic co2
-! 
+!
 !-----------------------------------------------------------------------
 !
 ! !REVISION HISTORY:
@@ -93,7 +93,7 @@ contains
 ! !IROUTINE: ocn_export_mct
 ! !INTERFACE:
 
- subroutine ocn_export(o2x, ldiag_cpl, errorCode)   
+ subroutine ocn_export(o2x, ldiag_cpl, errorCode)
 
 ! !DESCRIPTION:
 !  This routine calls the routines necessary to send MOM6 fields to
