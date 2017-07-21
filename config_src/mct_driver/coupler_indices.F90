@@ -1,11 +1,11 @@
 module coupler_indices
- 
+
   ! MCT types
   use mct_mod, only : mct_aVect
   ! MCT fucntions
   use mct_mod, only : mct_avect_indexra, mct_aVect_init, mct_aVect_clean
-  use seq_flds_mod, only : seq_flds_x2o_fields, seq_flds_o2x_fields 
-  use seq_flds_mod, only : seq_flds_i2o_per_cat, ice_ncat 
+  use seq_flds_mod, only : seq_flds_x2o_fields, seq_flds_o2x_fields
+  use seq_flds_mod, only : seq_flds_i2o_per_cat, ice_ncat
 
   ! MOM types
   use MOM_grid,       only : ocean_grid_type
@@ -25,7 +25,7 @@ module coupler_indices
 
     ! ocn -> drv
 
-    integer :: o2x_So_t      
+    integer :: o2x_So_t
     integer :: o2x_So_u
     integer :: o2x_So_v
     integer :: o2x_So_s
@@ -52,7 +52,7 @@ module coupler_indices
     integer :: x2o_Foxx_tauy       ! meridonal wind stress (tauy)     (W/m2   )
     integer :: x2o_Foxx_swnet      ! net short-wave heat flux         (W/m2   )
     integer :: x2o_Foxx_sen        ! sensible heat flux               (W/m2   )
-    integer :: x2o_Foxx_lat        
+    integer :: x2o_Foxx_lat
     integer :: x2o_Foxx_lwup       ! longwave radiation (up)          (W/m2   )
     integer :: x2o_Faxa_lwdn       ! longwave radiation (down)        (W/m2   )
     integer :: x2o_Fioi_melth      ! heat flux from snow & ice melt   (W/m2   )
@@ -62,7 +62,7 @@ module coupler_indices
     integer :: x2o_Fioi_flxdst     ! flux: dust release from sea ice component
     integer :: x2o_Fioi_salt       ! salt                             (kg(salt)/m2/s)
     integer :: x2o_Foxx_evap       ! evaporation flux                 (kg/m2/s)
-    integer :: x2o_Faxa_prec         
+    integer :: x2o_Faxa_prec
     integer :: x2o_Faxa_snow       ! water flux due to snow           (kg/m2/s)
     integer :: x2o_Faxa_rain       ! water flux due to rain           (kg/m2/s)
     integer :: x2o_Faxa_bcphidry   ! flux: Black   Carbon hydrophilic dry deposition
@@ -88,7 +88,7 @@ module coupler_indices
     integer, dimension(:), allocatable :: x2o_fracr_col     ! fraction of ocean cell used in radiation computations, per column
     integer, dimension(:), allocatable :: x2o_qsw_fracr_col ! qsw * fracr, per column
 
-    real, dimension(:,:,:),allocatable :: time_avg_sbuffer  !< time averages of send buffer 
+    real, dimension(:,:,:),allocatable :: time_avg_sbuffer  !< time averages of send buffer
     real                               :: accum_time        !< time for accumulation
 
   end type cpl_indices
@@ -109,7 +109,7 @@ contains
     integer          :: ncat  ! thickness category index
     character(len=2) :: cncat ! character version of ncat
     integer          :: ncol  ! column index
-    integer          :: mcog_ncols 
+    integer          :: mcog_ncols
     integer          :: lmcog_flds_sent
 
     ! Determine attribute vector indices
@@ -144,15 +144,15 @@ contains
     ind%x2o_Foxx_sen      = mct_avect_indexra(x2o,'Foxx_sen')
     ind%x2o_Foxx_lwup     = mct_avect_indexra(x2o,'Foxx_lwup')
     ind%x2o_Faxa_lwdn     = mct_avect_indexra(x2o,'Faxa_lwdn')
-    ind%x2o_Fioi_melth    = mct_avect_indexra(x2o,'Fioi_melth')   
+    ind%x2o_Fioi_melth    = mct_avect_indexra(x2o,'Fioi_melth')
     ind%x2o_Fioi_meltw    = mct_avect_indexra(x2o,'Fioi_meltw')
-    ind%x2o_Fioi_salt     = mct_avect_indexra(x2o,'Fioi_salt')   
+    ind%x2o_Fioi_salt     = mct_avect_indexra(x2o,'Fioi_salt')
     ind%x2o_Fioi_bcpho    = mct_avect_indexra(x2o,'Fioi_bcpho')
     ind%x2o_Fioi_bcphi    = mct_avect_indexra(x2o,'Fioi_bcphi')
     ind%x2o_Fioi_flxdst   = mct_avect_indexra(x2o,'Fioi_flxdst')
-    ind%x2o_Faxa_prec     = mct_avect_indexra(x2o,'Faxa_prec')   
-    ind%x2o_Faxa_snow     = mct_avect_indexra(x2o,'Faxa_snow')   
-    ind%x2o_Faxa_rain     = mct_avect_indexra(x2o,'Faxa_rain')   
+    ind%x2o_Faxa_prec     = mct_avect_indexra(x2o,'Faxa_prec')
+    ind%x2o_Faxa_snow     = mct_avect_indexra(x2o,'Faxa_snow')
+    ind%x2o_Faxa_rain     = mct_avect_indexra(x2o,'Faxa_rain')
     ind%x2o_Foxx_evap     = mct_avect_indexra(x2o,'Foxx_evap')
     ind%x2o_Foxx_rofl     = mct_avect_indexra(x2o,'Foxx_rofl')
     ind%x2o_Foxx_rofi     = mct_avect_indexra(x2o,'Foxx_rofi')
@@ -220,9 +220,9 @@ contains
 
   end subroutine alloc_sbuffer
 
- 
+
   subroutine time_avg_state(ind, grid, surf_state, dt, reset, last)
-  
+
     type(cpl_indices), intent(inout)      :: ind        !< module control structure
     type(ocean_grid_type), intent(inout)  :: grid       !< ocean grid (inout in order to do halo update)
     type(surface), intent(in)             :: surf_state !< ocean surface state
@@ -231,7 +231,7 @@ contains
     logical, optional, intent(in)         :: last       !< if present and true, divide by accumulated time
 
     ! local variables
-    integer :: i,j,nvar  
+    integer :: i,j,nvar
     real    :: rtime, slp_L, slp_R, slp_C, u_min, u_max, slope
     real, dimension(grid%isd:grid%ied, grid%jsd:grid%jed) :: ssh
 
@@ -240,30 +240,30 @@ contains
         ind%time_avg_sbuffer(:,:,:) = 0.
         ind%accum_time = 0.
       end if
-    end if 
+    end if
 
     ! sst
-    nvar = ind%o2x_So_t 
+    nvar = ind%o2x_So_t
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * surf_state%sst(i,j)
     end do; end do
 
     ! sss
-    nvar = ind%o2x_So_s 
+    nvar = ind%o2x_So_s
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * surf_state%sss(i,j)
     end do; end do
-  
+
 
     ! u
-    nvar = ind%o2x_So_u 
+    nvar = ind%o2x_So_u
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * &
                                           0.5*(surf_state%u(I,j)+surf_state%u(I-1,j))
     end do; end do
-    
+
     ! v
-    nvar = ind%o2x_So_v 
+    nvar = ind%o2x_So_v
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar)+dt * &
                                           0.5*(surf_state%v(i,J)+surf_state%v(i,J-1))
@@ -274,7 +274,7 @@ contains
       ssh(i,j) = surf_state%sea_lev(i,j)
     end do; end do
     call pass_var(ssh, grid%domain)
-      
+
     ! d/dx ssh
     nvar = ind%o2x_So_dhdx
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
@@ -298,7 +298,7 @@ contains
       end if
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
     end do; end do
-    
+
     ! d/dy ssh
     nvar = ind%o2x_So_dhdy
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
@@ -322,9 +322,9 @@ contains
       end if
       ind%time_avg_sbuffer(i,j,nvar) = ind%time_avg_sbuffer(i,j,nvar) + dt * slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
     end do; end do
-    
+
     ! Divide by total accumulated time
-    ind%accum_time = ind%accum_time + dt  
+    ind%accum_time = ind%accum_time + dt
     if (present(last)) then
 
       !! \todo Do dhdx,dhdy need to be rotated before sending to the coupler?
@@ -332,7 +332,7 @@ contains
 
       rtime = 1./ind%accum_time
       if (last) ind%time_avg_sbuffer(:,:,:) = ind%time_avg_sbuffer(:,:,:) * rtime
-    end if 
+    end if
 
   end subroutine time_avg_state
 
@@ -344,7 +344,7 @@ contains
     real(kind=8), intent(inout)       :: o2x(:,:)
 
     integer :: i, j, n
-     
+
     n = 0
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       n = n+1
