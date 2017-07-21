@@ -43,7 +43,7 @@ module ocn_comp_mct
   use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
   use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
   use coupler_indices,    only: coupler_indices_init, cpl_indices, alloc_sbuffer, time_avg_state
-  use ocn_import_export,  only: ocn_Export 
+  use ocn_import_export,  only: ocn_Export
 
 !
 ! !PUBLIC MEMBER FUNCTIONS:
@@ -66,7 +66,7 @@ module ocn_comp_mct
   private :: ocn_domain_mct
 
 ! !PRIVATE MODULE VARIABLES
-  type MCT_MOM_Data 
+  type MCT_MOM_Data
     type(ocean_state_type), pointer  :: ocn_state => NULL()   !< Private state of ocean
     type(ocean_public_type), pointer :: ocn_public => NULL()  !< Public state of ocean
     type(ocean_grid_type), pointer   :: grid => NULL() ! A pointer to a grid structure
@@ -76,7 +76,7 @@ module ocn_comp_mct
 
     type(cpl_indices), public :: ind !< Variable IDs
 
-  end type 
+  end type
   type(MCT_MOM_Data) :: glb
 
 !=======================================================================
@@ -263,7 +263,7 @@ contains
   if (debug .and. root_pe().eq.pe_here()) print *, "calling alloc_sbuffer()", nsend
 
   call alloc_sbuffer(glb%ind,glb%grid,nsend)
-  
+
 
   ! initialize necessary coupling info
 
@@ -284,7 +284,7 @@ contains
   ! end if
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling momo_sum_buffer"
-  
+
   ! Reset time average of send buffer
   call time_avg_state(glb%ind, glb%grid, glb%ocn_surface, 1., reset=.true., last=.true.)
 
