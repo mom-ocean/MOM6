@@ -36,6 +36,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: nsurf  ! Number of neutral surfaces
   logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
   logical :: boundary_extrapolation = .false.
+  logical :: refine_position = .true.
 
   real,    allocatable, dimension(:,:,:) :: uPoL  ! Non-dimensional position with left layer uKoL-1, u-point
   real,    allocatable, dimension(:,:,:) :: uPoR  ! Non-dimensional position with right layer uKoR-1, u-point
@@ -1148,6 +1149,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, Pres_l, Tl, Sl, dRdT
         KoL(k_surface) = kl_left
         call search_other_column_discontinuous(dRhoTop, dRhoBot, same_direction, lastP_left, lastK_left, &
                                  Pl(kl_left,1), Pl(kl_left,2), ki_left, ki_right, kl_left, PoL(k_surface))
+        ! If requested and if the surface connects somewhere in the layer, iterate to find the 'true' neutral position
+        if (PoL(k_surface) > 0. .and. PoL(k_surface) < 1.) then
+
+        endif
+
       endif
       KoR(k_surface) = kl_right
       PoR(k_surface) = REAL(ki_right-1)
@@ -1369,7 +1375,73 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
+!> Uses a Newton-Rhapson routine to find where dRho = 0, based on the equation of state and the polynomial
+!! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
+!! profiles of dRho, T, and S, between the top and bottom interface
+real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0)
+  real,                 intent(in   ) :: T_ref     !< Temperature of the neutral surface at the searched from interface
+  real,                 intent(in   ) :: S_ref     !< Salinity of the neutral surface at the searched from interface
+  real,                 intent(in   ) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
+  real,                 intent(in   ) :: beta_ref  !< dRho/dS of the neutral surface at the searched from interface
+  real,                 intent(in   ) :: P_top     !< Pressure at the top interface in the layer to be searched
+  real,                 intent(in   ) :: P_bot     !< Pressure at the bottom interface in the layer to be searched
+  integer,              intent(in   ) :: deg       !< Order of the polynomimal used for reconstructions
+  real, dimension(deg), intent(in   ) :: ppoly_T   !< Coefficients of the order N polynomial reconstruction of T within
+                                                   !! the layer to be searched.
+  real, dimension(deg), intent(in   ) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
+                                                   !! the layer to be searched.
+  real,                 intent(in   ) :: x0        !< Nondimensional position within the layer where the neutral
+                                                   !! surface connects. If interpolate_for_nondim_position was
+                                                   !! previously called, this would be based on linear profile of dRho
+  ! Local variables
+  real, parameter    :: max_tolerance = 1.e-10
+  integer, parameter :: max_iter = 10
+  integer :: iter
+  real :: T, S, alpha, beta, d_alpha_dP, d_beta_dP, P_at_x0
 
+  iter = 1
+  tolerance = max_tolerance*2
+
+  do while ( (iter < max_iter) .and. (tolerance > max_tolerance) )
+
+    P_at_x0 = (1. - x0)*P_top + x0*P_bot ! Linearly interpolate for pressure at nondimensional position x0
+    T = evaluation_polynomial( ppoly_T, deg, x0 )
+    S = evaluation_polynomial( ppoly_S, deg, x0 )
+    call density_second_derivs_wrt_P( S, T, P, alpha, beta, d_alpha_dP, d_beta_dP )
+    x0 = x0 - delta_rho( T, S, alpha, beta, T_ref, S_ref, alpha_ref, beta_ref )/d_delta_rho_dP(
+
+  enddo
+
+end function refine_nondim_position
+
+!> Calculate the difference in neutral density between two points based on
+!! delta_rho = alpha*delta_T + beta*delta_S
+function delta_rho(T0, S0, alpha0, beta0, T1, S1, alpha1, beta1)
+  real, intent(in) :: T0     !< Temperature of neutral surface 0
+  real, intent(in) :: S0     !< Salinity of neutral surface 0
+  real, intent(in) :: alpha0 !< dRho/dT of neutral surface 0
+  real, intent(in) :: beta0  !< dRho/dS of neutral surface 0
+  real, intent(in) :: T1     !< Temperature of neutral surface 1
+  real, intent(in) :: S1     !< Salinity of neutral surface 1
+  real, intent(in) :: alpha1 !< dRho/dT of neutral surface 1
+  real, intent(in) :: beta1  !< dRho/dS of neutral surface 1
+
+  delta_rho = 0.5 * ( (alpha0+alpha1)*(T0 - T1) + (beta0+beta1)(S0-S1))
+
+end function delta_rho
+
+!> Calculate the total first derivative of delta rho with respect to pressure
+function d_delta_rho_dP(delta_T, delta_S, alpha, beta, d_alpha_dP, d_beta_dP, dT_dP, dS_dP)
+  real, intent(in) :: delta_T    !< Diference in temperature between two neutral surfaces
+  real, intent(in) :: delta_S    !< Diference in salinity between two neutral surfaces
+  real, intent(in) :: alpha_avg  !< Average of dRho/dT between two neutral surfaces
+  real, intent(in) :: beta_avg   !< Average of dRho/dS between two neutral surfaces
+  real, intent(in) :: d_alpha_dP !< d(alpha)/dP between two neutral surfaces
+  real, intent(in) :: d_beta_dP  !< d(beta)/dP dRho/dT between two neutral surfaces
+  real, intent(in) :: dT_dP      !< Derivative of temperature wrt pressure
+  real, intent(in) :: dS_dP      !< Derivative of salinity wrt pressure
+
+end function d_delta_rho_dP
 !> Returns a single column of neutral diffusion fluxes of a tracer.
 subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
   integer,                      intent(in)    :: nk    !< Number of levels
@@ -1378,8 +1450,10 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
   real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness (Pa)
   real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
   real, dimension(nk),          intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
-  real, dimension(nsurf),       intent(in)    :: PiL   !< Fractional position of neutral surface within layer KoL of left column
-  real, dimension(nsurf),       intent(in)    :: PiR   !< Fractional position of neutral surface within layer KoR of right column
+  real, dimension(nsurf),       intent(in)    :: PiL   !< Fractional position of neutral surface
+                                                       !! within layer KoL of left column
+  real, dimension(nsurf),       intent(in)    :: PiR   !< Fractional position of neutral surface
+                                                       !! within layer KoR of right column
   integer, dimension(nsurf),    intent(in)    :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(nsurf),    intent(in)    :: KoR   !< Index of first right interface above neutral surface
   real, dimension(nsurf-1),     intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
@@ -1465,22 +1539,22 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
         if (klt .ne. klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
         T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
         T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
+        T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
+                                           PiL(k_sublayer), PiL(k_sublayer+1))
 !        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
 !        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
-!        T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
-!                                           PiL(k_sublayer), PiL(k_sublayer+1))
-        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
+!        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
 
         krb = KoR(k_sublayer+1)
         krt = KoR(k_sublayer)
         if (krt .ne. krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
         T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
         T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
+        T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
+                                            PiR(k_sublayer), PiL(k_sublayer+1))
 !        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
 !        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
-!        T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
-!                                            PiR(k_sublayer), PiL(k_sublayer+1))
-        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
+!        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
       endif
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
