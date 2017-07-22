@@ -33,8 +33,10 @@ use gsw_mod_toolbox, only : gsw_rho_second_derivatives
 implicit none ; private
 
 public calculate_compress_teos10, calculate_density_teos10
-public calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
-public calculate_density_second_derivs_teos10
+public calculate_density_derivs_teos10, calculate_density_derivs_scalar_teos10
+public calculate_specvol_derivs_teos10
+public calculate_density_second_derivs_teos10, calculate_density_second_derivs_wrt_P_scalar_teos10
+public calculate_density_second_derivs_wrt_P_teos10
 public calculate_density_scalar_teos10, calculate_density_array_teos10
 public gsw_sp_from_sr, gsw_pt_from_ct
 
@@ -133,6 +135,19 @@ subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, sta
 
 end subroutine calculate_density_derivs_teos10
 
+subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_dS)
+  real,    intent(in)  ::  T, S, pressure
+  real,    intent(out) :: drho_dT, drho_dS
+  ! Local variables
+  real :: zs,zt,zp
+  !Conversions
+  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
+  zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
+  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
+  if(S.lt.-1.0e-10) return !Can we assume safely that this is a missing value?
+  call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS, drho_dct=drho_dT)
+end subroutine calculate_density_derivs_scalar_teos10
+
 subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),  dimension(:) ::  T, S, pressure
   real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
@@ -187,11 +202,49 @@ subroutine calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, dr
     zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
     if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
-    call gsw_rho_second_derivatives (zs, zt, zp, rho_sa_sa=drho_dS_dS(j), rho_sa_ct=drho_dS_dT(j), &
+    call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS(j), rho_sa_ct=drho_dS_dT(j), &
                                      rho_ct_ct=drho_dT_dT(j), rho_sa_p=drho_dS_dP(j), rho_ct_p=drho_dT_dP(j))
   enddo
 
 end subroutine calculate_density_second_derivs_teos10
+
+!> Calculates the second derivatives of alpha and beta with respect to pressure
+subroutine calculate_density_second_derivs_wrt_P_teos10(T, S, pressure, drho_dS_dP, drho_dT_dP, start, npts)
+  real,    intent(in),  dimension(:) ::  T, S, pressure
+  real, dimension(:), intent(out)    :: drho_dS_dP !< Partial derivative of beta with respect to pressure
+  real, dimension(:), intent(out)    :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
+  ! Local variables
+  integer, intent(in)                :: start, npts
+  real :: zs,zt,zp
+  integer :: j
+
+  do j=start,start+npts-1
+    !Conversions
+    zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
+    if(S(j).lt.-1.0e-10) cycle !Can we assume safely that this is a missing value?
+    call gsw_rho_second_derivatives (zs, zt, zp, rho_sa_p=drho_dS_dP(j), rho_ct_p=drho_dT_dP(j))
+  enddo
+
+end subroutine calculate_density_second_derivs_wrt_P_teos10
+
+!> Calculates the second derivatives of alpha and beta with respect to pressure
+subroutine calculate_density_second_derivs_wrt_P_scalar_teos10(T, S, pressure, drho_dS_dP, drho_dT_dP)
+  real, intent(in)  ::  T, S, pressure
+  real, intent(out) :: drho_dS_dP !< Partial derivative of beta with respect to pressure
+  real, intent(out) :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
+  ! Local variables
+  real :: zs,zt,zp
+
+  !Conversions
+  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
+  zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
+  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
+  call gsw_rho_second_derivatives (zs, zt, zp, rho_sa_p=drho_dS_dP, rho_ct_p=drho_dT_dP)
+
+end subroutine calculate_density_second_derivs_wrt_P_scalar_teos10
+
 
 subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T, S, pressure
