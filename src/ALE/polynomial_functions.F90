@@ -78,7 +78,7 @@ real function first_derivative_polynomial( coefficients, nb_coefficients, x )
     f = f + REAL(k-1)*coefficients(k) * ( x**(k-2) )
   end do
 
-  evaluation_polynomial = f
+  first_derivative_polynomial = f
 
 end function first_derivative_polynomial
 

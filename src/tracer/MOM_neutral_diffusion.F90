@@ -3,22 +3,23 @@ module MOM_neutral_diffusion
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock,      only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,      only : CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_diag_mediator,  only : diag_ctrl, time_type
-use MOM_diag_mediator,  only : post_data, register_diag_field
-use MOM_EOS,            only : EOS_type, calculate_compress, calculate_density_derivs
-use MOM_error_handler,  only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser,    only : get_param, log_version, param_file_type
-use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
-use MOM_grid,           only : ocean_grid_type
-use MOM_remapping,      only : remapping_CS, initialize_remapping, build_reconstructions_1d
-use MOM_remapping,      only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
-use MOM_tracer_registry,only : tracer_registry_type
-use MOM_verticalGrid,   only : verticalGrid_type
-use polynomial_functions, only : evaluation_polynomial
-use PPM_functions,      only : PPM_reconstruction, PPM_boundary_extrapolation
-use regrid_edge_values, only : edge_values_implicit_h4
+use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diag_mediator,    only : diag_ctrl, time_type
+use MOM_diag_mediator,    only : post_data, register_diag_field
+use MOM_EOS,              only : EOS_type, calculate_compress, calculate_density_derivs
+use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_wrt_P_scalar
+use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
+use MOM_file_parser,      only : get_param, log_version, param_file_type
+use MOM_file_parser,      only : openParameterBlock, closeParameterBlock
+use MOM_grid,             only : ocean_grid_type
+use MOM_remapping,        only : remapping_CS, initialize_remapping, build_reconstructions_1d
+use MOM_remapping,        only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
+use MOM_tracer_registry,  only : tracer_registry_type
+use MOM_verticalGrid,     only : verticalGrid_type
+use polynomial_functions, only : evaluation_polynomial, first_derivative_polynomial
+use PPM_functions,        only : PPM_reconstruction, PPM_boundary_extrapolation
+use regrid_edge_values,   only : edge_values_implicit_h4
 
 implicit none ; private
 
@@ -1378,45 +1379,68 @@ end function interpolate_for_nondim_position
 !> Uses a Newton-Rhapson routine to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
 !! profiles of dRho, T, and S, between the top and bottom interface
-real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0)
-  real,                 intent(in   ) :: T_ref     !< Temperature of the neutral surface at the searched from interface
-  real,                 intent(in   ) :: S_ref     !< Salinity of the neutral surface at the searched from interface
-  real,                 intent(in   ) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
-  real,                 intent(in   ) :: beta_ref  !< dRho/dS of the neutral surface at the searched from interface
-  real,                 intent(in   ) :: P_top     !< Pressure at the top interface in the layer to be searched
-  real,                 intent(in   ) :: P_bot     !< Pressure at the bottom interface in the layer to be searched
-  integer,              intent(in   ) :: deg       !< Order of the polynomimal used for reconstructions
-  real, dimension(deg), intent(in   ) :: ppoly_T   !< Coefficients of the order N polynomial reconstruction of T within
-                                                   !! the layer to be searched.
-  real, dimension(deg), intent(in   ) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
-                                                   !! the layer to be searched.
-  real,                 intent(in   ) :: x0        !< Nondimensional position within the layer where the neutral
-                                                   !! surface connects. If interpolate_for_nondim_position was
-                                                   !! previously called, this would be based on linear profile of dRho
+real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, ppoly_T, ppoly_S, x0)
+  real,               intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
+  real,               intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
+  real,               intent(in) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
+  real,               intent(in) :: beta_ref  !< dRho/dS of the neutral surface at the searched from interface
+  real,               intent(in) :: P_top     !< Pressure at the top interface in the layer to be searched
+  real,               intent(in) :: P_bot     !< Pressure at the bottom interface in the layer to be searched
+  integer,            intent(in) :: deg       !< Order of the polynomimal used for reconstructions
+  real, dimension(:), intent(in) :: ppoly_T   !< Coefficients of the order N polynomial reconstruction of T within
+                                              !! the layer to be searched.
+  real, dimension(:), intent(in) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
+                                              !! the layer to be searched.
+  real,               intent(in) :: x0        !< Nondimensional position within the layer where the neutral
+                                              !! surface connects. If interpolate_for_nondim_position was
+                                              !! previously called, this would be based on linear profile of dRho
+  type(EOS_type),     pointer    :: EOS       !< Equation of state structure
   ! Local variables
   real, parameter    :: max_tolerance = 1.e-10
   integer, parameter :: max_iter = 10
   integer :: iter
-  real :: T, S, alpha, beta, d_alpha_dP, d_beta_dP, P_at_x0
+  real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
+  real :: P_int ! Interpolated pressure
+  real :: T, S, alpha, beta, alpha_avg, beta_avg, d_alpha_dP, d_beta_dP, dT_dP, dS_dP, delta_T, delta_S
 
-  iter = 1
-  tolerance = max_tolerance*2
+  refine_nondim_position = x0
 
-  do while ( (iter < max_iter) .and. (tolerance > max_tolerance) )
+  ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
+  do iter = 1, max_iter
 
-    P_at_x0 = (1. - x0)*P_top + x0*P_bot ! Linearly interpolate for pressure at nondimensional position x0
-    T = evaluation_polynomial( ppoly_T, deg, x0 )
-    S = evaluation_polynomial( ppoly_S, deg, x0 )
-    call density_second_derivs_wrt_P( S, T, P, alpha, beta, d_alpha_dP, d_beta_dP )
-    x0 = x0 - delta_rho( T, S, alpha, beta, T_ref, S_ref, alpha_ref, beta_ref )/d_delta_rho_dP(
+    ! Linearly interpolate for pressure at nondimensional position x0
+    P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot 
+    
+    ! Calculate the f(P) term for Newton's method
+    call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+    T = evaluation_polynomial( ppoly_T, deg, refine_nondim_position )
+    S = evaluation_polynomial( ppoly_S, deg, refine_nondim_position )
+    alpha_avg = 0.5 * ( alpha + alpha_ref )
+    beta_avg = 0.5 * ( beta + beta_ref )
+    delta_T = T - T_ref
+    delta_S = S - S_ref
+    delta_rho = alpha_avg*delta_T + beta_avg*delta_S 
+    if (delta_rho<max_tolerance) exit
+
+    ! Calculate the f'(P) term for Newton's method
+    call calculate_density_second_derivs_wrt_P_scalar( T, S, P_int, d_alpha_dP, d_beta_dP, EOS )
+    dT_dP = first_derivative_polynomial( ppoly_T, deg, refine_nondim_position ) 
+    dS_dP = first_derivative_polynomial( ppoly_S, deg, refine_nondim_position )
+    ! Calculate the total derivative of delta_rho.
+    ! Note because delta_rho = alpha_avg * deltaT + beta_avg * deltaS where alpha_avg = 0.5*(alpha+alpha_ref),
+    ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well
+    d_delta_rho_dP = 0.5 * (d_alpha_dP*delta_T + d_beta_dP*delta_S) + alpha_avg*dT_dP + beta_avg*dS_dP
+
+    ! Newton step update
+    refine_nondim_position = refine_nondim_position - delta_rho / d_delta_rho_dP
 
   enddo
-
+  refine_nondim_position = x0
 end function refine_nondim_position
 
 !> Calculate the difference in neutral density between two points based on
 !! delta_rho = alpha*delta_T + beta*delta_S
-function delta_rho(T0, S0, alpha0, beta0, T1, S1, alpha1, beta1)
+real function calc_delta_rho(T0, S0, alpha0, beta0, T1, S1, alpha1, beta1)
   real, intent(in) :: T0     !< Temperature of neutral surface 0
   real, intent(in) :: S0     !< Salinity of neutral surface 0
   real, intent(in) :: alpha0 !< dRho/dT of neutral surface 0
@@ -1426,22 +1450,10 @@ function delta_rho(T0, S0, alpha0, beta0, T1, S1, alpha1, beta1)
   real, intent(in) :: alpha1 !< dRho/dT of neutral surface 1
   real, intent(in) :: beta1  !< dRho/dS of neutral surface 1
 
-  delta_rho = 0.5 * ( (alpha0+alpha1)*(T0 - T1) + (beta0+beta1)(S0-S1))
+  calc_delta_rho = 0.5 * ( (alpha0+alpha1)*(T0 - T1) + (beta0+beta1)*(S0-S1) )
 
-end function delta_rho
+end function calc_delta_rho
 
-!> Calculate the total first derivative of delta rho with respect to pressure
-function d_delta_rho_dP(delta_T, delta_S, alpha, beta, d_alpha_dP, d_beta_dP, dT_dP, dS_dP)
-  real, intent(in) :: delta_T    !< Diference in temperature between two neutral surfaces
-  real, intent(in) :: delta_S    !< Diference in salinity between two neutral surfaces
-  real, intent(in) :: alpha_avg  !< Average of dRho/dT between two neutral surfaces
-  real, intent(in) :: beta_avg   !< Average of dRho/dS between two neutral surfaces
-  real, intent(in) :: d_alpha_dP !< d(alpha)/dP between two neutral surfaces
-  real, intent(in) :: d_beta_dP  !< d(beta)/dP dRho/dT between two neutral surfaces
-  real, intent(in) :: dT_dP      !< Derivative of temperature wrt pressure
-  real, intent(in) :: dS_dP      !< Derivative of salinity wrt pressure
-
-end function d_delta_rho_dP
 !> Returns a single column of neutral diffusion fluxes of a tracer.
 subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
   integer,                      intent(in)    :: nk    !< Number of levels
