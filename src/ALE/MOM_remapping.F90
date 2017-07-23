@@ -37,7 +37,7 @@ end type
 
 ! The following routines are visible to the outside world
 public remapping_core_h, remapping_core_w
-public initialize_remapping, end_remapping, remapping_set_param
+public initialize_remapping, end_remapping, remapping_set_param, extract_member_remapping_CS
 public remapping_unit_tests, build_reconstructions_1d, average_value_ppoly
 public dzFromH1H2
 
@@ -109,6 +109,26 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
   endif
 end subroutine remapping_set_param
 
+subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_extrapolation, check_reconstruction, &
+                                       check_remapping, force_bounds_in_subcell)
+  type(remapping_CS), intent(in) :: CS !< Control structure for remapping module
+  integer, optional, intent(out) :: remapping_scheme        !< Determines which reconstruction scheme to use
+  integer, optional, intent(out) :: degree                  !< Degree of polynomial reconstruction
+  logical, optional, intent(out) :: boundary_extrapolation  !< If true, extrapolate boundaries
+  logical, optional, intent(out) :: check_reconstruction    !< If true, reconstructions are checked for consistency.
+  logical, optional, intent(out) :: check_remapping         !< If true, the result of remapping are checked
+                                                            !!  for conservation and bounds.
+  logical, optional, intent(out) :: force_bounds_in_subcell !< If true, the intermediate values used in
+                                                            !! remapping are forced to be bounded.
+
+  if (present(remapping_scheme)) remapping_scheme = CS%remapping_scheme
+  if (present(degree)) degree = CS%degree
+  if (present(boundary_extrapolation)) boundary_extrapolation = CS%boundary_extrapolation
+  if (present(check_reconstruction)) check_reconstruction = CS%check_reconstruction
+  if (present(check_remapping)) check_remapping = CS%check_remapping
+  if (present(force_bounds_in_subcell)) force_bounds_in_subcell = CS%force_bounds_in_subcell
+
+end subroutine extract_member_remapping_CS
 !> Calculate edge coordinate x from cell width h
 subroutine buildGridFromH(nz, h, x)
   integer,               intent(in)    :: nz !< Number of cells
