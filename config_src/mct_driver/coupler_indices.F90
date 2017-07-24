@@ -9,6 +9,7 @@ module coupler_indices
 
   ! MOM types
   use MOM_grid,       only : ocean_grid_type
+  use MOM_surface_forcing, only: ice_ocean_boundary_type
   ! MOM functions
   use MOM_domains,    only : pass_var
   use MOM_variables,  only : surface
@@ -20,6 +21,7 @@ module coupler_indices
   public alloc_sbuffer
   public coupler_indices_init
   public time_avg_state
+  public fill_ice_ocean_bnd
 
   type, public :: cpl_indices
 
@@ -358,4 +360,78 @@ contains
 
   end subroutine ocn_export
 
+
+  subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind)
+    type(ice_ocean_boundary_type), intent(in)   :: ice_ocean_boundary !< A type for the ice ocean boundary
+    type(ocean_grid_type), intent(in)           :: grid
+    !type(mct_aVect), intent(in)                 :: x2o_o
+    real(kind=8), intent(in)                 :: x2o_o(:,:)
+    type(cpl_indices), intent(inout)            :: ind
+
+    ! local variables
+    integer           :: i, j, k, var
+
+    ! variable that are not in ice_ocean_boundary:
+    ! latent (x2o_Foxx_lat)
+    ! surface Stokes drift, x-comp. (x2o_Sw_ustokes) 
+    ! surface Stokes drift, y-comp. (x2o_Sw_vstokes) 
+    ! wave model langmuir multiplier (x2o_Sw_lamult)
+
+    ! biogeochemistry
+    ! Black Carbon hydrophobic release from sea ice component (x2o_Fioi_bcpho)
+    ! Black Carbon hydrophilic release from sea ice component (x2o_Fioi_bcphi)
+    ! dust release from sea ice component (x2o_Fioi_flxdst) 
+    ! Black Carbon hydrophilic dry deposition (x2o_Faxa_bcphidry)
+    ! Black Carbon hydrophobic dry deposition (x2o_Faxa_bcphodry)
+    ! Black Carbon hydrophobic wet deposition (x2o_Faxa_bcphiwet)
+    ! Organic Carbon hydrophilic dry deposition (x2o_Faxa_ocphidry)
+    ! Organic Carbon hydrophobic dry deposition (x2o_Faxa_ocphodry)
+    ! Organic Carbon hydrophilic dry deposition (x2o_Faxa_ocphiwet)
+    ! Sizes 1 to 4 dust - wet deposition (x2o_Faxa_dstwet?)
+    ! Sizes 1 to 4 dust - dry deposition (x2o_Faxa_dstdry?)
+    
+
+    ! need wind_stress_multiplier?
+
+    write(*,*) 'max. k is:', (grid%jec-grid%jsc) * (grid%iec-grid%isc) 
+    ! zonal wind stress (taux)
+    var = ind%x2o_Foxx_taux 
+    write(*,*) 'taux', SIZE(x2o_o(:,var))
+    write(*,*) 'ice_ocean_boundary%u_flux', SIZE(ice_ocean_boundary%u_flux(:,:))
+    k = 0
+    do j = grid%jsc, grid%jec
+      do i = grid%isc, grid%iec
+        k = k + 1 ! Increment position within gindex
+        ! zonal wind stress (taux)
+        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_taux)
+        ! meridional wind stress (tauy)
+        ice_ocean_boundary%v_flux(i,j) = x2o_o(k,ind%x2o_Foxx_tauy)
+        ! sensible heat flux
+        ice_ocean_boundary%t_flux(i,j) = x2o_o(k,ind%x2o_Foxx_sen)  
+        ! salt flux
+        ice_ocean_boundary%salt_flux(i,j) = x2o_o(k,ind%x2o_Fioi_salt)
+        ! heat flux from snow & ice melt
+        ice_ocean_boundary%calving_hflx(i,j) = x2o_o(k,ind%x2o_Fioi_melth)
+        ! snow melt flux
+        ice_ocean_boundary%fprec(i,j) = x2o_o(k,ind%x2o_Fioi_meltw)  
+        ! river runoff flux
+        ice_ocean_boundary%runoff(i,j) = x2o_o(k,ind%x2o_Foxx_rofl)
+        ! ice runoff flux
+        ice_ocean_boundary%calving(i,j) = x2o_o(k,ind%x2o_Foxx_rofi)
+        ! liquid precipitation (rain)
+        ice_ocean_boundary%lprec(i,j) = x2o_o(k,ind%x2o_Faxa_rain)
+        ! froze precipitation (snow)
+        ice_ocean_boundary%fprec(i,j) = x2o_o(k,ind%x2o_Faxa_snow)
+        !!!!!!! LONGWAVE NEEDS TO BE FIXED !!!!!!!
+        ! longwave radiation (up)
+        ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Foxx_lwup)
+        ! longwave radiation (down)
+        ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Faxa_lwdn)
+        !!!!!!! SHORTWAVE NEEDS TO BE COMBINED !!!!!!!
+        ! net short-wave heat flux
+        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_swnet) 
+      enddo
+    enddo
+
+  end subroutine fill_ice_ocean_bnd
 end module coupler_indices
