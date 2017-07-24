@@ -996,7 +996,7 @@ end subroutine mixedlayer_restrat_register_restarts
 !! \f[
 !!    \bar{H} \leftarrow \max \left( H, \frac{ \Delta t H + \tau_h \bar{H} }{ \Delta t + \tau_h } \right)
 !! \f]
-!! which allows the effective mixed-layer depth seen by the parameterization, $\bar{H}$, to instantaneously deepen
+!! which allows the effective mixed-layer depth seen by the parameterization, \f$\bar{H}\f$, to instantaneously deepen
 !! but to decay with time-scale \f$ \tau_h \f$.
 !! \f$ \bar{H} \f$ is substituted for \f$ H \f$ in the above equations.
 !!
