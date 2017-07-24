@@ -80,6 +80,8 @@ The file MOM_memory_macros.h provides the macros `SZI_`, `SZJ_`, `SZIB_` and `SZ
 - `real, dimension(SZI_(HI), SZJB_(HI)) :: Dv !< Depth at v-points (m)`
 - `real, dimension(SZIB_(HI), SZJB_(HI)) :: Dq !< Depth at q-points (m)`
 
+See MOM_memory_macros.h for the complete list of macros used in various memory modes.
+
 \section Global_index Calculating a global index
 
 For the most part MOM6 code should be independent of an equivalent absolute global index.

@@ -206,11 +206,17 @@ real,    intent(out) :: rho
   call calculate_density_array_nemo(T0, S0, pressure0, rho0, 1, 1)
   rho = rho0(1)
 end subroutine calculate_density_scalar_nemo
-
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from absolute salinity (S in g/Kg),
+!! conservative temperature (T in deg C), and pressure in Pa.
 subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T     !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S     !< Absoulte salinity in g/Kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho   !< In situ density in kg m-3.
+  integer, intent(in)                :: start !< The starting point in the arrays.
+  integer, intent(in)                :: npts  !< The number of values to calculate.
+
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absoulte salinity in g/Kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -269,9 +275,15 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
 end subroutine calculate_density_array_nemo
 
 subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: drho_dT, drho_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature, in kg m-3 K-1.
+  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in kg m-3 psu-1.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -343,9 +355,15 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
 end subroutine calculate_density_derivs_nemo
 
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho, drho_dp
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
+                                                 !! (also the inverse of the square of sound speed)
+                                                 !! in s2 m-2.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
