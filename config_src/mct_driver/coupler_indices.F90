@@ -11,7 +11,7 @@ module coupler_indices
   use MOM_grid,       only : ocean_grid_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   ! MOM functions
-  use MOM_domains,    only : pass_var
+  use MOM_domains,    only : pass_var, AGRID
   use ocean_model_mod, only : ocean_public_type
 
   implicit none
@@ -332,35 +332,37 @@ contains
         k = k + 1 ! Increment position within gindex
         ig = i + grid%idg_offset
         ! zonal wind stress (taux)
-        ice_ocean_boundary%u_flux(i,j) = x2o_o(ind%x2o_Foxx_taux,k)
+        ice_ocean_boundary%u_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_taux,k)
         ! meridional wind stress (tauy)
-        ice_ocean_boundary%v_flux(i,j) = x2o_o(ind%x2o_Foxx_tauy,k)
+        ice_ocean_boundary%v_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_tauy,k)
         ! sensible heat flux
-        ice_ocean_boundary%t_flux(i,j) = x2o_o(ind%x2o_Foxx_sen,k)
+        ice_ocean_boundary%t_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_sen,k)
         ! salt flux
-        ice_ocean_boundary%salt_flux(i,j) = x2o_o(ind%x2o_Fioi_salt,k)
+        ice_ocean_boundary%salt_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_salt,k)
         ! heat flux from snow & ice melt
-        ice_ocean_boundary%calving_hflx(i,j) = x2o_o(ind%x2o_Fioi_melth,k)
+        ice_ocean_boundary%calving_hflx(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_melth,k)
         ! snow melt flux
-        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Fioi_meltw,k)
+        ice_ocean_boundary%fprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_meltw,k)
         ! river runoff flux
-        ice_ocean_boundary%runoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k)
+        ice_ocean_boundary%runoff(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_rofl,k)
         ! ice runoff flux
-        ice_ocean_boundary%calving(i,j) = x2o_o(ind%x2o_Foxx_rofi,k)
+        ice_ocean_boundary%calving(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_rofi,k)
         ! liquid precipitation (rain)
-        ice_ocean_boundary%lprec(i,j) = x2o_o(ind%x2o_Faxa_rain,k)
+        ice_ocean_boundary%lprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Faxa_rain,k)
         ! froze precipitation (snow)
-        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Faxa_snow,k)
+        ice_ocean_boundary%fprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Faxa_snow,k)
         !!!!!!! LONGWAVE NEEDS TO BE FIXED !!!!!!!
         ! longwave radiation (up)
-        ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Foxx_lwup)
+        ice_ocean_boundary%lw_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Foxx_lwup)
         ! longwave radiation (down)
-        ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Faxa_lwdn)
+        ice_ocean_boundary%lw_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Faxa_lwdn)
         !!!!!!! SHORTWAVE NEEDS TO BE COMBINED !!!!!!!
         ! net short-wave heat flux
-        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_swnet)
+        ice_ocean_boundary%u_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Foxx_swnet)
       enddo
     enddo
+
+    ice_ocean_boundary%wind_stagger = AGRID
 
   end subroutine fill_ice_ocean_bnd
 
