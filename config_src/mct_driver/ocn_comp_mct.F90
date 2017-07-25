@@ -44,8 +44,7 @@ module ocn_comp_mct
   use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
   use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
   use coupler_indices,    only: coupler_indices_init, cpl_indices
-  use coupler_indices,    only: ocn_export
-
+  use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
 !
 ! !PUBLIC MEMBER FUNCTIONS:
   implicit none
