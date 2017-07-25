@@ -35,17 +35,16 @@ module ocn_comp_mct
 
 
   ! From MOM6
-  use ocean_model_mod,     only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
-  use ocean_model_mod,     only: ocean_model_init, get_state_pointers, update_ocean_model
-  use MOM_surface_forcing, only: ice_ocean_boundary_type 
-  use MOM_domains,         only: MOM_infra_init, num_pes, root_pe, pe_here
-  use MOM_grid,            only: ocean_grid_type, get_global_grid_size
-  use MOM_variables,       only: surface
-  use MOM_error_handler,   only: MOM_error, FATAL, is_root_pe
-  use MOM_time_manager,    only: time_type, set_date, set_calendar_type, NOLEAP
-  use coupler_indices,     only: coupler_indices_init, cpl_indices, alloc_sbuffer
-  use coupler_indices,     only: time_avg_state, fill_ice_ocean_bnd
-  use ocn_import_export,   only: ocn_Export
+  use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
+  use ocean_model_mod,    only: ocean_model_init, get_state_pointers
+  use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
+  use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
+  use MOM_grid,           only: ocean_grid_type, get_global_grid_size
+  use MOM_variables,      only: surface
+  use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
+  use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
+  use coupler_indices,    only: coupler_indices_init, cpl_indices
+  use coupler_indices,    only: ocn_export
 
 !
 ! !PUBLIC MEMBER FUNCTIONS:
@@ -231,6 +230,7 @@ contains
   glb%ocn_public%is_ocean_PE = .true.
   allocate(glb%ocn_public%pelist(npes))
   glb%ocn_public%pelist(:) = (/(i,i=pe0,pe0+npes)/)
+  ! \todo Set other bits of glb$ocn_public
 
   ! Initialize the MOM6 model
   call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in)
@@ -239,7 +239,7 @@ contains
   call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
 
   ! store pointers to components inside MOM
-  call get_state_pointers(glb%ocn_state, grid=glb%grid, surf=glb%ocn_surface)
+  call get_state_pointers(glb%ocn_state, grid=glb%grid)
 
   call t_stopf('MOM_init')
 
@@ -283,11 +283,6 @@ contains
   nsend = mct_avect_nRattr(o2x_o)
   nrecv = mct_avect_nRattr(x2o_o)
 
-  if (debug .and. root_pe().eq.pe_here()) print *, "calling alloc_sbuffer()", nsend
-
-  call alloc_sbuffer(glb%ind,glb%grid,nsend)
-
-
   ! initialize necessary coupling info
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_timemgr_eclockgetdata"
@@ -308,14 +303,9 @@ contains
   !    call seq_infodata_PutData( infodata, precip_fact=precip_fact)
   ! end if
 
-  if (debug .and. root_pe().eq.pe_here()) print *, "calling momo_sum_buffer"
-
-  ! Reset time average of send buffer
-  call time_avg_state(glb%ind, glb%grid, glb%ocn_surface, 1., reset=.true., last=.true.)
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
-
-  call ocn_export(o2x_o%rattr, ldiag_cpl, errorCode)
+  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
 
   call t_stopf('MOM_mct_init')
 
