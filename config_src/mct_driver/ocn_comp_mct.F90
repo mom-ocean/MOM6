@@ -11,27 +11,27 @@ module ocn_comp_mct
 ! !REVISION HISTORY:
 !
 ! !USES:
-  use ESMF,               only: ESMF_clock, ESMF_time, ESMF_timeInterval
-  use ESMF,               only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
-  use seq_cdata_mod,      only: seq_cdata
-  use seq_cdata_mod,      only: seq_cdata_setptrs
-  use mct_mod,            only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, mct_gsmap_orderedpoints
-  use mct_mod,            only: mct_aVect, mct_aVect_init, mct_aVect_zero, mct_aVect_nRattr
-  use mct_mod,            only: mct_gGrid, mct_gGrid_init, mct_gGrid_importRAttr, mct_gGrid_importIAttr
-  use seq_flds_mod,       only: seq_flds_x2o_fields,            &
+  use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
+  use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
+  use seq_cdata_mod,       only: seq_cdata
+  use seq_cdata_mod,       only: seq_cdata_setptrs
+  use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, mct_gsmap_orderedpoints
+  use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, mct_aVect_nRattr
+  use mct_mod,             only: mct_gGrid, mct_gGrid_init, mct_gGrid_importRAttr, mct_gGrid_importIAttr
+  use seq_flds_mod,        only: seq_flds_x2o_fields,            &
                                 seq_flds_o2x_fields,            &
                                 SEQ_FLDS_DOM_COORD,             &
                                 SEQ_FLDS_DOM_other
-  use seq_infodata_mod,   only: seq_infodata_type,              &
+  use seq_infodata_mod,    only: seq_infodata_type,              &
                                 seq_infodata_GetData,           &
                                 seq_infodata_start_type_start,  &
                                 seq_infodata_start_type_cont,   &
                                 seq_infodata_start_type_brnch,  &
                                 seq_infodata_PutData
-  use seq_comm_mct,       only: seq_comm_name, seq_comm_inst, seq_comm_suffix
-  use seq_timemgr_mod,    only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
-  use perf_mod,           only: t_startf, t_stopf
-  use shr_kind_mod,       only: SHR_KIND_R8
+  use seq_comm_mct,        only: seq_comm_name, seq_comm_inst, seq_comm_suffix
+  use seq_timemgr_mod,     only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
+  use perf_mod,            only: t_startf, t_stopf
+  use shr_kind_mod,        only: SHR_KIND_R8
 
 
   ! From MOM6
@@ -44,8 +44,7 @@ module ocn_comp_mct
   use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
   use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
   use coupler_indices,    only: coupler_indices_init, cpl_indices
-  use coupler_indices,    only: ocn_export
-
+  use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
 !
 ! !PUBLIC MEMBER FUNCTIONS:
   implicit none
@@ -70,8 +69,9 @@ module ocn_comp_mct
   type MCT_MOM_Data
     type(ocean_state_type), pointer  :: ocn_state => NULL()   !< Private state of ocean
     type(ocean_public_type), pointer :: ocn_public => NULL()  !< Public state of ocean
-    type(ocean_grid_type), pointer   :: grid => NULL() ! A pointer to a grid structure
-
+    type(ocean_grid_type), pointer   :: grid => NULL()        !< A pointer to a grid structure
+    type(surface), pointer           :: ocn_surface => NULL() !< A pointer to the ocean surface state
+    type(ice_ocean_boundary_type)    :: ice_ocean_boundary    !< A pointer to the ice ocean boundary type
     type(seq_infodata_type), pointer :: infodata
 
     type(cpl_indices), public :: ind !< Variable IDs
@@ -123,7 +123,8 @@ contains
   integer             :: lsize, nsend, nrecv
   logical             :: ldiag_cpl = .false.
   integer             :: ni, nj
-
+  integer             :: isc, iec, jsc, jec     !< Indices for the start and end of the domain
+                                                !! in the x and y dir., respectively.
   ! mct variables (these are local for now)
   integer                   :: MOM_MCT_ID
   type(mct_gsMap), pointer  :: MOM_MCT_gsMap => NULL() ! 2d, points to cdata
@@ -241,6 +242,7 @@ contains
 
   call t_stopf('MOM_init')
 
+
   !---------------------------------------------------------------------
   ! Initialize MCT attribute vectors and indices
   !---------------------------------------------------------------------
@@ -311,6 +313,29 @@ contains
   ! Size of global domain
   call get_global_grid_size(glb%grid, ni, nj)
 
+  ! allocate ice_ocean_boundary
+  isc = glb%grid%isc; iec = glb%grid%iec;
+  jsc = glb%grid%jsc; jec = glb%grid%jec;
+  allocate(glb%ice_ocean_boundary%u_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%u_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%q_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%q_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%salt_flux(isc:iec,jsc:jec));       glb%ice_ocean_boundary%salt_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%lw_flux(isc:iec,jsc:jec));         glb%ice_ocean_boundary%lw_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%sw_flux_vis_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dir(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%sw_flux_vis_dif(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dif(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%sw_flux_nir_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_nir_dir(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%sw_flux_nir_dif(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_nir_dif(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%lprec(isc:iec,jsc:jec));           glb%ice_ocean_boundary%lprec(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%fprec(isc:iec,jsc:jec));           glb%ice_ocean_boundary%fprec(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%runoff(isc:iec,jsc:jec));          glb%ice_ocean_boundary%runoff(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%calving(isc:iec,jsc:jec));         glb%ice_ocean_boundary%calving(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%runoff_hflx(isc:iec,jsc:jec));     glb%ice_ocean_boundary%runoff_hflx(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%calving_hflx(isc:iec,jsc:jec));    glb%ice_ocean_boundary%calving_hflx(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%p(isc:iec,jsc:jec));               glb%ice_ocean_boundary%p(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%mi(isc:iec,jsc:jec));              glb%ice_ocean_boundary%mi(:,:) = 0.0
+
+
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
    call seq_infodata_PutData( glb%infodata, &
@@ -340,9 +365,6 @@ contains
   type(time_type) :: time_start ! Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep ! Coupled time interval to pass to MOM6
   character(len=128) :: err_msg
-
-  ! Might need to be in glb to live on heap
-  type(ice_ocean_boundary_type) :: Ice_ocean_boundary
 
   ! Translate the current time (start of coupling interval)
   call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
@@ -380,10 +402,12 @@ contains
   ! \todo Let MOM6 know to write restart...
   if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
 
-  !call ocn_imprt goes her
+  ! fill ice ocean boundary
+  call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind)
+  if (debug .and. is_root_pe()) write(6,*) 'fill_ice_ocean_bnd'
 
-  !call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
-  !                        time_start, coupling_timestep)
+!  call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
+!                          time_start, coupling_timestep)
 
   end subroutine ocn_run_mct
 
