@@ -259,9 +259,11 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Size of global domain
   call get_global_grid_size(glb%grid, ni, nj)
 
-  ! allocate ice_ocean_boundary
-  isc = glb%grid%isc; iec = glb%grid%iec;
-  jsc = glb%grid%jsc; jec = glb%grid%jec;
+  ! Allocate ice_ocean_boundary using global indexing without halos
+  isc = glb%grid%isc + glb%grid%idg_offset
+  iec = glb%grid%iec + glb%grid%idg_offset
+  jsc = glb%grid%jsc + glb%grid%jdg_offset
+  jec = glb%grid%jec + glb%grid%jdg_offset
   allocate(glb%ice_ocean_boundary%u_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%u_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
@@ -335,6 +337,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   if (debug .and. is_root_pe()) then
     write(6,*) 'ocn_run_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
+  coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
 
   ! set (actually, get from mct) the cdata pointers:
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
@@ -349,8 +352,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind)
   if (debug .and. is_root_pe()) write(6,*) 'fill_ice_ocean_bnd'
 
-!  call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
-!                          time_start, coupling_timestep)
+  call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
+                          time_start, coupling_timestep)
 
 end subroutine ocn_run_mct
 
