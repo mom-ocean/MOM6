@@ -300,14 +300,14 @@ contains
 
     ! variable that are not in ice_ocean_boundary:
     ! latent (x2o_Foxx_lat)
-    ! surface Stokes drift, x-comp. (x2o_Sw_ustokes) 
-    ! surface Stokes drift, y-comp. (x2o_Sw_vstokes) 
+    ! surface Stokes drift, x-comp. (x2o_Sw_ustokes)
+    ! surface Stokes drift, y-comp. (x2o_Sw_vstokes)
     ! wave model langmuir multiplier (x2o_Sw_lamult)
 
     ! biogeochemistry
     ! Black Carbon hydrophobic release from sea ice component (x2o_Fioi_bcpho)
     ! Black Carbon hydrophilic release from sea ice component (x2o_Fioi_bcphi)
-    ! dust release from sea ice component (x2o_Fioi_flxdst) 
+    ! dust release from sea ice component (x2o_Fioi_flxdst)
     ! Black Carbon hydrophilic dry deposition (x2o_Faxa_bcphidry)
     ! Black Carbon hydrophobic dry deposition (x2o_Faxa_bcphodry)
     ! Black Carbon hydrophobic wet deposition (x2o_Faxa_bcphiwet)
@@ -316,12 +316,12 @@ contains
     ! Organic Carbon hydrophilic dry deposition (x2o_Faxa_ocphiwet)
     ! Sizes 1 to 4 dust - wet deposition (x2o_Faxa_dstwet?)
     ! Sizes 1 to 4 dust - dry deposition (x2o_Faxa_dstdry?)
-    
+
 
     ! need wind_stress_multiplier?
 
     ! Copy from x2o to ice_ocean_boundary. ice_ocean_boundary uses global indexing with no halos.
-    write(*,*) 'max. k is:', (grid%jec-grid%jsc+1) * (grid%iec-grid%isc+1) 
+    write(*,*) 'max. k is:', (grid%jec-grid%jsc+1) * (grid%iec-grid%isc+1)
     ! zonal wind stress (taux)
     write(*,*) 'taux', SIZE(x2o_o(ind%x2o_Foxx_taux,:))
     write(*,*) 'ice_ocean_boundary%u_flux', SIZE(ice_ocean_boundary%u_flux(:,:))
@@ -336,13 +336,13 @@ contains
         ! meridional wind stress (tauy)
         ice_ocean_boundary%v_flux(i,j) = x2o_o(ind%x2o_Foxx_tauy,k)
         ! sensible heat flux
-        ice_ocean_boundary%t_flux(i,j) = x2o_o(ind%x2o_Foxx_sen,k)  
+        ice_ocean_boundary%t_flux(i,j) = x2o_o(ind%x2o_Foxx_sen,k)
         ! salt flux
         ice_ocean_boundary%salt_flux(i,j) = x2o_o(ind%x2o_Fioi_salt,k)
         ! heat flux from snow & ice melt
         ice_ocean_boundary%calving_hflx(i,j) = x2o_o(ind%x2o_Fioi_melth,k)
         ! snow melt flux
-        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Fioi_meltw,k)  
+        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Fioi_meltw,k)
         ! river runoff flux
         ice_ocean_boundary%runoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k)
         ! ice runoff flux
@@ -358,7 +358,7 @@ contains
         ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Faxa_lwdn)
         !!!!!!! SHORTWAVE NEEDS TO BE COMBINED !!!!!!!
         ! net short-wave heat flux
-        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_swnet) 
+        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_swnet)
       enddo
     enddo
 
