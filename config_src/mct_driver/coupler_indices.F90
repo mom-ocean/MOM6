@@ -212,22 +212,29 @@ contains
     real(kind=8),            intent(inout) :: o2x(:,:)   !< MCT outgoing bugger
     ! Local variables
     real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
-    integer :: i, j, n
+    integer :: i, j, n, ig, jg
     real :: slp_L, slp_R, slp_C, slope, u_min, u_max
 
+    ! Copy from ocn_public to o2x. ocn_public uses global indexing with no halos.
+    ! The mask comes from "grid" that uses the usual MOM domain that has halos
+    ! and does not use global indexing.
     n = 0
-    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-      n = n+1
-      o2x(ind%o2x_So_t, n) = ocn_public%t_surf(i,j) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_s, n) = ocn_public%s_surf(i,j) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_u, n) = ocn_public%u_surf(i,j) * grid%mask2dT(i,j)
-      o2x(ind%o2x_So_v, n) = ocn_public%v_surf(i,j) * grid%mask2dT(i,j)
-    end do; end do
+    do j=grid%jsc, grid%jec
+      jg = j + grid%jdg_offset
+      do i=grid%isc,grid%iec
+        n = n+1
+        ig = i + grid%idg_offset
+        o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg) * grid%mask2dT(i,j)
+        o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
+        o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
+        o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
+        ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
+        ! in order to update halos. i.e. does not use global indexing.
+        ssh(i,j) = ocn_public%sea_lev(ig,jg)
+      end do
+    end do
 
-    ! ssh (make a copy in order to do a halo update)
-    do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
-      ssh(i,j) = ocn_public%sea_lev(i,j)
-    end do; end do
+    ! Update halo of ssh so we can calculate gradients
     call pass_var(ssh, grid%domain)
 
     ! d/dx ssh
