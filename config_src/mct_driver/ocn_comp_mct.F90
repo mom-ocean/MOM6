@@ -314,8 +314,8 @@ contains
   call get_global_grid_size(glb%grid, ni, nj)
 
   ! allocate ice_ocean_boundary
-  isc = glb%grid%isc; iec = glb%grid%iec;  
-  jsc = glb%grid%jsc; jec = glb%grid%jec;  
+  isc = glb%grid%isc; iec = glb%grid%iec;
+  jsc = glb%grid%jsc; jec = glb%grid%jec;
   allocate(glb%ice_ocean_boundary%u_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%u_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
@@ -334,8 +334,8 @@ contains
   allocate(glb%ice_ocean_boundary%calving_hflx(isc:iec,jsc:jec));    glb%ice_ocean_boundary%calving_hflx(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%p(isc:iec,jsc:jec));               glb%ice_ocean_boundary%p(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%mi(isc:iec,jsc:jec));              glb%ice_ocean_boundary%mi(:,:) = 0.0
- 
- 
+
+
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
    call seq_infodata_PutData( glb%infodata, &
