@@ -369,7 +369,7 @@ contains
     type(cpl_indices), intent(inout)            :: ind
 
     ! local variables
-    integer           :: i, j, k, var
+    integer           :: i, j, k, ig, jg
 
     ! variable that are not in ice_ocean_boundary:
     ! latent (x2o_Foxx_lat)
@@ -393,35 +393,37 @@ contains
 
     ! need wind_stress_multiplier?
 
-    write(*,*) 'max. k is:', (grid%jec-grid%jsc) * (grid%iec-grid%isc) 
+    ! Copy from x2o to ice_ocean_boundary. ice_ocean_boundary uses global indexing with no halos.
+    write(*,*) 'max. k is:', (grid%jec-grid%jsc+1) * (grid%iec-grid%isc+1) 
     ! zonal wind stress (taux)
-    var = ind%x2o_Foxx_taux 
-    write(*,*) 'taux', SIZE(x2o_o(:,var))
+    write(*,*) 'taux', SIZE(x2o_o(ind%x2o_Foxx_taux,:))
     write(*,*) 'ice_ocean_boundary%u_flux', SIZE(ice_ocean_boundary%u_flux(:,:))
     k = 0
     do j = grid%jsc, grid%jec
+      jg = j + grid%jdg_offset
       do i = grid%isc, grid%iec
         k = k + 1 ! Increment position within gindex
+        ig = i + grid%idg_offset
         ! zonal wind stress (taux)
-        ice_ocean_boundary%u_flux(i,j) = x2o_o(k,ind%x2o_Foxx_taux)
+        ice_ocean_boundary%u_flux(i,j) = x2o_o(ind%x2o_Foxx_taux,k)
         ! meridional wind stress (tauy)
-        ice_ocean_boundary%v_flux(i,j) = x2o_o(k,ind%x2o_Foxx_tauy)
+        ice_ocean_boundary%v_flux(i,j) = x2o_o(ind%x2o_Foxx_tauy,k)
         ! sensible heat flux
-        ice_ocean_boundary%t_flux(i,j) = x2o_o(k,ind%x2o_Foxx_sen)  
+        ice_ocean_boundary%t_flux(i,j) = x2o_o(ind%x2o_Foxx_sen,k)  
         ! salt flux
-        ice_ocean_boundary%salt_flux(i,j) = x2o_o(k,ind%x2o_Fioi_salt)
+        ice_ocean_boundary%salt_flux(i,j) = x2o_o(ind%x2o_Fioi_salt,k)
         ! heat flux from snow & ice melt
-        ice_ocean_boundary%calving_hflx(i,j) = x2o_o(k,ind%x2o_Fioi_melth)
+        ice_ocean_boundary%calving_hflx(i,j) = x2o_o(ind%x2o_Fioi_melth,k)
         ! snow melt flux
-        ice_ocean_boundary%fprec(i,j) = x2o_o(k,ind%x2o_Fioi_meltw)  
+        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Fioi_meltw,k)  
         ! river runoff flux
-        ice_ocean_boundary%runoff(i,j) = x2o_o(k,ind%x2o_Foxx_rofl)
+        ice_ocean_boundary%runoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k)
         ! ice runoff flux
-        ice_ocean_boundary%calving(i,j) = x2o_o(k,ind%x2o_Foxx_rofi)
+        ice_ocean_boundary%calving(i,j) = x2o_o(ind%x2o_Foxx_rofi,k)
         ! liquid precipitation (rain)
-        ice_ocean_boundary%lprec(i,j) = x2o_o(k,ind%x2o_Faxa_rain)
+        ice_ocean_boundary%lprec(i,j) = x2o_o(ind%x2o_Faxa_rain,k)
         ! froze precipitation (snow)
-        ice_ocean_boundary%fprec(i,j) = x2o_o(k,ind%x2o_Faxa_snow)
+        ice_ocean_boundary%fprec(i,j) = x2o_o(ind%x2o_Faxa_snow,k)
         !!!!!!! LONGWAVE NEEDS TO BE FIXED !!!!!!!
         ! longwave radiation (up)
         ice_ocean_boundary%lw_flux(i,j) = x2o_o(k,ind%x2o_Foxx_lwup)
