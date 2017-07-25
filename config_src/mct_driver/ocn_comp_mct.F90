@@ -1,136 +1,98 @@
+!> This is the main driver for MOM6 in CIME
 module ocn_comp_mct
 
-!|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-!BOP
-! !MODULE: ocn_comp_mct
-! !INTERFACE:
+! This file is part of MOM6. See LICENSE.md for the license.
 
-! !DESCRIPTION:
-!  This is the main driver for MOM6 in CIME
-!
-! !REVISION HISTORY:
-!
-! !USES:
-  use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
-  use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
-  use seq_cdata_mod,       only: seq_cdata
-  use seq_cdata_mod,       only: seq_cdata_setptrs
-  use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, mct_gsmap_orderedpoints
-  use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, mct_aVect_nRattr
-  use mct_mod,             only: mct_gGrid, mct_gGrid_init, mct_gGrid_importRAttr, mct_gGrid_importIAttr
-  use seq_flds_mod,        only: seq_flds_x2o_fields,            &
-                                seq_flds_o2x_fields,            &
-                                SEQ_FLDS_DOM_COORD,             &
-                                SEQ_FLDS_DOM_other
-  use seq_infodata_mod,    only: seq_infodata_type,              &
-                                seq_infodata_GetData,           &
-                                seq_infodata_start_type_start,  &
-                                seq_infodata_start_type_cont,   &
-                                seq_infodata_start_type_brnch,  &
-                                seq_infodata_PutData
-  use seq_comm_mct,        only: seq_comm_name, seq_comm_inst, seq_comm_suffix
-  use seq_timemgr_mod,     only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
-  use perf_mod,            only: t_startf, t_stopf
-  use shr_kind_mod,        only: SHR_KIND_R8
+! mct modules
+use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
+use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
+use seq_cdata_mod,       only: seq_cdata
+use seq_cdata_mod,       only: seq_cdata_setptrs
+use mct_mod,             only: mct_gsMap, mct_gsmap_init, mct_gsMap_lsize, &
+                               mct_gsmap_orderedpoints
+use mct_mod,             only: mct_aVect, mct_aVect_init, mct_aVect_zero, &
+                               mct_aVect_nRattr
+use mct_mod,             only: mct_gGrid, mct_gGrid_init, mct_gGrid_importRAttr, &
+                               mct_gGrid_importIAttr
+use seq_flds_mod,        only: seq_flds_x2o_fields, seq_flds_o2x_fields, seq_flds_dom_coord, &
+                               seq_flds_dom_other
+use seq_infodata_mod,    only: seq_infodata_type, seq_infodata_GetData, &
+                               seq_infodata_start_type_start, seq_infodata_start_type_cont,   &
+                               seq_infodata_start_type_brnch, seq_infodata_PutData
+use seq_comm_mct,        only: seq_comm_name, seq_comm_inst, seq_comm_suffix
+use seq_timemgr_mod,     only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
+use perf_mod,            only: t_startf, t_stopf
+use shr_kind_mod,        only: shr_kind_r8
+
+! MOM6 modules
+use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
+use ocean_model_mod,    only: ocean_model_init, get_state_pointers
+use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
+use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
+use MOM_grid,           only: ocean_grid_type, get_global_grid_size
+use MOM_variables,      only: surface
+use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
+use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
+use coupler_indices,    only: coupler_indices_init, cpl_indices
+use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
 
 
-  ! From MOM6
-  use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
-  use ocean_model_mod,    only: ocean_model_init, get_state_pointers
-  use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
-  use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
-  use MOM_grid,           only: ocean_grid_type, get_global_grid_size
-  use MOM_variables,      only: surface
-  use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
-  use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
-  use coupler_indices,    only: coupler_indices_init, cpl_indices
-  use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
-!
-! !PUBLIC MEMBER FUNCTIONS:
-  implicit none
+! By default make data private
+implicit none; private
+  ! Public member functions
   public :: ocn_init_mct
   public :: ocn_run_mct
   public :: ocn_final_mct
-  private                              ! By default make data private
+  ! Flag for debugging
   logical, parameter :: debug=.true.
 
-!
-! ! PUBLIC DATA:
-!
-! !REVISION HISTORY:
-! Author: Mariana Vertenstein
-!
-!EOP
-! !PRIVATE MODULE FUNCTIONS:
-  private :: ocn_SetGSMap_mct
-  private :: ocn_domain_mct
-
-! !PRIVATE MODULE VARIABLES
+  !> Control structure for this module
   type MCT_MOM_Data
-    type(ocean_state_type), pointer  :: ocn_state => NULL()   !< Private state of ocean
-    type(ocean_public_type), pointer :: ocn_public => NULL()  !< Public state of ocean
-    type(ocean_grid_type), pointer   :: grid => NULL()        !< A pointer to a grid structure
-    type(surface), pointer           :: ocn_surface => NULL() !< A pointer to the ocean surface state
-    type(ice_ocean_boundary_type)    :: ice_ocean_boundary    !< A pointer to the ice ocean boundary type
-    type(seq_infodata_type), pointer :: infodata
+    type(ocean_state_type), pointer  :: ocn_state => NULL()   !< The private state of ocean
+    type(ocean_public_type), pointer :: ocn_public => NULL()  !< The public state of ocean
+    type(ocean_grid_type), pointer   :: grid => NULL()        !< The grid structure
+    type(surface), pointer           :: ocn_surface => NULL() !< The ocean surface state
+    type(ice_ocean_boundary_type)    :: ice_ocean_boundary    !< The ice ocean boundary type
+    type(seq_infodata_type), pointer :: infodata              !< The input info type
+    type(cpl_indices), public :: ind                          !< Variable IDs
 
-    type(cpl_indices), public :: ind !< Variable IDs
+  end type MCT_MOM_Data
 
-  end type
-  type(MCT_MOM_Data) :: glb
-
-!=======================================================================
+  type(MCT_MOM_Data) :: glb                                   !< global structure
 
 contains
 
-!***********************************************************************
-!BOP
-!
-! !IROUTINE: ocn_init_mct
-!
-! !INTERFACE:
-  subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
-!
-! !DESCRIPTION:
-! Initialize POP
-!
-! !INPUT/OUTPUT PARAMETERS:
+!> Initializes MOM6
+subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
+  type(ESMF_Clock),             intent(inout) :: EClock      !< Time and time step ? \todo Why must this
+                                                             !! be intent(inout)?
+  type(seq_cdata)             , intent(inout) :: cdata_o     !< Input parameters
+  type(mct_aVect)             , intent(inout) :: x2o_o       !< Fluxes from coupler to ocean, computed by ocean
+  type(mct_aVect)             , intent(inout) :: o2x_o       !< Fluxes from ocean to coupler, computed by ocean
+  character(len=*), optional  , intent(in)    :: NLFilename  !< Namelist filename
 
-  type(ESMF_Clock),             intent(inout) :: EClock  !< Time and time step ? \todo Why must this be intent(inout)?
-  type(seq_cdata)             , intent(inout) :: cdata_o
-  type(mct_aVect)             , intent(inout) :: x2o_o, o2x_o
-  character(len=*), optional  , intent(in)    :: NLFilename ! Namelist filename
-!
-! !REVISION HISTORY:
-! Author: Mariana Vertenstein
-!EOP
-!-----------------------------------------------------------------------
-!
-!  local variables
-!
-!-----------------------------------------------------------------------
-  type(time_type)     :: time_init ! Start time of coupled model's calendar
-  type(time_type)     :: time_in   ! Start time for ocean model at initialization
-  type(ESMF_time)     :: current_time
-  type(ESMF_timeInterval) :: time_interval
+  !  local variables
+  type(time_type)     :: time_init         !< Start time of coupled model's calendar
+  type(time_type)     :: time_in           !< Start time for ocean model at initialization
+  type(ESMF_time)     :: current_time      !< Current time
+  type(ESMF_timeInterval) :: time_interval !< Time interval
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
-  character(len=384)  :: runid
-  character(len=384)  :: runtype
-  character(len=32)   :: starttype          ! infodata start type
-  integer             :: mpicom_ocn
-  integer             :: npes, pe0
+  character(len=384)  :: runid             !< Run ID
+  character(len=384)  :: runtype           !< Run type
+  character(len=32)   :: starttype         !< infodata start type
+  integer             :: mpicom_ocn        !< MPI ocn communicator
+  integer             :: npes, pe0         !< # of processors and current processor
   integer             :: i, errorCode
   integer             :: lsize, nsend, nrecv
   logical             :: ldiag_cpl = .false.
-  integer             :: ni, nj
-  integer             :: isc, iec, jsc, jec     !< Indices for the start and end of the domain
-                                                !! in the x and y dir., respectively.
+  integer             :: isc, iec, jsc, jec, ni, nj     !< Indices for the start and end of the domain
+                                                        !! in the x and y dir., respectively.
   ! mct variables (these are local for now)
   integer                   :: MOM_MCT_ID
-  type(mct_gsMap), pointer  :: MOM_MCT_gsMap => NULL() ! 2d, points to cdata
-  type(mct_gGrid), pointer  :: MOM_MCT_dom => NULL()   ! 2d, points to cdata
-  type(mct_gsMap)           :: MOM_MCT_gsMap3d  ! for 3d streams, local
-  type(mct_gGrid)           :: MOM_MCT_dom3d    ! for 3d streams, local
+  type(mct_gsMap), pointer  :: MOM_MCT_gsMap => NULL() !< 2d, points to cdata
+  type(mct_gGrid), pointer  :: MOM_MCT_dom => NULL()   !< 2d, points to cdata
+  type(mct_gsMap)           :: MOM_MCT_gsMap3d         !< for 3d streams, local
+  type(mct_gGrid)           :: MOM_MCT_dom3d           !< for 3d streams, local
 
   ! time management
   integer                   :: ocn_cpl_dt
@@ -148,24 +110,19 @@ contains
   character(len=16)   :: inst_suffix
 
   !!!DANGER!!!: change the following vars with the corresponding MOM6 vars
-  integer :: km=1 ! number of vertical levels
-  integer :: nx_block=0, ny_block=0 ! size of block domain in x,y dir including ghost cells
-  integer :: max_blocks_clinic=0 !max number of blocks per processor in each distribution
+  integer :: km=1                   !< Number of vertical levels
+  integer :: nx_block=0, ny_block=0 !< Size of block domain in x,y dir including ghost cells
+  integer :: max_blocks_clinic=0    !< Max. number of blocks per processor in each distribution
   integer :: ncouple_per_day = 48
-  logical :: lsend_precip_fact ! if T,send precip_fact to cpl for use in fw balance
-                               ! (partially-coupled option)
-  character(len=128) :: err_msg
-
-!-----------------------------------------------------------------------
+  logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
+                                    !! (partially-coupled option)
+  character(len=128) :: err_msg     !< Error message
 
   ! set (actually, get from mct) the cdata pointers:
   call seq_cdata_setptrs(cdata_o, id=MOM_MCT_ID, mpicom=mpicom_ocn, &
                          gsMap=MOM_MCT_gsMap, dom=MOM_MCT_dom, infodata=glb%infodata)
 
-  !---------------------------------------------------------------------
   ! Initialize the model run
-  !---------------------------------------------------------------------
-
   call coupler_indices_init(glb%ind)
 
   call seq_infodata_GetData( glb%infodata, case_name=runid )
@@ -184,23 +141,16 @@ contains
   end if
 
   ! instance control
-
   inst_name   = seq_comm_name(MOM_MCT_ID)
   inst_index  = seq_comm_inst(MOM_MCT_ID)
   inst_suffix = seq_comm_suffix(MOM_MCT_ID)
 
-  !---------------------------------------------------------------------
   ! Initialize MOM6
-  !---------------------------------------------------------------------
-
   call t_startf('MOM_init')
-
   call MOM_infra_init(mpicom_ocn)
-
   call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
   call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   call set_calendar_type(NOLEAP)  !TODO: confirm this
-
 
   time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
   time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
@@ -242,11 +192,7 @@ contains
 
   call t_stopf('MOM_init')
 
-
-  !---------------------------------------------------------------------
   ! Initialize MCT attribute vectors and indices
-  !---------------------------------------------------------------------
-
   call t_startf('MOM_mct_init')
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_SetGSMap_mct"
@@ -346,24 +292,21 @@ contains
 
   if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
 
-!-----------------------------------------------------------------------
-!EOC
+end subroutine ocn_init_mct
 
- end subroutine ocn_init_mct
-
-  !> Step forward ocean model for coupling interval
-  subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
+!> Step forward ocean model for coupling interval
+subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(ESMF_Clock), intent(inout) :: EClock  !< Time and time step ? \todo Why must this be intent(inout)?
-  type(seq_cdata),  intent(inout) :: cdata_o
-  type(mct_aVect),  intent(inout) :: x2o_o
-  type(mct_aVect),  intent(inout) :: o2x_o
+  type(seq_cdata),  intent(inout) :: cdata_o !< Input parameters
+  type(mct_aVect),  intent(inout) :: x2o_o   !< Fluxes from coupler to ocean, computed by ocean
+  type(mct_aVect),  intent(inout) :: o2x_o   !< Fluxes from ocean to coupler, computed by ocean
   ! Local variables
   type(ESMF_time) :: current_time
   type(ESMF_timeInterval) :: time_interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod
-  type(time_type) :: time_start ! Start of coupled time interval to pass to MOM6
-  type(time_type) :: coupling_timestep ! Coupled time interval to pass to MOM6
+  type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
+  type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg
 
   ! Translate the current time (start of coupling interval)
@@ -409,40 +352,21 @@ contains
 !  call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
 !                          time_start, coupling_timestep)
 
-  end subroutine ocn_run_mct
+end subroutine ocn_run_mct
 
-!***********************************************************************
-!BOP
-!
-! !IROUTINE: ocn_final_mct
-!
-! !INTERFACE:
-  subroutine ocn_final_mct( EClock, cdata_o, x2o_o, o2x_o)
-!
-! !DESCRIPTION:
-! Finalize POP
-!
-! !USES:
-! !ARGUMENTS:
+!> Finalizes MOM6
+!!
+!! \todo This needs to be done here.
+subroutine ocn_final_mct( EClock, cdata_o, x2o_o, o2x_o)
     type(ESMF_Clock)            , intent(inout) :: EClock
     type(seq_cdata)             , intent(inout) :: cdata_o
-    type(mct_aVect)             , intent(inout) :: x2o_o
-    type(mct_aVect)             , intent(inout) :: o2x_o
-!
-! !REVISION HISTORY:
-! Author: Fei Liu
-!EOP
-!BOC
-!-----------------------------------------------------------------------
-!
-!  local variables
-!
-!-----------------------------------------------------------------------
+    type(mct_aVect)             , intent(inout) :: x2o_o  !< Fluxes from coupler to ocean, computed by ocean
+    type(mct_aVect)             , intent(inout) :: o2x_o  !< Fluxes from ocean to coupler, computed by ocean
 
-  end subroutine ocn_final_mct
+end subroutine ocn_final_mct
 
 
-!> This routine mct global seg maps for the MOM decomposition
+!> Sets mct global segment maps for the MOM decomposition.
 !!
 !! \todo Find out if we should only provide indirect indexing for ocean points and not land.
 subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
@@ -451,12 +375,12 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   type(mct_gsMap), intent(inout) :: gsMap_ocn   !< MCT global segment map for 2d data
   type(mct_gsMap), intent(inout) :: gsMap3d_ocn !< MCT global segment map for 3d data
   ! Local variables
-  integer :: lsize ! Local size of indirect indexing array
-  integer :: i, j, k ! Local indices
-  integer :: ni, nj ! Declared sizes of h-point arrays
-  integer :: ig, jg ! Global indices
-  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
-  integer, allocatable :: gindex(:) ! Indirect indices
+  integer :: lsize   !< Local size of indirect indexing array
+  integer :: i, j, k !< Local indices
+  integer :: ni, nj  !< Declared sizes of h-point arrays
+  integer :: ig, jg  !< Global indices
+  type(ocean_grid_type), pointer :: grid => NULL() !< A pointer to a grid structure
+  integer, allocatable           :: gindex(:)      !< Indirect indices
 
   grid => glb%grid ! for convenience
   if (.not. associated(grid)) call MOM_error(FATAL, 'ocn_comp_mct.F90, ocn_SetGSMap_mct():' // &
@@ -469,7 +393,7 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
   call get_global_grid_size(grid, ni, nj)
 
   ! Create indirect indices for the computational domain
-  allocate( gindex( lsize ) )
+  allocate(gindex(lsize))
 
   ! Set indirect indices in gindex
   k = 0
@@ -478,39 +402,24 @@ subroutine ocn_SetGSMap_mct(mpicom_ocn, MOM_MCT_ID, gsMap_ocn, gsMap3d_ocn)
     do i = grid%isc, grid%iec
       ig = i + grid%idg_offset ! TODO: check this calculation
       k = k + 1 ! Increment position within gindex
-      gindex(k) = ni * ( jg - 1 ) + ig
+      gindex(k) = ni * (jg - 1) + ig
     enddo
   enddo
 
   ! Tell MCT how to indirectly index into the 2d buffer
-  call mct_gsMap_init( gsMap_ocn, gindex, mpicom_ocn, MOM_MCT_ID, lsize, ni * nj)
+  call mct_gsMap_init(gsMap_ocn, gindex, mpicom_ocn, MOM_MCT_ID, lsize, ni * nj)
 
-  deallocate( gindex )
+  deallocate(gindex)
 
 end subroutine ocn_SetGSMap_mct
 
-
-!***********************************************************************
-!BOP
-! !IROUTINE: ocn_domain_mct
-! !INTERFACE:
-
+!> Sets MCT global segment maps for the MOM6 decomposition
 subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
+  integer        , intent(in)    :: lsize      !< Size of attr. vector
+  type(mct_gsMap), intent(in)    :: gsMap_ocn  !< MCT global segment map for 2d data
+  type(mct_ggrid), intent(inout) :: dom_ocn    !< WHAT IS THIS?
 
-! !DESCRIPTION:
-!  This routine mct global seg maps for the pop decomposition
-!
-! !REVISION HISTORY:
-!  same as module
-!
-! !INPUT/OUTPUT PARAMETERS:
-
-  implicit none
-  integer        , intent(in)    :: lsize
-  type(mct_gsMap), intent(in)    :: gsMap_ocn
-  type(mct_ggrid), intent(inout) :: dom_ocn
-
-! Local Variables
+  ! Local Variables
   integer, parameter              :: SHR_REAL_R8 = selected_real_kind(12)
   integer, pointer                :: idata(:)
   integer                         :: i,j,k
@@ -583,22 +492,6 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   deallocate(data)
   deallocate(idata)
 
-!EOP
-!BOC
-!-----------------------------------------------------------------------
-!
-!  local variables
-!
-!-----------------------------------------------------------------------
-
-
-
-!-----------------------------------------------------------------------
-!EOC
-
-  end subroutine ocn_domain_mct
-
+end subroutine ocn_domain_mct
 
 end module ocn_comp_mct
-
-!|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
