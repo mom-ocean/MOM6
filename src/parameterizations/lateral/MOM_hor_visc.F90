@@ -529,7 +529,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         v0(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J)*sh_xy(I,J) - CS%DY2q(I-1,J)*sh_xy(I-1,J)) - &
                   CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*sh_xx(i,j+1) - CS%DX2h(i,j)*sh_xx(i,j))
       enddo ; enddo
-      if (apply_OBC .and. OBC%zero_biharmonic) then
+      if (apply_OBC) then; if (OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
           I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
@@ -542,7 +542,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             enddo
           endif
         enddo
-      endif
+      endif; endif
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
