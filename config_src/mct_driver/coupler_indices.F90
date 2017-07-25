@@ -19,7 +19,6 @@ module coupler_indices
   private
 
   public coupler_indices_init
-  public time_avg_state
   public fill_ice_ocean_bnd
   public ocn_export
 
@@ -364,4 +363,5 @@ contains
     enddo
 
   end subroutine fill_ice_ocean_bnd
+
 end module coupler_indices
