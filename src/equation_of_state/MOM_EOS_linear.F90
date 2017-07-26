@@ -34,9 +34,8 @@ implicit none ; private
 public calculate_compress_linear, calculate_density_linear
 public calculate_density_derivs_linear, calculate_density_derivs_scalar_linear
 public calculate_specvol_derivs_linear
-public calculate_density_second_derivs_linear, calculate_density_second_derivs_wrt_P_linear
-public calculate_density_second_derivs_wrt_P_scalar_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
+public calculate_density_second_derivs_scalar_linear
 public int_density_dz_linear, int_spec_vol_dp_linear
 
 interface calculate_density_linear
@@ -182,66 +181,25 @@ end subroutine calculate_density_derivs_scalar_linear
 
 !> This subroutine calculates the five, partial second derivatives of density w.r.t.
 !! potential temperature and salinity and pressure which for a linear equation of state should all be 0.
-subroutine calculate_density_second_derivs_linear(T, S,pressure,  drho_dS_dS, drho_dS_dT, drho_dT_dT,&
-                        drho_dS_dP, drho_dT_dP, start, npts)
-  real,    intent(in),  dimension(:) :: T           !< Potential temperature relative to the surface
-                                                    !! in C.
-  real,    intent(in),  dimension(:) :: S           !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure    !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: drho_dS_dS  !< The partial derivative of density with
-  real,    intent(out), dimension(:) :: drho_dS_dT  !< The partial derivative of density with
-  real,    intent(out), dimension(:) :: drho_dT_dT  !< The partial derivative of density with
-  real,    intent(out), dimension(:) :: drho_dS_dP  !< The partial derivative of density with
-  real,    intent(out), dimension(:) :: drho_dT_dP  !< The partial derivative of density with
-  integer, intent(in)                :: start       !< The starting point in the arrays.
-  integer, intent(in)                :: npts        !< The number of values to calculate.
-
-  integer :: j
-
-  do j=start,start+npts-1
-    drho_dS_dS(j) = 0.
-    drho_dS_dT(j) = 0.
-    drho_dT_dT(j) = 0.
-    drho_dS_dP(j) = 0.
-    drho_dT_dP(j) = 0.
-  enddo
-
-end subroutine calculate_density_second_derivs_linear
-
-!> This subroutine calculates the partial second derivatives of density w.r.t. temperature and salinity wrt pressure
-!! which for a linear equation of state is 0.
-subroutine calculate_density_second_derivs_wrt_P_linear(T, S,pressure, drho_dS_dP, drho_dT_dP, start, npts)
-  real,    intent(in),  dimension(:) :: T           !< Potential temperature relative to the surface
-                                                    !! in C.
-  real,    intent(in),  dimension(:) :: S           !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure    !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: drho_dS_dP  !< The partial derivative of density with
-  real,    intent(out), dimension(:) :: drho_dT_dP  !< The partial derivative of density with
-  integer, intent(in)                :: start       !< The starting point in the arrays.
-  integer, intent(in)                :: npts        !< The number of values to calculate.
-
-  integer :: j
-
-  do j=start,start+npts-1
-    drho_dS_dP(j) = 0.
-    drho_dT_dP(j) = 0.
-  enddo
-
-end subroutine calculate_density_second_derivs_wrt_P_linear
-
-!> This subroutine calculates the partial second derivatives of density w.r.t. temperature and salinity wrt pressure
-!! which for a linear equation of state is 0.
-subroutine calculate_density_second_derivs_wrt_P_scalar_linear(T, S, pressure, drho_dS_dP, drho_dT_dP)
+subroutine calculate_density_second_derivs_scalar_linear(T, S,pressure,  drho_dS_dS, drho_dS_dT, drho_dT_dT,&
+                        drho_dS_dP, drho_dT_dP)
   real,    intent(in)  :: T           !< Potential temperature relative to the surface
                                       !! in C.
   real,    intent(in)  :: S           !< Salinity in PSU.
   real,    intent(in)  :: pressure    !< Pressure in Pa.
-  real,    intent(out) :: drho_dS_dP  !< The partial derivative of alpha with pressure
-  real,    intent(out) :: drho_dT_dP  !< The partial derivative of beta with pressure
+  real,    intent(out) :: drho_dS_dS  !< The partial derivative of density with
+  real,    intent(out) :: drho_dS_dT  !< The partial derivative of density with
+  real,    intent(out) :: drho_dT_dT  !< The partial derivative of density with
+  real,    intent(out) :: drho_dS_dP  !< The partial derivative of density with
+  real,    intent(out) :: drho_dT_dP  !< The partial derivative of density with
+
+  drho_dS_dS = 0.
+  drho_dS_dT = 0.
+  drho_dT_dT = 0.
   drho_dS_dP = 0.
   drho_dT_dP = 0.
 
-end subroutine calculate_density_second_derivs_wrt_P_scalar_linear
+end subroutine calculate_density_second_derivs_scalar_linear
 
 ! #@# This subroutine needs a doxygen description.
 subroutine calculate_specvol_derivs_linear(T, S, pressure, dSV_dT, dSV_dS, &
