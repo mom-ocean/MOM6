@@ -32,7 +32,7 @@ use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_grid,           only: ocean_grid_type, get_global_grid_size
 use MOM_variables,      only: surface
 use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
-use MOM_time_manager,   only: time_type, set_date, set_calendar_type, NOLEAP
+use MOM_time_manager,   only: time_type, set_date, set_time, set_calendar_type, NOLEAP
 use coupler_indices,    only: coupler_indices_init, cpl_indices
 use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
 
