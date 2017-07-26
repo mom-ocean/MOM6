@@ -1150,9 +1150,13 @@ end subroutine open_boundary_impose_land_mask
 subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary control structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< New u values on open boundaries
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u_new !< On exit, new u values on open boundaries
+                                                                    !! On entry, the old time-level v but
+                                                                    !! including barotropic accelerations.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u_old !< Original unadjusted u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< New v values on open boundaries
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v_new !< On exit, new v values on open boundaries.
+                                                                    !! On entry, the old time-level v but
+                                                                    !! including barotropic accelerations.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
@@ -1176,7 +1180,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   do n=1,OBC%number_of_segments
      segment=>OBC%segment(n)
      if (.not. segment%on_pe) cycle
-     if (segment%oblique) call gradient_at_q_points(G,segment,u_old,v_old)
+     if (segment%oblique) call gradient_at_q_points(G,segment,u_new,v_new)
      if (segment%direction == OBC_DIRECTION_E) then
        I=segment%HI%IscB
        do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
@@ -1187,7 +1191,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max) ! outward phase speed
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            segment%rx_normal(I,j,k) = rx_avg
-           segment%normal_vel(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
+           ! The new boundary value is interpolated between future interior
+           ! value, u_new(I-1) and past boundary value but with barotropic
+           ! accelerations, u_new(I).
+           segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I-1,j,k)) / (1.0+rx_avg)
          elseif (segment%oblique) then
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -1201,16 +1208,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps  ! avoid segv
-           Cx = min(dhdt/dhdx,rx_max) ! default to normal radiation
+           Cx = min(dhdt*dhdx,rx_max) ! default to normal radiation
 !          Cy = 0.0
            cff = max(dhdx*dhdx,eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
+             Cy = min(cff,max(dhdt*dhdy,-cff))
 !          endif
-           segment%normal_vel(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I-1,j,k)) - &
+           segment%normal_vel(I,j,k) = ((cff*u_new(I,j,k) + Cx*u_new(I-1,j,k)) - &
               (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
          elseif (segment%gradient) then
            segment%normal_vel(I,j,k) = u_new(I-1,j,k)
@@ -1221,7 +1226,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Tnudge_out
            endif
-           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_old(I,j,k))
+           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_new(I,j,k))
          endif
        enddo; enddo
      endif
@@ -1236,7 +1241,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdx > 0.0) rx_new = min( (dhdt/dhdx), rx_max)
            rx_avg = (1.0-gamma_u)*segment%rx_normal(I,j,k) + gamma_u*rx_new
            segment%rx_normal(I,j,k) = rx_avg
-           segment%normal_vel(I,j,k) = (u_old(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
+           ! The new boundary value is interpolated between future interior
+           ! value, u_new(I+1) and past boundary value but with barotropic
+           ! accelerations, u_new(I).
+           segment%normal_vel(I,j,k) = (u_new(I,j,k) + rx_avg*u_new(I+1,j,k)) / (1.0+rx_avg)
          elseif (segment%oblique) then
            dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
            dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
@@ -1250,16 +1258,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
-           if (dhdx == 0.0) dhdx=eps  ! avoid segv
-           Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+           Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !          Cy = 0.
            cff = max(dhdx*dhdx, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdy==0.) dhdy=eps ! avoid segv
-             Cy = min(cff,max(dhdt/dhdy,-cff))
+             Cy = min(cff,max(dhdt*dhdy,-cff))
 !          endif
-           segment%normal_vel(I,j,k) = ((cff*u_old(I,j,k) + Cx*u_new(I+1,j,k)) - &
+           segment%normal_vel(I,j,k) = ((cff*u_new(I,j,k) + Cx*u_new(I+1,j,k)) - &
              (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
          elseif (segment%gradient) then
            segment%normal_vel(I,j,k) = u_new(I+1,j,k)
@@ -1270,7 +1276,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Tnudge_out
            endif
-           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_old(I,j,k))
+           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_new(I,j,k))
          endif
        enddo; enddo
      endif
@@ -1285,7 +1291,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
            ry_avg = (1.0-gamma_v)*segment%rx_normal(I,j,k) + gamma_v*ry_new
            segment%rx_normal(i,J,k) = ry_avg
-           segment%normal_vel(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
+           ! The new boundary value is interpolated between future interior
+           ! value, v_new(J-1) and past boundary value but with barotropic
+           ! accelerations, v_new(J).
+           segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
          elseif (segment%oblique) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
@@ -1299,16 +1308,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps  ! avoid segv
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !          Cx = 0
            cff = max(dhdy*dhdy, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
+             Cx = min(cff,max(dhdt*dhdx,-cff))
 !          endif
-           segment%normal_vel(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J-1,k)) - &
+           segment%normal_vel(i,J,k) = ((cff*v_new(i,J,k) + Cy*v_new(i,J-1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
          elseif (segment%gradient) then
            segment%normal_vel(i,J,k) = v_new(i,J-1,k)
@@ -1319,7 +1326,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Tnudge_out
            endif
-           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_old(i,J,k))
+           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_new(i,J,k))
          endif
        enddo; enddo
      endif
@@ -1335,7 +1342,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            if (dhdt*dhdy > 0.0) ry_new = min( (dhdt/dhdy), ry_max)
            ry_avg = (1.0-gamma_v)*segment%rx_normal(I,j,k) + gamma_v*ry_new
            segment%rx_normal(i,J,k) = ry_avg
-           segment%normal_vel(i,J,k) = (v_old(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
+           ! The new boundary value is interpolated between future interior
+           ! value, v_new(J+1) and past boundary value but with barotropic
+           ! accelerations, v_new(J).
+           segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
          elseif (segment%oblique) then
            dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
            dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
@@ -1349,16 +1359,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              endif
 !          endif
            if (dhdt*dhdy < 0.0) dhdt = 0.0
-           if (dhdy == 0.0) dhdy=eps  ! avoid segv
-           Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+           Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !          Cx = 0
            cff = max(dhdy*dhdy, eps)
 !          if (segment%oblique) then
              cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             if (dhdx==0.) dhdx=eps ! avoid segv
-             Cx = min(cff,max(dhdt/dhdx,-cff))
+             Cx = min(cff,max(dhdt*dhdx,-cff))
 !          endif
-           segment%normal_vel(i,J,k) = ((cff*v_old(i,J,k) + Cy*v_new(i,J+1,k)) - &
+           segment%normal_vel(i,J,k) = ((cff*v_new(i,J,k) + Cy*v_new(i,J+1,k)) - &
               (max(Cx,0.0)*segment%grad_normal(I-1,2,k) + min(Cx,0.0)*segment%grad_normal(I,2,k))) / (cff + Cy)
          elseif (segment%gradient) then
            segment%normal_vel(i,J,k) = v_new(i,J+1,k)
@@ -1369,7 +1377,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Tnudge_out
            endif
-           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_old(i,J,k))
+           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_new(i,J,k))
          endif
        enddo; enddo
      end if
