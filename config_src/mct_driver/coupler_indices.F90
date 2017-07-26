@@ -289,7 +289,7 @@ contains
 
 
   subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind)
-    type(ice_ocean_boundary_type), intent(in)   :: ice_ocean_boundary !< A type for the ice ocean boundary
+    type(ice_ocean_boundary_type), intent(inout)   :: ice_ocean_boundary !< A type for the ice ocean boundary
     type(ocean_grid_type), intent(in)           :: grid
     !type(mct_aVect), intent(in)                 :: x2o_o
     real(kind=8), intent(in)                 :: x2o_o(:,:)
