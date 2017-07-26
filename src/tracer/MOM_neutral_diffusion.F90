@@ -8,7 +8,7 @@ use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, time_type
 use MOM_diag_mediator,    only : post_data, register_diag_field
 use MOM_EOS,              only : EOS_type, calculate_compress, calculate_density_derivs
-use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_wrt_P_scalar
+use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_scalar
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_file_parser,      only : openParameterBlock, closeParameterBlock
@@ -38,7 +38,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: nsurf  ! Number of neutral surfaces
   integer :: ppoly_deg = 2 ! Degree of polynomial used for reconstructions
   logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
-  logical :: boundary_extrapolation = .true.
+  logical :: boundary_extrap = .true.
   logical :: refine_position = .false.
 
   ! Positions of neutral surfaces in both the u, v directions
@@ -128,12 +128,18 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                  "a higher computational cost.", default=.true.)
   ! Initialize and configure remapping
   if (CS%continuous_reconstruction .eqv. .false.) then
+    call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", CS%boundary_extrap, &
+                   "Uses a rootfinding approach to find the position of a\n"//   &
+                   "neutral surface within a layer taking into account the\n"//  &
+                   "nonlinearity of the equation of state and the\n"//           &
+                   "polynomial reconstructions of T/S.",                         &
+                   default=.false.)
     call get_param(param_file, mdl, "NDIFF_REMAPPING_SCHEME", string, &
                    "This sets the reconstruction scheme used\n"//&
                    "for vertical remapping for all variables.\n"//&
                    "It can be one of the following schemes:\n"//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
-    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = .false. )
+    call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = CS%boundary_extrap )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%ppoly_deg)
     call get_param(param_file, mdl, "NDIFF_REFINE_POSITION", CS%refine_position, &
                    "Uses a rootfinding approach to find the position of a\n"//   &
@@ -155,9 +161,9 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
     CS%nsurf = 4*G%ke   ! Discontinuous means that every interface has four connections
     allocate(CS%T_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%T_i(:,:,:,:) = 0.
     allocate(CS%S_i(SZI_(G),SZJ_(G),SZK_(G),2))    ; CS%S_i(:,:,:,:) = 0.
-    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdT_i(:,:,:,:) = 0. 
+    allocate(CS%dRdT_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdT_i(:,:,:,:) = 0.
     allocate(CS%dRdS_i(SZI_(G),SZJ_(G),SZK_(G),2)) ; CS%dRdS_i(:,:,:,:) = 0.
-    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(G),CS%ppoly_deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.  
+    allocate(CS%ppoly_coeffs_T(SZI_(G),SZJ_(G),SZK_(G),CS%ppoly_deg+1)) ; CS%ppoly_coeffs_T(:,:,:,:) = 0.
     allocate(CS%ppoly_coeffs_S(SZI_(G),SZJ_(G),SZK_(G),CS%ppoly_deg+1)) ; CS%ppoly_coeffs_S(:,:,:,:) = 0.
   endif
   ! T-points
@@ -424,7 +430,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
             CS%Pint(i,j,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:),           &
             CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                                             &
             CS%Pint(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%dRdT_i(i,j+1,:,:), CS%dRdS_i(i,j+1,:,:), &
-            CS%ppoly_coeffs_T(i+1,j,:,:), CS%ppoly_coeffs_S(i+1,j,:,:),                                         &
+            CS%ppoly_coeffs_T(i,j+1,:,:), CS%ppoly_coeffs_S(i,j+1,:,:),                                         &
             CS%refine_position, EOS, CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:) )
       endif
     endif
@@ -484,7 +490,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! x-flux
   do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
     if (G%mask2dCu(I,j)>0.) then
-      call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i+1,j,:),       &
+      call neutral_surface_flux(nk, CS%nsurf, CS%ppoly_deg, h(i,j,:), h(i+1,j,:),       &
                                 Tracer(i,j,:), Tracer(i+1,j,:), &
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
@@ -496,7 +502,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   ! y-flux
   do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
     if (G%mask2dCv(i,J)>0.) then
-      call neutral_surface_flux(nk, CS%nsurf, h(i,j,:), h(i,j+1,:),       &
+      call neutral_surface_flux(nk, CS%nsurf, CS%ppoly_deg, h(i,j,:), h(i,j+1,:),       &
                                 Tracer(i,j,:), Tracer(i,j+1,:), &
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
@@ -1177,7 +1183,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
         if ( refine_pos .and. (PoL(k_surface) > 0.) .and. (PoL(k_surface) < 1.) ) then
           PoL(k_surface) = refine_nondim_position(Tr(kl_right,ki_right), Sr(kl_right,ki_right),                   &
                               dRdT_r(kl_right,ki_right), dRdS_r(kl_right,ki_right), Pl(kl_left,1), Pl(kl_left,2), &
-                              deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface))
+                              deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot)
         endif
 
       endif
@@ -1223,7 +1229,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
         if ( refine_pos .and. (PoR(k_surface) > 0. .and. PoR(k_surface) < 1.) ) then
           PoR(k_surface) = refine_nondim_position(Tl(kl_left,ki_left), Sl(kl_left,ki_left),                     &
                               dRdT_l(kl_left,ki_left), dRdS_l(kl_left,ki_left), Pr(kl_right,1), Pr(kl_right,2), &
-                              deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface))
+                              deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot)
         endif
       endif
       KoL(k_surface) = kl_left
@@ -1235,8 +1241,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
       stop 'Else what?'
     endif
     ! Store layer indices and positions for next iteration
-    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
-    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
+!    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MIN(PoL(k_surface),lastP_left)
+!    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MIN(PoR(k_surface),lastP_right)
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
@@ -1407,10 +1413,11 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
-!> Uses a Newton-Rhapson routine to find where dRho = 0, based on the equation of state and the polynomial
+!> Use a Newton-Rhapson routine to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
 !! profiles of dRho, T, and S, between the top and bottom interface
-real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, ppoly_T, ppoly_S, EOS, x0)
+real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, ppoly_T, ppoly_S, EOS, x0, drho_top,&
+  drho_bot)
   real,               intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
   real,               intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
   real,               intent(in) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
@@ -1425,71 +1432,186 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   real,               intent(in) :: x0        !< Nondimensional position within the layer where the neutral
                                               !! surface connects. If interpolate_for_nondim_position was
                                               !! previously called, this would be based on linear profile of dRho
+  real,               intent(in) :: drho_top, drho_bot
   type(EOS_type),     pointer    :: EOS       !< Equation of state structure
   ! Local variables
-  real, parameter    :: max_tolerance = 1.e-50
-  integer, parameter :: max_iter = 10
+  real, parameter    :: max_tolerance = 1.e-20
+  integer, parameter :: max_iter = 20
   integer :: iter
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
   real :: P_int ! Interpolated pressure
-  real :: T, S, alpha, beta, alpha_avg, beta_avg, d_alpha_dP, d_beta_dP, dT_dP, dS_dP, delta_T, delta_S
+  real :: T, S, alpha, beta, alpha_avg, beta_avg
+  real :: dT_dP, dS_dP, delta_T, delta_S, delta_P
+  real :: dbeta_dS, dbeta_dT, dalpha_dT, dalpha_dS, dbeta_dP, dalpha_dP
+  real :: f_a, f_b, f_c, a, b, c ! For biseciton method
+  logical :: debug = .true.
 
-  refine_nondim_position = x0
+  delta_P = P_bot-P_top
+
+  ! Bisection method
+  ! Calculate delta_rho(x0) and initialzie xpos, xneg, fpos, fneg
+  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, &
+                        f_c, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+  if (sign(1.,f_c) == sign(1.,drho_top)) then
+    a = x0
+    f_a = f_c
+    b = 1.
+    f_b = drho_bot
+  else
+    a = x0
+    f_a = f_c
+    b = 0.
+    f_b = drho_top
+  endif
+
+  ! Bisection method
+  do iter = 1, max_iter
+    c = 0.5 * (a+b)
+    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, c, EOS, &
+                        f_c, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+    if (sign(1.,f_c) == sign(1.,f_a)) then
+      a = c
+      f_a = f_c
+    else
+      b = c
+      f_b = f_c
+    endif
+  enddo
+
+  refine_nondim_position = c
 
   ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
   do iter = 1, max_iter
 
+    ! Calculate properties needed for delta_rho at the current position
     ! Linearly interpolate for pressure at nondimensional position x0
-    P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot 
-    
-    ! Calculate the f(P) term for Newton's method
+    P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot
+    T = evaluation_polynomial( ppoly_T, deg+1, refine_nondim_position )
+    S = evaluation_polynomial( ppoly_S, deg+1, refine_nondim_position )
     call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
-    T = evaluation_polynomial( ppoly_T, deg, refine_nondim_position )
-    S = evaluation_polynomial( ppoly_S, deg, refine_nondim_position )
-    alpha_avg = 0.5 * ( alpha + alpha_ref )
-    beta_avg = 0.5 * ( beta + beta_ref )
+
+    ! Calculate the f(P) term for Newton's method
+    alpha_avg = 0.5*( alpha + alpha_ref )
+    beta_avg = 0.5*( beta + beta_ref )
     delta_T = T - T_ref
     delta_S = S - S_ref
     delta_rho = alpha_avg*delta_T + beta_avg*delta_S
-    print *, iter, refine_nondim_position, delta_rho 
+!    print *, iter, refine_nondim_position, delta_rho
     if (abs(delta_rho)<max_tolerance) exit
 
     ! Calculate the f'(P) term for Newton's method
-    call calculate_density_second_derivs_wrt_P_scalar( T, S, P_int, d_alpha_dP, d_beta_dP, EOS )
-    dT_dP = first_derivative_polynomial( ppoly_T, deg, refine_nondim_position ) 
-    dS_dP = first_derivative_polynomial( ppoly_S, deg, refine_nondim_position )
+    call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+    dalpha_dS = dbeta_dT ! Cross derivatives are identicial
+    ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
+    dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
+    dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / delta_P
     ! Calculate the total derivative of delta_rho.
     ! Note because delta_rho = alpha_avg * deltaT + beta_avg * deltaS where alpha_avg = 0.5*(alpha+alpha_ref),
-    ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well
-    d_delta_rho_dP = 0.5 * (d_alpha_dP*delta_T + d_beta_dP*delta_S) + alpha_avg*dT_dP + beta_avg*dS_dP
+    ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well. By chain rule
+    ! dT_dP= dT_dz dz/dP = dT_dz / (Pbot-Ptop)
+!    d_delta_rho_dP = 0.5*(d_alpha_dP*delta_T + d_beta_dP*delta_S) + (alpha_avg*dT_dz + beta_avg*dS_dz)
+    d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
+                           ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
+                           dS_dP*beta_avg + dT_dP*alpha_avg
+
 
     ! Newton step update
-    refine_nondim_position = refine_nondim_position - delta_rho / d_delta_rho_dP
-    
+    P_int = P_int - (delta_rho / d_delta_rho_dP)
+    refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
+    if (refine_nondim_position < 0. .or. refine_nondim_position > 1.) then
+      if (debug) then
+        write (*,*) "Iteration: ", iter
+        write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
+        write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
+        write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
+        write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
+        write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
+        write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
+        write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
+        write (*,*) "x0: ", x0
+        write (*,*) "refine_nondim_position: ", refine_nondim_position
+        call MOM_error(WARNING, "Step went out of bounds")
+      endif
+
+    endif
+
   enddo
-  refine_nondim_position = x0
+
+  ! Make sure that the result is bounded between 0 and 1
+  if (refine_nondim_position>1.) then
+    if (debug) then
+      write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
+      write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
+      write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
+      write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
+      write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
+      write (*,*) "x0: ", x0
+      write (*,*) "refine_nondim_position: ", refine_nondim_position
+      call MOM_error(WARNING, "refine_nondim_position>1.")
+    endif
+    refine_nondim_position = c
+  endif
+
+  if (refine_nondim_position<0.) then
+    if (debug) then
+      write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
+      write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
+      write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
+      write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
+      write (*,*) "dT_dP, dS_dP:", dT_dP, dS_dP
+      write (*,*) "x0: ", x0
+      write (*,*) "refine_nondim_position: ", refine_nondim_position
+      call MOM_error(WARNING, "refine_nondim_position<0.")
+    endif
+    refine_nondim_position = c
+  endif
+
 end function refine_nondim_position
 
-!> Calculate the difference in neutral density between two points based on
-!! delta_rho = alpha*delta_T + beta*delta_S
-real function calc_delta_rho(T0, S0, alpha0, beta0, T1, S1, alpha1, beta1)
-  real, intent(in) :: T0     !< Temperature of neutral surface 0
-  real, intent(in) :: S0     !< Salinity of neutral surface 0
-  real, intent(in) :: alpha0 !< dRho/dT of neutral surface 0
-  real, intent(in) :: beta0  !< dRho/dS of neutral surface 0
-  real, intent(in) :: T1     !< Temperature of neutral surface 1
-  real, intent(in) :: S1     !< Salinity of neutral surface 1
-  real, intent(in) :: alpha1 !< dRho/dT of neutral surface 1
-  real, intent(in) :: beta1  !< dRho/dS of neutral surface 1
+!> Calculate the difference in neutral density between a reference T, S, alpha, and beta
+!! and a point on the polynomial reconstructions of T, S
+subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, &
+                          delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+  integer,                intent(in)  :: deg       !< Degree of polynomial reconstruction
+  real,                   intent(in)  :: T_ref     !< Temperature at reference surface
+  real,                   intent(in)  :: S_ref     !< Salinity at reference surface
+  real,                   intent(in)  :: alpha_ref !< dRho/dT at reference surface
+  real,                   intent(in)  :: beta_ref  !< dRho/dS at reference surface
+  real,                   intent(in)  :: P_top     !< Pressure (Pa) at top interface of layer to be searched
+  real,                   intent(in)  :: P_bot     !< Pressure (Pa) at bottom interface
+  real, dimension(deg+1), intent(in)  :: ppoly_T   !< Coefficients of T reconstruction
+  real, dimension(deg+1), intent(in)  :: ppoly_S   !< Coefficients of S reconstruciton
+  real,                   intent(in)  :: x0        !< Nondimensional position to evaluate
+  type(EOS_type),         pointer     :: EOS       !< Equation of state structure
+  real,                   intent(out) :: delta_rho
+  real,                   intent(out) :: P_int     !< Temperature at point x0
+  real,                   intent(out) :: T         !< Temperature at point x0
+  real,                   intent(out) :: S         !< Temperature at point x0
+  real,                   intent(out) :: alpha_avg !< Temperature at point x0
+  real,                   intent(out) :: beta_avg  !< Temperature at point x0
+  real,                   intent(out) :: delta_T   !< Temperature at point x0
+  real,                   intent(out) :: delta_S   !< Temperature at point x0
 
-  calc_delta_rho = 0.5 * ( (alpha0+alpha1)*(T0 - T1) + (beta0+beta1)*(S0-S1) )
+  real :: alpha, beta
+  P_int = (1. - x0)*P_top + x0*P_bot
+  T = evaluation_polynomial( ppoly_T, deg+1, x0 )
+  S = evaluation_polynomial( ppoly_S, deg+1, x0 )
+  call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
 
-end function calc_delta_rho
+  ! Calculate the f(P) term for Newton's method
+  alpha_avg = 0.5*( alpha + alpha_ref )
+  beta_avg = 0.5*( beta + beta_ref )
+  delta_T = T - T_ref
+  delta_S = S - S_ref
+  delta_rho = alpha_avg*delta_T + beta_avg*delta_S
+
+end subroutine calc_delta_rho
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
+subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
   integer,                      intent(in)    :: nk    !< Number of levels
   integer,                      intent(in)    :: nsurf !< Number of neutral surfaces
+  integer,                      intent(in)    :: deg   !< Degree of polynomial reconstructions
   real, dimension(nk),          intent(in)    :: hl    !< Left-column layer thickness (Pa)
   real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness (Pa)
   real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
@@ -1516,13 +1638,13 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
   real, dimension(nk) :: aL_r !< Right-column left edge value of tracer (conc, e.g. degC)
   real, dimension(nk) :: aR_r !< Right-column right edge value of tracer (conc, e.g. degC)
   ! Discontinuous reconstruction
+  integer               :: iMethod
   real, dimension(nk,2) :: Tid_l !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk,2) :: Tid_r !< Right-column interface tracer (conc, e.g. degC)
-  real, dimension(nk,5) :: ppoly_r_coeffs_l
-  real, dimension(nk,5) :: ppoly_r_coeffs_r
-  real, dimension(nk,5) :: ppoly_r_S_l
-  real, dimension(nk,5) :: ppoly_r_S_r
-  integer               :: iMethod
+  real, dimension(nk,deg+1) :: ppoly_r_coeffs_l
+  real, dimension(nk,deg+1) :: ppoly_r_coeffs_r
+  real, dimension(nk,deg+1) :: ppoly_r_S_l
+  real, dimension(nk,deg+1) :: ppoly_r_S_r
 
   ! Setup reconstruction edge values
   if (continuous) then
@@ -1557,22 +1679,22 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
       if (continuous) then
         klb = KoL(k_sublayer+1)
         T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
-        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
+        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
 
         klt = KoL(k_sublayer)
-!        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
-        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
+        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
+!        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
 
         T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
                                aL_l(klt), aR_l(klt), Tl(klt))
 
         krb = KoR(k_sublayer+1)
-!        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
-        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
+        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
+!        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), deg+1, PiR(k_sublayer+1))
 
         krt = KoR(k_sublayer)
-!        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
-        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
+        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
+!        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
 
         T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
                                 aL_r(krt), aR_r(krt), Tr(krt))
@@ -1581,35 +1703,35 @@ subroutine neutral_surface_flux(nk, nsurf, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, h
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
         if (klt .ne. klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
-        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), 3, PiL(k_sublayer+1))
-        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), 3, PiL(k_sublayer))
+        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
+        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
         T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
                                            PiL(k_sublayer), PiL(k_sublayer+1))
 !        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
 !        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
-        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
+!        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
 
         krb = KoR(k_sublayer+1)
         krt = KoR(k_sublayer)
         if (krt .ne. krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
-        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), 3, PiR(k_sublayer+1))
-        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), 3, PiR(k_sublayer))
+        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), deg+1, PiR(k_sublayer+1))
+        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
         T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
-                                            PiR(k_sublayer), PiL(k_sublayer+1))
+                                            PiR(k_sublayer), PiR(k_sublayer+1))
 !        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
 !        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
-        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
+!        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
       endif
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
       dT_layer = T_right_layer - T_left_layer
-      if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
+      !if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
+      if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
       else
         dT_ave = dT_layer
       endif
-      dT_ave = dT_layer
       Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
     endif
   enddo
@@ -1717,12 +1839,12 @@ logical function neutral_diffusion_unit_tests(verbose)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 8, &
                                    absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
-  call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+  call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
-  call neutral_surface_flux(3, 2*3+2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
+  call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
                                PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
   neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. test_data1d(v, 7, Flx, &
