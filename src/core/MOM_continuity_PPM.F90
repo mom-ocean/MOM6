@@ -578,7 +578,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
+          do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             BT_cont%Fa_u_W0(I,j) = 0.0
             do k=1,nz
               BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i,j,k)*G%dy_Cu(I,j)
@@ -588,7 +588,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
             BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
           enddo
         else
-          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
+          do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             BT_cont%Fa_u_W0(I,j) = 0.0
             do k=1,nz
               BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i+1,j,k)*G%dy_Cu(I,j)
@@ -1384,7 +1384,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_N_or_S) then
         J = OBC%segment(n)%HI%JsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
+          do I = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
             BT_cont%Fa_v_S0(i,J) = 0.0
             do k=1,nz
               BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j,k)*G%dx_Cv(i,J)
@@ -1394,7 +1394,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
             BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
           enddo
         else
-          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
+          do I = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
             BT_cont%Fa_v_S0(i,J) = 0.0
             do k=1,nz
               BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j+1,k)*G%dx_Cv(i,J)
