@@ -1437,105 +1437,170 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   ! Local variables
   real, parameter    :: max_tolerance = 1.e-20
   integer, parameter :: max_iter = 20
+  integer, parameter :: min_method = 3        ! 1: Bisection, 2: Newton's method 3: Brent's Method
   integer :: iter
+
+
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
   real :: P_int ! Interpolated pressure
   real :: T, S, alpha, beta, alpha_avg, beta_avg
   real :: dT_dP, dS_dP, delta_T, delta_S, delta_P
   real :: dbeta_dS, dbeta_dT, dalpha_dT, dalpha_dS, dbeta_dP, dalpha_dP
-  real :: f_a, f_b, f_c, a, b, c ! For biseciton method
+  real :: f_a, f_b, f_c, a, b, c, d, e, w
+  real :: xm, tol1, p ,q, r, min1, min2 ! For biseciton method
   logical :: debug = .true.
 
   delta_P = P_bot-P_top
+  refine_nondim_position = x0
 
-  ! Bisection method
-  ! Calculate delta_rho(x0) and initialzie xpos, xneg, fpos, fneg
-  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, &
-                        f_c, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
-  if (sign(1.,f_c) == sign(1.,drho_top)) then
-    a = x0
-    f_a = f_c
-    b = 1.
-    f_b = drho_bot
-  else
-    a = x0
-    f_a = f_c
-    b = 0.
-    f_b = drho_top
-  endif
-
-  ! Bisection method
-  do iter = 1, max_iter
-    c = 0.5 * (a+b)
-    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, c, EOS, &
-                        f_c, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
-    if (sign(1.,f_c) == sign(1.,f_a)) then
-      a = c
-      f_a = f_c
-    else
-      b = c
-      f_b = f_c
-    endif
-  enddo
-
-  refine_nondim_position = c
-
-  ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
-  do iter = 1, max_iter
-
-    ! Calculate properties needed for delta_rho at the current position
-    ! Linearly interpolate for pressure at nondimensional position x0
-    P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot
-    T = evaluation_polynomial( ppoly_T, deg+1, refine_nondim_position )
-    S = evaluation_polynomial( ppoly_S, deg+1, refine_nondim_position )
-    call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
-
-    ! Calculate the f(P) term for Newton's method
-    alpha_avg = 0.5*( alpha + alpha_ref )
-    beta_avg = 0.5*( beta + beta_ref )
-    delta_T = T - T_ref
-    delta_S = S - S_ref
-    delta_rho = alpha_avg*delta_T + beta_avg*delta_S
-!    print *, iter, refine_nondim_position, delta_rho
-    if (abs(delta_rho)<max_tolerance) exit
-
-    ! Calculate the f'(P) term for Newton's method
-    call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
-    dalpha_dS = dbeta_dT ! Cross derivatives are identicial
-    ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
-    dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
-    dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / delta_P
-    ! Calculate the total derivative of delta_rho.
-    ! Note because delta_rho = alpha_avg * deltaT + beta_avg * deltaS where alpha_avg = 0.5*(alpha+alpha_ref),
-    ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well. By chain rule
-    ! dT_dP= dT_dz dz/dP = dT_dz / (Pbot-Ptop)
-!    d_delta_rho_dP = 0.5*(d_alpha_dP*delta_T + d_beta_dP*delta_S) + (alpha_avg*dT_dz + beta_avg*dS_dz)
-    d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
-                           ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
-                           dS_dP*beta_avg + dT_dP*alpha_avg
-
-
-    ! Newton step update
-    P_int = P_int - (delta_rho / d_delta_rho_dP)
-    refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
-    if (refine_nondim_position < 0. .or. refine_nondim_position > 1.) then
-      if (debug) then
-        write (*,*) "Iteration: ", iter
-        write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
-        write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
-        write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
-        write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
-        write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
-        write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
-        write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
-        write (*,*) "x0: ", x0
-        write (*,*) "refine_nondim_position: ", refine_nondim_position
-        call MOM_error(WARNING, "Step went out of bounds")
+  select case (min_method)
+    case (1) ! Bisection method
+      ! Calculate delta_rho(x0) and initialzie xpos, xneg, fpos, fneg
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, f_c)
+      if (sign(1.,f_c) == sign(1.,drho_top)) then
+        a = x0
+        f_a = f_c
+        b = 1.
+        f_b = drho_bot
+      else
+        a = x0
+        f_a = f_c
+        b = 0.
+        f_b = drho_top
       endif
 
-    endif
+      ! Bisection method
+      do iter = 1, max_iter
+        c = 0.5 * (a+b)
+        call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, c, EOS, f_c)
+        if (sign(1.,f_c) == sign(1.,f_a)) then
+          a = c
+          f_a = f_c
+        else
+          b = c
+          f_b = f_c
+        endif
+      enddo
+      refine_nondim_position = c
+    case(2) ! Newton's method
+      ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
+      do iter = 1, max_iter
 
-  enddo
+        ! Calculate properties needed for delta_rho at the current position
+        ! Linearly interpolate for pressure at nondimensional position x0
+        P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot
+        T = evaluation_polynomial( ppoly_T, deg+1, refine_nondim_position )
+        S = evaluation_polynomial( ppoly_S, deg+1, refine_nondim_position )
+        call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+
+        ! Calculate the f(P) term for Newton's method
+        alpha_avg = 0.5*( alpha + alpha_ref )
+        beta_avg = 0.5*( beta + beta_ref )
+        delta_T = T - T_ref
+        delta_S = S - S_ref
+        delta_rho = alpha_avg*delta_T + beta_avg*delta_S
+!        print *, iter, refine_nondim_position, delta_rho
+        if (abs(delta_rho)<max_tolerance) exit
+
+        ! Calculate the f'(P) term for Newton's method
+        call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+        dalpha_dS = dbeta_dT ! Cross derivatives are identicial
+        ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
+        dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
+        dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / delta_P
+        ! Calculate the total derivative of delta_rho.
+        ! Note because delta_rho = alpha_avg * deltaT + beta_avg * deltaS where alpha_avg = 0.5*(alpha+alpha_ref),
+        ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well. By chain rule
+        ! dT_dP= dT_dz dz/dP = dT_dz / (Pbot-Ptop)
+!        d_delta_rho_dP = 0.5*(d_alpha_dP*delta_T + d_beta_dP*delta_S) + (alpha_avg*dT_dz + beta_avg*dS_dz)
+        d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
+                               ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
+                               dS_dP*beta_avg + dT_dP*alpha_avg
+
+
+        ! Newton step update
+        P_int = P_int - (delta_rho / d_delta_rho_dP)
+        refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
+        if (refine_nondim_position < 0. .or. refine_nondim_position > 1.) then
+          if (debug) then
+            write (*,*) "Iteration: ", iter
+            write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
+            write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
+            write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
+            write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
+            write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
+            write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
+            write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
+            write (*,*) "x0: ", x0
+            write (*,*) "refine_nondim_position: ", refine_nondim_position
+            call MOM_error(WARNING, "Step went out of bounds")
+          endif
+
+        endif
+
+      enddo
+    case (3) ! Brent's method
+      ! Initialize the three points of the method with f(0), f(x0) and f(1)
+      a = 0. ; f_a = drho_top
+      c = 1. ; f_c = drho_bot
+      b = x0
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, b, EOS, f_b)
+
+      do iter = 1,max_iter
+        if ((f_b > 0. .and. f_c >0.) .or. (f_b < 0. .and. f_c < 0.)) then
+          c = a
+          f_c = f_a
+          d = b-a
+          e = d
+        endif
+        if (ABS(f_c) < ABS(f_b)) then
+          a = b; b = c; c = a;
+          f_a = f_b ; f_b = f_c ; f_c = f_a;
+        endif
+        tol1 = 2.*EPSILON(b)*ABS(b) + 0.5*max_tolerance
+        xm = 0.5*(c-b)
+        if ( (ABS(xm) <= tol1) .or. (f_b == 0.) ) then
+          refine_nondim_position = b
+          exit
+        endif
+        if ( (ABS(e) >= tol1) .and. (ABS(f_a) > ABS(f_b)) ) then
+          w = f_b/f_a
+          if (a==c) then
+            p = 2.*xm*w
+            q = 1. - w
+          else
+            q = f_a/f_c
+            r = f_b/f_c
+            p = s*(2.*xm*q*(q-r)-(b-a)*(r-1.))
+            q = (q-1.)*(r-1.)*(s-1.)
+          endif
+          if ( p > 0. ) q = -q
+          p = ABS(p)
+          min1 = 3.*xm*q - ABS(tol1*q)
+          min2 = ABS(e*q)
+          if (2.*p < MIN(min1,min2)) then
+            e = d;
+            d = p/q
+          else
+            d = xm
+            e = d
+          endif
+        else
+          d = xm
+          e = d
+        endif
+        a = b
+        f_a = f_b
+        if (ABS(d) > tol1) then
+          b = b + d
+        else
+          b = b + SIGN(tol1,xm)
+        endif
+        call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, b, EOS, f_b)
+
+      enddo
+
+  end select
 
   ! Make sure that the result is bounded between 0 and 1
   if (refine_nondim_position>1.) then
@@ -1571,7 +1636,7 @@ end function refine_nondim_position
 !> Calculate the difference in neutral density between a reference T, S, alpha, and beta
 !! and a point on the polynomial reconstructions of T, S
 subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, &
-                          delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+                          delta_rho, P_out, T_out, S_out, alpha_avg_out, beta_avg_out, delta_T_out, delta_S_out)
   integer,                intent(in)  :: deg       !< Degree of polynomial reconstruction
   real,                   intent(in)  :: T_ref     !< Temperature at reference surface
   real,                   intent(in)  :: S_ref     !< Salinity at reference surface
@@ -1584,15 +1649,15 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   real,                   intent(in)  :: x0        !< Nondimensional position to evaluate
   type(EOS_type),         pointer     :: EOS       !< Equation of state structure
   real,                   intent(out) :: delta_rho
-  real,                   intent(out) :: P_int     !< Temperature at point x0
-  real,                   intent(out) :: T         !< Temperature at point x0
-  real,                   intent(out) :: S         !< Temperature at point x0
-  real,                   intent(out) :: alpha_avg !< Temperature at point x0
-  real,                   intent(out) :: beta_avg  !< Temperature at point x0
-  real,                   intent(out) :: delta_T   !< Temperature at point x0
-  real,                   intent(out) :: delta_S   !< Temperature at point x0
+  real,         optional, intent(out) :: P_out         !< Pressure at point x0
+  real,         optional, intent(out) :: T_out         !< Temperature at point x0
+  real,         optional, intent(out) :: S_out         !< Salinity at point x0
+  real,         optional, intent(out) :: alpha_avg_out !< Average of alpha between reference and x0
+  real,         optional, intent(out) :: beta_avg_out  !< Average of beta between reference and x0
+  real,         optional, intent(out) :: delta_T_out   !< Difference in temperature between reference and x0
+  real,         optional, intent(out) :: delta_S_out   !< Difference in salinity between reference and x0
 
-  real :: alpha, beta
+  real :: alpha, beta, alpha_avg, beta_avg, P_int, T, S, delta_T, delta_S
   P_int = (1. - x0)*P_top + x0*P_bot
   T = evaluation_polynomial( ppoly_T, deg+1, x0 )
   S = evaluation_polynomial( ppoly_S, deg+1, x0 )
@@ -1604,6 +1669,15 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   delta_T = T - T_ref
   delta_S = S - S_ref
   delta_rho = alpha_avg*delta_T + beta_avg*delta_S
+
+  ! If doing a Newton step, these quantities are needed, otherwise they can just be optional
+  if (present(P_out)) P_out = P_int
+  if (present(T_out)) T_out = T
+  if (present(S_out)) S_out = S
+  if (present(alpha_avg_out)) alpha_avg_out = alpha_avg
+  if (present(beta_avg_out))  beta_avg_out = alpha_avg
+  if (present(delta_T_out)) delta_T_out = delta_T
+  if (present(delta_S_out)) delta_S_out = delta_S
 
 end subroutine calc_delta_rho
 
