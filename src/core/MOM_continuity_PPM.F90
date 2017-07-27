@@ -367,31 +367,23 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
-  if (local_open_BC) then
-    do n=1, OBC%number_of_segments
-      segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
-      if (segment%direction == OBC_DIRECTION_E) then
-        I=segment%HI%IsdB
-        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-          h_in(i+1,j,k) = h_in(i,j,k)
-!         h_L(i+1,j,k) = h_in(i,j,k)
-!         h_R(i+1,j,k) = h_in(i,j,k)
-!         h_L(i,j,k) = h_in(i,j,k)
-!         h_R(i,j,k) = h_in(i,j,k)
-        enddo ; enddo
-      elseif (segment%direction == OBC_DIRECTION_W) then
-        I=segment%HI%IsdB
-        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-            h_in(i,j,k) = h_in(i+1,j,k)
-!           h_L(i,j,k) = h_in(i+1,j,k)
-!           h_R(i,j,k) = h_in(i+1,j,k)
-!           h_L(i+1,j,k) = h_in(i+1,j,k)
-!           h_R(i+1,j,k) = h_in(i+1,j,k)
-        enddo ; enddo
-      endif
-    enddo
-  endif
+! if (local_open_BC) then
+!   do n=1, OBC%number_of_segments
+!     segment => OBC%segment(n)
+!     if (.not. segment%on_pe .or. segment%specified) cycle
+!     if (segment%direction == OBC_DIRECTION_E) then
+!       I=segment%HI%IsdB
+!       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+!         h_in(i+1,j,k) = h_in(i,j,k)
+!       enddo ; enddo
+!     elseif (segment%direction == OBC_DIRECTION_W) then
+!       I=segment%HI%IsdB
+!       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+!           h_in(i,j,k) = h_in(i+1,j,k)
+!       enddo ; enddo
+!     endif
+!   enddo
+! endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
@@ -417,6 +409,17 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         do I=ish-1,ieh
           if (OBC%segment(OBC%segnum_u(I,j))%specified) &
             uh(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+        enddo
+      endif
+      if (local_open_BC) then
+        do I=ish-1,ieh
+          if (OBC%segment(OBC%segnum_u(I,j))%open) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+              uh(I,j,k) = G%dy_Cu(I,j) * u(I,j,k) * h_in(I,j,k)
+            else
+              uh(I,j,k) = G%dy_Cu(I,j) * u(I,j,k) * h_in(I+1,j,k)
+            endif
+          endif
         enddo
       endif
     enddo
@@ -570,6 +573,34 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 
     endif ! present(uhbt) or do_aux or set_BT_cont
   enddo ! j-loop
+  if (local_open_BC .and. set_BT_cont) then
+    do n = 1, OBC%number_of_segments
+      if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
+        I = OBC%segment(n)%HI%IsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
+            BT_cont%Fa_u_W0(I,j) = 0.0
+            do k=1,nz
+              BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i,j,k)*G%dy_Cu(I,j)
+            enddo
+            BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
+            BT_cont%Fa_u_WW(I,j) = BT_cont%Fa_u_W0(I,j)
+            BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
+          enddo
+        else
+          do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
+            BT_cont%Fa_u_W0(I,j) = 0.0
+            do k=1,nz
+              BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i+1,j,k)*G%dy_Cu(I,j)
+            enddo
+            BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
+            BT_cont%Fa_u_WW(I,j) = BT_cont%Fa_u_W0(I,j)
+            BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
+          enddo
+        endif
+      endif
+    enddo
+  endif
   call cpu_clock_end(id_clock_correct)
 
   if  (set_BT_cont) then ; if (associated(BT_cont%h_u)) then
@@ -1144,31 +1175,23 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
-  if (local_open_BC) then
-    do n=1, OBC%number_of_segments
-      segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
-      if (segment%direction == OBC_DIRECTION_N) then
-        J=segment%HI%JsdB
-        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-          h_in(i,j+1,k) = h_in(i,j,k)
-!         h_L(i,j+1,k) = h_in(i,j,k)
-!         h_R(i,j+1,k) = h_in(i,j,k)
-!         h_L(i,j,k) = h_in(i,j,k)
-!         h_R(i,j,k) = h_in(i,j,k)
-        enddo ; enddo
-      elseif (segment%direction == OBC_DIRECTION_S) then
-        J=segment%HI%JsdB
-        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-          h_in(i,j,k) = h_in(i,j+1,k)
-!         h_L(i,j,k) = h_in(i,j+1,k)
-!         h_R(i,j,k) = h_in(i,j+1,k)
-!         h_L(i,j+1,k) = h_in(i,j+1,k)
-!         h_R(i,j+1,k) = h_in(i,j+1,k)
-        enddo ; enddo
-      endif
-    enddo
-  endif
+! if (local_open_BC) then
+!   do n=1, OBC%number_of_segments
+!     segment => OBC%segment(n)
+!     if (.not. segment%on_pe .or. segment%specified) cycle
+!     if (segment%direction == OBC_DIRECTION_N) then
+!       J=segment%HI%JsdB
+!       do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+!         h_in(i,j+1,k) = h_in(i,j,k)
+!       enddo ; enddo
+!     elseif (segment%direction == OBC_DIRECTION_S) then
+!       J=segment%HI%JsdB
+!       do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+!         h_in(i,j,k) = h_in(i,j+1,k)
+!       enddo ; enddo
+!     endif
+!   enddo
+! endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
@@ -1196,6 +1219,17 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         do i=ish,ieh
           if (OBC%segment(OBC%segnum_v(i,J))%specified) &
             vh(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+        enddo
+      endif
+      if (local_open_BC) then
+        do i=ish,ieh
+          if (OBC%segment(OBC%segnum_v(i,J))%open) then
+            if (OBC%segment(OBC%segnum_v(I,j))%direction == OBC_DIRECTION_N) then
+              vh(i,J,k) = G%dx_Cv(i,J) * v(i,J,k) * h_in(i,J,k)
+            else
+              vh(i,J,k) = G%dx_Cv(i,J) * v(i,J,k) * h_in(i,J+1,k)
+            endif
+          endif
         enddo
       endif
     enddo ! k-loop
@@ -1326,7 +1360,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (any_simple_OBC) then
           do i=ish,ieh
             do_I(i) = (OBC%segment(OBC%segnum_v(i,J))%specified)
-            if (do_I(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(I,j)
+            if (do_I(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
             if (abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) &
@@ -1344,6 +1378,35 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 
     endif ! present(vhbt) or do_aux or set_BT_cont
   enddo ! j-loop
+
+  if (local_open_BC .and. set_BT_cont) then
+    do n = 1, OBC%number_of_segments
+      if (OBC%segment(n)%open .and. OBC%segment(n)%is_N_or_S) then
+        J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
+            BT_cont%Fa_v_S0(i,J) = 0.0
+            do k=1,nz
+              BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j,k)*G%dx_Cv(i,J)
+            enddo
+            BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
+            BT_cont%Fa_v_SS(i,J) = BT_cont%Fa_v_S0(i,J)
+            BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
+          enddo
+        else
+          do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
+            BT_cont%Fa_v_S0(i,J) = 0.0
+            do k=1,nz
+              BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j+1,k)*G%dx_Cv(i,J)
+            enddo
+            BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
+            BT_cont%Fa_v_SS(i,J) = BT_cont%Fa_v_S0(i,J)
+            BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
+          enddo
+        endif
+      endif
+    enddo
+  endif
   call cpu_clock_end(id_clock_correct)
 
   if (set_BT_cont) then ; if (associated(BT_cont%h_v)) then
