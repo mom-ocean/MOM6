@@ -244,10 +244,12 @@ contains
     do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
       n = n+1
       ! This is a simple second-order difference
-    ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+      ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
       ! This is a PLM slope which might be less prone to the A-grid null mode
-      slp_L = ssh(i,j) - ssh(i-1,j)
-      slp_R = ssh(i+1,j) - ssh(i,j)
+      slp_L = (ssh(i,j) - ssh(i-1,j)) * grid%mask2dCu(I-1,j)
+      !if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
+      slp_R = (ssh(i+1,j) - ssh(i,j)) * grid%mask2dCu(I,j)
+      !if (grid%mask2dCu(I,j)==0.) slp_R = 0.
       slp_C = 0.5 * (slp_L + slp_R)
       if ( (slp_L * slp_R) > 0.0 ) then
         ! This limits the slope so that the edge values are bounded by the
@@ -270,6 +272,8 @@ contains
       ! This is a PLM slope which might be less prone to the A-grid null mode
       slp_L = ssh(i,j) - ssh(i,j-1)
       slp_R = ssh(i,j+1) - ssh(i,j)
+slp_L=0.
+slp_R=0.
       slp_C = 0.5 * (slp_L + slp_R)
       if ( (slp_L * slp_R) > 0.0 ) then
         ! This limits the slope so that the edge values are bounded by the
