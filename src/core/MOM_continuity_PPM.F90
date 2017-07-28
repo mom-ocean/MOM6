@@ -354,7 +354,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,CS,h_L,h_in,h_R,G,GV,LB,visc_rem)
+!$OMP parallel do default(none) shared(OBC,ish,ieh,jsh,jeh,nz,CS,h_L,h_in,h_R,G,GV,LB,visc_rem)
   do k=1,nz
     ! This sets h_L and h_R.
     if (CS%upwind_1st) then
@@ -1172,7 +1172,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) shared(nz,ish,ieh,jsh,jeh,h_in,h_L,h_R,G,GV,LB,CS,visc_rem)
+!$OMP parallel do default(none) shared(OBC,nz,ish,ieh,jsh,jeh,h_in,h_L,h_R,G,GV,LB,CS,visc_rem)
   do k=1,nz
     ! This sets h_L and h_R.
     if (CS%upwind_1st) then
