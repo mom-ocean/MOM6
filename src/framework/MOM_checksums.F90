@@ -142,7 +142,7 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, s
   if (present(haloshift)) hshift = haloshift
   if (hshift<0) hshift = HI%ied-HI%iec
 
-  o_corners = .false. 
+  o_corners = .false.
   if (present(omit_corners)) o_corners = omit_corners
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
@@ -310,7 +310,7 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  o_corners = .false. 
+  o_corners = .false.
   if (present(omit_corners)) o_corners = omit_corners
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
@@ -355,7 +355,7 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, omit
   if (present(haloshift)) hshift=haloshift
   if (hshift<0) hshift=HI%ied-HI%iec
 
-  o_corners = .false. 
+  o_corners = .false.
   if (present(omit_corners)) o_corners = omit_corners
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
@@ -546,7 +546,7 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   if (present(haloshift)) hshift = haloshift
   if (hshift<0) hshift=HI%iedB-HI%iecB
 
-  o_corners = .false. 
+  o_corners = .false.
   if (present(omit_corners)) o_corners = omit_corners
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
@@ -592,7 +592,7 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, omit_cor
   if (present(haloshift)) hshift = haloshift
   if (hshift<0) hshift=HI%iedB-HI%iecB
 
-  o_corners = .false. 
+  o_corners = .false.
   if (present(omit_corners)) o_corners = omit_corners
 
   scaling = 1.0 ; if (present(scale)) scaling = scale
