@@ -51,7 +51,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : uvchksum, hchksum, bchksum
+use MOM_debugging, only : uvchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -417,7 +417,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
 !$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
-
   do j=G%JscB,G%JecB ; do m=1,2
 
     if (m==1) then
@@ -974,8 +973,8 @@ function set_v_at_u(v, h, G, i, j, k, mask2dCv)
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
 
   hwt(1) = (h(i,j-1,k) + h(i,j,k)) * mask2dCv(i,J-1)
-  hwt(2) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
-  hwt(3) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
+  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
+  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
   hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * mask2dCv(i+1,J)
 
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
@@ -1006,7 +1005,7 @@ function set_u_at_v(u, h, G, i, j, k, mask2dCu)
   hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
-          ((hwt(3) * u(I,j,k) + hwt(2) * u(I-1,j+1,k)) + &
+          ((hwt(2) * u(I,j,k) + hwt(3) * u(I-1,j+1,k)) + &
            (hwt(1) * u(I-1,j,k) + hwt(4) * u(I,j+1,k))) / hwt_tot
 end function set_u_at_v
 

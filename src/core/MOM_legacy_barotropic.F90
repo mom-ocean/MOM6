@@ -1506,7 +1506,7 @@ subroutine legacy_btstep(use_fluxes, U_in, V_in, eta_in, dt, bc_accel_u, bc_acce
   if (CS%debug) then
     call uvchksum("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0)
     call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0)
-    call hchksum(GV%H_to_kg_m2*eta, "BT Initial eta",CS%debug_BT_HI, haloshift=0)
+    call hchksum(eta, "BT Initial eta",CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
     call uvchksum("BT BT_force_[uv]", &
                   BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=0)
     if (interp_eta_PF) then

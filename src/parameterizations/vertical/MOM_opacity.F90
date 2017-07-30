@@ -64,7 +64,7 @@ use MOM_io, only : slasher
 use MOM_tracer_flow_control, only : get_chl_from_model, tracer_flow_control_CS
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_transform_test, only : do_transform_on_this_pe
+use MOM_transform_test, only : do_transform_test, do_transform_on_this_pe
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 implicit none ; private
@@ -326,7 +326,10 @@ subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
     ! Only the 2-d surface chlorophyll can be read in from a file.  The
     ! same value is assumed for all layers.
     call get_time(CS%Time,seconds,days)
-    !call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
+    if (.not. do_transform_test()) then
+      ! Don't use time_interp_external() in transform test.
+      call time_interp_external(CS%sbc_chl, CS%Time, chl_data)
+    endif
     do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.5) .and. (chl_data(i,j) < 0.0)) then
         write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&

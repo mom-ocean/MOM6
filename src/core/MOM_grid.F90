@@ -6,7 +6,7 @@ module MOM_grid
 use MOM_checksums, only : hchksum, bchksum
 use MOM_checksums, only : hchksum_pair, uvchksum, bchksum_pair
 use MOM_transform_test, only : do_transform_on_this_pe
-use MOM_hor_index, only : hor_index_type, hor_index_init, transform_hor_index
+use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_error_handler, only : callTree_enter, callTree_leave

@@ -1079,8 +1079,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call read_data(TideAmp_file, 'tideamp', CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
-
+    call read_data(TideAmp_file,'tideamp',CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
@@ -1112,7 +1111,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call read_data(gust_file, 'gustiness', CS%gust, domain=G%domain%mpp_domain, &
+    call read_data(gust_file,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
                    timelevel=1) ! units should be Pa
   endif
 

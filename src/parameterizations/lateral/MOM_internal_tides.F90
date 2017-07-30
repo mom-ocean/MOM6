@@ -2343,7 +2343,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call callTree_enter(trim(mod)//'(), MOM_internal_tide_input.F90')
+  call callTree_enter(trim(mdl)//'(), MOM_internal_tide_input.F90')
 
   if (associated(CS)) then
     call MOM_error(WARNING, "internal_tides_init called "//&
@@ -2740,7 +2740,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   ! Initialize wave_structure (not sure if this should be here - BDM)
   call wave_structure_init(Time, G, param_file, diag, CS%wave_structure_CSp)
 
-  call callTree_leave(trim(mod)//'(), MOM_internal_tide_input.F90')
+  call callTree_leave(trim(mdl)//'(), MOM_internal_tide_input.F90')
 
 end subroutine internal_tides_init
 

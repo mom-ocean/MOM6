@@ -1272,7 +1272,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   integer, optional,               intent(in)    :: NIHALO       !< Default halo sizes, required
                                                                  !! with static memory.
   integer, optional,               intent(in)    :: NJHALO       !< Default halo sizes, required
-  logical, optional,               intent(in)    :: transform
                                                                  !! with static memory.
   integer, optional,               intent(in)    :: NIGLOBAL     !< Total domain sizes, required
                                                                  !! with static memory.
@@ -1291,6 +1290,9 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                                                                  !! "MOM_memory.h" if missing.
   character(len=*),      optional, intent(in)    :: param_suffix !< A suffix to apply to
                                                                  !! layout-specific parameters.
+  logical, optional,               intent(in)    :: transform    !< A logical if true the initialised
+                                                                 !! domain will be transformed, i.e.
+                                                                 !! i and j indices will be swapped.
 
 
 ! Arguments: MOM_dom - A pointer to the MOM_domain_type being defined here.
@@ -1311,7 +1313,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 !  (in,opt)  domain_name - A name for this domain, "MOM" if missing.
 !  (in,opt)  include_name - A name for model's include file, "MOM_memory.h" if missing.
 !  (in,opt)  param_suffix - A suffix to apply to layout-specific parameters.
-!  (in,opt)  transform - whether or not to transform the domain: see framework/MOM_transform_test.F90
+!  (in,opt)  transform - Whether or not to transform the domain: see framework/MOM_transform_test.F90
 
   integer, dimension(2) :: layout = (/ 1, 1 /)
   integer, dimension(2) :: io_layout = (/ 0, 0 /)

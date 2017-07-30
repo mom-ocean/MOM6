@@ -535,22 +535,22 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
         do j=js,je ; do I=Isq,Ieq
-          if (q(I,J-1)*u(I,j,k) == 0.0) then
-            temp1 = q(I,J-1) * ( (vh_max(i,j-1)+vh_max(i+1,j-1)) &
-                               + (vh_min(i,j-1)+vh_min(i+1,j-1)) )*0.5
-          elseif (pos_sign*q(I,J-1)*u(I,j,k) < 0.0) then
-            temp1 = q(I,J-1) * (vh_max(i,j-1)+vh_max(i+1,j-1))
-          else
-            temp1 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
-          endif
-
           if (q(I,J)*u(I,j,k) == 0.0) then
-            temp2 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
+            temp1 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
                              + (vh_min(i,j)+vh_min(i+1,j)) )*0.5
           elseif (pos_sign*q(I,J)*u(I,j,k) < 0.0) then
-            temp2 = q(I,J) * (vh_max(i,j)+vh_max(i+1,j))
+            temp1 = q(I,J) * (vh_max(i,j)+vh_max(i+1,j))
           else
-            temp2 = q(I,J) * (vh_min(i,j)+vh_min(i+1,j))
+            temp1 = q(I,J) * (vh_min(i,j)+vh_min(i+1,j))
+          endif
+
+          if (q(I,J-1)*u(I,j,k) == 0.0) then
+            temp2 = q(I,J-1) * ( (vh_max(i,j-1)+vh_max(i+1,j-1)) &
+                               + (vh_min(i,j-1)+vh_min(i+1,j-1)) )*0.5
+          elseif (pos_sign*q(I,J-1)*u(I,j,k) < 0.0) then
+            temp2 = q(I,J-1) * (vh_max(i,j-1)+vh_max(i+1,j-1))
+          else
+            temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
           endif
           CAu(I,j,k) = pos_sign * 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
@@ -668,8 +668,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, CS)
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
           CAv(i,J,k) = neg_sign * 0.25* &
-              (q(I,J)*(uh(I,j+1,k) + uh(I,j,k)) + &
-               q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) * G%IdyCv(i,J)
+              (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
+               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then

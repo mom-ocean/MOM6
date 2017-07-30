@@ -100,7 +100,7 @@ use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : grid_metrics_chksum
 use MOM_grid_initialize,       only : dyn_grid_metrics_chksum
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
-use MOM_hor_index,             only : hor_index_type, hor_index_init, transform_hor_index
+use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
@@ -1909,9 +1909,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
-  is   = HI%isc   ; ie   = HI%iec  ; js   = HI%jsc  ; je   = HI%jec ; nz = GV%ke
-  isd  = HI%isd   ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed
-  IsdB = HI%IsdB  ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
+  is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
+  isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
+  IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
 
   ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0

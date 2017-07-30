@@ -93,7 +93,7 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
-public ocean_model_data_get
+public    ocean_model_data_get
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get

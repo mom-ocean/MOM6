@@ -307,7 +307,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
                              ! in m.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
-  call callTree_enter(trim(mod)//'(), MOM_internal_tide_input.F90')
+  call callTree_enter(trim(mdl)//'(), MOM_internal_tide_input.F90')
 
   if (associated(CS)) then
     call MOM_error(WARNING, "int_tide_input_init called with an associated "// &
@@ -408,7 +408,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
 
-  call callTree_leave(trim(mod)//'(), MOM_internal_tide_input.F90')
+  call callTree_leave(trim(mdl)//'(), MOM_internal_tide_input.F90')
 
 end subroutine int_tide_input_init
 

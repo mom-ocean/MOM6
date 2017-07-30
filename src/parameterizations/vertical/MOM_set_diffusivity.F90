@@ -2589,7 +2589,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   integer :: isd, ied, jsd, jed
   real, dimension(:, :), allocatable :: tmp
 
-  call callTree_enter(trim(mod)//'(), MOM_set_diffusivity.F90')
+  call callTree_enter(trim(mdl)//'(), MOM_set_diffusivity.F90')
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -3075,8 +3075,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je); CS%TKE_Niku(:,:) = 0.0
     call read_data(filename, 'TKE_input', CS%TKE_Niku, &
-                   domain=G%domain%mpp_domain, timelevel=1) ! ??? timelevel -aja
-
+                   domain=G%domain%mpp_domain, timelevel=1 ) ! ??? timelevel -aja
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
@@ -3229,7 +3228,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
   CS%useCVMix = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_CSp)
 
-  call callTree_leave(trim(mod)//'(), MOM_set_diffusivity.F90')
+  call callTree_leave(trim(mdl)//'(), MOM_set_diffusivity.F90')
 
 end subroutine set_diffusivity_init
 

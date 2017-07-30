@@ -1920,7 +1920,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
   if (.not.just_read) call log_version(PF, mdl, version, "")
 
-  call get_param(PF, mod, "DEBUG", debug, default=.false.)
+  call get_param(PF, mdl, "DEBUG", debug, default=.false.)
   inputdir = "." ;  call get_param(PF, mdl, "INPUTDIR", inputdir)
 
   inputdir = slasher(inputdir)
