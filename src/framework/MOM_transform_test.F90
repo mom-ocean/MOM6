@@ -32,7 +32,7 @@ use ensemble_manager_mod, only : get_ensemble_size, get_ensemble_id, get_ensembl
 implicit none ; private
 
 public :: MOM_transform_test_init, transform_test_started
-public :: transform, transform_and_swap
+public :: transform
 public :: do_transform_test, do_transform_on_this_pe
 public :: transform_compare, undo_transform
 public :: transform_pointer, undo_transform_pointer
@@ -58,13 +58,13 @@ interface undo_transform_allocatable
 end interface
 
 interface transform_pointer
-  module procedure transform_pointer_2d_ptr_log
-  module procedure transform_pointer_2d_ptr, transform_pointer_3d_ptr
+  module procedure transform_pointer_2d_log
+  module procedure transform_pointer_2d, transform_pointer_3d
 end interface
 
 interface undo_transform_pointer
-  module procedure transform_pointer_2d_ptr_log
-  module procedure transform_pointer_2d_ptr, transform_pointer_3d_ptr
+  module procedure transform_pointer_2d_log
+  module procedure transform_pointer_2d, transform_pointer_3d
 end interface
 
 interface undo_transform
@@ -74,10 +74,6 @@ end interface
 interface transform_compare
   module procedure transform_compare_scalar
   module procedure transform_compare_1d, transform_compare_2d, transform_compare_3d
-end interface
-
-interface transform_and_swap
-  module procedure transform_and_swap_2d, transform_and_swap_3d
 end interface
 
 integer, parameter :: TRANSFORM_TRANSPOSE = 1
@@ -292,18 +288,18 @@ subroutine transform_allocatable_2d(array)
 
 end subroutine transform_allocatable_2d
 
-subroutine transform_pointer_2d_ptr(array)
-  real, dimension(:,:), pointer, contiguous, intent(inout) :: array
+subroutine transform_pointer_2d(array)
+  real, pointer, contiguous, dimension(:,:), intent(inout) :: array
 
   real, allocatable, dimension(:,:) :: tmp
   integer :: is, ie, js, je
 
   if (.not. associated(array)) then
-    call MOM_error(FATAL, 'transform_2d_ptr: array not associated.')
+    call MOM_error(FATAL, 'transform_pointer_2d: array not associated.')
   endif
 
   if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_2d: should not be called on this PE.')
+    call MOM_error(FATAL, 'transform_pointer_2d: should not be called on this PE.')
   endif
 
   is = lbound(array, 1)
@@ -323,20 +319,20 @@ subroutine transform_pointer_2d_ptr(array)
 
   deallocate(tmp)
 
-end subroutine transform_pointer_2d_ptr
+end subroutine transform_pointer_2d
 
-subroutine transform_pointer_2d_ptr_log(array)
+subroutine transform_pointer_2d_log(array)
   logical, dimension(:,:), pointer, contiguous, intent(inout) :: array
 
   logical, allocatable, dimension(:,:) :: tmp
   integer :: is, ie, js, je
 
   if (.not. associated(array)) then
-    call MOM_error(FATAL, 'transform_2d_ptr: array not associated.')
+    call MOM_error(FATAL, 'transform_pointer_2d: array not associated.')
   endif
 
   if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_2d: should not be called on this PE.')
+    call MOM_error(FATAL, 'transform_pointer_2d: should not be called on this PE.')
   endif
 
   is = lbound(array, 1)
@@ -356,20 +352,20 @@ subroutine transform_pointer_2d_ptr_log(array)
 
   deallocate(tmp)
 
-end subroutine transform_pointer_2d_ptr_log
+end subroutine transform_pointer_2d_log
 
-subroutine transform_pointer_3d_ptr(array)
+subroutine transform_pointer_3d(array)
   real, dimension(:,:, :), pointer, contiguous, intent(inout) :: array
 
   real, allocatable, dimension(:,:,:) :: tmp
   integer :: is, ie, js, je, ks, ke
 
   if (.not. associated(array)) then
-    call MOM_error(FATAL, 'transform_2d_ptr: array not associated.')
+    call MOM_error(FATAL, 'transform_pointer_3d: array not associated.')
   endif
 
   if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_2d: should not be called on this PE.')
+    call MOM_error(FATAL, 'transform_pointer_3d: should not be called on this PE.')
   endif
 
   is = lbound(array, 1)
@@ -391,7 +387,7 @@ subroutine transform_pointer_3d_ptr(array)
 
   deallocate(tmp)
 
-end subroutine transform_pointer_3d_ptr
+end subroutine transform_pointer_3d
 
 !< Transform an allocatable array. After this call input may have
 ! a different shape.
@@ -427,42 +423,6 @@ subroutine transform_allocatable_3d(array)
   deallocate(tmp)
 
 end subroutine transform_allocatable_3d
-
-!< Transform an allocatable array. After this call input may have
-! a different shape.
-subroutine transform_allocatable_3d_ptr(array)
-  real, dimension(:, :, :), pointer, intent(inout) :: array
-
-  real, allocatable, dimension(:, :, :) :: tmp
-  integer :: isz, jsz, ksz
-
-  if (.not. associated(array)) then
-    call MOM_error(FATAL, 'transform_3d_ptr: array not associated.')
-  endif
-
-  if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_3d: should not be called on this PE.')
-  endif
-
-  isz = size(array, 1)
-  jsz = size(array, 2)
-  ksz = size(array, 3)
-
-  allocate(tmp(isz, jsz, ksz))
-  tmp(:, :, :) = array(:, :, :)
-  deallocate(array)
-  allocate(array(jsz, isz, ksz))
-
-  if (transform_type == TRANSFORM_TRANSPOSE) then
-    call transpose_3d(tmp, array)
-  else
-    call rot90_3d(tmp, array, 1)
-  endif
-
-  deallocate(tmp)
-
-end subroutine transform_allocatable_3d_ptr
-
 
 !< Transform an allocatable array. After this call input may have
 ! a different shape.
@@ -566,66 +526,6 @@ subroutine transpose_4d(arrayIn, arrayOut)
   enddo
 
 end subroutine transpose_4d
-
-subroutine transform_and_swap_2d(arrayA, arrayB)
-  real, intent(inout), dimension(:,:) :: arrayA, arrayB
-
-  real, allocatable, dimension(:,:) :: tmp
-
-  if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_and_swap_2d: should not be called on this PE.')
-  endif
-
-  if (size(arrayA, 1) /= size(arrayB, 1) .or. size(arrayA, 2) /= size(arrayB, 2)) then
-    call MOM_error(FATAL, 'transform_and_swap_2d: arrays shapes incompatible.')
-  endif
-
-  allocate(tmp(size(arrayA, 1), size(arrayA, 2)))
-
-  tmp(:, :) = arrayA(:, :)
-
-  if (transform_type == TRANSFORM_TRANSPOSE) then
-    call transpose_2d(arrayB, arrayA)
-    call transpose_2d(tmp, arrayB)
-  else
-    call rot90_2d(arrayB, arrayA, 1)
-    call rot90_2d(tmp, arrayB, 1)
-  endif
-
-  deallocate(tmp)
-
-end subroutine transform_and_swap_2d
-
-subroutine transform_and_swap_3d(arrayA, arrayB)
-  real, intent(inout), dimension(:,:,:) :: arrayA, arrayB
-
-  real, allocatable, dimension(:,:,:) :: tmp
-
-  if (.not. transform_on_this_pe) then
-    call MOM_error(FATAL, 'transform_and_swap_3d: should not be called on this PE.')
-  endif
-
-  if (size(arrayA, 1) /= size(arrayB, 2) .or. &
-          size(arrayA, 2) /= size(arrayB, 1) .or. &
-          size(arrayA, 3) /= size(arrayB, 3)) then
-    call MOM_error(FATAL, 'trans_and_swap_3d: array shapes incompatible.')
-  endif
-
-  allocate(tmp(size(arrayA, 1), size(arrayA, 2), size(arrayA, 3)))
-
-  tmp(:, :, :) = arrayA(:, :, :)
-
-  if (transform_type == TRANSFORM_TRANSPOSE) then
-    call transpose_3d(arrayB, arrayA)
-    call transpose_3d(tmp, arrayB)
-  else
-    call rot90_3d(arrayB, arrayA, 1)
-    call rot90_3d(tmp, arrayB, 1)
-  endif
-
-  deallocate(tmp)
-
-end subroutine transform_and_swap_3d
 
 subroutine transform_compare_2d(arrayA, arrayB, ret)
   real, dimension(:, :), intent(in) :: arrayA, arrayB

@@ -1255,7 +1255,7 @@ end subroutine transform_surface_forcing
 subroutine transform_ice_ocean_boundary(IOB)
   type(ice_ocean_boundary_type), intent(inout) :: IOB
 
-  integer :: index, m, n
+  integer :: m, n
 
   call transform_pointer(IOB%u_flux)
   call transform_pointer(IOB%v_flux)
@@ -1285,7 +1285,6 @@ subroutine transform_ice_ocean_boundary(IOB)
   call transform_pointer(IOB%p)
   call transform_pointer(IOB%mi)
 
-  index = 0
   do n=1,IOB%fluxes%num_bcs
     do m=1,IOB%fluxes%bc(n)%num_fields
       call transform_pointer(IOB%fluxes%bc(n)%field(m)%values)
@@ -1297,7 +1296,7 @@ end subroutine transform_ice_ocean_boundary
 subroutine undo_transform_ice_ocean_boundary(IOB)
   type(ice_ocean_boundary_type), intent(inout) :: IOB
 
-  integer :: index, m, n
+  integer :: m, n
 
   call undo_transform_pointer(IOB%u_flux)
   call undo_transform_pointer(IOB%v_flux)
@@ -1328,7 +1327,6 @@ subroutine undo_transform_ice_ocean_boundary(IOB)
   call undo_transform_pointer(IOB%p)
   call undo_transform_pointer(IOB%mi)
 
-  index = 0
   do n=1,IOB%fluxes%num_bcs
     do m=1,IOB%fluxes%bc(n)%num_fields
       call undo_transform_pointer(IOB%fluxes%bc(n)%field(m)%values)
