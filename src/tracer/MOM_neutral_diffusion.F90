@@ -9,6 +9,7 @@ use MOM_diag_mediator,    only : diag_ctrl, time_type
 use MOM_diag_mediator,    only : post_data, register_diag_field
 use MOM_EOS,              only : EOS_type, calculate_compress, calculate_density_derivs
 use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_scalar
+use MOM_EOS,              only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use MOM_file_parser,      only : openParameterBlock, closeParameterBlock
@@ -704,36 +705,7 @@ real function ppm_ave(xL, xR, aL, aR, aMean)
   else
     ppm_ave = ( aL + xave * ( ( aR - aL ) + a6 ) )  - a6o3 * ( xR**2 + xR * xL + xL**2 )
   endif
-
 end function ppm_ave
-
-!real function ppm_ave(xa, xb, a_L, a_R, u_c)
-!  real, intent(in) :: xa    !< Fraction position of left bound (0,1)
-!  real, intent(in) :: xb    !< Fraction position of right bound (0,1)
-!  real, intent(in) :: a_L    !< Left edge scalar value, at x=0
-!  real, intent(in) :: a_R    !< Right edge scalar value, at x=1
-!  real, intent(in) :: u_c !< Average scalar value of cell
-!  ! Local variables
-!  real :: mx, a_c, Ya, Yb, Ya2b2ab, xa2b2ab, my
-!
-!  mx = 0.5 * ( xa + xb )
-!  a_c = 0.5 * ( ( u_c - a_L ) + ( u_c - a_R ) ) ! a_6 / 6
-!  if (mx<0.5) then
-!    ! This integration of the PPM reconstruction is expressed in distances from the left edge
-!    xa2b2ab = (xa*xa+xb*xb)+xa*xb
-!    ppm_ave = a_L + ( ( a_R - a_L ) * mx &
-!                    + a_c * ( 3. * ( xb + xa ) - 2.*xa2b2ab ) )
-!  else
-!    ! This integration of the PPM reconstruction is expressed in distances from the right edge
-!    Ya = 1. - xa
-!    Yb = 1. - xb
-!    my = 0.5 * ( Ya + Yb )
-!    Ya2b2ab = (Ya*Ya+Yb*Yb)+Ya*Yb
-!    ppm_ave = a_R  + ( ( a_L - a_R ) * my &
-!                     + a_c * ( 3. * ( Yb + Ya ) - 2.*Ya2b2ab ) )
-!  endif
-!
-!end function ppm_ave
 
 !> A true signum function that returns either -abs(a), when x<0; or abs(a) when x>0; or 0 when x=0.
 real function signum(a,x)
@@ -1086,6 +1058,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
   real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
+  real    :: min_bound
 
   ! Vectors with all the values of the discontinuous reconstruction.
   ! Dimensions are [number of layers x number of interfaces]. Second dimension = 1 for top interface, = 2 for bottom
@@ -1161,9 +1134,14 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
       else
         dRhoTopm1 = dRhoTop
       endif
-      if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
-                                             "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
-      if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
+      if (debug_this_module) then
+        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
+                                                  "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
+        write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
+        write(*,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
+        write(*,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
+        write(*,*) "Temp/Salt Bot L: ", Tl(kl_left,2), Sl(kl_left,2)
+      endif
 
       KoL(k_surface) = kl_left
       KoR(k_surfacE) = kl_right
@@ -1181,9 +1159,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
                                  Pl(kl_left,1), Pl(kl_left,2), ki_left, ki_right, kl_left, PoL(k_surface))
         ! If requested and if the surface connects somewhere in the layer, iterate to find the 'true' neutral position
         if ( refine_pos .and. (PoL(k_surface) > 0.) .and. (PoL(k_surface) < 1.) ) then
+          min_bound = 0.
+          if ( (k_surface > 1) .and. ( KoL(k_surface) == KoL(k_surface-1) ) ) min_bound = PoL(k_surface-1)
           PoL(k_surface) = refine_nondim_position(Tr(kl_right,ki_right), Sr(kl_right,ki_right),                   &
                               dRdT_r(kl_right,ki_right), dRdS_r(kl_right,ki_right), Pl(kl_left,1), Pl(kl_left,2), &
-                              deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot)
+                              deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot, min_bound)
         endif
 
       endif
@@ -1207,10 +1187,14 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
       else
         dRhoTopm1 = dRhoTop
       endif
-      if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
-                                             "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
-      if (debug_this_module)  write(*,'(A,I2,X,I2)') "Searching from: ", kl_left, ki_left
-
+      if (debug_this_module) then
+        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
+                                                  "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
+        write(*,'(A,I2,X,I2)') "Searching from: ", kl_right, ki_right
+        write(*,*) "Temp/Salt Reference: ", Tr(kl_left,ki_left), Sr(kl_left,ki_left)
+        write(*,*) "Temp/Salt Top R: ", Tl(kl_right,1), Sl(kl_right,1)
+        write(*,*) "Temp/Salt Bot R: ", Tl(kl_right,2), Sl(kl_right,2)
+      endif
       KoL(k_surface) = kl_left
       KoR(k_surface) = kl_right
 
@@ -1227,9 +1211,12 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
                                  Pr(kl_right,1), Pr(kl_right,2), ki_right, ki_left, kl_right, PoR(k_surface))
         ! If requested and if the surface connects somewhere in the layer, iterate to find the 'true' neutral position
         if ( refine_pos .and. (PoR(k_surface) > 0. .and. PoR(k_surface) < 1.) ) then
+          min_bound = 0.
+          if ( (k_surface > 1) .and. ( KoR(k_surface) == KoR(k_surface-1) ) ) min_bound = PoR(k_surface-1)
+
           PoR(k_surface) = refine_nondim_position(Tl(kl_left,ki_left), Sl(kl_left,ki_left),                     &
                               dRdT_l(kl_left,ki_left), dRdS_l(kl_left,ki_left), Pr(kl_right,1), Pr(kl_right,2), &
-                              deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot)
+                              deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot, min_bound)
         endif
       endif
       KoL(k_surface) = kl_left
@@ -1241,8 +1228,10 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
       stop 'Else what?'
     endif
     ! Store layer indices and positions for next iteration
-!    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MIN(PoL(k_surface),lastP_left)
-!    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MIN(PoR(k_surface),lastP_right)
+
+    ! Make sure that the surfaces are always increasing
+    if (lastK_left == KoL(k_surface))  PoL(k_surface) = MAX(PoL(k_surface),lastP_left)
+    if (lastK_right == KoR(k_surface))  PoR(k_surface) = MAX(PoR(k_surface),lastP_right)
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
@@ -1261,6 +1250,13 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean
       else
         hEff(k_surface-1) = 0.
+      endif
+      if ( hEff(k_surface-1) < 0. ) then
+        write (*,*) "KoL(k_surface-1), KoL(k_surface): ", KoL(k_surface-1), KoL(k_surface)
+        write (*,*) "PoL(k_surface-1), PoL(k_surface): ", PoL(k_surface-1), PoL(k_surface)
+        write (*,*) "KoR(k_surface-1), KoR(k_surface): ", KoR(k_surface-1), KoR(k_surface)
+        write (*,*) "PoR(k_surface-1), PoR(k_surface): ", PoR(k_surface-1), PoR(k_surface)
+        call MOM_error(FATAL, "Effective thickness is negative")
       endif
     endif
 
@@ -1296,12 +1292,14 @@ subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column
   elseif ((ki == 2) .and. (kl < nk)) then
     ki = 1
     kl = kl + 1
-  elseif ((kl == nk) .and. (ki==2)) then
+  else
+!    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
+  endif
+
+  if ((kl == nk) .and. (ki==2)) then
     reached_bottom = .true.
     searching_this_column = .true.
     searching_other_column = .false.
-  else
-    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
   endif
 
 end subroutine increment_interface
@@ -1413,11 +1411,15 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
 end function interpolate_for_nondim_position
 
-!> Use a Newton-Rhapson routine to find where dRho = 0, based on the equation of state and the polynomial
+!> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
-!! profiles of dRho, T, and S, between the top and bottom interface
+!! profiles of dRho, T, and S, between the top and bottom interface. If second derivatives of the EOS are available,
+!! it starts with a Newton's method. However, Newton's method is not guaranteed to be bracketed, a check is performed
+!! to see if it it diverges outside the interval. In that case (or in the case that second derivatives are not
+!! available), Brent's method is used following the implementation found at
+!! https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
 real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, ppoly_T, ppoly_S, EOS, x0, drho_top,&
-  drho_bot)
+  drho_bot, min_bound)
   real,               intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
   real,               intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
   real,               intent(in) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
@@ -1432,175 +1434,203 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   real,               intent(in) :: x0        !< Nondimensional position within the layer where the neutral
                                               !! surface connects. If interpolate_for_nondim_position was
                                               !! previously called, this would be based on linear profile of dRho
-  real,               intent(in) :: drho_top, drho_bot
+  real,               intent(in) :: drho_top, drho_bot, min_bound
   type(EOS_type),     pointer    :: EOS       !< Equation of state structure
   ! Local variables
-  real, parameter    :: max_tolerance = 1.e-20
+  real, parameter    :: max_tolerance = 1.E-15
   integer, parameter :: max_iter = 20
-  integer, parameter :: min_method = 3        ! 1: Bisection, 2: Newton's method 3: Brent's Method
+  integer :: form_of_EOS
   integer :: iter
-
+  logical :: do_newton, do_brent
 
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
-  real :: P_int ! Interpolated pressure
+  real :: P_int, P_min ! Interpolated pressure
+  real :: delta_rho_init, delta_rho_final, x_init
   real :: T, S, alpha, beta, alpha_avg, beta_avg
+  ! Newton's Method variables
   real :: dT_dP, dS_dP, delta_T, delta_S, delta_P
   real :: dbeta_dS, dbeta_dT, dalpha_dT, dalpha_dS, dbeta_dP, dalpha_dP
-  real :: f_a, f_b, f_c, a, b, c, d, e, w
-  real :: xm, tol1, p ,q, r, min1, min2 ! For biseciton method
-  logical :: debug = .true.
+  ! Brent's Method variables
+  real :: a, b, c, d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
+
+  real :: P_last
+  logical :: debug = .false.
 
   delta_P = P_bot-P_top
-  refine_nondim_position = x0
+  refine_nondim_position = min_bound
+  x_init = refine_nondim_position
 
-  select case (min_method)
-    case (1) ! Bisection method
-      ! Calculate delta_rho(x0) and initialzie xpos, xneg, fpos, fneg
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, f_c)
-      if (sign(1.,f_c) == sign(1.,drho_top)) then
-        a = x0
-        f_a = f_c
-        b = 1.
-        f_b = drho_bot
-      else
-        a = x0
-        f_a = f_c
-        b = 0.
-        f_b = drho_top
+  call extract_member_EOS(EOS, form_of_EOS = form_of_EOS)
+  do_newton = (form_of_EOS == EOS_LINEAR) .or. (form_of_EOS == EOS_TEOS10) .or. (form_of_EOS == EOS_WRIGHT)
+  do_brent = .not. do_newton
+
+  ! Check to make sure that a root exists between the minimum bound and the bottom of the layer
+  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, &
+                      EOS, delta_rho)
+  delta_rho_init = delta_rho
+  if ( SIGN(1.,delta_rho) == SIGN(1.,drho_bot) ) then
+    ! Return the position of min_bound if closer to 0 than drho_bot
+    if (ABS(delta_rho) < ABS(drho_bot)) then
+      refine_nondim_position = min_bound
+    else
+      refine_nondim_position = 1.
+    endif
+    do_newton = .false. ; do_brent = .false.
+  endif
+
+  if (debug) then
+    write (*,*) "------"
+    write (*,*) "Starting delta_rho: ", delta_rho
+  endif
+
+  ! For now only linear, Wright, and TEOS-10 equations of state have functions providing second derivatives and
+  ! thus can use Newton's method for the equation of state
+  if (do_newton) then
+    ! Set lower bound of pressure
+    P_min = P_top*(1.-min_bound) + P_bot*(min_bound)
+    ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
+    do iter = 1, max_iter
+      ! Evaluate delta_rho(x0)
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, EOS, &
+                          delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+      ! Check for convergence
+      if (ABS(delta_rho) <= max_tolerance) then
+        do_brent = .false.
+        exit
       endif
-
-      ! Bisection method
-      do iter = 1, max_iter
-        c = 0.5 * (a+b)
-        call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, c, EOS, f_c)
-        if (sign(1.,f_c) == sign(1.,f_a)) then
-          a = c
-          f_a = f_c
-        else
-          b = c
-          f_b = f_c
+      ! Evaluate total derivative of delta_rho
+      call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+      dalpha_dS = dbeta_dT ! Cross derivatives are identicial
+      ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
+      dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / -delta_P
+      dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / -delta_P
+      ! Total derivative of d_delta_rho wrt P
+      d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
+                             ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
+                             dS_dP*beta_avg + dT_dP*alpha_avg
+      ! Newton step update
+      P_last = P_int
+      P_int = P_int - (delta_rho / d_delta_rho_dP)
+      if (P_int < P_min .or. P_int > P_bot) then
+        if (debug) then
+          write (*,*) "Iteration: ", iter
+          write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
+          write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
+          write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
+          write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
+          write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
+          write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
+          write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
+          write (*,*) "x0: ", x0
+          write (*,*) "refine_nondim_position: ", refine_nondim_position
+          write (*,*)
         endif
-      enddo
+!        call MOM_error(WARNING, "Step went out of bounds")
+        ! Switch to Brent's method by setting the converged flag to false
+        do_brent = .true.
+        ! Reset to first guess if already diverged
+        if (ABS(delta_rho_init)<ABS(delta_rho)) then
+          refine_nondim_position = x_init
+        endif
+        exit
+      endif
+      refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
+      ! Check to see if the updated position is too small
+!      if ( ABS(P_last-P_int) < 2*EPSILON(P_int)*MAX(P_last,P_int) ) exit
+    enddo
+  endif
+  ! Do Brent if Newton's method kicked out or if second derivatives don't exist
+  if (do_brent) then
+    machep = EPSILON(sa)
+    ! Find the bracketing interval based on where the sign changes
+    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+                        refine_nondim_position, EOS, delta_rho)
+    ! Bracketed between min_bound and 1.
+    if ( SIGN(1.,delta_rho)*SIGN(1.,drho_bot)==-1. ) then
+      sa = refine_nondim_position ; fa = delta_rho
+      sb = 1. ; fb = drho_bot
+    elseif ( SIGN(1.,delta_rho)*SIGN(1.,drho_top)==-1. ) then
+      sa = 0. ; fa = drho_top
+      sb = refine_nondim_position ; fb = delta_rho
+    else
+      call MOM_error(FATAL, "refine_nondim_position: No root exists in Brent's method interval")
+    endif
+    c = sa ; fc = fa ; e = sb - sa; d = e
+
+    ! This is from https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
+    do iter = 1,max_iter
+      if ( abs ( fc ) < abs ( fb ) ) then
+        sa = sb
+        sb = c
+        c = sa
+        fa = fb
+        fb = fc
+        fc = fa
+      end if
+      tol = 2. * machep * abs ( sb ) + max_tolerance
+      m = 0.5 * ( c - sb )
+      if ( abs ( m ) <= tol .or. fb == 0. ) then
+        exit
+      end if
+      if ( abs ( e ) < tol .or. abs ( fa ) <= abs ( fb ) ) then
+        e = m
+        d = e
+      else
+        s0 = fb / fa
+        if ( sa == c ) then
+          p = 2. * m * s0
+          q = 1. - s0
+        else
+          q = fa / fc
+          r = fb / fc
+          p = s0 * ( 2. * m * q * ( q - r ) - ( sb - sa ) * ( r - 1. ) )
+          q = ( q - 1. ) * ( r - 1. ) * ( s0 - 1. )
+        end if
+        if ( 0. < p ) then
+          q = - q
+        else
+          p = - p
+        end if
+        s0 = e
+        e = d
+        if ( 2. * p < 3. * m * q - abs ( tol * q ) .and. &
+          p < abs ( 0.5 * s0 * q ) ) then
+          d = p / q
+        else
+          e = m
+          d = e
+        end if
+      end if
+      sa = sb
+      fa = fb
+      if ( tol < abs ( d ) ) then
+        sb = sb + d
+      else if ( 0. < m ) then
+        sb = sb + tol
+      else
+        sb = sb - tol
+      end if
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+                        sb, EOS, fb)
+      if ( ( 0. < fb .and. 0. < fc ) .or. &
+           ( fb <= 0. .and. fc <= 0. ) ) then
+        c = sa
+        fc = fa
+        e = sb - sa
+        d = e
+      end if
+    enddo
+    ! Modified from original to ensure that the minimum position is found
+    fa = ABS(fa) ; fb = ABS(fb) ; fc = ABS(fc)
+    delta_rho = MIN(fa, fb, fc)
+    if (fb==delta_rho) then
+      refine_nondim_position = sb
+    elseif (fa==delta_rho) then
+      refine_nondim_position = sa
+    elseif (fc==delta_rho) then
       refine_nondim_position = c
-    case(2) ! Newton's method
-      ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
-      do iter = 1, max_iter
-
-        ! Calculate properties needed for delta_rho at the current position
-        ! Linearly interpolate for pressure at nondimensional position x0
-        P_int = (1. - refine_nondim_position)*P_top + refine_nondim_position*P_bot
-        T = evaluation_polynomial( ppoly_T, deg+1, refine_nondim_position )
-        S = evaluation_polynomial( ppoly_S, deg+1, refine_nondim_position )
-        call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
-
-        ! Calculate the f(P) term for Newton's method
-        alpha_avg = 0.5*( alpha + alpha_ref )
-        beta_avg = 0.5*( beta + beta_ref )
-        delta_T = T - T_ref
-        delta_S = S - S_ref
-        delta_rho = alpha_avg*delta_T + beta_avg*delta_S
-!        print *, iter, refine_nondim_position, delta_rho
-        if (abs(delta_rho)<max_tolerance) exit
-
-        ! Calculate the f'(P) term for Newton's method
-        call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
-        dalpha_dS = dbeta_dT ! Cross derivatives are identicial
-        ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
-        dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
-        dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / delta_P
-        ! Calculate the total derivative of delta_rho.
-        ! Note because delta_rho = alpha_avg * deltaT + beta_avg * deltaS where alpha_avg = 0.5*(alpha+alpha_ref),
-        ! the terms of the total derivative with d_alpha/dP and d_beta/dP should be multipled by 0.5 as well. By chain rule
-        ! dT_dP= dT_dz dz/dP = dT_dz / (Pbot-Ptop)
-!        d_delta_rho_dP = 0.5*(d_alpha_dP*delta_T + d_beta_dP*delta_S) + (alpha_avg*dT_dz + beta_avg*dS_dz)
-        d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
-                               ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
-                               dS_dP*beta_avg + dT_dP*alpha_avg
-
-
-        ! Newton step update
-        P_int = P_int - (delta_rho / d_delta_rho_dP)
-        refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
-        if (refine_nondim_position < 0. .or. refine_nondim_position > 1.) then
-          if (debug) then
-            write (*,*) "Iteration: ", iter
-            write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
-            write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
-            write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
-            write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
-            write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
-            write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
-            write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
-            write (*,*) "x0: ", x0
-            write (*,*) "refine_nondim_position: ", refine_nondim_position
-            call MOM_error(WARNING, "Step went out of bounds")
-          endif
-
-        endif
-
-      enddo
-    case (3) ! Brent's method
-      ! Initialize the three points of the method with f(0), f(x0) and f(1)
-      a = 0. ; f_a = drho_top
-      c = 1. ; f_c = drho_bot
-      b = x0
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, b, EOS, f_b)
-
-      do iter = 1,max_iter
-        if ((f_b > 0. .and. f_c >0.) .or. (f_b < 0. .and. f_c < 0.)) then
-          c = a
-          f_c = f_a
-          d = b-a
-          e = d
-        endif
-        if (ABS(f_c) < ABS(f_b)) then
-          a = b; b = c; c = a;
-          f_a = f_b ; f_b = f_c ; f_c = f_a;
-        endif
-        tol1 = 2.*EPSILON(b)*ABS(b) + 0.5*max_tolerance
-        xm = 0.5*(c-b)
-        if ( (ABS(xm) <= tol1) .or. (f_b == 0.) ) then
-          refine_nondim_position = b
-          exit
-        endif
-        if ( (ABS(e) >= tol1) .and. (ABS(f_a) > ABS(f_b)) ) then
-          w = f_b/f_a
-          if (a==c) then
-            p = 2.*xm*w
-            q = 1. - w
-          else
-            q = f_a/f_c
-            r = f_b/f_c
-            p = s*(2.*xm*q*(q-r)-(b-a)*(r-1.))
-            q = (q-1.)*(r-1.)*(s-1.)
-          endif
-          if ( p > 0. ) q = -q
-          p = ABS(p)
-          min1 = 3.*xm*q - ABS(tol1*q)
-          min2 = ABS(e*q)
-          if (2.*p < MIN(min1,min2)) then
-            e = d;
-            d = p/q
-          else
-            d = xm
-            e = d
-          endif
-        else
-          d = xm
-          e = d
-        endif
-        a = b
-        f_a = f_b
-        if (ABS(d) > tol1) then
-          b = b + d
-        else
-          b = b + SIGN(tol1,xm)
-        endif
-        call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, b, EOS, f_b)
-
-      enddo
-
-  end select
+    endif
+  endif
 
   ! Make sure that the result is bounded between 0 and 1
   if (refine_nondim_position>1.) then
@@ -1612,9 +1642,9 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
       write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
       write (*,*) "x0: ", x0
       write (*,*) "refine_nondim_position: ", refine_nondim_position
-      call MOM_error(WARNING, "refine_nondim_position>1.")
     endif
-    refine_nondim_position = c
+    call MOM_error(WARNING, "refine_nondim_position>1.")
+    refine_nondim_position = x0
   endif
 
   if (refine_nondim_position<0.) then
@@ -1626,9 +1656,24 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
       write (*,*) "dT_dP, dS_dP:", dT_dP, dS_dP
       write (*,*) "x0: ", x0
       write (*,*) "refine_nondim_position: ", refine_nondim_position
-      call MOM_error(WARNING, "refine_nondim_position<0.")
     endif
-    refine_nondim_position = c
+    call MOM_error(WARNING, "refine_nondim_position<0.")
+    refine_nondim_position = x0
+  endif
+
+  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+                      refine_nondim_position, EOS, delta_rho)
+  if (ABS(delta_rho)>ABS(delta_rho_init)) then
+    refine_nondim_position = x_init
+  endif
+
+
+  if (debug) then
+    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+                        refine_nondim_position, EOS, delta_rho)
+    write (*,*) "End delta_rho: ", delta_rho
+    write (*,*) "x0, delta_x: ", x0, refine_nondim_position-x0
+    write (*,*) "******"
   endif
 
 end function refine_nondim_position
@@ -1752,27 +1797,16 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
     else
       if (continuous) then
         klb = KoL(k_sublayer+1)
-        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
         T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
-
         klt = KoL(k_sublayer)
-        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
-!        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
-
+        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
         T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
                                aL_l(klt), aR_l(klt), Tl(klt))
-
         krb = KoR(k_sublayer+1)
-        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
-!        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), deg+1, PiR(k_sublayer+1))
-
         krt = KoR(k_sublayer)
-        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
-!        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
-
+        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
         T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
                                 aL_r(krt), aR_r(krt), Tr(krt))
-
       else ! Discontinuous reconstruction
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
@@ -1781,10 +1815,6 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
         T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
                                            PiL(k_sublayer), PiL(k_sublayer+1))
-!        T_left_top =    ( 1. - PiL(k_sublayer)   ) * Tid_l(klt,1) + PiL(k_sublayer)   * Tid_l(klt,2)
-!        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Tid_l(klb,1) + PiL(k_sublayer+1) * Tid_l(klb,2)
-!        T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1), Tid_l(klt,1), Tid_l(klt,2), Tl(klt))
-
         krb = KoR(k_sublayer+1)
         krt = KoR(k_sublayer)
         if (krt .ne. krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
@@ -1792,16 +1822,12 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
         T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
                                             PiR(k_sublayer), PiR(k_sublayer+1))
-!        T_right_top =    ( 1. - PiR(k_sublayer) )   * Tid_r(krt,1) + PiR(k_sublayer)   * Tid_r(krt,2)
-!        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tid_r(krb,1) + PiR(k_sublayer+1) * Tid_r(krb,2)
-!        T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1), Tid_r(krt,1), Tid_r(krt,2), Tr(krt))
       endif
       dT_top = T_right_top - T_left_top
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
       dT_layer = T_right_layer - T_left_layer
-      !if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
-      if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_layer) <= 0. ) then
+      if (signum(1.,dT_top) * signum(1.,dT_bottom) < 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
       else
         dT_ave = dT_layer
