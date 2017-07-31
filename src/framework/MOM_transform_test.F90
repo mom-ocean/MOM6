@@ -220,7 +220,6 @@ subroutine transform_domain(Domain)
 
 end subroutine transform_domain
 
-!< 
 subroutine transform_2d(arrayIn, arrayOut)
   real, dimension(:,:), intent(in) :: arrayIn !< Input array
   real, dimension(:,:), intent(out) :: arrayOut !< Transformed input
