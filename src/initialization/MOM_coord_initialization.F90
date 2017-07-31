@@ -58,6 +58,7 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
 ! Set-up the layer densities, GV%Rlay, and reduced gravities, GV%g_prime.
   call get_param(PF, mdl, "COORD_CONFIG", config, &
                  "This specifies how layers are to be defined: \n"//&
+                 " \t ALE or none - used to avoid defining layers in ALE mode \n"//&
                  " \t file - read coordinate information from the file \n"//&
                  " \t\t specified by (COORD_FILE).\n"//&
                  " \t BFB - Custom coords for buoyancy-forced basin case \n"//&
@@ -93,7 +94,8 @@ subroutine MOM_initialize_coord(GV, PF, write_geom, output_dir, tv, max_depth)
       call user_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
     case ("BFB")
       call BFB_set_coord(GV%Rlay, GV%g_prime, GV, PF, eos)
-    case ("none")
+    case ("none", "ALE")
+      call set_coord_to_none(GV%Rlay, GV%g_prime, GV, PF)
     case default ; call MOM_error(FATAL,"MOM_initialize_coord: "// &
       "Unrecognized coordinate setup"//trim(config))
   end select
@@ -520,7 +522,35 @@ subroutine set_coord_linear(Rlay, g_prime, GV, param_file)
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_linear
 
-! -----------------------------------------------------------------------------
+!> Sets Rlay to Rho0 and g_prime to zero except for the free surface.
+!! This is for use only in ALE mode where Rlay should not be used and g_prime(1) alone
+!! might be used.
+subroutine set_coord_to_none(Rlay, g_prime, GV, param_file)
+  real, dimension(:),      intent(out) :: Rlay       !< The layers' target coordinate values
+                                                     !! (potential density).
+  real, dimension(:),      intent(out) :: g_prime    !< A structure indicating the open file to
+                                                     !! parse for model parameter values.
+  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  real :: g_fs    ! Reduced gravity across the free surface, in m s-2.
+  character(len=40)  :: mdl = "set_coord_to_none" ! This subroutine's name.
+  integer :: k, nz
+  nz = GV%ke
+
+  call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")
+
+  call get_param(param_file, mdl, "GFS" , g_fs, &
+                 "The reduced gravity at the free surface.", units="m s-2", &
+                 default=GV%g_Earth)
+
+  g_prime(1) = g_fs
+  do k=2,nz ; g_prime(k) = 0. ; enddo
+  Rlay(1) = GV%Rho0
+  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+
+  call callTree_leave(trim(mdl)//'()')
+
+end subroutine set_coord_to_none
 
 !>   This subroutine writes out a file containing any available data related
 !! to the vertical grid used by the MOM ocean model.
