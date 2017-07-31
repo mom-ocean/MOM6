@@ -54,10 +54,10 @@ subroutine initialize_ice_thickness (h_shelf, area_shelf_h, hmask, G, PF)
   type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
-  character(len=40)  :: mod = "initialize_ice_thickness" ! This subroutine's name.
+  character(len=40)  :: mdl = "initialize_ice_thickness" ! This subroutine's name.
   character(len=200) :: config
 
-  call get_param(PF, mod, "ICE_PROFILE_CONFIG", config, &
+  call get_param(PF, mdl, "ICE_PROFILE_CONFIG", config, &
                  "This specifies how the initial ice profile is specified. \n"//&
                  "Valid values are: CHANNEL, FILE, and USER.", &
                  fail_if_missing=.true.)
@@ -83,27 +83,27 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
   !  h_shelf and area_shelf_h in m (and dimensionless) and updates hmask
   character(len=200) :: filename,thickness_file,inputdir ! Strings for file/path
   character(len=200) :: thickness_varname, area_varname! Variable name in file
-  character(len=40)  :: mod = "initialize_ice_thickness_from_file" ! This subroutine's name.
+  character(len=40)  :: mdl = "initialize_ice_thickness_from_file" ! This subroutine's name.
   integer :: i, j, isc, jsc, iec, jec
   real :: len_sidestress, mask, udh
 
   call MOM_mesg("  MOM_ice_shelf_init_profile.F90, initialize_thickness_from_file: reading thickness")
 
-  call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
-  call get_param(PF, mod, "ICE_THICKNESS_FILE", thickness_file, &
+  call get_param(PF, mdl, "ICE_THICKNESS_FILE", thickness_file, &
                  "The file from which the bathymetry is read.", &
                  default="ice_shelf_h.nc")
-  call get_param(PF, mod, "LEN_SIDE_STRESS", len_sidestress, &
+  call get_param(PF, mdl, "LEN_SIDE_STRESS", len_sidestress, &
                  "position past which shelf sides are stress free.", &
                  default=0.0, units="axis_units")
 
   filename = trim(inputdir)//trim(thickness_file)
-  call log_param(PF, mod, "INPUTDIR/THICKNESS_FILE", filename)
-  call get_param(PF, mod, "ICE_THICKNESS_VARNAME", thickness_varname, &
+  call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
+  call get_param(PF, mdl, "ICE_THICKNESS_VARNAME", thickness_varname, &
                  "The name of the thickness variable in ICE_THICKNESS_FILE.", &
                  default="h_shelf")
-  call get_param(PF, mod, "ICE_AREA_VARNAME", area_varname, &
+  call get_param(PF, mdl, "ICE_AREA_VARNAME", area_varname, &
                  "The name of the area variable in ICE_THICKNESS_FILE.", &
                  default="area_shelf_h")
 
@@ -113,7 +113,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
   call read_data(filename,trim(thickness_varname),h_shelf,domain=G%Domain%mpp_domain)
   call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
 
-!  call get_param(PF, mod, "ICE_BOUNDARY_CONFIG", config, &
+!  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &
 !                 fail_if_missing=.true.)
 
@@ -145,7 +145,7 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
       elseif ((area_shelf_h(i,j) .gt. 0) .and. (area_shelf_h(i,j) .le. G%areaT(i,j))) then
         hmask(i,j) = 2.
       else
-        call MOM_error(FATAL,mod// " AREA IN CELL OUT OF RANGE")
+        call MOM_error(FATAL,mdl// " AREA IN CELL OUT OF RANGE")
       endif
     enddo
   enddo
@@ -160,7 +160,7 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
   type(ocean_grid_type), intent(in)            :: G    !< The ocean's grid structure
   type(param_file_type), intent(in)            :: PF
 
-  character(len=40)  :: mod = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
+  character(len=40)  :: mdl = "initialize_ice_shelf_thickness_channel" ! This subroutine's name.
   real :: max_draft, min_draft, flat_shelf_width, c1, slope_pos
   real :: edge_pos, shelf_slope_scale, Rho_ocean
   integer :: i, j, jsc, jec, jsd, jed, jedg, nyh, isc, iec, isd, ied
@@ -171,17 +171,17 @@ subroutine initialize_ice_thickness_channel (h_shelf, area_shelf_h, hmask, G, PF
   nyh = G%domain%njhalo ; jedg = G%domain%njglobal+nyh
   j_off = G%jdg_offset
 
-  call MOM_mesg(mod//": setting thickness")
+  call MOM_mesg(mdl//": setting thickness")
 
-  call get_param(PF, mod, "SHELF_MAX_DRAFT", max_draft, &
+  call get_param(PF, mdl, "SHELF_MAX_DRAFT", max_draft, &
                  units="m", default=1.0)
-  call get_param(PF, mod, "SHELF_MIN_DRAFT", min_draft, &
+  call get_param(PF, mdl, "SHELF_MIN_DRAFT", min_draft, &
                  units="m", default=1.0)
-  call get_param(PF, mod, "FLAT_SHELF_WIDTH", flat_shelf_width, &
+  call get_param(PF, mdl, "FLAT_SHELF_WIDTH", flat_shelf_width, &
                  units="axis_units", default=0.0)
-  call get_param(PF, mod, "SHELF_SLOPE_SCALE", shelf_slope_scale, &
+  call get_param(PF, mdl, "SHELF_SLOPE_SCALE", shelf_slope_scale, &
                  units="axis_units", default=0.0)
-  call get_param(PF, mod, "SHELF_EDGE_POS_0", edge_pos, &
+  call get_param(PF, mdl, "SHELF_EDGE_POS_0", edge_pos, &
                  units="axis_units", default=0.0)
 
   slope_pos = edge_pos - flat_shelf_width
@@ -252,15 +252,15 @@ end subroutine initialize_ice_thickness_channel
 !   real, intent(inout), dimension(:,:)               :: hmask, h_boundary_values
 !   type(param_file_type), intent(in)                 :: PF
 
-!   character(len=40)  :: mod = "initialize_ice_shelf_boundary" ! This subroutine's name.
+!   character(len=40)  :: mdl = "initialize_ice_shelf_boundary" ! This subroutine's name.
 !   character(len=200) :: config
 !   logical flux_bdry
 
-!   call get_param(PF, mod, "ICE_BOUNDARY_CONFIG", config, &
+!   call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                  "This specifies how the ice domain boundary is specified. \n"//&
 !                  "valid values include CHANNEL, FILE and USER.", &
 !                  fail_if_missing=.true.)
-!   call get_param(PF, mod, "ICE_BOUNDARY_FLUX_CONDITION", flux_bdry, &
+!   call get_param(PF, mdl, "ICE_BOUNDARY_FLUX_CONDITION", flux_bdry, &
 !                  "This specifies whether mass input is a dirichlet or \n"//&
 !                  "flux condition", default=.true.)
 
@@ -299,23 +299,23 @@ end subroutine initialize_ice_thickness_channel
 !   logical, intent(in)                               :: flux_bdry
 !   type (param_file_type), intent(in)                :: PF
 
-!   character(len=40)  :: mod = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
+!   character(len=40)  :: mdl = "initialize_ice_shelf_boundary_channel" ! This subroutine's name.
 !   integer :: i, j, isd, jsd, is, js, iegq, jegq, giec, gjec, gisc, gjsc, isc, jsc, iec, jec, ied, jed
 !   real                                                  :: lenlat, input_thick, input_flux, len_stress
 
-!   call get_param(PF, mod, "LENLAT", lenlat, fail_if_missing=.true.)
+!   call get_param(PF, mdl, "LENLAT", lenlat, fail_if_missing=.true.)
 
-!   call get_param(PF, mod, "INPUT_FLUX_ICE_SHELF", input_flux, &
+!   call get_param(PF, mdl, "INPUT_FLUX_ICE_SHELF", input_flux, &
 !                  "volume flux at upstream boundary", &
 !                  units="m2 s-1", default=0.)
-!   call get_param(PF, mod, "INPUT_THICK_ICE_SHELF", input_thick, &
+!   call get_param(PF, mdl, "INPUT_THICK_ICE_SHELF", input_thick, &
 !                  "flux thickness at upstream boundary", &
 !                  units="m", default=1000.)
-!   call get_param(PF, mod, "LEN_SIDE_STRESS", len_stress, &
+!   call get_param(PF, mdl, "LEN_SIDE_STRESS", len_stress, &
 !                  "maximum position of no-flow condition in along-flow direction", &
 !                  units="km", default=0.)
 
-!   call MOM_mesg(mod//": setting boundary")
+!   call MOM_mesg(mdl//": setting boundary")
 
 !   isd = G%isd ; ied = G%ied
 !   jsd = G%jsd ; jed = G%jed

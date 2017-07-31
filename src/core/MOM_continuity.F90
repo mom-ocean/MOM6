@@ -118,7 +118,7 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   type(continuity_CS),     pointer       :: CS         !< Control structure for mom_continuity.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_continuity" ! This module's name.
+  character(len=40)  :: mdl = "MOM_continuity" ! This module's name.
   character(len=20)  :: tmpstr
 
   if (associated(CS)) then
@@ -128,8 +128,8 @@ subroutine continuity_init(Time, G, GV, param_file, diag, CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "CONTINUITY_SCHEME", tmpstr, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CONTINUITY_SCHEME", tmpstr, &
                  "CONTINUITY_SCHEME selects the discretization for the \n"//&
                  "continuity solver. The only valid value currently is: \n"//&
                  "\t PPM - use a positive-definite (or monotonic) \n"//&

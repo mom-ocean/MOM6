@@ -2007,6 +2007,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     enddo ; enddo
   endif
   if (apply_OBCs) then
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
 !GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
 !GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
@@ -2076,7 +2077,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
 ! Now calculate each layer's accelerations.
   if (apply_OBCs) then
-!   call open_boundary_set_bt_accel(OBC, G, u_accel_bt, v_accel_bt)
+    !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
       if (OBC%segnum_u(I,j) /= OBC_NONE) then
         u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
@@ -2342,7 +2343,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
                                                                   !! column mass anomaly, in m or kg m-2.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: ubt_old !< The starting value of ubt in a barotropic step,
                                                                   !! m s-1.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of ubt in a barotropic step,
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: vbt_old !< The starting value of vbt in a barotropic step,
                                                                   !! m s-1.
   type(BT_OBC_type),                     intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                                   !! related to the open boundary conditions,
@@ -2350,12 +2351,11 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   integer,                               intent(in)    :: halo    !< The extra halo size to use here.
   real,                                  intent(in)    :: dtbt    !< The time step, in s.
   real,                                  intent(in)    :: bebt    !< The fractional weighting of the future velocity
-                                                                  !! in
-                                                                  !! determining the transport.
+                                                                  !! in determining the transport.
   logical,                               intent(in)    :: use_BT_cont !< If true, use the BT_cont_types to calculate
                                                                   !! transports.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(in)    :: Datu    !< A fixed estimate of the face areas at u points.
-  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at u points.
+  real, dimension(SZIW_(MS),SZJBW_(MS)), intent(in)    :: Datv    !< A fixed estimate of the face areas at v points.
   type(local_BT_cont_u_type), dimension(SZIBW_(MS),SZJW_(MS)), intent(in) :: BTCL_u !< Structure of information used
                                                                   !! for a dynamic estimate of the face areas at
                                                                   !! u-points.
@@ -2804,10 +2804,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_u(I,j) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i+1,j))))
         if (GV%Boussinesq) then
-          BT_OBC%H_u(I,j) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*GV%m_to_H + eta(i+1,j)
+          endif
         else
-          BT_OBC%H_u(I,j) = 0.5*(eta(i,j) + eta(i+1,j))
+          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+            BT_OBC%H_u(i,j) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+            BT_OBC%H_u(i,j) = eta(i+1,j)
+          endif
         endif
       endif
     endif ; enddo ; enddo
@@ -2850,10 +2857,17 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
         BT_OBC%Cg_v(i,J) = SQRT(GV%g_prime(1)*(0.5* &
                                 (G%bathyT(i,j) + G%bathyT(i,j+1))))
         if (GV%Boussinesq) then
-          BT_OBC%H_v(i,J) = 0.5*((G%bathyT(i,j)*GV%m_to_H + eta(i,j)) + &
-                                 (G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%m_to_H + eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*GV%m_to_H + eta(i,j+1)
+          endif
         else
-          BT_OBC%H_v(i,J) = 0.5*(eta(i,j) + eta(i,j+1))
+          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+            BT_OBC%H_v(i,J) = eta(i,j)
+          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+            BT_OBC%H_v(i,J) = eta(i,j+1)
+          endif
         endif
       endif
     endif ; enddo ; enddo
@@ -3883,7 +3897,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "MOM_barotropic"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   real :: Datu(SZIBS_(G),SZJ_(G)), Datv(SZI_(G),SZJBS_(G))
   real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
@@ -3919,41 +3933,41 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "SPLIT", CS%split, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (.not.CS%split) return
 
-  call get_param(param_file, mod, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
+  call get_param(param_file, mdl, "BOUND_BT_CORRECTION", CS%bound_BT_corr, &
                  "If true, the corrective pseudo mass-fluxes into the \n"//&
                  "barotropic solver are limited to values that require \n"//&
                  "less than maxCFL_BT_cont to be accommodated.",default=.false.)
-  call get_param(param_file, mod, "BT_CONT_CORR_BOUNDS", CS%BT_cont_bounds, &
+  call get_param(param_file, mdl, "BT_CONT_CORR_BOUNDS", CS%BT_cont_bounds, &
                  "If true, and BOUND_BT_CORRECTION is true, use the \n"//&
                  "BT_cont_type variables to set limits determined by \n"//&
                  "MAXCFL_BT_CONT on the CFL number of the velocites \n"//&
                  "that are likely to be driven by the corrective mass fluxes.", &
                  default=.true.) !, do_not_log=.not.CS%bound_BT_corr)
-  call get_param(param_file, mod, "ADJUST_BT_CONT", CS%adjust_BT_cont, &
+  call get_param(param_file, mdl, "ADJUST_BT_CONT", CS%adjust_BT_cont, &
                  "If true, adjust the curve fit to the BT_cont type \n"//&
                  "that is used by the barotropic solver to match the \n"//&
                  "transport about which the flow is being linearized.", default=.false.)
-  call get_param(param_file, mod, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
+  call get_param(param_file, mdl, "GRADUAL_BT_ICS", CS%gradual_BT_ICs, &
                  "If true, adjust the initial conditions for the \n"//&
                  "barotropic solver to the values from the layered \n"//&
                  "solution over a whole timestep instead of instantly. \n"//&
                  "This is a decent approximation to the inclusion of \n"//&
                  "sum(u dh_dt) while also correcting for truncation errors.", &
                  default=.false.)
-  call get_param(param_file, mod, "BT_USE_VISC_REM_U_UH0", CS%visc_rem_u_uh0, &
+  call get_param(param_file, mdl, "BT_USE_VISC_REM_U_UH0", CS%visc_rem_u_uh0, &
                  "If true, use the viscous remnants when estimating the \n"//&
                  "barotropic velocities that were used to calculate uh0 \n"//&
                  "and vh0.  False is probably the better choice.", default=.false.)
-  call get_param(param_file, mod, "BT_USE_WIDE_HALOS", CS%use_wide_halos, &
+  call get_param(param_file, mdl, "BT_USE_WIDE_HALOS", CS%use_wide_halos, &
                  "If true, use wide halos and march in during the \n"//&
                  "barotropic time stepping for efficiency.", default=.true., &
                  layoutParam=.true.)
-  call get_param(param_file, mod, "BTHALO", bt_halo_sz, &
+  call get_param(param_file, mdl, "BTHALO", bt_halo_sz, &
                  "The minimum halo size for the barotropic solver.", default=0, &
                  layoutParam=.true.)
 #ifdef STATIC_MEMORY_
@@ -3964,38 +3978,38 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
 #else
   wd_halos(1) = bt_halo_sz; wd_halos(2) =  bt_halo_sz
 #endif
-  call log_param(param_file, mod, "!BT x-halo", wd_halos(1), &
+  call log_param(param_file, mdl, "!BT x-halo", wd_halos(1), &
                  "The barotropic x-halo size that is actually used.", &
                  layoutParam=.true.)
-  call log_param(param_file, mod, "!BT y-halo", wd_halos(2), &
+  call log_param(param_file, mdl, "!BT y-halo", wd_halos(2), &
                  "The barotropic y-halo size that is actually used.", &
                  layoutParam=.true.)
 
-  call get_param(param_file, mod, "USE_BT_CONT_TYPE", use_BT_cont_type, &
+  call get_param(param_file, mdl, "USE_BT_CONT_TYPE", use_BT_cont_type, &
                "If true, use a structure with elements that describe \n"//&
                "effective face areas from the summed continuity solver \n"//&
                "as a function the barotropic flow in coupling between \n"//&
                "the barotropic and baroclinic flow.  This is only used \n"//&
                "if SPLIT is true. \n", default=.true.)
-  call get_param(param_file, mod, "NONLINEAR_BT_CONTINUITY", &
+  call get_param(param_file, mdl, "NONLINEAR_BT_CONTINUITY", &
                                 CS%Nonlinear_continuity, &
                  "If true, use nonlinear transports in the barotropic \n"//&
                  "continuity equation.  This does not apply if \n"//&
                  "USE_BT_CONT_TYPE is true.", default=.false.)
   CS%Nonlin_cont_update_period = 1
   if (CS%Nonlinear_continuity) &
-    call get_param(param_file, mod, "NONLIN_BT_CONT_UPDATE_PERIOD", &
+    call get_param(param_file, mdl, "NONLIN_BT_CONT_UPDATE_PERIOD", &
                                   CS%Nonlin_cont_update_period, &
                  "If NONLINEAR_BT_CONTINUITY is true, this is the number \n"//&
                  "of barotropic time steps between updates to the face \n"//&
                  "areas, or 0 to update only before the barotropic stepping.",&
                  units="nondim", default=1)
-  call get_param(param_file, mod, "BT_MASS_SOURCE_LIMIT", CS%eta_source_limit, &
+  call get_param(param_file, mdl, "BT_MASS_SOURCE_LIMIT", CS%eta_source_limit, &
                  "The fraction of the initial depth of the ocean that can \n"//&
                  "be added to or removed from the bartropic solution \n"//&
                  "within a thermodynamic time step.  By default this is 0 \n"//&
                  "for no correction.", units="nondim", default=0.0)
-  call get_param(param_file, mod, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
+  call get_param(param_file, mdl, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
                  "If true, step the barotropic velocity first and project \n"//&
                  "out the velocity tendancy by 1+BEBT when calculating the \n"//&
                  "transport.  The default (false) is to use a predictor \n"//&
@@ -4004,36 +4018,36 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "average of the old and new velocities, with weights \n"//&
                  "of (1-BEBT) and BEBT.", default=.false.)
 
-  call get_param(param_file, mod, "DYNAMIC_SURFACE_PRESSURE", CS%dynamic_psurf, &
+  call get_param(param_file, mdl, "DYNAMIC_SURFACE_PRESSURE", CS%dynamic_psurf, &
                  "If true, add a dynamic pressure due to a viscous ice \n"//&
                  "shelf, for instance.", default=.false.)
   if (CS%dynamic_psurf) then
-    call get_param(param_file, mod, "ICE_LENGTH_DYN_PSURF", CS%ice_strength_length, &
+    call get_param(param_file, mdl, "ICE_LENGTH_DYN_PSURF", CS%ice_strength_length, &
                  "The length scale at which the Rayleigh damping rate due \n"//&
                  "to the ice strength should be the same as if a Laplacian \n"//&
                  "were applied, if DYNAMIC_SURFACE_PRESSURE is true.", &
                  units="m", default=1.0e4)
-    call get_param(param_file, mod, "DEPTH_MIN_DYN_PSURF", CS%Dmin_dyn_psurf, &
+    call get_param(param_file, mdl, "DEPTH_MIN_DYN_PSURF", CS%Dmin_dyn_psurf, &
                   "The minimum depth to use in limiting the size of the \n"//&
                   "dynamic surface pressure for stability, if \n"//&
                   "DYNAMIC_SURFACE_PRESSURE is true..", units="m", &
                   default=1.0e-6)
-    call get_param(param_file, mod, "CONST_DYN_PSURF", CS%const_dyn_psurf, &
+    call get_param(param_file, mdl, "CONST_DYN_PSURF", CS%const_dyn_psurf, &
                  "The constant that scales the dynamic surface pressure, \n"//&
                  "if DYNAMIC_SURFACE_PRESSURE is true.  Stable values \n"//&
                  "are < ~1.0.", units="nondim", default=0.9)
   endif
 
-  call get_param(param_file, mod, "TIDES", CS%tides, &
+  call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  call get_param(param_file, mod, "SADOURNY", CS%Sadourny, &
+  call get_param(param_file, mdl, "SADOURNY", CS%Sadourny, &
                  "If true, the Coriolis terms are discretized with the \n"//&
                  "Sadourny (1975) energy conserving scheme, otherwise \n"//&
                  "the Arakawa & Hsu scheme is used.  If the internal \n"//&
                  "deformation radius is not resolved, the Sadourny scheme \n"//&
                  "should probably be used.", default=.true.)
 
-  call get_param(param_file, mod, "BT_THICK_SCHEME", hvel_str, &
+  call get_param(param_file, mdl, "BT_THICK_SCHEME", hvel_str, &
                  "A string describing the scheme that is used to set the \n"//&
                  "open face areas used for barotropic transport and the \n"//&
                  "relative weights of the accelerations. Valid values are:\n"//&
@@ -4060,55 +4074,55 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
     call MOM_error(FATAL, "barotropic_init: BT_THICK_SCHEME FROM_BT_CONT "//&
                            "can only be used if USE_BT_CONT_TYPE is defined.")
 
-  call get_param(param_file, mod, "BT_STRONG_DRAG", CS%strong_drag, &
+  call get_param(param_file, mdl, "BT_STRONG_DRAG", CS%strong_drag, &
                  "If true, use a stronger estimate of the retarding \n"//&
                  "effects of strong bottom drag, by making it implicit \n"//&
                  "with the barotropic time-step instead of implicit with \n"//&
                  "the baroclinic time-step and dividing by the number of \n"//&
                  "barotropic steps.", default=.false.)
 
-  call get_param(param_file, mod, "CLIP_BT_VELOCITY", CS%clip_velocity, &
+  call get_param(param_file, mdl, "CLIP_BT_VELOCITY", CS%clip_velocity, &
                  "If true, limit any velocity components that exceed \n"//&
                  "CFL_TRUNCATE.  This should only be used as a desperate \n"//&
                  "debugging measure.", default=.false.)
-  call get_param(param_file, mod, "CFL_TRUNCATE", CS%CFL_trunc, &
+  call get_param(param_file, mdl, "CFL_TRUNCATE", CS%CFL_trunc, &
                  "The value of the CFL number that will cause velocity \n"//&
                  "components to be truncated; instability can occur past 0.5.", &
                  units="nondim", default=0.5, do_not_log=.not.CS%clip_velocity)
-  call get_param(param_file, mod, "MAXVEL", CS%maxvel, &
+  call get_param(param_file, mdl, "MAXVEL", CS%maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8, &
                  do_not_log=.not.CS%clip_velocity)
-  call get_param(param_file, mod, "MAXCFL_BT_CONT", CS%maxCFL_BT_cont, &
+  call get_param(param_file, mdl, "MAXCFL_BT_CONT", CS%maxCFL_BT_cont, &
                  "The maximum permitted CFL number associated with the \n"//&
                  "barotropic accelerations from the summed velocities \n"//&
                  "times the time-derivatives of thicknesses.", units="nondim", &
                  default=0.25)
 
-  call get_param(param_file, mod, "DT_BT_FILTER", CS%dt_bt_filter, &
+  call get_param(param_file, mdl, "DT_BT_FILTER", CS%dt_bt_filter, &
                  "A time-scale over which the barotropic mode solutions \n"//&
                  "are filtered, in seconds if positive, or as a fraction \n"//&
                  "of DT if negative. When used this can never be taken to \n"//&
                  "be longer than 2*dt.  Set this to 0 to apply no filtering.", &
                  units="sec or nondim", default=-0.25)
-  call get_param(param_file, mod, "G_BT_EXTRA", CS%G_extra, &
+  call get_param(param_file, mdl, "G_BT_EXTRA", CS%G_extra, &
                  "A nondimensional factor by which gtot is enhanced.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "SSH_EXTRA", SSH_extra, &
+  call get_param(param_file, mdl, "SSH_EXTRA", SSH_extra, &
                  "An estimate of how much higher SSH might get, for use \n"//&
                  "in calculating the safe external wave speed. The \n"//&
                  "default is the minimum of 10 m or 5% of MAXIMUM_DEPTH.", &
                  units="m", default=min(10.0,0.05*G%max_depth))
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
-  call get_param(param_file, mod, "DEBUG_BT", CS%debug_bt, &
+  call get_param(param_file, mdl, "DEBUG_BT", CS%debug_bt, &
                  "If true, write out verbose debugging data within the \n"//&
                  "barotropic time-stepping loop. The data volume can be \n"//&
                  "quite large if this is true.", default=CS%debug)
 
   CS%linearized_BT_PV = .true.
-  call get_param(param_file, mod, "BEBT", CS%bebt, &
+  call get_param(param_file, mdl, "BEBT", CS%bebt, &
                  "BEBT determines whether the barotropic time stepping \n"//&
                  "uses the forward-backward time-stepping scheme or a \n"//&
                  "backward Euler scheme. BEBT is valid in the range from \n"//&
@@ -4116,7 +4130,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "gravity waves) to 1 (for a backward Euler treatment). \n"//&
                  "In practice, BEBT must be greater than about 0.05.", &
                  units="nondim", default=0.1)
-  call get_param(param_file, mod, "DTBT", CS%dtbt, &
+  call get_param(param_file, mdl, "DTBT", CS%dtbt, &
                  "The barotropic time step, in s. DTBT is only used with \n"//&
                  "the split explicit time stepping. To set the time step \n"//&
                  "automatically based the maximum stable value use 0, or \n"//&
@@ -4251,8 +4265,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   call set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
   if (dtbt_input > 0.0) CS%dtbt = dtbt_input
 
-  call log_param(param_file, mod, "DTBT as used", CS%dtbt)
-  call log_param(param_file, mod, "estimated maximum DTBT", CS%dtbt_max)
+  call log_param(param_file, mdl, "DTBT as used", CS%dtbt)
+  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max)
 
   ! ubtav, vbtav, ubt_IC, vbt_IC, uhbt_IC, and vhbt_IC are allocated and
   ! initialized in register_barotropic_restarts.

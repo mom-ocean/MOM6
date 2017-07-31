@@ -101,7 +101,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ISOMIP_tracer" ! This module's name.
+  character(len=40)  :: mdl = "ISOMIP_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_ISOMIP_tracer
@@ -116,19 +116,19 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the ISOMIP tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     CS%tracer_IC_file = trim(inputdir)//trim(CS%tracer_IC_file)
-    call log_param(param_file, mod, "INPUTDIR/ISOMIP_TRACER_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/ISOMIP_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
-  call get_param(param_file, mod, "SPONGE", CS%use_sponge, &
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
@@ -142,7 +142,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     write(longname,'("Concentration of ISOMIP Tracer ",I2.2)') m
-    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.

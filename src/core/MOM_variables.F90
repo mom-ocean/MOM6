@@ -182,11 +182,6 @@ end type cont_diag_ptrs
 !>   The vertvisc_type structure contains vertical viscosities, drag
 !! coefficients, and related fields.
 type, public :: vertvisc_type
-  logical :: calc_bbl            !< If true, the BBL viscosity and thickness
-                                 !! need to be recalculated.
-  real :: bbl_calc_time_interval !< The amount of time over which the impending
-                                 !! calculation of the BBL properties will apply,
-                                 !! for use in diagnostics of the BBL properties.
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
                              !! that is captured in Kd_turb.
   real, pointer, dimension(:,:) :: &
