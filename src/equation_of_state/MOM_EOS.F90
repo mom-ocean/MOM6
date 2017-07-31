@@ -9,8 +9,10 @@ use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linea
 use MOM_EOS_linear, only : calculate_density_second_derivs_scalar_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
 use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright
-use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_specvol_derivs_wright, int_density_dz_wright
+use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_density_derivs_scalar_wright
+use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
+use MOM_EOS_Wright, only : calculate_density_second_derivs_scalar_wright
 use MOM_EOS_UNESCO, only : calculate_density_scalar_unesco, calculate_density_array_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
@@ -45,6 +47,7 @@ public find_depth_of_pressure_in_cell
 public calculate_TFreeze
 public convert_temp_salt_for_TEOS10
 public gsw_sp_from_sr, gsw_pt_from_ct
+public extract_member_EOS
 
 !> Calculates density of sea water from T, S and P
 interface calculate_density
@@ -77,11 +80,11 @@ type, public :: EOS_type ; private
 end type EOS_type
 
 ! The named integers that might be stored in eqn_of_state_type%form_of_EOS.
-integer, parameter :: EOS_LINEAR = 1
-integer, parameter :: EOS_UNESCO = 2
-integer, parameter :: EOS_WRIGHT = 3
-integer, parameter :: EOS_TEOS10 = 4
-integer, parameter :: EOS_NEMO   = 5
+integer, parameter, public :: EOS_LINEAR = 1
+integer, parameter, public :: EOS_UNESCO = 2
+integer, parameter, public :: EOS_WRIGHT = 3
+integer, parameter, public :: EOS_TEOS10 = 4
+integer, parameter, public :: EOS_NEMO   = 5
 
 character*(10), parameter :: EOS_LINEAR_STRING = "LINEAR"
 character*(10), parameter :: EOS_UNESCO_STRING = "UNESCO"
@@ -263,6 +266,8 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
     case (EOS_LINEAR)
       call calculate_density_derivs_scalar_linear(T, S, pressure, drho_dT, drho_dS, &
                                                   EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+    case (EOS_WRIGHT)
+      call calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
     case (EOS_TEOS10)
       call calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_dS)
     case default
@@ -291,6 +296,9 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call calculate_density_second_derivs_scalar_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                  drho_dT_dP)
+    case (EOS_WRIGHT)
+      call calculate_density_second_derivs_scalar_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
                                                   drho_dT_dP)
     case (EOS_TEOS10)
       call calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
@@ -2221,7 +2229,33 @@ subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   enddo; enddo; enddo
 end subroutine convert_temp_salt_for_TEOS10
 
+! Extractor routine for the EOS type if the members need to be accessed outside this module
+subroutine extract_member_EOS(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, Rho_T0_S0, drho_dT, &
+                              dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp)
+  type(EOS_type), pointer :: EOS
+  integer, optional, intent(out) :: form_of_EOS
+  integer, optional, intent(out) :: form_of_TFreeze
+  logical, optional, intent(out) :: EOS_quadrature
+  logical, optional, intent(out) :: Compressible
+  real   , optional, intent(out) :: Rho_T0_S0
+  real   , optional, intent(out) :: drho_dT
+  real   , optional, intent(out) :: dRho_dS
+  real   , optional, intent(out) :: TFr_S0_P0
+  real   , optional, intent(out) :: dTFr_dS
+  real   , optional, intent(out) :: dTFr_dp
 
+  if (present(form_of_EOS    ))  form_of_EOS     = EOS%form_of_EOS
+  if (present(form_of_TFreeze))  form_of_TFreeze = EOS%form_of_TFreeze
+  if (present(EOS_quadrature ))  EOS_quadrature  = EOS%EOS_quadrature
+  if (present(Compressible   ))  Compressible    = EOS%Compressible
+  if (present(Rho_T0_S0      ))  Rho_T0_S0       = EOS%Rho_T0_S0
+  if (present(drho_dT        ))  drho_dT         = EOS%drho_dT
+  if (present(dRho_dS        ))  dRho_dS         = EOS%dRho_dS
+  if (present(TFr_S0_P0      ))  TFr_S0_P0       = EOS%TFr_S0_P0
+  if (present(dTFr_dS        ))  dTFr_dS         = EOS%dTFr_dS
+  if (present(dTFr_dp        ))  dTFr_dp         = EOS%dTFr_dp
+
+end subroutine extract_member_EOS
 
 end module MOM_EOS
 

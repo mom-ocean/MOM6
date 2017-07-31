@@ -32,7 +32,8 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress_wright, calculate_density_wright
-public calculate_density_derivs_wright, calculate_specvol_derivs_wright
+public calculate_density_derivs_wright, calculate_density_derivs_scalar_wright, calculate_specvol_derivs_wright
+public calculate_density_second_derivs_scalar_wright
 public calculate_density_scalar_wright, calculate_density_array_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
@@ -181,6 +182,69 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
   enddo
 
 end subroutine calculate_density_derivs_wright
+
+! #@# This subroutine needs a doxygen description.
+subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
+  real,    intent(in) :: T        !< Potential temperature relative to the surface
+                                  !! in C.
+  real,    intent(in) :: S        !< Salinity in PSU.
+  real,    intent(in) :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in kg m-3 psu-1.
+
+  real :: al0, p0, lambda, I_denom2
+
+  al0 = (a0 + a1*T) + a2*S
+  p0 = (b0 + b4*S) + T * (b1 + T*((b2 + b3*T)) + b5*S)
+  lambda = (c0 +c4*S) + T * (c1 + T*((c2 + c3*T)) + c5*S)
+
+  I_denom2 = 1.0 / (lambda + al0*(pressure + p0))
+  I_denom2 = I_denom2 *I_denom2
+  drho_dT = I_denom2 * &
+    (lambda* (b1 + T*(2.0*b2 + 3.0*b3*T) + b5*S) - &
+     (pressure+p0) * ( (pressure+p0)*a1 + &
+      (c1 + T*(c2*2.0 + c3*3.0*T) + c5*S) ))
+  drho_dS = I_denom2 * (lambda* (b4 + b5*T) - &
+    (pressure+p0) * ( (pressure+p0)*a2 + (c4 + c5*T) ))
+
+end subroutine calculate_density_derivs_scalar_wright
+
+!> Second derivatives of density with respect to temperature, salinity, and pressure
+subroutine calculate_density_second_derivs_scalar_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp)
+  real, intent(in)     :: T, S, P
+  real, intent(out)    :: drho_ds_ds !< Partial derivative of beta with respect to S
+  real, intent(out)    :: drho_ds_dt !< Partial derivative of beta with resepct to T
+  real, intent(out)    :: drho_dt_dt !< Partial derivative of alpha with respect to T
+  real, intent(out)    :: drho_ds_dp !< Partial derivative of beta with respect to pressure
+  real, intent(out)    :: drho_dt_dp !< Partial derivative of alpha with respect to pressure
+  ! Based on the above expression, derived by Mathematica and then common terms factored
+  real :: z0, z1, z2, z3, z4, z5, z6 ,z7, z8, z9, z10, z11, z2_2, z2_3
+  z0 = T*(b1 + b5*S + T*(b2 + b3*T))
+  z1 = (b0 + p + b4*S + z0)
+  z3 = (b1 + b5*S + T*(2.*b2 + 2.*b3*T))
+  z4 = (c0 + c4*S + T*(c1 + c5*S + T*(c2 + c3*T)))
+  z5 = (b1 + b5*S + T*(b2 + b3*T) + T*(b2 + 2.*b3*T))
+  z6 = c1 + c5*S + T*(c2 + c3*T) + T*(c2 + 2.*c3*T)
+  z7 = (c4 + c5*T + a2*z1)
+  z8 = (c1 + c5*S + T*(2.*c2 + 3.*c3*T) + a1*z1)
+  z9 = (a0 + a2*S + a1*T)
+  z10 = (b4 + b5*T)
+  z11 = (z10*z4 - z1*z7)
+  z2 = (c0 + c4*S + T*(c1 + c5*S + T*(c2 + c3*T)) + z9*z1)
+  z2_2 = z2*z2
+  z2_3 = z2_2*z2
+
+  drho_ds_ds = (z10*(c4 + c5*T) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T + z9*z10 + a2*z1)*z11)/z2_3
+  drho_ds_dt = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
+  drho_dt_dt = (z3*z6 - z1*(2.*c2 + 6.*c3*T + a1*z5) + (2.*b2 + 4.*b3*T)*z4 - z5*z8)/z2_2 - &
+                (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
+  drho_ds_dp = (-c4 - c5*T - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
+  drho_dt_dp = (-c1 - c5*S - T*(2.*c2 + 3.*c3*T) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
+
+end subroutine calculate_density_second_derivs_scalar_wright
 
 subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
