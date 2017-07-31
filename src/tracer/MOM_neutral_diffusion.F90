@@ -1437,7 +1437,7 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   real,               intent(in) :: drho_top, drho_bot, min_bound
   type(EOS_type),     pointer    :: EOS       !< Equation of state structure
   ! Local variables
-  real, parameter    :: max_tolerance = 1.E-15
+  real, parameter    :: max_tolerance = 1.E-12
   integer, parameter :: max_iter = 20
   integer :: form_of_EOS
   integer :: iter
@@ -1502,8 +1502,8 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
       call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
       dalpha_dS = dbeta_dT ! Cross derivatives are identicial
       ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
-      dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / -delta_P
-      dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / -delta_P
+      dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
+      dS_dP = first_derivative_polynomial( ppoly_S, deg+1, refine_nondim_position ) / delta_P
       ! Total derivative of d_delta_rho wrt P
       d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
                              ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
@@ -1663,7 +1663,7 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
 
   call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
                       refine_nondim_position, EOS, delta_rho)
-  if (ABS(delta_rho)>ABS(delta_rho_init)) then
+  if (ABS(delta_rho)>=ABS(delta_rho_init)) then
     refine_nondim_position = x_init
   endif
 
@@ -1673,6 +1673,7 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
                         refine_nondim_position, EOS, delta_rho)
     write (*,*) "End delta_rho: ", delta_rho
     write (*,*) "x0, delta_x: ", x0, refine_nondim_position-x0
+    write (*,*) "Iterations: ", iter
     write (*,*) "******"
   endif
 
@@ -1720,7 +1721,7 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   if (present(T_out)) T_out = T
   if (present(S_out)) S_out = S
   if (present(alpha_avg_out)) alpha_avg_out = alpha_avg
-  if (present(beta_avg_out))  beta_avg_out = alpha_avg
+  if (present(beta_avg_out))  beta_avg_out = beta_avg
   if (present(delta_T_out)) delta_T_out = delta_T
   if (present(delta_S_out)) delta_S_out = delta_S
 
