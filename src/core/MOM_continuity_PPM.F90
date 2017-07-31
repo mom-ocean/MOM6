@@ -1492,8 +1492,8 @@ subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, J, &
           vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j)
           dvhdv(i) = G%dx_Cv(i,J) * h(i,j) * visc_rem(i)
         else
-          vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j)
-          dvhdv(i) = G%dx_Cv(i,J) * h(i,j) * visc_rem(i)
+          vh(i) = G%dx_Cv(i,J) * v(i) * h(i,j+1)
+          dvhdv(i) = G%dx_Cv(i,J) * h(i,j+1) * visc_rem(i)
         endif
       endif
     endif ; enddo
