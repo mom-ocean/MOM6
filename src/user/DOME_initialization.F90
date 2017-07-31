@@ -55,15 +55,15 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth)
   real :: min_depth ! The minimum and maximum depths in m.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "DOME_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "DOME_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   do j=js,je ; do i=is,ie
@@ -90,21 +90,29 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being initialized.
-  type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file
-                                                    !! to parse for model parameter values.
+subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
-  real :: e0(SZK_(G)+1)     ! The resting interface heights, in m, usually !
+  real :: e0(SZK_(GV)+1)    ! The resting interface heights, in m, usually !
                             ! negative because it is positive upward.      !
-  real :: eta1D(SZK_(G)+1)  ! Interface height relative to the sea surface !
+  real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface !
                             ! positive upward, in m.                       !
-  character(len=40)  :: mod = "DOME_initialize_thickness" ! This subroutine's name.
+  logical :: just_read    ! If true, just read parameters but set nothing.
+  character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! This subroutine has no run-time parameters.
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_thickness: setting thickness", 5)
 
@@ -158,7 +166,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
   real :: H0(SZK_(G))
   real :: min_depth
   real :: damp, e_dense, damp_new
-  character(len=40)  :: mod = "DOME_initialize_sponges" ! This subroutine's name.
+  character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -172,7 +180,7 @@ subroutine DOME_initialize_sponges(G, GV, tv, PF, CSp)
 !  and mask2dT is 1.                                                   !
 
 !   Set up sponges for DOME configuration
-  call get_param(PF, mod, "MINIMUM_DEPTH", min_depth, &
+  call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   H0(1) = 0.0
@@ -267,7 +275,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                             ! thickness D_edge, in the same units as lat.
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
-  character(len=40)  :: mod = "DOME_set_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment

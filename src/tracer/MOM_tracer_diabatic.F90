@@ -206,24 +206,27 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
 
 end subroutine tracer_vertdiff
 
-subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
-                                    evap_CFL_limit, minimum_forcing_depth, in_flux_optional, out_flux_optional)
-! This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
-! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface
-!       flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
+!> This routine is modeled after applyBoundaryFluxesInOut in MOM_diabatic_aux.F90
+!! NOTE: Please note that in this routine sfc_flux gets set to zero to ensure that the surface
+!! flux of the tracer does not get applied again during a subsequent call to tracer_vertdif
+subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_limit, minimum_forcing_depth, &
+               in_flux_optional, out_flux_optional, update_h_opt)
 
-  type(ocean_grid_type),                 intent(in)    :: G  !< Grid structure
-  type(verticalGrid_type),               intent(in)    :: GV        !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Tr  !< Tracer concentration on T-cell
-  real,                                  intent(in)    :: dt !< Time-step over which forcing is applied (s)
-  type(forcing),                         intent(in) :: fluxes !< Surface fluxes container
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h  !< Layer thickness in H units
-  real,                                       intent(in)  :: evap_CFL_limit
-  real,                                       intent(in)  :: minimum_forcing_depth
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: in_flux_optional ! The total time-integrated amount of tracer!
+  type(ocean_grid_type),                      intent(in   ) :: G  !< Grid structure
+  type(verticalGrid_type),                    intent(in   ) :: GV !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Tr !< Tracer concentration on T-cell
+  real,                                       intent(in   ) :: dt !< Time-step over which forcing is applied (s)
+  type(forcing),                              intent(in   ) :: fluxes !< Surface fluxes container
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: h  !< Layer thickness in H units
+  real,                                       intent(in   ) :: evap_CFL_limit
+  real,                                       intent(in   ) :: minimum_forcing_depth
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: in_flux_optional ! The total time-integrated amount of tracer!
                                                                              ! that enters with freshwater
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: out_flux_optional ! The total time-integrated amount of tracer!
                                                                               ! that leaves with freshwater
+  !< Optional flag to determine whether h should be updated
+  logical,                          optional, intent(in) :: update_h_opt
+
   integer, parameter :: maxGroundings = 5
   integer :: numberOfGroundings, iGround(maxGroundings), jGround(maxGroundings)
   real :: H_limit_fluxes, IforcingDepthScale, Idt
@@ -243,6 +246,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
   real, dimension(SZI_(G))                              :: in_flux_1d, out_flux_1d
   real                                                  :: hGrounding(maxGroundings)
   real    :: Tr_in
+  logical :: update_h
   integer :: i, j, is, ie, js, je, k, nz, n, nsw
   character(len=45) :: mesg
 
@@ -263,12 +267,18 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
     enddo ; enddo
   endif
 
+  if (present(update_h_opt)) then
+    update_h = update_h_opt
+  else
+    update_h = .true.
+  endif
+
   Idt = 1.0/dt
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,Tr,G,GV,fluxes,dt,    &
 !$OMP                                  IforcingDepthScale,minimum_forcing_depth, &
-!$OMP                                  numberOfGroundings,iGround,jGround,      &
+!$OMP                                  numberOfGroundings,iGround,jGround,update_h, &
 !$OMP                                  in_flux,out_flux,hGrounding,Idt,evap_CFL_limit) &
 !$OMP                          private(h2d,Tr2d,netMassInOut,netMassOut,      &
 !$OMP                                  in_flux_1d,out_flux_1d,fractionOfForcing,     &
@@ -388,8 +398,13 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, &
     ! Step C/ copy updated tracer concentration from the 2d slice now back into model state.
     do k=1,nz ; do i=is,ie
       Tr(i,j,k) = Tr2d(i,k)
-      h(i,j,k) = h2d(i,k)
     enddo ; enddo
+
+    if (update_h) then
+      do k=1,nz ; do i=is,ie
+        h(i,j,k) = h2d(i,k)
+      enddo ; enddo
+    endif
 
   enddo ! j-loop finish
 

@@ -28,7 +28,8 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
+use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
@@ -40,8 +41,7 @@ implicit none ; private
 
 public USER_set_coord, USER_initialize_topography, USER_initialize_thickness
 public USER_initialize_velocity, USER_init_temperature_salinity
-public USER_init_mixed_layer_density, USER_initialize_sponges
-public USER_set_OBC_data, USER_set_rotation
+public USER_initialize_sponges, USER_set_OBC_data, USER_set_rotation
 
 logical :: first_call = .true.
 
@@ -89,7 +89,7 @@ subroutine USER_initialize_topography(D, G, param_file, max_depth)
 end subroutine USER_initialize_topography
 
 !> initialize thicknesses.
-subroutine USER_initialize_thickness(h, G, param_file, T)
+subroutine USER_initialize_thickness(h, G, param_file, T, just_read_params)
   type(ocean_grid_type), intent(in)           :: G          !< The ocean's grid structure.
   real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h !< The thicknesses being
                                                             !! initialized.
@@ -97,9 +97,18 @@ subroutine USER_initialize_thickness(h, G, param_file, T)
                                                             !! open file to parse for model
                                                             !! parameter values.
   real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G))  :: T !< Potential temperature.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
+  logical :: just_read    ! If true, just read parameters but set nothing.
+
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_thickness: " // &
    "Unmodified user routine called - you must edit the routine to use it")
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   h(:,:,1) = 0.0
 
@@ -108,16 +117,25 @@ subroutine USER_initialize_thickness(h, G, param_file, T)
 end subroutine USER_initialize_thickness
 
 !> initialize velocities.
-subroutine USER_initialize_velocity(u, v, G, param_file)
+subroutine USER_initialize_velocity(u, v, G, param_file, just_read_params)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [m/s]
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [m/s]
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
+  logical :: just_read    ! If true, just read parameters but set nothing.
+
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_initialize_velocity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   u(:,:,1) = 0.0
   v(:,:,1) = 0.0
@@ -128,7 +146,7 @@ end subroutine USER_initialize_velocity
 
 !> This function puts the initial layer temperatures and salinities
 !! into T(:,:,:) and S(:,:,:).
-subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state)
+subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
@@ -137,10 +155,18 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state)
                                                             !! parameter values.
   type(EOS_type),                            pointer     :: eqn_of_state !< Integer that selects the
                                                             !! equation of state.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
+  logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
    "USER_initialization.F90, USER_init_temperature_salinity: " // &
    "Unmodified user routine called - you must edit the routine to use it")
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   T(:,:,1) = 0.0
   S(:,:,1) = 0.0
@@ -148,32 +174,6 @@ subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state)
   if (first_call) call write_user_log(param_file)
 
 end subroutine USER_init_temperature_salinity
-
-!> Set initial potential density of the mixed layer.
-subroutine USER_init_mixed_layer_density(Rml, G, param_file, use_temperature, &
-                                         eqn_of_state, T, S, P_Ref)
-  type(ocean_grid_type),                         intent(in)  :: G        !< Ocean grid structure.
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)),    intent(out) :: Rml      !< Mixed layer potential density.
-  type(param_file_type),                         intent(in)  :: param_file !< A structure indicating the
-                                                                         !! open file to parse for model
-                                                                         !! parameter values.
-  logical,                                       intent(in)  :: use_temperature !< Whether to use potential
-                                                                         !! temperature.
-  type(EOS_type),                      optional, pointer     :: eqn_of_state !< integer that selects the
-                                                                         !! equation of state.
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), optional, intent(in) :: T  !< Model potential temperature.
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)), optional, intent(in) :: S  !< Model salinity.
-  real,                                optional, intent(in)  :: P_Ref    !< The coordinate-density
-                                                                         !! reference pressure in Pa.
-  call MOM_error(FATAL, &
-   "USER_initialization.F90, USER_init_mixed_layer_density: " // &
-   "Unmodified user routine called - you must edit the routine to use it")
-
-  Rml(:,:,1) = 0.0
-
-  if (first_call) call write_user_log(param_file)
-
-end subroutine USER_init_mixed_layer_density
 
 !> Set up the sponges.
 subroutine USER_initialize_sponges(G, use_temperature, tv, param_file, CSp, h)
@@ -240,9 +240,9 @@ subroutine write_user_log(param_file)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "user_initialization" ! This module's name.
+  character(len=40)  :: mdl = "user_initialization" ! This module's name.
 
-  call log_version(param_file, mod, version)
+  call log_version(param_file, mdl, version)
   first_call = .false.
 
 end subroutine write_user_log

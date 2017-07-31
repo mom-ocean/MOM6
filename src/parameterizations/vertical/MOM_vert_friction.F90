@@ -1474,7 +1474,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_vert_friction" ! This module's name.
+  character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units = "meters or kg m-2"
 
   if (associated(CS)) then
@@ -1490,106 +1490,106 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
 
 ! Default, read and log parameters
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag \n"//&
                  "law of the form c_drag*|u|*u. The velocity magnitude \n"//&
                  "may be an assumed value or it may be based on the \n"//&
                  "actual velocity in the bottommost HBBL, depending on \n"//&
                  "LINEAR_DRAG.", default=.true.)
-  call get_param(param_file, mod, "CHANNEL_DRAG", CS%Channel_drag, &
+  call get_param(param_file, mdl, "CHANNEL_DRAG", CS%Channel_drag, &
                  "If true, the bottom drag is exerted directly on each \n"//&
                  "layer proportional to the fraction of the bottom it \n"//&
                  "overlies.", default=.false.)
-  call get_param(param_file, mod, "DIRECT_STRESS", CS%direct_stress, &
+  call get_param(param_file, mdl, "DIRECT_STRESS", CS%direct_stress, &
                  "If true, the wind stress is distributed over the \n"//&
                  "topmost HMIX_STRESS of fluid (like in HYCOM), and KVML \n"//&
                  "may be set to a very small value.", default=.false.)
-  call get_param(param_file, mod, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
+  call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
                  "If true, use a bulk Richardson number criterion to \n"//&
                  "determine the mixed layer thickness for viscosity.", &
                  default=.false.)
-  call get_param(param_file, mod, "U_TRUNC_FILE", CS%u_trunc_file, &
+  call get_param(param_file, mdl, "U_TRUNC_FILE", CS%u_trunc_file, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to zonal velocity truncations are written.  \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
                  "needed.", default=" ")
-  call get_param(param_file, mod, "V_TRUNC_FILE", CS%v_trunc_file, &
+  call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to meridional velocity truncations are written. \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
                  "needed.", default=" ")
-  call get_param(param_file, mod, "HARMONIC_VISC", CS%harmonic_visc, &
+  call get_param(param_file, mdl, "HARMONIC_VISC", CS%harmonic_visc, &
                  "If true, use the harmonic mean thicknesses for \n"//&
                  "calculating the vertical viscosity.", default=.false.)
-  call get_param(param_file, mod, "HARMONIC_BL_SCALE", CS%harm_BL_val, &
+  call get_param(param_file, mdl, "HARMONIC_BL_SCALE", CS%harm_BL_val, &
                  "A scale to determine when water is in the boundary \n"//&
                  "layers based solely on harmonic mean thicknesses for \n"//&
                  "the purpose of determining the extent to which the \n"//&
                  "thicknesses used in the viscosities are upwinded.", &
                  default=0.0, units="nondim")
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   if (GV%nkml < 1) &
-    call get_param(param_file, mod, "HMIX_FIXED", CS%Hmix, &
+    call get_param(param_file, mdl, "HMIX_FIXED", CS%Hmix, &
                  "The prescribed depth over which the near-surface \n"//&
                  "viscosity and diffusivity are elevated when the bulk \n"//&
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   if (CS%direct_stress) then
     if (GV%nkml < 1) then
-      call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
+      call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
                  "DIRECT_STRESS is true.", units="m", default=CS%Hmix)
     else
-      call get_param(param_file, mod, "HMIX_STRESS", CS%Hmix_stress, &
+      call get_param(param_file, mdl, "HMIX_STRESS", CS%Hmix_stress, &
                  "The depth over which the wind stress is applied if \n"//&
                  "DIRECT_STRESS is true.", units="m", fail_if_missing=.true.)
     endif
     if (CS%Hmix_stress <= 0.0) call MOM_error(FATAL, "vertvisc_init: " // &
        "HMIX_STRESS must be set to a positive value if DIRECT_STRESS is true.")
   endif
-  call get_param(param_file, mod, "KV", CS%Kv, &
+  call get_param(param_file, mdl, "KV", CS%Kv, &
                  "The background kinematic viscosity in the interior. \n"//&
                  "The molecular value, ~1e-6 m2 s-1, may be used.", &
                  units="m2 s-1", fail_if_missing=.true.)
 
 ! CS%Kvml = CS%Kv ; CS%Kvbbl = CS%Kv ! Needed? -AJA
-  if (GV%nkml < 1) call get_param(param_file, mod, "KVML", CS%Kvml, &
+  if (GV%nkml < 1) call get_param(param_file, mdl, "KVML", CS%Kvml, &
                  "The kinematic viscosity in the mixed layer.  A typical \n"//&
                  "value is ~1e-2 m2 s-1. KVML is not used if \n"//&
                  "BULKMIXEDLAYER is true.  The default is set by KV.", &
                  units="m2 s-1", default=CS%Kv)
-  if (.not.CS%bottomdraglaw) call get_param(param_file, mod, "KVBBL", CS%Kvbbl, &
+  if (.not.CS%bottomdraglaw) call get_param(param_file, mdl, "KVBBL", CS%Kvbbl, &
                  "The kinematic viscosity in the benthic boundary layer. \n"//&
                  "A typical value is ~1e-2 m2 s-1. KVBBL is not used if \n"//&
                  "BOTTOMDRAGLAW is true.  The default is set by KV.", &
                  units="m2 s-1", default=CS%Kv)
-  call get_param(param_file, mod, "HBBL", CS%Hbbl, &
+  call get_param(param_file, mdl, "HBBL", CS%Hbbl, &
                  "The thickness of a bottom boundary layer with a \n"//&
                  "viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or \n"//&
                  "the thickness over which near-bottom velocities are \n"//&
                  "averaged for the drag law if BOTTOMDRAGLAW is defined \n"//&
                  "but LINEAR_DRAG is not.", units="m", fail_if_missing=.true.)
-  call get_param(param_file, mod, "MAXVEL", CS%maxvel, &
+  call get_param(param_file, mdl, "MAXVEL", CS%maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
-  call get_param(param_file, mod, "CFL_BASED_TRUNCATIONS", CS%CFL_based_trunc, &
+  call get_param(param_file, mdl, "CFL_BASED_TRUNCATIONS", CS%CFL_based_trunc, &
                  "If true, base truncations on the CFL number, and not an \n"//&
                  "absolute speed.", default=.true.)
-  call get_param(param_file, mod, "CFL_TRUNCATE", CS%CFL_trunc, &
+  call get_param(param_file, mdl, "CFL_TRUNCATE", CS%CFL_trunc, &
                  "The value of the CFL number that will cause velocity \n"//&
                  "components to be truncated; instability can occur past 0.5.", &
                  units="nondim", default=0.5)
-  call get_param(param_file, mod, "CFL_REPORT", CS%CFL_report, &
+  call get_param(param_file, mdl, "CFL_REPORT", CS%CFL_report, &
                  "The value of the CFL number that causes accelerations \n"//&
                  "to be reported; the default is CFL_TRUNCATE.", &
                  units="nondim", default=CS%CFL_trunc)
-  call get_param(param_file, mod, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
+  call get_param(param_file, mdl, "CFL_TRUNCATE_RAMP_TIME", CS%truncRampTime, &
                  "The time over which the CFL trunction value is ramped\n"//&
                  "up at the beginning of the run.", &
                  units="s", default=0.)
   CS%CFL_truncE = CS%CFL_trunc
-  call get_param(param_file, mod, "CFL_TRUNCATE_START", CS%CFL_truncS, &
+  call get_param(param_file, mdl, "CFL_TRUNCATE_START", CS%CFL_truncS, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)

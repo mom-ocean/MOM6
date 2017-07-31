@@ -199,7 +199,7 @@ end type OBC_registry_type
 
 integer :: id_clock_pass
 
-character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
+character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
@@ -224,51 +224,51 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   allocate(OBC)
 
-  call log_version(param_file, mod, version, "Controls where open boundaries are located, what "//&
+  call log_version(param_file, mdl, version, "Controls where open boundaries are located, what "//&
                  "kind of boundary condition to impose, and what data to apply, if any.")
-  call get_param(param_file, mod, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", OBC%number_of_segments, &
                  "The number of open boundary segments.", &
                  default=0)
-  call get_param(param_file, mod, "G_EARTH", OBC%g_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", OBC%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "OBC_USER_CONFIG", config1, &
+  call get_param(param_file, mdl, "OBC_USER_CONFIG", config1, &
                  "A string that sets how the open boundary conditions are \n"//&
                  " configured: \n", default="none", do_not_log=.true.)
-  call get_param(param_file, mod, "NK", OBC%ke, &
+  call get_param(param_file, mdl, "NK", OBC%ke, &
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
   ! It's in state initialization...
 !  if (config1 .eq. "tidal_bay") OBC%update_OBC = .true.
 
-  call get_param(param_file, mod, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
+  call get_param(param_file, mdl, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
                    "If true, extend OBC segments. This option is used to recover\n"//&
                    "legacy solutions dependent on an incomplete implementaion of OBCs.\n"//&
                    "This option will be obsoleted in the future.", default=.false.)
 
   if (OBC%number_of_segments > 0) then
-    call get_param(param_file, mod, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
+    call get_param(param_file, mdl, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
          "If true, sets relative vorticity to zero on open boundaries.", &
          default=.false.)
-    call get_param(param_file, mod, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
+    call get_param(param_file, mdl, "OBC_FREESLIP_VORTICITY", OBC%freeslip_vorticity, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the relative vorticity on open boundaries. This cannot\n"// &
          "be true if OBC_ZERO_VORTICITY is True.", default=.false.)
     if (OBC%zero_vorticity .and. OBC%freeslip_vorticity) call MOM_error(FATAL, &
          "MOM_open_boundary.F90, open_boundary_config: "//&
          "Only one of OBC_ZERO_VORTICITY and OBC_FREESLIP_VORTICITY can be True at once.")
-    call get_param(param_file, mod, "OBC_ZERO_STRAIN", OBC%zero_strain, &
+    call get_param(param_file, mdl, "OBC_ZERO_STRAIN", OBC%zero_strain, &
          "If true, sets the strain used in the stress tensor to zero on open boundaries.", &
          default=.false.)
-    call get_param(param_file, mod, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
+    call get_param(param_file, mdl, "OBC_FREESLIP_STRAIN", OBC%freeslip_strain, &
          "If true, sets the normal gradient of tangential velocity to\n"// &
          "zero in the strain use in the stress tensor on open boundaries. This cannot\n"// &
          "be true if OBC_ZERO_STRAIN is True.", default=.false.)
     if (OBC%zero_strain .and. OBC%freeslip_strain) call MOM_error(FATAL, &
          "MOM_open_boundary.F90, open_boundary_config: "//&
          "Only one of OBC_ZERO_STRAIN and OBC_FREESLIP_STRAIN can be True at once.")
-    call get_param(param_file, mod, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
+    call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
          "viscosity term.", default=.false.)
     ! Allocate everything
@@ -295,7 +295,7 @@ subroutine open_boundary_config(G, param_file, OBC)
 
     do l = 1, OBC%number_of_segments
       write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
-      call get_param(param_file, mod, segment_param_str, segment_str, &
+      call get_param(param_file, mdl, segment_param_str, segment_str, &
            "Documentation needs to be dynamic?????", &
            fail_if_missing=.true.)
       segment_str = remove_spaces(segment_str)
@@ -360,23 +360,23 @@ subroutine initialize_segment_data(G, OBC, PF)
   ! param file so that I can use it later in step_MOM in order to finish
   ! initializing segments on the first step.
 
-  call get_param(PF, mod, "INPUTDIR", inputdir, default=".")
+  call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
 
-  call get_param(PF, mod, "REMAPPING_SCHEME", remappingScheme, &
+  call get_param(PF, mdl, "REMAPPING_SCHEME", remappingScheme, &
           "This sets the reconstruction scheme used\n"//&
           "for vertical remapping for all variables.\n"//&
           "It can be one of the following schemes:\n"//&
           trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
-  call get_param(PF, mod, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
+  call get_param(PF, mdl, "FATAL_CHECK_RECONSTRUCTIONS", check_reconstruction, &
           "If true, cell-by-cell reconstructions are checked for\n"//&
           "consistency and if non-monotonicity or an inconsistency is\n"//&
           "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
-  call get_param(PF, mod, "FATAL_CHECK_REMAPPING", check_remapping, &
+  call get_param(PF, mdl, "FATAL_CHECK_REMAPPING", check_remapping, &
           "If true, the results of remapping are checked for\n"//&
           "conservation and new extrema and if an inconsistency is\n"//&
           "detected then a FATAL error is issued.", default=.false.,do_not_log=.true.)
-  call get_param(PF, mod, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
+  call get_param(PF, mdl, "REMAP_BOUND_INTERMEDIATE_VALUES", force_bounds_in_subcell, &
           "If true, the values on the intermediate grid used for remapping\n"//&
           "are forced to be bounded, which might not be the case due to\n"//&
           "round off.", default=.false.,do_not_log=.true.)
@@ -402,7 +402,7 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
-    call get_param(PF, mod, segnam, segstr)
+    call get_param(PF, mdl, segnam, segstr)
 
     call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) then
@@ -952,19 +952,19 @@ subroutine open_boundary_init(G, param_file, OBC)
   if (.not.associated(OBC)) return
 
   if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
-    call get_param(param_file, mod, "OBC_RADIATION_MAX", OBC%rx_max, &
+    call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
                    "The maximum magnitude of the baroclinic radiation \n"//&
                    "velocity (or speed of characteristics).  This is only \n"//&
                    "used if one of the open boundary segments is using Orlanski.", &
                    units="m s-1", default=10.0)
-    call get_param(param_file, mod, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
+    call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
                    "The relative weighting for the baroclinic radiation \n"//&
                    "velocities (or speed of characteristics) at the new \n"//&
                    "time level (1) or the running mean (0) for velocities. \n"//&
                    "Valid values range from 0 to 1. This is only used if \n"//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.3)
-    call get_param(param_file, mod, "OBC_RAD_THICK_WT", OBC%gamma_h, &
+    call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
                    "The relative weighting for the baroclinic radiation \n"//&
                    "velocities (or speed of characteristics) at the new \n"//&
                    "time level (1) or the running mean (0) for thicknesses. \n"//&
@@ -1526,7 +1526,7 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   integer :: isd_off, jsd_off
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
-  character(len=40)  :: mod = "set_tracer_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_tracer_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
 
   real :: temp_u(G%domain%niglobal+1,G%domain%njglobal)
@@ -1672,7 +1672,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   ! Local variables
   integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
-  character(len=40)  :: mod = "allocate_OBC_segment_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "allocate_OBC_segment_data" ! This subroutine's name.
 
   isd = segment%HI%isd ; ied = segment%HI%ied
   jsd = segment%HI%jsd ; jed = segment%HI%jed
@@ -1816,7 +1816,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB, n, m, nz
-  character(len=40)  :: mod = "set_OBC_segment_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "set_OBC_segment_data" ! This subroutine's name.
   character(len=200) :: filename, OBC_file, inputdir ! Strings for file/path
   type(OBC_segment_type), pointer :: segment
   integer, dimension(4) :: siz,siz2
@@ -2035,14 +2035,14 @@ subroutine OBC_registry_init(param_file, Reg)
   integer, save :: init_calls = 0
 
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_open_boundary" ! This module's name.
+  character(len=40)  :: mdl = "MOM_open_boundary" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not.associated(Reg)) then ; allocate(Reg)
   else ; return ; endif
 
   ! Read all relevant parameters and write them to the model log.
-! call log_version(param_file, mod, version, "")
+! call log_version(param_file, mdl,s version, "")
 
   init_calls = init_calls + 1
   if (init_calls > 1) then

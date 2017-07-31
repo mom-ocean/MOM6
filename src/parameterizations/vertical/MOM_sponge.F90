@@ -162,7 +162,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
 !                 for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_sponge"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   logical :: use_sponge
   integer :: i, j, k, col, total_sponge_cols
 
@@ -173,8 +173,8 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   endif
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "SPONGE", use_sponge, &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "SPONGE", use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
@@ -238,7 +238,7 @@ subroutine initialize_sponge(Iresttime, int_height, G, param_file, CS, &
   total_sponge_cols = CS%num_col
   call sum_across_PEs(total_sponge_cols)
 
-  call log_param(param_file, mod, "!Total sponge columns", total_sponge_cols, &
+  call log_param(param_file, mdl, "!Total sponge columns", total_sponge_cols, &
                  "The total number of columns where sponges are applied.")
 
 end subroutine initialize_sponge

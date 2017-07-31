@@ -939,7 +939,7 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
 !                  for this module
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_regularize_layers"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_regularize_layers"  ! This module's name.
   logical :: use_temperature
   integer :: isd, ied, jsd, jed
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -954,23 +954,23 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   CS%Time => Time
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "REGULARIZE_SURFACE_LAYERS", CS%regularize_surface_layers, &
                  "If defined, vertically restructure the near-surface \n"//&
                  "layers when they have too much lateral variations to \n"//&
                  "allow for sensible lateral barotropic transports.", &
                  default=.false.)
   if (CS%regularize_surface_layers) then
-    call get_param(param_file, mod, "REGULARIZE_SURFACE_DETRAIN", CS%reg_sfc_detrain, &
+    call get_param(param_file, mdl, "REGULARIZE_SURFACE_DETRAIN", CS%reg_sfc_detrain, &
                  "If true, allow the buffer layers to detrain into the \n"//&
                  "interior as a part of the restructuring when \n"//&
                  "REGULARIZE_SURFACE_LAYERS is true.", default=.true.)
   endif
 
-  call get_param(param_file, mod, "HMIX_MIN", CS%Hmix_min, &
+  call get_param(param_file, mdl, "HMIX_MIN", CS%Hmix_min, &
                  "The minimum mixed layer depth if the mixed layer depth \n"//&
                  "is determined dynamically.", units="m", default=0.0)
-  call get_param(param_file, mod, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
+  call get_param(param_file, mdl, "REG_SFC_DEFICIT_TOLERANCE", CS%h_def_tol1, &
                  "The value of the relative thickness deficit at which \n"//&
                  "to start modifying the layer structure when \n"//&
                  "REGULARIZE_SURFACE_LAYERS is true.", units="nondim", &
@@ -979,12 +979,12 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
   CS%h_def_tol3 = 0.3 + 0.7*CS%h_def_tol1
   CS%h_def_tol4 = 0.5 + 0.5*CS%h_def_tol1
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 !  if (.not. CS%debug) &
-!    call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debug, &
+!    call get_param(param_file, mdl, "DEBUG_CONSERVATION", CS%debug, &
 !                 "If true, monitor conservation and extrema.", default=.false.)
 
-  call get_param(param_file, mod, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
+  call get_param(param_file, mdl, "ALLOW_CLOCKS_IN_OMP_LOOPS", &
                  CS%allow_clocks_in_omp_loops, &
                  "If true, clocks can be called from inside loops that can \n"//&
                  "be threaded. To run with multiple threads, set to False.", &

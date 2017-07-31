@@ -1257,7 +1257,7 @@ subroutine restart_init(param_file, CS, restart_root)
 !                           module by other components.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_restart"   ! This module's name.
+  character(len=40)  :: mdl = "MOM_restart"   ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "restart_init called with an associated control structure.")
@@ -1266,8 +1266,8 @@ subroutine restart_init(param_file, CS, restart_root)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "PARALLEL_RESTARTFILES", &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", &
                                 CS%parallel_restartfiles, &
                  "If true, each processor writes its own restart file, \n"//&
                  "otherwise a single restart file is generated", &
@@ -1275,16 +1275,16 @@ subroutine restart_init(param_file, CS, restart_root)
 
   if (present(restart_root)) then
     CS%restartfile = restart_root
-    call log_param(param_file, mod, "RESTARTFILE from argument", CS%restartfile)
+    call log_param(param_file, mdl, "RESTARTFILE from argument", CS%restartfile)
   else
-    call get_param(param_file, mod, "RESTARTFILE", CS%restartfile, &
+    call get_param(param_file, mdl, "RESTARTFILE", CS%restartfile, &
                  "The name-root of the restart file.", default="MOM.res")
   endif
-  call get_param(param_file, mod, "LARGE_FILE_SUPPORT", CS%large_file_support, &
+  call get_param(param_file, mdl, "LARGE_FILE_SUPPORT", CS%large_file_support, &
                  "If true, use the file-size limits with NetCDF large \n"//&
                  "file support (4Gb), otherwise the limit is 2Gb.", &
                  default=.true.)
-  call get_param(param_file, mod, "MAX_FIELDS", CS%max_fields, &
+  call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
 
