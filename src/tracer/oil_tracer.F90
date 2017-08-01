@@ -164,7 +164,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "oil_tracer" ! This module's name.
+  character(len=40)  :: mdl = "oil_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying oils
@@ -181,51 +181,51 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "OIL_IC_FILE", CS%IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "OIL_IC_FILE", CS%IC_file, &
                  "The file in which the oil tracer initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mod, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
   endif
-  call get_param(param_file, mod, "OIL_IC_FILE_IS_Z", CS%Z_IC_file, &
+  call get_param(param_file, mdl, "OIL_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, OIL_IC_FILE is in depth space, not layer space", &
                  default=.false.)
 
-  call get_param(param_file, mod, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
                  "If true, the tracers are masked out in massless layer. \n"//&
                  "This can be a problem with time-averages.", default=.false.)
-  call get_param(param_file, mod, "OIL_MAY_REINIT", CS%oil_may_reinit, &
+  call get_param(param_file, mdl, "OIL_MAY_REINIT", CS%oil_may_reinit, &
                  "If true, oil tracers may go through the initialization \n"//&
                  "code if they are not found in the restart files. \n"//&
                  "Otherwise it is a fatal error if the oil tracers are not \n"//&
                  "found in the restart files of a restarted run.", &
                  default=.false.)
-  call get_param(param_file, mod, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
                  "The geographic longitude of the oil source.", units="degrees E", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
                  "The geographic latitude of the oil source.", units="degrees N", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "OIL_SOURCE_LAYER", CS%oil_source_k, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LAYER", CS%oil_source_k, &
                  "The layer into which the oil is introduced, or a \n"//&
                  "negative number for a vertically uniform source, \n"//&
                  "or 0 not to use this tracer.", units="Layer", default=0)
-  call get_param(param_file, mod, "OIL_SOURCE_RATE", CS%oil_source_rate, &
+  call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
                  "The rate of oil injection.", units="kg s-1", default=1.0)
-  call get_param(param_file, mod, "OIL_DECAY_DAYS", CS%oil_decay_days, &
+  call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
                  "The decay timescale in days (if positive), or no decay \n"//&
                  "if 0, or use the temperature dependent decay rate of \n"//&
                  "Adcroft et al. (GRL, 2010) if negative.", units="days", &
                  default=0.0)
-  call get_param(param_file, mod, "OIL_DATED_START_YEAR", CS%oil_start_year, &
+  call get_param(param_file, mdl, "OIL_DATED_START_YEAR", CS%oil_start_year, &
                  "The time at which the oil source starts", units="years", &
                  default=0.0)
-  call get_param(param_file, mod, "OIL_DATED_END_YEAR", CS%oil_end_year, &
+  call get_param(param_file, mdl, "OIL_DATED_END_YEAR", CS%oil_end_year, &
                  "The time at which the oil source ends", units="years", &
                  default=1.0e99)
 
@@ -235,7 +235,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     if (CS%oil_source_k(m)/=0) then
       write(name_tag(1:3),'("_",I2.2)') m
       CS%ntr = CS%ntr + 1
-      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mod)
+      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mdl)
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
         CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))
@@ -244,7 +244,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
       endif
     endif
   enddo
-  call log_param(param_file, mod, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
+  call log_param(param_file, mdl, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 

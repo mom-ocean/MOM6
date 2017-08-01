@@ -30,7 +30,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
   type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
   type(param_file_type),  intent(in) :: param_file !< Parameter file structure
   ! Local variables
-  character(len=40)  :: mod = "supercritical_set_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "supercritical_set_OBC_data" ! This subroutine's name.
   real :: zonal_flow
   integer :: i, j, k, l
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -39,7 +39,7 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
   if (.not.associated(OBC)) call MOM_error(FATAL, 'supercritical_initialization.F90: '// &
         'supercritical_set_OBC_data() was called but OBC type was not initialized!')
 
-  call get_param(param_file, mod, "SUPERCRITICAL_ZONAL_FLOW", zonal_flow, &
+  call get_param(param_file, mdl, "SUPERCRITICAL_ZONAL_FLOW", zonal_flow, &
                  "Constant zonal flow imposed at upstream open boundary.", &
                  units="m/s", default=8.57)
 
@@ -90,7 +90,7 @@ subroutine supercritical_initialize_topography(D, G, param_file, max_depth)
   type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
   real,                             intent(in)  :: max_depth  !< Maximum depth of model in m
   ! Local variables
-  character(len=40)  :: mod = "supercritical_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "supercritical_initialize_topography" ! This subroutine's name.
   real :: min_depth ! The minimum and maximum depths in m.
   real :: PI ! 3.1415...
   real :: coast_offset, coast_angle
@@ -98,13 +98,13 @@ subroutine supercritical_initialize_topography(D, G, param_file, max_depth)
 
   call MOM_mesg("  supercritical_initialization.F90, supercritical_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mod, "SUPERCRITICAL_COAST_OFFSET", coast_offset, &
+  call get_param(param_file, mdl, "SUPERCRITICAL_COAST_OFFSET", coast_offset, &
                  "The distance along the southern boundary at which the coasts angles in.", &
                  units="km", default=10.0)
-  call get_param(param_file, mod, "SUPERCRITICAL_COAST_ANGLE", coast_angle, &
+  call get_param(param_file, mdl, "SUPERCRITICAL_COAST_ANGLE", coast_angle, &
                  "The angle of the southern bondary beyond X=SUPERCRITICAL_COAST_OFFSET.", &
                  units="degrees", default=8.95)
 

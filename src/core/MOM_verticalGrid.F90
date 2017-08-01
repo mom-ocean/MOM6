@@ -91,49 +91,49 @@ subroutine verticalGridInit( param_file, GV )
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: nk
-  character(len=16) :: mod = 'MOM_verticalGrid'
+  character(len=16) :: mdl = 'MOM_verticalGrid'
 
   if (associated(GV)) call MOM_error(FATAL, &
      'verticalGridInit: called with an associated GV pointer.')
   allocate(GV)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
                    "Parameters providing information about the vertical grid.")
-  call get_param(param_file, mod, "G_EARTH", GV%g_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", GV%g_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "RHO_0", GV%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", GV%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "BOUSSINESQ", GV%Boussinesq, &
+  call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
-  call get_param(param_file, mod, "ANGSTROM", GV%Angstrom_z, &
+  call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_z, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
   if (.not.GV%Boussinesq) then
-    call get_param(param_file, mod, "H_TO_KG_M2", GV%H_to_kg_m2,&
+    call get_param(param_file, mdl, "H_TO_KG_M2", GV%H_to_kg_m2,&
                  "A constant that translates thicknesses from the model's \n"//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
   else
-    call get_param(param_file, mod, "H_TO_M", GV%H_to_m, &
+    call get_param(param_file, mdl, "H_TO_M", GV%H_to_m, &
                  "A constant that translates the model's internal \n"//&
                  "units of thickness into m.", units="m H-1", default=1.0)
   endif
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
-  call get_param(param_file, mod, "NK", nk, &
+  call get_param(param_file, mdl, "NK", nk, &
                  "The number of model layers.", units="nondim", &
                  static_value=NK_)
   if (nk /= NK_) call MOM_error(FATAL, "verticalGridInit: " // &
        "Mismatched number of layers NK_ between MOM_memory.h and param_file")
 
 #else
-  call get_param(param_file, mod, "NK", nk, &
+  call get_param(param_file, mdl, "NK", nk, &
                  "The number of model layers.", units="nondim", fail_if_missing=.true.)
 #endif
   GV%ke = nk
@@ -153,7 +153,7 @@ subroutine verticalGridInit( param_file, GV )
   GV%H_to_Pa = GV%g_Earth * GV%H_to_kg_m2
 
 ! Log derivative values.
-  call log_param(param_file, mod, "M to THICKNESS", GV%m_to_H)
+  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H)
 
   ALLOC_( GV%sInterface(nk+1) )
   ALLOC_( GV%sLayer(nk) )
@@ -201,11 +201,21 @@ end function get_flux_units
 
 !> Returns the model's tracer flux units.
 function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
-  character(len=48)                      :: get_tr_flux_units
-  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
-  character(len=*), optional, intent(in) :: tr_units
-  character(len=*), optional, intent(in) :: tr_vol_conc_units
-  character(len=*), optional, intent(in) :: tr_mass_conc_units
+  character(len=48)                      :: get_tr_flux_units !< The model's flux units
+                                                              !! for a tracer.
+  type(verticalGrid_type),    intent(in) :: GV                !< The ocean's vertical
+                                                              !! grid structure.
+  character(len=*), optional, intent(in) :: tr_units          !< Units for a tracer, for example
+                                                              !! Celsius or PSU.
+  character(len=*), optional, intent(in) :: tr_vol_conc_units !< The concentration units per unit
+                                                              !! volume, forexample if the units are
+                                                              !! umol m-3, tr_vol_conc_units would
+                                                              !! be umol.
+  character(len=*), optional, intent(in) :: tr_mass_conc_units !< The concentration units per unit
+                                                              !! mass of sea water, for example if
+                                                              !! the units are mol kg-1,
+                                                              !! tr_vol_conc_units would be mol.
+
 !   This subroutine returns the appropriate units for thicknesses and fluxes,
 ! depending on whether the model is Boussinesq or not and the scaling for
 ! the vertical thickness.

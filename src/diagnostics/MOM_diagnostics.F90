@@ -168,39 +168,59 @@ type, public :: diagnostics_CS ; private
 end type diagnostics_CS
 
 contains
-
+!> Diagnostics not more naturally calculated elsewhere are computed here.
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
                                        dt, G, GV, CS, eta_bt)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
-  type(accel_diag_ptrs),                     intent(in)    :: ADp
-  type(cont_diag_ptrs),                      intent(in)    :: CDp
-  type(forcing),                             intent(in)    :: fluxes
-  real,                                      intent(in)    :: dt   !< The time difference in s since the last call to this subroutine
-  type(diagnostics_CS),                      intent(inout) :: CS
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: eta_bt
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
+                                                                   !! structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
+                                                                   !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
+                                                                   !! (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh   !< Transport through zonal faces
+                                                                   !! = u*h*dy, m3/s(Bouss)
+                                                                   !! kg/s(non-Bouss).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh   !< transport through meridional
+                                                                   !! faces = v*h*dx, m3/s(Bouss)
+                                                                   !! kg/s(non-Bouss).
+  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to
+                                                                   !! various thermodynamic
+                                                                   !! variables.
+  type(accel_diag_ptrs),                     intent(in)    :: ADp  !< structure with pointers to
+                                                                   !! accelerations in momentum
+                                                                   !! equation.
+  type(cont_diag_ptrs),                      intent(in)    :: CDp  !< structure with pointers to
+                                                                   !! terms in continuity equation.
+  type(forcing),                             intent(in)    :: fluxes !< A structure containing the
+                                                                   !! surface fluxes.
+  real,                                      intent(in)    :: dt   !< The time difference in s since
+                                                                   !! the last call to this
+                                                                   !! subroutine.
+  type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
+                                                                   !! a previous call to
+                                                                   !! diagnostics_init.
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)   :: eta_bt !< An optional barotropic
+    !! variable that gives the "correct" free surface height (Boussinesq) or total water column
+    !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
+    !! calculating interface heights, in m or kg m-2.
 
 ! Diagnostics not more naturally calculated elsewhere are computed here.
 
 ! Arguments:
-!  (in)      u   - zonal velocity component (m/s)
-!  (in)      v   - meridional velocity component (m/s)
-!  (in)      h   - layer thickness,  meter(Bouss)  kg/m^2(non-Bouss)
-!  (in)      uh  - transport through zonal faces = u*h*dy, m3/s(Bouss) kg/s(non-Bouss)
-!  (in)      vh  - transport through meridional faces = v*h*dx, m3/s(Bouss) kg/s(non-Bouss)
+!  (in)      u   - zonal velocity component (m/s).
+!  (in)      v   - meridional velocity component (m/s).
+!  (in)      h   - layer thickness,  meter(Bouss)  kg/m^2(non-Bouss).
+!  (in)      uh  - transport through zonal faces = u*h*dy, m3/s(Bouss) kg/s(non-Bouss).
+!  (in)      vh  - transport through meridional faces = v*h*dx, m3/s(Bouss) kg/s(non-Bouss).
 !  (in)      tv  - structure pointing to various thermodynamic variables.
-!  (in)      ADp - structure with pointers to accelerations in momentum equation
-!  (in)      CDp - structure with pointers to terms in continuity equation
-!  (in)      dt  - time difference in s since the last call to this subroutine
+!  (in)      ADp - structure with pointers to accelerations in momentum equation.
+!  (in)      CDp - structure with pointers to terms in continuity equation.
+!  (in)      dt  - time difference in s since the last call to this subroutine.
 !  (in)      G   - ocean grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS  - control structure returned by a previous call to diagnostics_init
+!  (in)      CS  - control structure returned by a previous call to diagnostics_init.
 !  (in,opt)  eta_bt - An optional barotropic variable that gives the "correct"
 !                     free surface height (Boussinesq) or total water column
 !                     mass per unit area (non-Boussinesq).  This is used to
@@ -620,7 +640,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
 end subroutine calculate_diagnostic_fields
 
-
+!> This subroutine finds location of R_in in an increasing ordered
+!! list, Rlist, returning as k the element such that
+!! Rlist(k) <= R_in < Rlist(k+1), and where wt and wt_p are the linear
+!! weights that should be assigned to elements k and k+1.
 subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
   real,     intent(in)    :: Rlist(:), R_in
   integer,  intent(inout) :: k
@@ -681,13 +704,22 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 end subroutine find_weights
 
+!> Subroutine calculates vertical integrals of several tracers, along
+!! with the mass-weight of these tracers, the total column mass, and the
+!! carefully calculated column height.
 subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
-  type(forcing),                            intent(in)    :: fluxes
-  type(diagnostics_CS),                     intent(inout) :: CS
+  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid
+                                                                  !! structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
+                                                                  !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                    intent(in)    :: tv   !< A structure pointing to various
+                                                                  !! thermodynamic variables.
+  type(forcing),                            intent(in)    :: fluxes !< A structure containing the
+                                                                  !! surface fluxes.
+  type(diagnostics_CS),                     intent(inout) :: CS   !< A control structure returned
+                                                                  !! by a previous call to
+                                                                  !! diagnostics_init.
 
 ! Subroutine calculates vertical integrals of several tracers, along
 ! with the mass-weight of these tracers, the total column mass, and the
@@ -802,17 +834,28 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
 
 end subroutine calculate_vertical_integrals
 
-
+!> This subroutine calculates terms in the mechanical energy budget.
 subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity, in m s-1
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh
-  type(accel_diag_ptrs),                     intent(in)    :: ADp
-  type(cont_diag_ptrs),                      intent(in)    :: CDp
-  type(diagnostics_CS),                      intent(inout) :: CS
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
+                                                                   !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
+                                                                   !! (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh   !< Transport through zonal
+                                                                   !! faces=u*h*dy: m3/s (Bouss)
+                                                                   !! kg/s(non-Bouss).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh   !< Transport through merid
+                                                                   !! faces=v*h*dx: m3/s (Bouss)
+                                                                   !! kg/s(non-Bouss).
+  type(accel_diag_ptrs),                     intent(in)    :: ADp  !< Structure pointing to
+                                                                   !! accelerations in momentum
+                                                                   !! equation.
+  type(cont_diag_ptrs),                      intent(in)    :: CDp  !< Structure pointing to terms
+                                                                   !! in continuity equations.
+  type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
+                                                                   !! a previous call to
+                                                                   !! diagnostics_init.
 
 ! This subroutine calculates terms in the mechanical energy budget.
 
@@ -1001,10 +1044,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
 
 end subroutine calculate_energy_diagnostics
 
-
+!> This subroutine registers fields to calculate a diagnostic time derivative.
 subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
-  real, dimension(:,:,:), target :: f_ptr, deriv_ptr
-  type(diagnostics_CS),  pointer :: CS
+  real, dimension(:,:,:), target :: f_ptr     !< Field whose derivative is taken.
+  real, dimension(:,:,:), target :: deriv_ptr !< Field in which the calculated time derivatives
+                                              !! placed.
+  type(diagnostics_CS),  pointer :: CS        !< Control structure returned by previous call to
+                                              !! diagnostics_init.
 
 ! This subroutine registers fields to calculate a diagnostic time derivative.
 ! Arguments:
@@ -1035,11 +1081,13 @@ subroutine register_time_deriv(f_ptr, deriv_ptr, CS)
 
 end subroutine register_time_deriv
 
-
+!> This subroutine calculates all registered time derivatives.
 subroutine calculate_derivs(dt, G, CS)
-  real,                  intent(in)    :: dt   !< The time interval over which differences occur, in s
-  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(diagnostics_CS),  intent(inout) :: CS
+  real,                  intent(in)    :: dt   !< The time interval over which differences occur,
+                                               !! in s.
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure.
+  type(diagnostics_CS),  intent(inout) :: CS   !< Control structure returned by previous call to
+                                               !! diagnostics_init.
 
 ! This subroutine calculates all registered time derivatives.
 ! Arguments:
@@ -1062,16 +1110,23 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
+! #@# This subroutine needs a doxygen description
 subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS)
-  type(ocean_internal_state), intent(in)    :: MIS
-  type(accel_diag_ptrs),      intent(inout) :: ADp
-  type(cont_diag_ptrs),       intent(inout) :: CDp
-  type(time_type),            intent(in)    :: Time
-  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target,    intent(inout) :: diag
-  type(diagnostics_CS),       pointer       :: CS
+  type(ocean_internal_state), intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers to
+                                                    !! the fields and accelerations that make up the
+                                                    !! ocean's internal physical state.
+  type(accel_diag_ptrs),      intent(inout) :: ADp  !< Structure with pointers to momentum equation
+                                                    !! terms.
+  type(cont_diag_ptrs),       intent(inout) :: CDp  !< Structure with pointers to continuity
+                                                    !! equation terms.
+  type(time_type),            intent(in)    :: Time !< Current model time.
+  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),      intent(in)    :: param_file !< A structure to parse for run-time
+                                                    !! parameters.
+  type(diag_ctrl), target,    intent(inout) :: diag !< Structure to regulate diagnostic output.
+  type(diagnostics_CS),       pointer       :: CS   !< Pointer set to point to control structure
+                                                    !! for this module.
 
 ! Arguments
 !  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
@@ -1090,7 +1145,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
-  character(len=40)  :: mod = "MOM_diagnostics" ! This module's name.
+  character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   real :: omega, f2_min
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
@@ -1111,12 +1166,12 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
                  "The lower fraction of water column over which N2 is limited as monotonic\n"// &
                  "for the purposes of calculating the equivalent barotropic wave speed.", &
                  units='nondim', default=0.)
-  call get_param(param_file, mod, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
+  call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
                  "The depth below which N2 is limited as monotonic for the\n"// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
                  units='m', default=-1.)
@@ -1329,13 +1384,18 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
 end subroutine MOM_diagnostics_init
 
-
+!> This subroutine sets up diagnostics upon which other diagnostics depend.
 subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
-  type(ocean_internal_state), intent(in)    :: MIS
-  type(accel_diag_ptrs),      intent(inout) :: ADp
-  type(cont_diag_ptrs),       intent(inout) :: CDp
-  type(ocean_grid_type),      intent(in)    :: G    !< The ocean's grid structure
-  type(diagnostics_CS),       pointer       :: CS
+  type(ocean_internal_state), intent(in)    :: MIS !< For "MOM Internal State" a set of pointers to
+                                                   !! the fields and accelerations making up ocean
+                                                   !! internal physical state.
+  type(accel_diag_ptrs),      intent(inout) :: ADp !< Structure pointing to accelerations in
+                                                   !! momentum equation.
+  type(cont_diag_ptrs),       intent(inout) :: CDp !< Structure pointing to terms in continuity
+                                                   !! equation.
+  type(ocean_grid_type),      intent(in)    :: G   !< The ocean's grid structure.
+  type(diagnostics_CS),       pointer       :: CS  !< Pointer to the control structure for this
+                                                   !! module.
 
 ! This subroutine sets up diagnostics upon which other diagnostics depend.
 ! Arguments:

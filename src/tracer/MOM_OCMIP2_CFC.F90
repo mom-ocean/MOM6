@@ -158,12 +158,14 @@ end type OCMIP2_CFC_CS
 contains
 
 function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),    intent(in) :: HI
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(OCMIP2_CFC_CS),     pointer    :: CS
-  type(tracer_registry_type), pointer :: tr_Reg
-  type(MOM_restart_CS),    pointer    :: restart_CS
+  type(hor_index_type),    intent(in) :: HI         !< A horizontal index type structure.
+  type(verticalGrid_type), intent(in) :: GV         !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
+  type(OCMIP2_CFC_CS),     pointer    :: CS         !< A pointer that is set to point to the control
+                                                    !! structure for this module.
+  type(tracer_registry_type), &
+                           pointer    :: tr_Reg     !< A pointer to the tracer registry.
+  type(MOM_restart_CS),    pointer    :: restart_CS !< A pointer to the restart control structure.
 ! This subroutine is used to register tracer fields and subroutines
 ! to be used with MOM.
 ! Arguments: HI - A horizontal index type structure.
@@ -176,7 +178,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_OCMIP2_CFC" ! This module's name.
+  character(len=40)  :: mdl = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! These can be overridden later in via the field manager?
   character(len=128) :: default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
@@ -221,24 +223,24 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "CFC_IC_FILE", CS%IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CFC_IC_FILE", CS%IC_file, &
                  "The file in which the CFC initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mod, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
   endif
-  call get_param(param_file, mod, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
+  call get_param(param_file, mdl, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mod, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
                  "If true, the tracers are masked out in massless layer. \n"//&
                  "This can be a problem with time-averages.", default=.false.)
-  call get_param(param_file, mod, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+  call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
                  "it is a fatal error if tracers are not found in the \n"//&
@@ -247,8 +249,8 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   !   The following vardesc types contain a package of metadata about each tracer,
   ! including, the name; units; longname; and grid information.
   CS%CFC11_name = "CFC11" ; CS%CFC12_name = "CFC12"
-  CS%CFC11_desc = var_desc(CS%CFC11_name,"mol m-3","CFC-11 Concentration", caller=mod)
-  CS%CFC12_desc = var_desc(CS%CFC12_name,"mol m-3","CFC-12 Concentration", caller=mod)
+  CS%CFC11_desc = var_desc(CS%CFC11_name,"mol m-3","CFC-11 Concentration", caller=mdl)
+  CS%CFC12_desc = var_desc(CS%CFC12_name,"mol m-3","CFC-12 Concentration", caller=mdl)
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
@@ -281,29 +283,29 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 !-----------------------------------------------------------------------
   a11_dflt(:) = (/ 3501.8, -210.31,  6.1851, -0.07513 /)
   a12_dflt(:) = (/ 3845.4, -228.95,  6.1908, -0.06743 /)
-  call get_param(param_file, mod, "CFC11_A1", CS%a1_11, &
+  call get_param(param_file, mdl, "CFC11_A1", CS%a1_11, &
                  "A coefficient in the Schmidt number of CFC11.", &
                  units="nondim", default=a11_dflt(1))
-  call get_param(param_file, mod, "CFC11_A2", CS%a2_11, &
+  call get_param(param_file, mdl, "CFC11_A2", CS%a2_11, &
                  "A coefficient in the Schmidt number of CFC11.", &
                  units="degC-1", default=a11_dflt(2))
-  call get_param(param_file, mod, "CFC11_A3", CS%a3_11, &
+  call get_param(param_file, mdl, "CFC11_A3", CS%a3_11, &
                  "A coefficient in the Schmidt number of CFC11.", &
                  units="degC-2", default=a11_dflt(3))
-  call get_param(param_file, mod, "CFC11_A4", CS%a4_11, &
+  call get_param(param_file, mdl, "CFC11_A4", CS%a4_11, &
                  "A coefficient in the Schmidt number of CFC11.", &
                  units="degC-3", default=a11_dflt(4))
 
-  call get_param(param_file, mod, "CFC12_A1", CS%a1_12, &
+  call get_param(param_file, mdl, "CFC12_A1", CS%a1_12, &
                  "A coefficient in the Schmidt number of CFC12.", &
                  units="nondim", default=a12_dflt(1))
-  call get_param(param_file, mod, "CFC12_A2", CS%a2_12, &
+  call get_param(param_file, mdl, "CFC12_A2", CS%a2_12, &
                  "A coefficient in the Schmidt number of CFC12.", &
                  units="degC-1", default=a12_dflt(2))
-  call get_param(param_file, mod, "CFC12_A3", CS%a3_12, &
+  call get_param(param_file, mdl, "CFC12_A3", CS%a3_12, &
                  "A coefficient in the Schmidt number of CFC12.", &
                  units="degC-2", default=a12_dflt(3))
-  call get_param(param_file, mod, "CFC12_A4", CS%a4_12, &
+  call get_param(param_file, mdl, "CFC12_A4", CS%a4_12, &
                  "A coefficient in the Schmidt number of CFC12.", &
                  units="degC-3", default=a12_dflt(4))
 
@@ -316,47 +318,47 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   d12_dflt(:) = (/ -218.0971, 298.9702, 113.8049, -1.39165 /)
   e12_dflt(:) = (/ -0.143566, 0.091015, -0.0153924 /)
 
-  call get_param(param_file, mod, "CFC11_D1", CS%d1_11, &
+  call get_param(param_file, mdl, "CFC11_D1", CS%d1_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="none", default=d11_dflt(1))
-  call get_param(param_file, mod, "CFC11_D2", CS%d2_11, &
+  call get_param(param_file, mdl, "CFC11_D2", CS%d2_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="hK", default=d11_dflt(2))
-  call get_param(param_file, mod, "CFC11_D3", CS%d3_11, &
+  call get_param(param_file, mdl, "CFC11_D3", CS%d3_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="none", default=d11_dflt(3))
-  call get_param(param_file, mod, "CFC11_D4", CS%d4_11, &
+  call get_param(param_file, mdl, "CFC11_D4", CS%d4_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="hK-2", default=d11_dflt(4))
-  call get_param(param_file, mod, "CFC11_E1", CS%e1_11, &
+  call get_param(param_file, mdl, "CFC11_E1", CS%e1_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="PSU-1", default=e11_dflt(1))
-  call get_param(param_file, mod, "CFC11_E2", CS%e2_11, &
+  call get_param(param_file, mdl, "CFC11_E2", CS%e2_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="PSU-1 hK-1", default=e11_dflt(2))
-  call get_param(param_file, mod, "CFC11_E3", CS%e3_11, &
+  call get_param(param_file, mdl, "CFC11_E3", CS%e3_11, &
                  "A coefficient in the solubility of CFC11.", &
                  units="PSU-1 hK-2", default=e11_dflt(3))
 
-  call get_param(param_file, mod, "CFC12_D1", CS%d1_12, &
+  call get_param(param_file, mdl, "CFC12_D1", CS%d1_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="none", default=d12_dflt(1))
-  call get_param(param_file, mod, "CFC12_D2", CS%d2_12, &
+  call get_param(param_file, mdl, "CFC12_D2", CS%d2_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="hK", default=d12_dflt(2))
-  call get_param(param_file, mod, "CFC12_D3", CS%d3_12, &
+  call get_param(param_file, mdl, "CFC12_D3", CS%d3_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="none", default=d12_dflt(3))
-  call get_param(param_file, mod, "CFC12_D4", CS%d4_12, &
+  call get_param(param_file, mdl, "CFC12_D4", CS%d4_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="hK-2", default=d12_dflt(4))
-  call get_param(param_file, mod, "CFC12_E1", CS%e1_12, &
+  call get_param(param_file, mdl, "CFC12_E1", CS%e1_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="PSU-1", default=e12_dflt(1))
-  call get_param(param_file, mod, "CFC12_E2", CS%e2_12, &
+  call get_param(param_file, mdl, "CFC12_E2", CS%e2_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="PSU-1 hK-1", default=e12_dflt(2))
-  call get_param(param_file, mod, "CFC12_E3", CS%e3_12, &
+  call get_param(param_file, mdl, "CFC12_E3", CS%e3_12, &
                  "A coefficient in the solubility of CFC12.", &
                  units="PSU-1 hK-2", default=e12_dflt(3))
 
@@ -365,19 +367,30 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   register_OCMIP2_CFC = .true.
 end function register_OCMIP2_CFC
-
+!>This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
+!! and it sets up the tracer output.
 subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                                  sponge_CSp, diag_to_Z_CSp)
-  logical,                               intent(in) :: restart
-  type(time_type), target,               intent(in) :: day
-  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,               intent(in) :: diag
-  type(ocean_OBC_type),                  pointer    :: OBC
-  type(OCMIP2_CFC_CS),                   pointer    :: CS
-  type(sponge_CS),                       pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
+  logical,                        intent(in) :: restart    !< .true. if the fields have already been
+                                                           !! read from a restart file.
+  type(time_type), target,        intent(in) :: day        !< Time of the start of the run.
+  type(ocean_grid_type),          intent(in) :: G          !< The ocean's grid structure.
+  type(verticalGrid_type),        intent(in) :: GV         !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                  intent(in) :: h          !< Layer thicknesses, in H
+                                                           !! (usually m or kg m-2).
+  type(diag_ctrl), target,        intent(in) :: diag       !< A structure that is used to regulate
+                                                           !! diagnostic output.
+  type(ocean_OBC_type),           pointer    :: OBC        !< This open boundary condition type
+                                                           !! specifies whether, where, and what
+                                                           !! open boundary conditions are used.
+  type(OCMIP2_CFC_CS),            pointer    :: CS         !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  type(sponge_CS),                pointer    :: sponge_CSp !< A pointer to the control structure for
+                                                           !! the sponges, if they are in use.
+                                                           !! Otherwise this may be unassociated.
+  type(diag_to_Z_CS),             pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                           !! for diagnostics in depth space.
 !   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 ! and it sets up the tracer output.
 
@@ -483,7 +496,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
   enddo
 
 end subroutine initialize_OCMIP2_CFC
-
+!>This subroutine initializes a tracer array.
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -525,16 +538,37 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
 
 end subroutine init_tracer_CFC
 
+!>  This subroutine applies diapycnal diffusion and any other column
+! tracer physics or chemistry to the tracers from this file.
+! CFCs are relatively simple, as they are passive tracers. with only a surface
+! flux as a source.
 subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(OCMIP2_CFC_CS),                pointer    :: CS
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  type(ocean_grid_type),              intent(in) :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),            intent(in) :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h_old  !< Layer thickness before entrainment,
+                                                           !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h_new  !< Layer thickness after entrainment,
+                                                           !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: ea     !< an array to which the amount of fluid
+                                                         !! entrained from the layer above during
+                                                         !! this call will be added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: eb   !< an array to which the amount of fluid
+                                                         !! entrained from the layer below during
+                                                         !! this call will be added, in m or kg m-2.
+  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to any
+                                                           !! possible forcing fields. Unused fields
+                                                           !! have NULL ptrs.
+  real,                               intent(in) :: dt     !< The amount of time covered by this
+                                                           !! call, in s
+  type(OCMIP2_CFC_CS),                pointer    :: CS     !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  real,                     optional,intent(in)  :: evap_CFL_limit
+  real,                     optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
 ! CFCs are relatively simple, as they are passive tracers. with only a surface
@@ -633,16 +667,25 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 
 end subroutine OCMIP2_CFC_column_physics
 
+!> This function calculates the mass-weighted integral of all tracer stocks,
+!! returning the number of stocks it has calculated.  If the stock_index
+!! is present, only the stock corresponding to that coded index is returned.
 function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(:),                 intent(out)   :: stocks
-  type(OCMIP2_CFC_CS),                pointer       :: CS
-  character(len=*), dimension(:),     intent(out)   :: names
-  character(len=*), dimension(:),     intent(out)   :: units
-  integer, optional,                  intent(in)    :: stock_index
-  integer                                           :: OCMIP2_CFC_stock
+  type(ocean_grid_type),           intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),         intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                   intent(in)    :: h      !< Layer thicknesses, in H
+                                                           !! (usually m or kg m-2).
+  real, dimension(:),              intent(out)   :: stocks !< the mass-weighted integrated amount
+                                                           !! of each tracer, in kg times
+                                                           !! concentration units.
+  type(OCMIP2_CFC_CS),             pointer       :: CS     !< The control structure returned by a
+                                                           !! previous call to register_OCMIP2_CFC.
+  character(len=*), dimension(:),  intent(out)   :: names  !< The names of the stocks calculated.
+  character(len=*), dimension(:),  intent(out)   :: units  !< The units of the stocks calculated.
+  integer, optional,               intent(in)    :: stock_index !< The coded index of a specific
+                                                                !! stock being sought.
+  integer                                        :: OCMIP2_CFC_stock
 ! This function calculates the mass-weighted integral of all tracer stocks,
 ! returning the number of stocks it has calculated.  If the stock_index
 ! is present, only the stock corresponding to that coded index is returned.
@@ -691,10 +734,13 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 end function OCMIP2_CFC_stock
 
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in) :: G    !< The ocean's grid structure
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure.
   type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(OCMIP2_CFC_CS),                      pointer    :: CS
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
+                                                                  !! (usually m or kg m-2).
+  type(OCMIP2_CFC_CS),                      pointer       :: CS   !< The control structure returned
+                                                                  !! by a previous call to
+                                                                  !! register_OCMIP2_CFC.
 !   This subroutine sets up the fields that the coupler needs to calculate the
 ! CFC fluxes between the ocean and atmosphere.
 ! Arguments: state - A structure containing fields that describe the
