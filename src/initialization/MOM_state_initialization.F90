@@ -1795,14 +1795,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  character(len=200) :: filename   ! The name of an input file containing temperature
-                                   ! and salinity in z-space; also used for  ice shelf area.
-  character(len=200) :: tfilename  ! The name of an input file containing only temperature
-                                   ! in z-space.
-  character(len=200) :: sfilename  ! The name of an input file containing only salinity
-                                   ! in z-space.
-  character(len=200) :: shelf_file ! The name of an input file used for  ice shelf area.
-  character(len=200) :: inputdir   ! The directory where NetCDF input filesare.
+  character(len=200) :: filename   !< The name of an input file containing temperature
+                                   !! and salinity in z-space; also used for  ice shelf area.
+  character(len=200) :: tfilename  !< The name of an input file containing only temperature
+                                   !! in z-space.
+  character(len=200) :: sfilename  !< The name of an input file containing only salinity
+                                   !! in z-space.
+  character(len=200) :: shelf_file !< The name of an input file used for  ice shelf area.
+  character(len=200) :: inputdir   !! The directory where NetCDF input filesare.
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
@@ -1898,22 +1898,22 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
                  "The name of the z-space input file used to initialize \n"//&
                  "temperatures (T) and salinities (S). If T and S are not \n" //&
                  "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE \n" //&
-                 "must be set.",default="temp_salt_z.nc")
+                 "must be set.",default="temp_salt_z.nc",do_not_log=just_read)
   call get_param(PF, mdl, "TEMP_Z_INIT_FILE",tfilename, &
                  "The name of the z-space input file used to initialize \n"//&
-                 "temperatures, only.", default=trim(filename))
+                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
   call get_param(PF, mdl, "SALT_Z_INIT_FILE",sfilename, &
                  "The name of the z-space input file used to initialize \n"//&
-                 "temperatures, only.", default=trim(filename))
+                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
   filename = trim(inputdir)//trim(filename)
   tfilename = trim(inputdir)//trim(tfilename)
   sfilename = trim(inputdir)//trim(sfilename)
   call get_param(PF, mdl, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in \n"//&
-                 "TEMP_Z_INIT_FILE.", default="ptemp")
+                 "TEMP_Z_INIT_FILE.", default="ptemp",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
-                 "SALT_Z_INIT_FILE.", default="salt")
+                 "SALT_Z_INIT_FILE.", default="salt",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated \n"//&
                  "initial conditions.", default=.false., do_not_log=just_read)
