@@ -91,7 +91,7 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = 'MOM_write_cputime'  ! This module's name.
+  character(len=40)  :: mdl = 'MOM_write_cputime'  ! This module's name.
 
   if (.not.associated(CS)) then
     allocate(CS)
@@ -100,8 +100,8 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
   endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "MAXCPU", CS%maxcpu, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, &
                  "The maximum amount of cpu time per processor for which \n"//&
                  "MOM should run before saving a restart file and \n"//&
                  "quitting with a return value that indicates that a \n"//&
@@ -111,10 +111,10 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
                  "seconds, so the actual CPU time used is larger by a \n"//&
                  "factor of the number of processors used.", &
                  units="wall-clock seconds", default=-1.0)
-  call get_param(param_file, mod, "CPU_TIME_FILE", CS%CPUfile, &
+  call get_param(param_file, mdl, "CPU_TIME_FILE", CS%CPUfile, &
                  "The file into which CPU time is written.",default="CPU_stats")
   CS%CPUfile = trim(directory)//trim(CS%CPUfile)
-  call log_param(param_file, mod, "directory/CPU_TIME_FILE", CS%CPUfile)
+  call log_param(param_file, mdl, "directory/CPU_TIME_FILE", CS%CPUfile)
 #ifdef STATSLABEL
   CS%CPUfile = trim(CS%CPUfile)//"."//trim(adjustl(STATSLABEL))
 #endif

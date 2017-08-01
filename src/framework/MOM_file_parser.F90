@@ -49,6 +49,7 @@ use MOM_coms, only : root_PE, broadcast
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_error_handler, only : is_root_pe, stdlog, stdout
 use MOM_time_manager, only : set_time, get_time, time_type, get_ticks_per_second
+use MOM_time_manager, only : set_date, get_date
 use MOM_document, only : doc_param, doc_module, doc_init, doc_end, doc_type
 use MOM_document, only : doc_openBlock, doc_closeBlock
 use MOM_string_functions, only : left_int, left_ints, slasher
@@ -269,7 +270,7 @@ subroutine close_param_file(CS, quiet_close, component)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=128) :: docfile_default
-  character(len=40)  :: mod   ! This module's name.
+  character(len=40)  :: mdl   ! This module's name.
   integer :: i, n, num_unused
 
   if (present(quiet_close)) then ; if (quiet_close) then
@@ -286,33 +287,33 @@ subroutine close_param_file(CS, quiet_close, component)
   endif ; endif
 
   ! Log the parameters for the parser.
-  mod = "MOM_file_parser"
-  call log_version(CS, mod, version, "")
-  call log_param(CS, mod, "SEND_LOG_TO_STDOUT", &
+  mdl = "MOM_file_parser"
+  call log_version(CS, mdl, version, "")
+  call log_param(CS, mdl, "SEND_LOG_TO_STDOUT", &
                         CS%log_to_stdout, &
                  "If true, all log messages are also sent to stdout.", &
                  default=log_to_stdout_default)
-  call log_param(CS, mod, "REPORT_UNUSED_PARAMS", &
+  call log_param(CS, mdl, "REPORT_UNUSED_PARAMS", &
                         CS%report_unused, &
                  "If true, report any parameter lines that are not used \n"//&
                  "in the run.", default=report_unused_default)
-  call log_param(CS, mod, "FATAL_UNUSED_PARAMS", &
+  call log_param(CS, mdl, "FATAL_UNUSED_PARAMS", &
                         CS%unused_params_fatal, &
                  "If true, kill the run if there are any unused \n"//&
                  "parameters.", default=unused_params_fatal_default)
   docfile_default = "MOM_parameter_doc"
   if (present(component)) docfile_default = trim(component)//"_parameter_doc"
-  call log_param(CS, mod, "DOCUMENT_FILE", CS%doc_file, &
+  call log_param(CS, mdl, "DOCUMENT_FILE", CS%doc_file, &
                  "The basename for files where run-time parameters, their\n"//&
                  "settings, units and defaults are documented. Blank will\n"//&
                  "disable all parameter documentation.", default=docfile_default)
   if (len_trim(CS%doc_file) > 0) then
-    call log_param(CS, mod, "COMPLETE_DOCUMENTATION", &
+    call log_param(CS, mdl, "COMPLETE_DOCUMENTATION", &
                    CS%complete_doc, &
                   "If true, all run-time parameters are\n"//&
                   "documented in "//trim(CS%doc_file)//&
                   ".all .", default=complete_doc_default)
-    call log_param(CS, mod, "MINIMAL_DOCUMENTATION", &
+    call log_param(CS, mdl, "MINIMAL_DOCUMENTATION", &
                    CS%minimal_doc, &
                   "If true, non-default run-time parameters are\n"//&
                   "documented in "//trim(CS%doc_file)//&
@@ -781,30 +782,60 @@ subroutine read_param_logical(CS, varname, value, fail_if_missing)
 end subroutine read_param_logical
 
 
-subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing)
+subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing, date_format)
   type(param_file_type),  intent(in) :: CS
   character(len=*),       intent(in) :: varname
   type(time_type),     intent(inout) :: value
   real,         optional, intent(in) :: timeunit
   logical,      optional, intent(in) :: fail_if_missing
-! This subroutine determines the value of an integer model parameter
+  logical,     optional, intent(out) :: date_format
+! This subroutine determines the value of an time-type model parameter
 ! from a parameter file. The arguments are the unit of the open file
 ! which is to be read, the (case-sensitive) variable name, the variable
 ! where the value is to be stored, and (optionally) a flag indicating
 ! whether to fail if this parameter can not be found.  The unique argument
 ! to read time is the number of seconds to use as the unit of time being read.
   character(len=INPUT_STR_LENGTH) :: value_string(1)
+  character(len=240) :: err_msg
   logical            :: found, defined
   real               :: real_time, time_unit
-  integer            :: days, secs
+  integer            :: days, secs, vals(7)
+
+  if (present(date_format)) date_format = .false.
 
   call get_variable_line(CS, varname, found, defined, value_string)
   if (found .and. defined .and. (LEN_TRIM(value_string(1)) > 0)) then
-    time_unit = 1.0 ; if (present(timeunit)) time_unit = timeunit
-    read( value_string(1), *) real_time
-    days = int(real_time*(time_unit/86400.0))
-    secs = int(floor((real_time*(time_unit/86400.0)-days)*86400.0 + 0.5))
-    value = set_time(secs, days)
+    ! Determine whether value string should be parsed for a real number
+    ! or a date, in either a string format or a comma-delimited list of values.
+    if ((INDEX(value_string(1),'-') > 0) .and. &
+        (INDEX(value_string(1),'-',back=.true.) > INDEX(value_string(1),'-'))) then
+      ! There are two dashes, so this must be a date format.
+      value = set_date(value_string(1), err_msg=err_msg)
+      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL,'read_param_time: '//&
+          trim(err_msg)//' in integer list read error for time-type variable '//&
+          trim(varname)// ' parsing "'//trim(value_string(1))//'"')
+      if (present(date_format)) date_format = .true.
+    elseif (INDEX(value_string(1),',') > 0) then
+      ! Initialize vals with an invalid date.
+      vals(:) = (/ -999, -999, -999, 0, 0, 0, 0 /)
+      read(value_string(1),*,end=995,err=1005) vals
+     995 continue
+      if ((vals(1) < 0) .or. (vals(2) < 0) .or. (vals(3) < 0)) &
+        call MOM_error(FATAL,'read_param_time: integer list read error for time-type variable '//&
+                       trim(varname)// ' parsing "'//trim(value_string(1))//'"')
+      value = set_date(vals(1), vals(2), vals(3), vals(4), vals(5), vals(6), &
+                       vals(7), err_msg=err_msg)
+      if (LEN_TRIM(err_msg) > 0) call MOM_error(FATAL,'read_param_time: '//&
+          trim(err_msg)//' in integer list read error for time-type variable '//&
+          trim(varname)// ' parsing "'//trim(value_string(1))//'"')
+      if (present(date_format)) date_format = .true.
+    else
+      time_unit = 1.0 ; if (present(timeunit)) time_unit = timeunit
+      read( value_string(1), *) real_time
+      days = int(real_time*(time_unit/86400.0))
+      secs = int(floor((real_time*(time_unit/86400.0)-days)*86400.0 + 0.5))
+      value = set_time(secs, days)
+   endif
   else
     if (present(fail_if_missing)) then ; if (fail_if_missing) then
       if (.not.found) then
@@ -816,6 +847,9 @@ subroutine read_param_time(CS, varname, value, timeunit, fail_if_missing)
       endif
     endif ; endif
   endif
+  return
+ 1005 call MOM_error(FATAL,'read_param_time: read error for time-type variable '//&
+                           trim(varname)// ' parsing "'//trim(value_string(1))//'"')
 end subroutine read_param_time
 
 function strip_quotes(val_str)
@@ -1382,8 +1416,10 @@ subroutine log_param_char(CS, modulename, varname, value, desc, units, &
 
 end subroutine log_param_char
 
+!> This subroutine writes the value of a time-type parameter to a log file,
+!! along with its name and the module it came from.
 subroutine log_param_time(CS, modulename, varname, value, desc, units, &
-                          default, timeunit)
+                          default, timeunit, layoutParam, log_date)
   type(param_file_type),      intent(in) :: CS
   character(len=*),           intent(in) :: modulename
   character(len=*),           intent(in) :: varname
@@ -1391,12 +1427,17 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
   character(len=*), optional, intent(in) :: desc, units
   type(time_type),  optional, intent(in) :: default
   real,             optional, intent(in) :: timeunit
-! This subroutine writes the value of a time-type parameter to a log file,
-! along with its name and the module it came from.
+  logical,          optional, intent(in) :: log_date   !< If true, log the time_type in date format.
+  logical,          optional, intent(in) :: layoutParam
+
   real :: real_time, real_default
-  logical :: use_timeunit = .false.
+  logical :: use_timeunit, date_format
   character(len=240) :: mesg, myunits
-  integer :: days, secs, ticks
+  character(len=80) :: date_string, default_string
+  integer :: days, secs, ticks, ticks_per_sec
+
+  use_timeunit = .false.
+  date_format = .false. ; if (present(log_date)) date_format = log_date
 
   call get_time(value, secs, days, ticks)
 
@@ -1414,7 +1455,19 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
 
   if (present(desc)) then
     if (present(timeunit)) use_timeunit = (timeunit > 0.0)
-    if (use_timeunit) then
+    if (date_format) then
+      myunits='[date]'
+
+      date_string = convert_date_to_string(value)
+      if (present(default)) then
+        default_string = convert_date_to_string(default)
+        call doc_param(CS%doc, varname, desc, myunits, date_string, &
+                       default=default_string, layoutParam=layoutParam)
+      else
+        call doc_param(CS%doc, varname, desc, myunits, date_string, &
+                       layoutParam=layoutParam)
+      endif
+    elseif (use_timeunit) then
       if (present(units)) then
         write(myunits(1:240),'(A)') trim(units)
       else
@@ -1444,6 +1497,34 @@ subroutine log_param_time(CS, modulename, varname, value, desc, units, &
 
 end subroutine log_param_time
 
+!> This function converts a date into a string, valid with ticks and for dates up to year 99,999,999
+function convert_date_to_string(date) result(date_string)
+  type(time_type), intent(in) :: date !< The date to be translated into a string.
+  character(len=40) :: date_string    !< A date string in a format like YYYY-MM-DD HH:MM:SS.sss
+
+  character(len=40) :: sub_string
+  real    :: real_secs
+  integer :: yrs, mons, days, hours, mins, secs, ticks, ticks_per_sec
+
+  call get_date(date, yrs, mons, days, hours, mins, secs, ticks)
+  write (date_string, '(i8.4)') yrs
+  write (sub_string, '("-", i2.2, "-", I2.2, " ", i2.2, ":", i2.2, ":")') &
+         mons, days, hours, mins
+  date_string = trim(adjustl(date_string)) // trim(sub_string)
+  if (ticks > 0) then
+    ticks_per_sec = get_ticks_per_second()
+    real_secs = secs + ticks/ticks_per_sec
+    if (ticks_per_sec <= 100) then
+      write (sub_string, '(F7.3)') real_secs
+    else
+      write (sub_string, '(F10.6)') real_secs
+    endif
+  else
+    write (sub_string, '(i2.2)') secs
+  endif
+  date_string = trim(date_string) // trim(adjustl(sub_string))
+
+end function convert_date_to_string
 
 subroutine get_param_int(CS, modulename, varname, value, desc, units, &
                default, fail_if_missing, do_not_read, do_not_log, &
@@ -1675,7 +1756,7 @@ end subroutine get_param_logical
 
 subroutine get_param_time(CS, modulename, varname, value, desc, units, &
                           default, fail_if_missing, do_not_read, do_not_log, &
-                          timeunit, static_value)
+                          timeunit, static_value, layoutParam, log_as_date)
   type(param_file_type),      intent(in)    :: CS
   character(len=*),           intent(in)    :: modulename
   character(len=*),           intent(in)    :: varname
@@ -1685,22 +1766,26 @@ subroutine get_param_time(CS, modulename, varname, value, desc, units, &
   logical,          optional, intent(in)    :: fail_if_missing
   logical,          optional, intent(in)    :: do_not_read, do_not_log
   real,             optional, intent(in)    :: timeunit
+  logical,          optional, intent(in)    :: layoutParam
+  logical,          optional, intent(in)    :: log_as_date
 ! This subroutine writes the value of a real parameter to a log file,
 ! along with its name and the module it came from.
-  logical :: do_read, do_log
+  logical :: do_read, do_log, date_format, log_date
 
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
+  log_date = .false.
 
   if (do_read) then
     if (present(default)) value = default
     if (present(static_value)) value = static_value
-    call read_param_time(CS, varname, value, timeunit, fail_if_missing)
+    call read_param_time(CS, varname, value, timeunit, fail_if_missing, date_format=log_date)
   endif
 
   if (do_log) then
-    call log_param_time(CS, modulename, varname, value, desc, &
-                           units, default, timeunit)
+    if (present(log_as_date)) log_date = log_as_date
+    call log_param_time(CS, modulename, varname, value, desc, units, default, &
+                        timeunit, layoutParam=layoutParam, log_date=log_date)
   endif
 
 end subroutine get_param_time

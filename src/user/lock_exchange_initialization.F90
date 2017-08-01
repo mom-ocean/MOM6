@@ -37,37 +37,49 @@ contains
 
 !> This subroutine initializes layer thicknesses for the lock_exchange experiment.
 ! -----------------------------------------------------------------------------
-subroutine lock_exchange_initialize_thickness(h, G, GV, param_file)
-  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
-  real, intent(out), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< The thickness that is being initialized.
-  type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open file to
-                                                              !! parse for model parameter values.
+subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
-  real :: e0(SZK_(G))     ! The resting interface heights, in m, usually !
-                          ! negative because it is positive upward.      !
-  real :: e_pert(SZK_(G)) ! Interface height perturbations, positive     !
-                          ! upward, in m.                                !
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
-                          ! positive upward, in m.                       !
+  real :: e0(SZK_(GV))     ! The resting interface heights, in m, usually !
+                           ! negative because it is positive upward.      !
+  real :: e_pert(SZK_(GV)) ! Interface height perturbations, positive     !
+                           ! upward, in m.                                !
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface !
+                           ! positive upward, in m.                       !
   real :: front_displacement ! Vertical displacement acrodd front
   real :: thermocline_thickness ! Thickness of stratified region
-  character(len=40)  :: mod = "lock_exchange_initialize_thickness" ! This subroutine's name.
+  logical :: just_read    ! If true, just read parameters but set nothing.
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
-  call get_param(param_file, mod, "FRONT_DISPLACEMENT", front_displacement, &
+  if (.not.just_read) &
+    call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)
+
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "FRONT_DISPLACEMENT", front_displacement, &
                  "The vertical displacement of interfaces across the front. \n"//&
                  "A value larger in magnitude that MAX_DEPTH is truncated,", &
-                 units="m", fail_if_missing=.true.)
-  call get_param(param_file, mod, "THERMOCLINE_THICKNESS", thermocline_thickness, &
+                 units="m", fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "THERMOCLINE_THICKNESS", thermocline_thickness, &
                  "The thickness of the thermocline in the lock exchange \n"//&
                  "experiment.  A value of zero creates a two layer system \n"//&
                  "with vanished layers in between the two inflated layers.", &
-                 default=0., units="m")
+                 default=0., units="m", do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     do k=2,nz

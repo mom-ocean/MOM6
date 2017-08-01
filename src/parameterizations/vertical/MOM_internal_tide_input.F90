@@ -293,7 +293,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   logical :: read_tideamp
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_int_tide_input"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file
 
@@ -325,18 +325,18 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
   CS%inputdir = slasher(CS%inputdir)
 
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
-  call get_param(param_file, mod, "MIN_ZBOT_ITIDES", min_zbot_itides, &
+  call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", min_zbot_itides, &
                "Turn off internal tidal dissipation when the total \n"//&
                "ocean depth is less than this value.", units="m", default=0.0)
 
-  call get_param(param_file, mod, "UTIDE", utide, &
+  call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                units="m s-1", default=0.0)
 
@@ -346,38 +346,38 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
   allocate(itide%tideamp(isd:ied,jsd:jed)) ; itide%tideamp(:,:) = utide
   allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed)) ; CS%TKE_itidal_coef(:,:) = 0.0
 
-  call get_param(param_file, mod, "KAPPA_ITIDES", kappa_itides, &
+  call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. \n"//&
                "The default is 2pi/10 km, as in St.Laurent et al. 2002.", &
                units="m-1", default=8.e-4*atan(1.0))
 
-  call get_param(param_file, mod, "KAPPA_H2_FACTOR", kappa_h2_factor, &
+  call get_param(param_file, mdl, "KAPPA_H2_FACTOR", kappa_h2_factor, &
                "A scaling factor for the roughness amplitude with n"//&
                "INT_TIDE_DISSIPATION.",  units="nondim", default=1.0)
-  call get_param(param_file, mod, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
+  call get_param(param_file, mdl, "TKE_ITIDE_MAX", CS%TKE_itide_max, &
                "The maximum internal tide energy source availble to mix \n"//&
                "above the bottom boundary layer with INT_TIDE_DISSIPATION.", &
                units="W m-2",  default=1.0e3)
 
-  call get_param(param_file, mod, "READ_TIDEAMP", read_tideamp, &
+  call get_param(param_file, mdl, "READ_TIDEAMP", read_tideamp, &
                "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
                "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
   if (read_tideamp) then
-    call get_param(param_file, mod, "TIDEAMP_FILE", tideamp_file, &
+    call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                "The path to the file containing the spatially varying \n"//&
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
-    call log_param(param_file, mod, "INPUTDIR/TIDEAMP_FILE", filename)
+    call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
     call read_data(filename, 'tideamp', itide%tideamp, &
                    domain=G%domain%mpp_domain, timelevel=1)
   endif
 
-  call get_param(param_file, mod, "H2_FILE", h2_file, &
+  call get_param(param_file, mdl, "H2_FILE", h2_file, &
                "The path to the file containing the sub-grid-scale \n"//&
                "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
-  call log_param(param_file, mod, "INPUTDIR/H2_FILE", filename)
+  call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
   call read_data(filename, 'h2', itide%h2, domain=G%domain%mpp_domain, &
                  timelevel=1)
 

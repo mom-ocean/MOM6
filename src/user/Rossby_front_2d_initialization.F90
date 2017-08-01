@@ -22,7 +22,9 @@ implicit none ; private
 #include <MOM_memory.h>
 
 ! Private (module-wise) parameters
-character(len=40) :: mod = "Rossby_front_2d_initialization" !< This module's name.
+character(len=40) :: mdl = "Rossby_front_2d_initialization" !< This module's name.
+! This include declares and sets the variable "version".
+#include "version_variable.h"
 
 public Rossby_front_initialize_thickness
 public Rossby_front_initialize_temperature_salinity
@@ -36,28 +38,40 @@ real, parameter :: HMLmax = 0.75 !< Deepest ML as fractional depth of ocean
 contains
 
 !> Initialization of thicknesses in 2D Rossby front test
-subroutine Rossby_front_initialize_thickness(h, G, GV, param_file )
-  type(ocean_grid_type),   intent(in) :: G                 !< Grid structure
-  type(verticalGrid_type), intent(in) :: GV                !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Thickness
-  type(param_file_type),   intent(in) :: param_file        !< Parameter file handle
+subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in) :: G            !< Grid structure
+  type(verticalGrid_type), intent(in) :: GV           !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: Tz, Dml, eta, stretch, h0
   real    :: min_thickness, T_range, dRho_dT
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call MOM_mesg("Rossby_front_2d_initialization.F90, Rossby_front_initialize_thickness: setting thickness")
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
+  if (.not.just_read) &
+    call MOM_mesg("Rossby_front_2d_initialization.F90, Rossby_front_initialize_thickness: setting thickness")
+
+  if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Read parameters needed to set thickness
-  call get_param(param_file, mod, "MIN_THICKNESS", min_thickness, &
-                 'Minimum layer thickness',units='m',default=1.e-3)
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-                 default=DEFAULT_COORDINATE_MODE)
-  call get_param(param_file, mod, "T_RANGE", T_range, 'Initial temperature range', units='C', default=0.0)
-  call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
+                 'Minimum layer thickness',units='m',default=1.e-3, do_not_log=just_read)
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+  call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
+                 units='C', default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   Tz = T_range / G%max_depth
 
@@ -95,28 +109,39 @@ end subroutine Rossby_front_initialize_thickness
 
 
 !> Initialization of temperature and salinity in the Rossby front test
-subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, param_file, eqn_of_state)
+subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, &
+                   param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
   real      :: T_range      ! Range of salinities and temperatures over the vertical
   real      :: y, zc, zi, dTdz
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
   real      :: PI                   ! 3.1415926... calculated as 4*atan(1)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call get_param(param_file,mod,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-            default=DEFAULT_COORDINATE_MODE)
-  call get_param(param_file,mod,"S_REF",S_ref,'Reference salinity',units='1e-3',fail_if_missing=.true.)
-  call get_param(param_file,mod,"T_REF",T_ref,'Reference temperature',units='C',fail_if_missing=.true.)
-  call get_param(param_file,mod,"T_RANGE",T_range,'Initial temperature range',units='C',default=0.0)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+            default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+  call get_param(param_file, mdl,"S_REF",S_ref,'Reference salinity', units='1e-3', &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature',units='C',&
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl,"T_RANGE",T_range,'Initial temperature range',&
+                 units='C', default=0.0, do_not_log=just_read)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   T(:,:,:) = 0.0
   S(:,:,:) = S_ref
@@ -136,7 +161,7 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 
 !> Initialization of u and v in the Rossby front test
-subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
+subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
   type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
@@ -145,20 +170,28 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file)
   type(param_file_type),                  intent(in)     :: param_file !< A structure indicating the
                                                                !! open file to parse for model
                                                                !! parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
 
   real    :: y              ! Non-dimensional coordinate across channel, 0..pi
   real    :: T_range        ! Range of salinities and temperatures over the vertical
   real    :: dUdT           ! Factor to convert dT/dy into dU/dz, g*alpha/f
   real    :: dRho_dT, zi, zc, zm, f, Ty, Dml, hAtU
   integer :: i, j, k, is, ie, js, je, nz
+  logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  call get_param(param_file, mod, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-            default=DEFAULT_COORDINATE_MODE)
-  call get_param(param_file, mod, "T_RANGE", T_range, 'Initial temperature range', units='C', default=0.0)
-  call get_param(param_file, mod, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
+                 default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+  call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
+                 units='C', default=0.0, do_not_log=just_read)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, do_not_log=.true.)
+
+  if (just_read) return ! All run-time parameters have been read, so return.
 
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0

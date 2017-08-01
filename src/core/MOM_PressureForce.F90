@@ -78,7 +78,7 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   type(PressureForce_CS),  pointer       :: CS   !< Pressure force control structure
   type(tidal_forcing_CS), optional, pointer :: tides_CSp !< Tide control structure
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_PressureForce" ! This module's name.
+  character(len=40)  :: mdl = "MOM_PressureForce" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "PressureForce_init called with an associated "// &
@@ -87,8 +87,8 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   else ; allocate(CS) ; endif
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ANALYTIC_FV_PGF", CS%Analytic_FV_PGF, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ANALYTIC_FV_PGF", CS%Analytic_FV_PGF, &
                  "If true the pressure gradient forces are calculated \n"//&
                  "with a finite volume form that analytically integrates \n"//&
                  "the equations of state in pressure to avoid any \n"//&

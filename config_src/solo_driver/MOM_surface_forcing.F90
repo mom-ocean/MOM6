@@ -1535,7 +1535,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type)    :: Time_frc
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_surface_forcing" ! This module's name.
+  character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
 
   if (associated(CS)) then
@@ -1552,63 +1552,63 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, '')
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call log_version(param_file, mdl, version, '')
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, &
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &
                  default=".")
   CS%inputdir = slasher(CS%inputdir)
 
-  call get_param(param_file, mod, "ADIABATIC", CS%adiabatic, &
+  call get_param(param_file, mdl, "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
-  call get_param(param_file, mod, "VARIABLE_WINDS", CS%variable_winds, &
+  call get_param(param_file, mdl, "VARIABLE_WINDS", CS%variable_winds, &
                  "If true, the winds vary in time after the initialization.", &
                  default=.true.)
-  call get_param(param_file, mod, "VARIABLE_BUOYFORCE", CS%variable_buoyforce, &
+  call get_param(param_file, mdl, "VARIABLE_BUOYFORCE", CS%variable_buoyforce, &
                  "If true, the buoyancy forcing varies in time after the \n"//&
                  "initialization of the model.", default=.true.)
 
-  call get_param(param_file, mod, "BUOY_CONFIG", CS%buoy_config, &
+  call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing \n"//&
                  "is specified. Valid options include (file), (zero), \n"//&
                  "(linear), (USER), (BFB) and (NONE).", fail_if_missing=.true.)
   if (trim(CS%buoy_config) == "file") then
-    call get_param(param_file, mod, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
+    call get_param(param_file, mdl, "ARCHAIC_OMIP_FORCING_FILE", CS%archaic_OMIP_file, &
                  "If true, use the forcing variable decomposition from \n"//&
                  "the old German OMIP prescription that predated CORE. If \n"//&
                  "false, use the variable groupings available from MOM \n"//&
                  "output diagnostics of forcing variables.", default=.true.)
     if (CS%archaic_OMIP_file) then
-      call get_param(param_file, mod, "LONGWAVEDOWN_FILE", CS%longwave_file, &
+      call get_param(param_file, mdl, "LONGWAVEDOWN_FILE", CS%longwave_file, &
                  "The file with the downward longwave heat flux, in \n"//&
                  "variable lwdn_sfc.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "LONGWAVEUP_FILE", CS%longwaveup_file, &
+      call get_param(param_file, mdl, "LONGWAVEUP_FILE", CS%longwaveup_file, &
                  "The file with the upward longwave heat flux, in \n"//&
                  "variable lwup_sfc.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "EVAPORATION_FILE", CS%evaporation_file, &
+      call get_param(param_file, mdl, "EVAPORATION_FILE", CS%evaporation_file, &
                  "The file with the evaporative moisture flux, in \n"//&
                  "variable evap.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
+      call get_param(param_file, mdl, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
                  "The file with the sensible heat flux, in \n"//&
                  "variable shflx.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "SHORTWAVEUP_FILE", CS%shortwaveup_file, &
+      call get_param(param_file, mdl, "SHORTWAVEUP_FILE", CS%shortwaveup_file, &
                  "The file with the upward shortwave heat flux.", &
                  fail_if_missing=.true.)
-      call get_param(param_file, mod, "SHORTWAVEDOWN_FILE", CS%shortwave_file, &
+      call get_param(param_file, mdl, "SHORTWAVEDOWN_FILE", CS%shortwave_file, &
                  "The file with the downward shortwave heat flux.", &
                  fail_if_missing=.true.)
-      call get_param(param_file, mod, "SNOW_FILE", CS%snow_file, &
+      call get_param(param_file, mdl, "SNOW_FILE", CS%snow_file, &
                  "The file with the downward frozen precip flux, in \n"//&
                  "variable snow.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "PRECIP_FILE", CS%rain_file, &
+      call get_param(param_file, mdl, "PRECIP_FILE", CS%rain_file, &
                  "The file with the downward total precip flux, in \n"//&
                  "variable precip.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "FRESHDISCHARGE_FILE", CS%runoff_file, &
+      call get_param(param_file, mdl, "FRESHDISCHARGE_FILE", CS%runoff_file, &
                  "The file with the fresh and frozen runoff/calving fluxes, \n"//&
                  "invariables disch_w and disch_s.", fail_if_missing=.true.)
 
@@ -1619,66 +1619,66 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
       CS%lrunoff_var = "disch_w"; CS%frunoff_var = "disch_s"
 
     else
-      call get_param(param_file, mod, "LONGWAVE_FILE", CS%longwave_file, &
+      call get_param(param_file, mdl, "LONGWAVE_FILE", CS%longwave_file, &
                  "The file with the longwave heat flux, in the variable \n"//&
                  "given by LONGWAVE_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "LONGWAVE_FORCING_VAR", CS%LW_var, &
+      call get_param(param_file, mdl, "LONGWAVE_FORCING_VAR", CS%LW_var, &
                  "The variable with the longwave forcing field.", default="LW")
 
-      call get_param(param_file, mod, "SHORTWAVE_FILE", CS%shortwave_file, &
+      call get_param(param_file, mdl, "SHORTWAVE_FILE", CS%shortwave_file, &
                  "The file with the shortwave heat flux, in the variable \n"//&
                  "given by SHORTWAVE_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "SHORTWAVE_FORCING_VAR", CS%SW_var, &
+      call get_param(param_file, mdl, "SHORTWAVE_FORCING_VAR", CS%SW_var, &
                  "The variable with the shortwave forcing field.", default="SW")
 
-      call get_param(param_file, mod, "EVAPORATION_FILE", CS%evaporation_file, &
+      call get_param(param_file, mdl, "EVAPORATION_FILE", CS%evaporation_file, &
                  "The file with the evaporative moisture flux, in the \n"//&
                  "variable given by EVAP_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "EVAP_FORCING_VAR", CS%evap_var, &
+      call get_param(param_file, mdl, "EVAP_FORCING_VAR", CS%evap_var, &
                  "The variable with the evaporative moisture flux.", &
                  default="evap")
 
-      call get_param(param_file, mod, "LATENTHEAT_FILE", CS%latentheat_file, &
+      call get_param(param_file, mdl, "LATENTHEAT_FILE", CS%latentheat_file, &
                  "The file with the latent heat flux, in the variable \n"//&
                  "given by LATENT_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "LATENT_FORCING_VAR", CS%latent_var, &
+      call get_param(param_file, mdl, "LATENT_FORCING_VAR", CS%latent_var, &
                  "The variable with the latent heat flux.", default="latent")
 
-      call get_param(param_file, mod, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
+      call get_param(param_file, mdl, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
                  "The file with the sensible heat flux, in the variable \n"//&
                  "given by SENSIBLE_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "SENSIBLE_FORCING_VAR", CS%sens_var, &
+      call get_param(param_file, mdl, "SENSIBLE_FORCING_VAR", CS%sens_var, &
                  "The variable with the sensible heat flux.", default="sensible")
 
-      call get_param(param_file, mod, "RAIN_FILE", CS%rain_file, &
+      call get_param(param_file, mdl, "RAIN_FILE", CS%rain_file, &
                  "The file with the liquid precipitation flux, in the \n"//&
                  "variable given by RAIN_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "RAIN_FORCING_VAR", CS%rain_var, &
+      call get_param(param_file, mdl, "RAIN_FORCING_VAR", CS%rain_var, &
                  "The variable with the liquid precipitation flux.", &
                  default="liq_precip")
-      call get_param(param_file, mod, "SNOW_FILE", CS%snow_file, &
+      call get_param(param_file, mdl, "SNOW_FILE", CS%snow_file, &
                  "The file with the frozen precipitation flux, in the \n"//&
                  "variable given by SNOW_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "SNOW_FORCING_VAR", CS%snow_var, &
+      call get_param(param_file, mdl, "SNOW_FORCING_VAR", CS%snow_var, &
                  "The variable with the frozen precipitation flux.", &
                  default="froz_precip")
 
-      call get_param(param_file, mod, "RUNOFF_FILE", CS%runoff_file, &
+      call get_param(param_file, mdl, "RUNOFF_FILE", CS%runoff_file, &
                  "The file with the fresh and frozen runoff/calving \n"//&
                  "fluxes, in variables given by LIQ_RUNOFF_FORCING_VAR \n"//&
                  "and FROZ_RUNOFF_FORCING_VAR.", fail_if_missing=.true.)
-      call get_param(param_file, mod, "LIQ_RUNOFF_FORCING_VAR", CS%lrunoff_var, &
+      call get_param(param_file, mdl, "LIQ_RUNOFF_FORCING_VAR", CS%lrunoff_var, &
                  "The variable with the liquid runoff flux.", &
                  default="liq_runoff")
-      call get_param(param_file, mod, "FROZ_RUNOFF_FORCING_VAR", CS%frunoff_var, &
+      call get_param(param_file, mdl, "FROZ_RUNOFF_FORCING_VAR", CS%frunoff_var, &
                  "The variable with the frozen runoff flux.", &
                  default="froz_runoff")
     endif
 
-    call get_param(param_file, mod, "SSTRESTORE_FILE", CS%SSTrestore_file, &
+    call get_param(param_file, mdl, "SSTRESTORE_FILE", CS%SSTrestore_file, &
                  "The file with the SST toward which to restore in the \n"//&
                  "variable given by SST_RESTORE_VAR.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
+    call get_param(param_file, mdl, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
                  "The file with the surface salinity toward which to \n"//&
                  "restore in the variable given by SSS_RESTORE_VAR.", &
                  fail_if_missing=.true.)
@@ -1686,10 +1686,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     if (CS%archaic_OMIP_file) then
       CS%SST_restore_var = "TEMP" ; CS%SSS_restore_var = "SALT"
     else
-      call get_param(param_file, mod, "SST_RESTORE_VAR", CS%SST_restore_var, &
+      call get_param(param_file, mdl, "SST_RESTORE_VAR", CS%SST_restore_var, &
                  "The variable with the SST toward which to restore.", &
                  default="SST")
-      call get_param(param_file, mod, "SSS_RESTORE_VAR", CS%SSS_restore_var, &
+      call get_param(param_file, mdl, "SSS_RESTORE_VAR", CS%SSS_restore_var, &
                  "The variable with the SSS toward which to restore.", &
                  default="SSS")
     endif
@@ -1710,55 +1710,55 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     CS%SSTrestore_file = trim(CS%inputdir)//trim(CS%SSTrestore_file)
     CS%salinityrestore_file = trim(CS%inputdir)//trim(CS%salinityrestore_file)
   elseif (trim(CS%buoy_config) == "const") then
-    call get_param(param_file, mod, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
+    call get_param(param_file, mdl, "SENSIBLE_HEAT_FLUX", CS%constantHeatForcing, &
                  "A constant heat forcing (positive into ocean) applied \n"//&
                  "through the sensible heat flux field. ", &
                  units='W/m2', fail_if_missing=.true.)
   endif
-  call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
+  call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
                  "is specified. Valid options include (file), (2gyre), \n"//&
                  "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
   if (trim(CS%wind_config) == "file") then
-    call get_param(param_file, mod, "WIND_FILE", CS%wind_file, &
+    call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in \n"//&
                  "variables STRESS_X and STRESS_Y.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "WINDSTRESS_X_VAR",CS%stress_x_var, &
+    call get_param(param_file, mdl, "WINDSTRESS_X_VAR",CS%stress_x_var, &
                  "The name of the x-wind stress variable in WIND_FILE.", &
                  default="STRESS_X")
-    call get_param(param_file, mod, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
+    call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mod, "WINDSTRESS_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WINDSTRESS_STAGGER",CS%wind_stagger, &
                  "A character indicating how the wind stress components \n"//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
                  default="A")
-    call get_param(param_file, mod, "WINDSTRESS_SCALE", CS%wind_scale, &
+    call get_param(param_file, mdl, "WINDSTRESS_SCALE", CS%wind_scale, &
                  "A value by which the wind stresses in WIND_FILE are rescaled.", &
                  default=1.0, units="nondim")
-    call get_param(param_file, mod, "USTAR_FORCING_VAR", CS%ustar_var, &
+    call get_param(param_file, mdl, "USTAR_FORCING_VAR", CS%ustar_var, &
                  "The name of the friction velocity variable in WIND_FILE \n"//&
                  "or blank to get ustar from the wind stresses plus the \n"//&
                  "gustiness.", default=" ", units="nondim")
     CS%wind_file = trim(CS%inputdir) // trim(CS%wind_file)
   endif
   if (trim(CS%wind_config) == "gyres") then
-    call get_param(param_file, mod, "TAUX_CONST", CS%gyres_taux_const, &
+    call get_param(param_file, mdl, "TAUX_CONST", CS%gyres_taux_const, &
                  "With the gyres wind_config, the constant offset in the \n"//&
                  "zonal wind stress profile: \n"//&
                  "  A in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_SIN_AMP",CS%gyres_taux_sin_amp, &
+    call get_param(param_file, mdl, "TAUX_SIN_AMP",CS%gyres_taux_sin_amp, &
                  "With the gyres wind_config, the sine amplitude in the \n"//&
                  "zonal wind stress profile: \n"//&
                  "  B in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_COS_AMP",CS%gyres_taux_cos_amp, &
+    call get_param(param_file, mdl, "TAUX_COS_AMP",CS%gyres_taux_cos_amp, &
                  "With the gyres wind_config, the cosine amplitude in \n"//&
                  "the zonal wind stress profile: \n"//&
                  "  C in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_N_PIS",CS%gyres_taux_n_pis, &
+    call get_param(param_file, mdl, "TAUX_N_PIS",CS%gyres_taux_n_pis, &
                  "With the gyres wind_config, the number of gyres in \n"//&
                  "the zonal wind stress profile: \n"//&
                  "  n in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
@@ -1771,22 +1771,22 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     CS%south_lat = G%south_lat
     CS%len_lat = G%len_lat
   endif
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
-  call get_param(param_file, mod, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
+  call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
-  call get_param(param_file, mod, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
+  call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
                  "The latent heat of fusion.", units="J/kg", default=hlv)
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
@@ -1794,36 +1794,36 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
     if (trim(CS%buoy_config) == "linear") then
-      call get_param(param_file, mod, "SST_NORTH", CS%T_north, &
+      call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature \n"//&
                  "at the northern end of the domain toward which to \n"//&
                  "to restore.", units="deg C", default=0.0)
-      call get_param(param_file, mod, "SST_SOUTH", CS%T_south, &
+      call get_param(param_file, mdl, "SST_SOUTH", CS%T_south, &
                  "With buoy_config linear, the sea surface temperature \n"//&
                  "at the southern end of the domain toward which to \n"//&
                  "to restore.", units="deg C", default=0.0)
-      call get_param(param_file, mod, "SSS_NORTH", CS%S_north, &
+      call get_param(param_file, mdl, "SSS_NORTH", CS%S_north, &
                  "With buoy_config linear, the sea surface salinity \n"//&
                  "at the northern end of the domain toward which to \n"//&
                  "to restore.", units="PSU", default=35.0)
-      call get_param(param_file, mod, "SSS_SOUTH", CS%S_south, &
+      call get_param(param_file, mdl, "SSS_SOUTH", CS%S_south, &
                  "With buoy_config linear, the sea surface salinity \n"//&
                  "at the southern end of the domain toward which to \n"//&
                  "to restore.", units="PSU", default=35.0)
     endif
   endif
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+  call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
-  call get_param(param_file, mod, "READ_GUST_2D", CS%read_gust_2d, &
+  call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from \n"//&
                  "an input file", default=.false.)
   if (CS%read_gust_2d) then
-    call get_param(param_file, mod, "GUST_2D_FILE", gust_file, &
+    call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in \n"//&
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
@@ -1843,10 +1843,10 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
     call SCM_idealized_hurricane_wind_init(Time, G, param_file, CS%SCM_idealized_hurricane_CSp)
   elseif (trim(CS%wind_config) == "const") then
-    call get_param(param_file, mod, "CONST_WIND_TAUX", CS%tau_x0, &
+    call get_param(param_file, mdl, "CONST_WIND_TAUX", CS%tau_x0, &
                  "With wind_config const, this is the constant zonal\n"//&
                  "wind-stress", units="Pa", fail_if_missing=.true.)
-    call get_param(param_file, mod, "CONST_WIND_TAUY", CS%tau_y0, &
+    call get_param(param_file, mdl, "CONST_WIND_TAUY", CS%tau_y0, &
                  "With wind_config const, this is the constant zonal\n"//&
                  "wind-stress", units="Pa", fail_if_missing=.true.)
   elseif (trim(CS%wind_config) == "SCM_CVmix_tests" .or. &

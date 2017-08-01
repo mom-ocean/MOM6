@@ -22,7 +22,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 ! Private (module-wise) parameters
-character(len=40) :: mod = "soliton_initialization" !< This module's name.
+character(len=40) :: mdl = "soliton_initialization" !< This module's name.
 
 public soliton_initialize_thickness
 public soliton_initialize_velocity

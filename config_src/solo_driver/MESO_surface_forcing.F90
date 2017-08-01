@@ -364,7 +364,7 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MESO_surface_forcing" ! This module's name.
+  character(len=40)  :: mdl = "MESO_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "MESO_surface_forcing_init called with an associated "// &
@@ -375,31 +375,31 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
 
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
-  call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+  call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
 
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
 
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
@@ -407,22 +407,22 @@ subroutine MESO_surface_forcing_init(Time, G, param_file, diag, CS)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
 
-    call get_param(param_file, mod, "SSTRESTORE_FILE", CS%SSTrestore_file, &
+    call get_param(param_file, mdl, "SSTRESTORE_FILE", CS%SSTrestore_file, &
                  "The file with the SST toward which to restore in \n"//&
                  "variable TEMP.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
+    call get_param(param_file, mdl, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
                  "The file with the surface salinity toward which to \n"//&
                  "restore in variable SALT.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SENSIBLEHEAT_FILE", CS%heating_file, &
+    call get_param(param_file, mdl, "SENSIBLEHEAT_FILE", CS%heating_file, &
                  "The file with the non-shortwave heat flux in \n"//&
                  "variable Heat.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "PRECIP_FILE", CS%PmE_file, &
+    call get_param(param_file, mdl, "PRECIP_FILE", CS%PmE_file, &
                  "The file with the net precipiation minus evaporation \n"//&
                  "in variable PmE.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SHORTWAVE_FILE", CS%Solar_file, &
+    call get_param(param_file, mdl, "SHORTWAVE_FILE", CS%Solar_file, &
                  "The file with the shortwave heat flux in \n"//&
                  "variable NET_SOL.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "INPUTDIR", CS%inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
     CS%inputdir = slasher(CS%inputdir)
 
    endif

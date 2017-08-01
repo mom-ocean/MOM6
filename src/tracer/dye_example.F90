@@ -146,7 +146,7 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "regional_dyes" ! This module's name.
+  character(len=40)  :: mdl = "regional_dyes" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=48)  :: desc_name ! The variable's descriptor.
@@ -163,8 +163,8 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "NUM_DYE_TRACERS", CS%ntr, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
                  "The number of dye tracers in this run. Each tracer \n"//&
                  "should have a separate region.", default=0)
   allocate(CS%dye_source_minlon(CS%ntr), &
@@ -192,42 +192,42 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%id_tr_dfy(:) = -1
 
   CS%dye_source_minlon(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MINLON", CS%dye_source_minlon, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MINLON", CS%dye_source_minlon, &
                  "This is the starting longitude at which we start injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_minlon(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLON ")
 
   CS%dye_source_maxlon(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MAXLON", CS%dye_source_maxlon, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MAXLON", CS%dye_source_maxlon, &
                  "This is the ending longitude at which we finish injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlon(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLON ")
 
   CS%dye_source_minlat(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MINLAT", CS%dye_source_minlat, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MINLAT", CS%dye_source_minlat, &
                  "This is the starting latitude at which we start injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_minlat(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINLAT ")
 
   CS%dye_source_maxlat(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MAXLAT", CS%dye_source_maxlat, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MAXLAT", CS%dye_source_maxlat, &
                  "This is the ending latitude at which we finish injecting dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxlat(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXLAT ")
 
   CS%dye_source_mindepth(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MINDEPTH", CS%dye_source_mindepth, &
                  "This is the minumum depth at which we inject dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_mindepth(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MINDEPTH")
 
   CS%dye_source_maxdepth(:) = -1.e30
-  call get_param(param_file, mod, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
+  call get_param(param_file, mdl, "DYE_SOURCE_MAXDEPTH", CS%dye_source_maxdepth, &
                  "This is the maximum depth at which we inject dyes.", &
                  fail_if_missing=.true.)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29) &
@@ -236,7 +236,7 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   do m = 1, CS%ntr
     write(var_name(:),'(A,I3.3)') "dye",m
     write(desc_name(:),'(A,I3.3)') "Dye Tracer ",m
-    CS%tr_desc(m) = var_desc(trim(var_name), "conc", trim(desc_name), caller=mod)
+    CS%tr_desc(m) = var_desc(trim(var_name), "conc", trim(desc_name), caller=mdl)
   enddo
 
 
