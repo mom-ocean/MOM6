@@ -38,7 +38,7 @@ implicit none ; private
 public calculate_compress, calculate_density, query_compressible
 public calculate_density_derivs, calculate_density_derivs_scalar, calculate_specific_vol_derivs
 public calculate_density_second_derivs_scalar
-public EOS_init, EOS_end, EOS_allocate
+public EOS_init, EOS_manual_init, EOS_end, EOS_allocate
 public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
@@ -620,6 +620,34 @@ subroutine EOS_init(param_file, EOS)
 
 
 end subroutine EOS_init
+
+!> Manually initialized an EOS type (intended for unit testing of routines which need a specific EOS)
+subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, Rho_T0_S0, drho_dT, &
+                           dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp)
+  type(EOS_type),    pointer       :: EOS
+  integer, optional, intent(in   ) :: form_of_EOS
+  integer, optional, intent(in   ) :: form_of_TFreeze
+  logical, optional, intent(in   ) :: EOS_quadrature
+  logical, optional, intent(in   ) :: Compressible
+  real   , optional, intent(in   ) :: Rho_T0_S0
+  real   , optional, intent(in   ) :: drho_dT
+  real   , optional, intent(in   ) :: dRho_dS
+  real   , optional, intent(in   ) :: TFr_S0_P0
+  real   , optional, intent(in   ) :: dTFr_dS
+  real   , optional, intent(in   ) :: dTFr_dp
+
+  if (present(form_of_EOS    ))  EOS%form_of_EOS     = form_of_EOS
+  if (present(form_of_TFreeze))  EOS%form_of_TFreeze = form_of_TFreeze
+  if (present(EOS_quadrature ))  EOS%EOS_quadrature  = EOS_quadrature
+  if (present(Compressible   ))  EOS%Compressible    = Compressible
+  if (present(Rho_T0_S0      ))  EOS%Rho_T0_S0       = Rho_T0_S0
+  if (present(drho_dT        ))  EOS%drho_dT         = drho_dT
+  if (present(dRho_dS        ))  EOS%dRho_dS         = dRho_dS
+  if (present(TFr_S0_P0      ))  EOS%TFr_S0_P0       = TFr_S0_P0
+  if (present(dTFr_dS        ))  EOS%dTFr_dS         = dTFr_dS
+  if (present(dTFr_dp        ))  EOS%dTFr_dp         = dTFr_dp
+
+end subroutine EOS_manual_init
 
 !> Allocates EOS_type
 subroutine EOS_allocate(EOS)
