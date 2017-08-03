@@ -455,7 +455,7 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       enddo
     enddo;  enddo
     ! Store the grid on which the T/S sponge data will reside
-    call initialize_ALE_sponge(Idamp, h, nz, G, param_file, ACSp)
+    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
 
     ! Construct temperature and salinity on the arbitrary grid
     T(:,:,:) = 0.0 ; S(:,:,:) = 0.0
