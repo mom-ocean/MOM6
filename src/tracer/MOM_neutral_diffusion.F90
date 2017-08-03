@@ -1114,7 +1114,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg, Pres_l, Tl, Sl,
         endif
       endif
     else
-      same_direction = .true.
+      same_direction = .false.
     endif
 
     if (searching_left_column) then
@@ -1437,7 +1437,7 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   real,               intent(in) :: drho_top, drho_bot, min_bound
   type(EOS_type),     pointer    :: EOS       !< Equation of state structure
   ! Local variables
-  real, parameter    :: max_tolerance = 1.E-12
+  real, parameter    :: max_tolerance = 1.E-16
   integer, parameter :: max_iter = 20
   integer :: form_of_EOS
   integer :: iter
