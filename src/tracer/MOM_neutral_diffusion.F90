@@ -7,7 +7,7 @@ use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, time_type
 use MOM_diag_mediator,    only : post_data, register_diag_field
-use MOM_EOS,              only : EOS_type, calculate_compress, calculate_density_derivs
+use MOM_EOS,              only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
 use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_scalar
 use MOM_EOS,              only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
@@ -1419,23 +1419,25 @@ end function interpolate_for_nondim_position
 !! available), Brent's method is used following the implementation found at
 !! https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
 real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, ppoly_T, ppoly_S, EOS, x0, drho_top,&
-  drho_bot, min_bound)
-  real,               intent(in) :: T_ref     !< Temperature of the neutral surface at the searched from interface
-  real,               intent(in) :: S_ref     !< Salinity of the neutral surface at the searched from interface
-  real,               intent(in) :: alpha_ref !< dRho/dT of the neutral surface at the searched from interface
-  real,               intent(in) :: beta_ref  !< dRho/dS of the neutral surface at the searched from interface
-  real,               intent(in) :: P_top     !< Pressure at the top interface in the layer to be searched
-  real,               intent(in) :: P_bot     !< Pressure at the bottom interface in the layer to be searched
-  integer,            intent(in) :: deg       !< Order of the polynomimal used for reconstructions
-  real, dimension(:), intent(in) :: ppoly_T   !< Coefficients of the order N polynomial reconstruction of T within
-                                              !! the layer to be searched.
-  real, dimension(:), intent(in) :: ppoly_S   !< Coefficients of the order N polynomial reconstruction of T within
-                                              !! the layer to be searched.
-  real,               intent(in) :: x0        !< Nondimensional position within the layer where the neutral
-                                              !! surface connects. If interpolate_for_nondim_position was
-                                              !! previously called, this would be based on linear profile of dRho
+  drho_bot, min_bound, force_brent)
+  real,               intent(in) :: T_ref       !< Temperature of the neutral surface at the searched from interface
+  real,               intent(in) :: S_ref       !< Salinity of the neutral surface at the searched from interface
+  real,               intent(in) :: alpha_ref   !< dRho/dT of the neutral surface at the searched from interface
+  real,               intent(in) :: beta_ref    !< dRho/dS of the neutral surface at the searched from interface
+  real,               intent(in) :: P_top       !< Pressure at the top interface in the layer to be searched
+  real,               intent(in) :: P_bot       !< Pressure at the bottom interface in the layer to be searched
+  integer,            intent(in) :: deg         !< Order of the polynomimal used for reconstructions
+  real, dimension(:), intent(in) :: ppoly_T     !< Coefficients of the order N polynomial reconstruction of T within
+                                                !! the layer to be searched.
+  real, dimension(:), intent(in) :: ppoly_S     !< Coefficients of the order N polynomial reconstruction of T within
+                                                !! the layer to be searched.
+  real,               intent(in) :: x0          !< Nondimensional position within the layer where the neutral
+                                                !! surface connects. If interpolate_for_nondim_position was
+                                                !! previously called, this would be based on linear profile of dRho
   real,               intent(in) :: drho_top, drho_bot, min_bound
-  type(EOS_type),     pointer    :: EOS       !< Equation of state structure
+  type(EOS_type),     pointer    :: EOS         !< Equation of state structure
+  logical, optional,  intent(in) :: force_brent !< Forces the use of Brent's method instead of Newton's method to find
+                                                !! position of neutral surface
   ! Local variables
   real, parameter    :: max_tolerance = 1.E-16
   integer, parameter :: max_iter = 20
@@ -1463,6 +1465,10 @@ real function refine_nondim_position(T_ref, S_ref, alpha_ref, beta_ref, P_top, P
   call extract_member_EOS(EOS, form_of_EOS = form_of_EOS)
   do_newton = (form_of_EOS == EOS_LINEAR) .or. (form_of_EOS == EOS_TEOS10) .or. (form_of_EOS == EOS_WRIGHT)
   do_brent = .not. do_newton
+  if (present(force_brent)) then
+    do_newton = .not. force_brent
+    do_brent = force_brent
+  endif
 
   ! Check to make sure that a root exists between the minimum bound and the bottom of the layer
   call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, &
@@ -1876,6 +1882,11 @@ logical function neutral_diffusion_unit_tests(verbose)
   integer, dimension(2*nk+2) :: KoL, KoR                   ! Test indexes
   real, dimension(2*nk+1)    :: hEff                       ! Test positions
   real, dimension(2*nk+1)    :: Flx                        ! Test flux
+  ! Variables for refine_nondim_position tests
+  type(EOS_type), pointer    :: EOS                        ! Structure for linear equation of state
+  type(remapping_CS)         :: remapping_CS               ! Remapping control structure (PLM)
+  real, dimension(2)         :: poly_T                    ! Linear reconstruction for T
+  real, dimension(2)         :: poly_S                    ! Linear reconstruction for S
   integer :: k
   logical :: v
 
@@ -2092,6 +2103,30 @@ logical function neutral_diffusion_unit_tests(verbose)
                                    (/0.,0.,0.,0.,0.,6.,0./), & ! hEff
                                    'Two unstable mixed layers')
 
+  ! Unit tests for refine_nondim_position
+  allocate(EOS)
+  call EOS_manual_init(EOS, form_of_EOS = EOS_LINEAR, dRho_dT = -1., dRho_dS = 2.)
+  ! Tests using Newton's method
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0.), &
+            "Temperature stratified (Newton) "))
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0.), &
+            "Salinity stratified    (Newton) "))
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0.), &
+            "Temp/Salt stratified   (Newton) "))
+  ! Tests using Brent's method
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0.,force_brent = .true.), &
+            "Temperature stratified (Brent)  "))
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0.,force_brent = .true.), &
+            "Salinity stratified    (Brent)  "))
+  neutral_diffusion_unit_tests = neutral_diffusion_unit_tests .or. (test_rnp(0.5,refine_nondim_position( &
+            20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0.,force_brent = .true.), &
+            "Temp/Salt stratified   (Brent)  "))
+  deallocate(EOS)
   if (.not. neutral_diffusion_unit_tests) write(*,*) 'Pass'
 
 end function neutral_diffusion_unit_tests
@@ -2327,6 +2362,20 @@ logical function compare_nsp_row(KoL, KoR, pL, pR, KoL0, KoR0, pL0, pR0)
   if (pR /= pR0) compare_nsp_row = .true.
 end function compare_nsp_row
 
+!> Compares output position from refine_nondim_position with an expected value
+logical function test_rnp(expected_pos, test_pos, title)
+  real,             intent(in) :: expected_pos
+  real,             intent(in) :: test_pos
+  character(len=*), intent(in) :: title
+  ! Local variables
+  integer :: stdunit = 6 ! Output to standard error
+  test_rnp = expected_pos /= test_pos
+  if (test_rnp) then
+    write(stdunit,'(A, f20.16, " .neq. ", f20.16, " <-- WRONG")') title, expected_pos, test_pos
+  else
+    write(stdunit,'(A, f20.16, " .eq.  ", f20.16)') title, expected_pos, test_pos
+  endif
+end function test_rnp
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)
   type(neutral_diffusion_CS), pointer :: CS
