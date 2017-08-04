@@ -594,8 +594,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do K=nz,2,-1
       if (find_work .and. .not.(use_EOS)) then
         drdiA = 0.0 ; drdiB = 0.0
-!       drdkL = GV%g_prime(k) ; drdkR = GV%g_prime(k)
-        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
+        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = drdkL
       endif
 
       calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
@@ -625,6 +624,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                    drho_dS_u(I) * (S(i,j,k)-S(i,j,k-1)))
           drdkR = (drho_dT_u(I) * (T(i+1,j,k)-T(i+1,j,k-1)) + &
                    drho_dS_u(I) * (S(i+1,j,k)-S(i+1,j,k-1)))
+          drdkDe_u(I,K) = drdkR * e(i+1,j,K) - drdkL * e(i,j,K)
+        elseif (find_work) then ! This is used in pure stacked SW mode
           drdkDe_u(I,K) = drdkR * e(i+1,j,K) - drdkL * e(i,j,K)
         endif
 
@@ -714,6 +715,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               endif
             endif
 
+          else ! .not. use_EOS
+            if (present_slope_x) then
+              Slope = slope_x(I,j,k)
+            else
+              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * m_to_H * G%mask2dCu(I,j)
+            endif
+            if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
+            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope) * m_to_H
+            hN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_u(I,K) = N2_floor * h_neglect
@@ -756,14 +766,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! The actual streamfunction at each interface.
             Sfn_est = (Sfn_unlim_u(I,K) + slope2_Ratio_u(I,K)*Sfn_safe) / (1.0 + slope2_Ratio_u(I,K))
           else  ! With .not.use_EOS, the layers are constant density.
-            if (present_slope_x) then
-              Slope = slope_x(I,j,k)
-            else
-              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * m_to_H
-            endif
-            Sfn_est = (KH_u(I,j,K)*G%dy_Cu(I,j)) * Slope
-                    !  ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))) * m_to_H
-            if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
+            Sfn_est = Sfn_unlim_u(I,K)
           endif
 
           ! Make sure that there is enough mass above to allow the streamfunction
@@ -838,8 +841,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do K=nz,2,-1
       if (find_work .and. .not.(use_EOS)) then
         drdjA = 0.0 ; drdjB = 0.0
-!         drdkL = GV%g_prime(k) ; drdkR = GV%g_prime(k)
-        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)
+        drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = drdkL
       endif
 
       calc_derivatives = use_EOS .and. (k >= nk_linear) .and. &
@@ -867,6 +869,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                    drho_dS_v(i) * (S(i,j,k)-S(i,j,k-1)))
           drdkR = (drho_dT_v(i) * (T(i,j+1,k)-T(i,j+1,k-1)) + &
                    drho_dS_v(i) * (S(i,j+1,k)-S(i,j+1,k-1)))
+          drdkDe_v(i,K) =  drdkR * e(i,j+1,K) - drdkL * e(i,j,K)
+        elseif (find_work) then ! This is used in pure stacked SW mode
           drdkDe_v(i,K) =  drdkR * e(i,j+1,K) - drdkL * e(i,j,K)
         endif
 
@@ -956,6 +960,15 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               endif
             endif
 
+          else ! .not. use_EOS
+            if (present_slope_y) then
+              Slope = slope_y(i,J,k)
+            else
+              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * m_to_H * G%mask2dCv(i,J)
+            endif
+            if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
+            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope) * m_to_H
+            hN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
           hN2_v(i,K) = N2_floor * h_neglect
@@ -998,14 +1011,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             ! The actual streamfunction at each interface.
             Sfn_est = (Sfn_unlim_v(i,K) + slope2_Ratio_v(i,K)*Sfn_safe) / (1.0 + slope2_Ratio_v(i,K))
           else      ! With .not.use_EOS, the layers are constant density.
-            if (present_slope_y) then
-              Slope = slope_y(i,J,k)
-            else
-              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * m_to_H
-            endif
-            Sfn_est = (KH_v(i,J,K)*G%dx_Cv(i,J)) * Slope
-                    !  ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))) * m_to_H
-            if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
+            Sfn_est = Sfn_unlim_v(i,K)
           endif
 
           ! Make sure that there is enough mass above to allow the streamfunction
