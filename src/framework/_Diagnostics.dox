@@ -152,8 +152,8 @@ The run-time parameter `NUM_DIAG_COORDS` controls how many diagnostic coordinate
 
 The run-time parameter `DIAG_COORDS` defines the mapping between each coordinate, the name of the module in the diag_table and run-time parameter names that define the coordinate.
 A list of string tuples, separated by commas, with each tuple in the form of MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME.
-`MODULE_SUFFIX` is the string appended to "ocean_model_" to create a module in the diag_table.
-`PARAMETER_SUFFIX` is the string appended to "DiAG_COORD_DEF_", and other paramaters, used to control the generation of the named coordinate.
+`MODULE_SUFFIX` is the string appended to "ocean_model" to create a module in the diag_table.
+`PARAMETER_SUFFIX` is the string appended to "DiAG_COORD_DEF", and other parameters, used to control the generation of the named coordinate.
 `COORDINATE_NAME` is a name understood by the MOM6 regridding module. Valid examples are "ZSTAR", "SIGMA", "RHO", etc.
 
 By default, `NUM_DIAG_COORDS=1` and `DIAG_COORDS="z Z ZSTAR"`, meaning the module "ocean_model_z" provides diagnostics in "z*" coordinates and uses the parameter `DIAG_COORD_DEF_Z`.
