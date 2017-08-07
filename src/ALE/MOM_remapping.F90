@@ -26,7 +26,7 @@ type, public :: remapping_CS
   !> Degree of polynomial reconstruction
   integer :: degree = 0
   !> If true, extrapolate boundaries
-  logical :: boundary_extrapolation = .false.
+  logical :: boundary_extrapolation = .true.
   !> If true, reconstructions are checked for consistency.
   logical :: check_reconstruction = .false.
   !> If true, the result of remapping are checked for conservation and bounds.
