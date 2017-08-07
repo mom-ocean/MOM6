@@ -47,9 +47,15 @@ real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar.
 
 contains
 
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! (T in deg C), and pressure in Pa.  It uses the expression from
+!! TEOS10 website.
 subroutine calculate_density_scalar_teos10(T, S, pressure, rho)
-real,    intent(in)  :: T, S, pressure
-real,    intent(out) :: rho
+real,    intent(in)  :: T        !< Conservative temperature in C.
+real,    intent(in)  :: S        !< Absolute salinity in g/kg.
+real,    intent(in)  :: pressure !< Pressure in Pa.
+real,    intent(out) :: rho      !< In situ density in kg m-3.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -108,9 +114,15 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
 end subroutine calculate_density_array_teos10
 
 subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: drho_dT, drho_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature, in kg m-3 K-1.
+  real,    intent(out), dimension(:) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in kg m-3 psu-1.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -148,9 +160,15 @@ subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_
 end subroutine calculate_density_derivs_scalar_teos10
 
 subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
-  real,    intent(in),  dimension(:) ::  T, S, pressure
-  real,    intent(out), dimension(:) :: dSV_dT, dSV_dS
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: dSV_dT   !< The partial derivative of specific volume with
+                                                 !! potential temperature, in m3 kg-1 K-1.
+  real,    intent(out), dimension(:) :: dSV_dS   !< The partial derivative of specific volume with
+                                                 !! salinity, in m3 kg-1 / (g/kg).
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *
@@ -201,10 +219,21 @@ subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS
 
 end subroutine calculate_density_second_derivs_scalar_teos10
 
+!> This subroutine computes the in situ density of sea water (rho in *
+!! units of kg/m^3) and the compressibility (drho/dp = C_sound^-2)   *
+!! (drho_dp in units of s2 m-2) from salinity (sal in psu), potential*
+!! temperature (T in deg C), and pressure in Pa.  It uses the        *
+!! subroutines from TEOS10 website
 subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
-  real,    intent(in),  dimension(:) :: T, S, pressure
-  real,    intent(out), dimension(:) :: rho, drho_dp
-  integer, intent(in)                :: start, npts
+  real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
+  real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
+  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
+  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
+  real,    intent(out), dimension(:) :: drho_dp  !< The partial derivative of density with pressure
+                                                 !! (also the inverse of the square of sound speed)
+                                                 !! in s2 m-2.
+  integer, intent(in)                :: start    !< The starting point in the arrays.
+  integer, intent(in)                :: npts     !< The number of values to calculate.
 ! * Arguments: T - conservative temperature in C.                      *
 ! *  (in)      S - absolute salinity in g/kg.                          *
 ! *  (in)      pressure - pressure in Pa.                              *

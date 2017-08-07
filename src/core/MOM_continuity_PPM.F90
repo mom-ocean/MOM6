@@ -354,7 +354,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,CS,h_L,h_in,h_R,G,GV,LB,visc_rem)
+!$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,CS,h_L,h_in,h_R,G,GV,LB,visc_rem,OBC)
   do k=1,nz
     ! This sets h_L and h_R.
     if (CS%upwind_1st) then
@@ -363,7 +363,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_x(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
+                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
@@ -375,17 +375,19 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         I=segment%HI%IsdB
         do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
           h_in(i+1,j,k) = h_in(i,j,k)
-          h_L(i+1,j,k) = h_in(i,j,k)
-          h_R(i+1,j,k) = h_in(i,j,k)
-          h_R(i,j,k) = h_in(i,j,k)
+!         h_L(i+1,j,k) = h_in(i,j,k)
+!         h_R(i+1,j,k) = h_in(i,j,k)
+!         h_L(i,j,k) = h_in(i,j,k)
+!         h_R(i,j,k) = h_in(i,j,k)
         enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IsdB
         do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
             h_in(i,j,k) = h_in(i+1,j,k)
-            h_L(i,j,k) = h_in(i+1,j,k)
-            h_R(i,j,k) = h_in(i+1,j,k)
-            h_L(i+1,j,k) = h_in(i+1,j,k)
+!           h_L(i,j,k) = h_in(i+1,j,k)
+!           h_R(i,j,k) = h_in(i+1,j,k)
+!           h_L(i+1,j,k) = h_in(i+1,j,k)
+!           h_R(i+1,j,k) = h_in(i+1,j,k)
         enddo ; enddo
       endif
     enddo
@@ -1129,7 +1131,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   call cpu_clock_begin(id_clock_update)
-!$OMP parallel do default(none) shared(nz,ish,ieh,jsh,jeh,h_in,h_L,h_R,G,GV,LB,CS,visc_rem)
+!$OMP parallel do default(none) shared(nz,ish,ieh,jsh,jeh,h_in,h_L,h_R,G,GV,LB,CS,visc_rem,OBC)
   do k=1,nz
     ! This sets h_L and h_R.
     if (CS%upwind_1st) then
@@ -1138,7 +1140,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       enddo ; enddo
     else
       call PPM_reconstruction_y(h_in(:,:,k), h_L(:,:,k), h_R(:,:,k), G, LB, &
-                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd)
+                                2.0*GV%Angstrom, CS%monotonic, simple_2nd=CS%simple_2nd, OBC=OBC)
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
@@ -1150,17 +1152,19 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         J=segment%HI%JsdB
         do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
           h_in(i,j+1,k) = h_in(i,j,k)
-          h_L(i,j+1,k) = h_in(i,j,k)
-          h_R(i,j+1,k) = h_in(i,j,k)
-          h_R(i,j,k) = h_in(i,j,k)
+!         h_L(i,j+1,k) = h_in(i,j,k)
+!         h_R(i,j+1,k) = h_in(i,j,k)
+!         h_L(i,j,k) = h_in(i,j,k)
+!         h_R(i,j,k) = h_in(i,j,k)
         enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
         do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
           h_in(i,j,k) = h_in(i,j+1,k)
-          h_L(i,j,k) = h_in(i,j+1,k)
-          h_R(i,j,k) = h_in(i,j+1,k)
-          h_L(i,j+1,k) = h_in(i,j+1,k)
+!         h_L(i,j,k) = h_in(i,j+1,k)
+!         h_R(i,j,k) = h_in(i,j+1,k)
+!         h_L(i,j+1,k) = h_in(i,j+1,k)
+!         h_R(i,j+1,k) = h_in(i,j+1,k)
         enddo ; enddo
       endif
     enddo
@@ -1824,7 +1828,7 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
 end subroutine set_merid_BT_cont
 
 !> Calculates left/right edge values for PPM reconstruction.
-subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd)
+subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd, OBC)
   type(ocean_grid_type),             intent(in)  :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in !< Layer thickness, in H.
   real, dimension(SZI_(G),SZJ_(G)),  intent(out) :: h_L  !< Left thickness in the
@@ -1840,6 +1844,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   logical, optional,                 intent(in)  :: simple_2nd !< If true, use the
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
+  type(ocean_OBC_type), pointer,     optional    :: OBC !< Open boundaries control structure.
 
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
@@ -1848,10 +1853,18 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   real :: dMx, dMn
   logical :: use_CW84, use_2nd
   character(len=256) :: mesg
-  integer :: i, j, isl, iel, jsl, jel, stencil
+  integer :: i, j, isl, iel, jsl, jel, n, stencil
+  logical :: local_open_BC
+  type(OBC_segment_type), pointer :: segment
 
   use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
+
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
+
   isl = LB%ish-1 ; iel = LB%ieh+1 ; jsl = LB%jsh ; jel = LB%jeh
 
   ! This is the stencil of the reconstruction, not the scheme overall.
@@ -1892,6 +1905,21 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
       endif
     enddo; enddo
 
+    if (local_open_BC) then
+      do n=1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (segment%direction == OBC_DIRECTION_E .or. &
+            segment%direction == OBC_DIRECTION_W) then
+          I=segment%HI%IsdB
+          do j=segment%HI%jsd,segment%HI%jed
+            slp(i+1,j) = 0.0
+            slp(i,j) = 0.0
+          enddo
+        endif
+      enddo
+    endif
+
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
@@ -1905,6 +1933,32 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     enddo; enddo
   endif
 
+  if (local_open_BC) then
+    do n=1, OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (segment%direction == OBC_DIRECTION_E) then
+        I=segment%HI%IsdB
+        do j=segment%HI%jsd,segment%HI%jed
+!         h_in(i+1,j) = h_in(i,j)
+          h_L(i+1,j) = h_in(i,j)
+          h_R(i+1,j) = h_in(i,j)
+          h_L(i,j) = h_in(i,j)
+          h_R(i,j) = h_in(i,j)
+        enddo
+      elseif (segment%direction == OBC_DIRECTION_W) then
+        I=segment%HI%IsdB
+        do j=segment%HI%jsd,segment%HI%jed
+!         h_in(i,j) = h_in(i+1,j)
+          h_L(i,j) = h_in(i+1,j)
+          h_R(i,j) = h_in(i+1,j)
+          h_L(i+1,j) = h_in(i+1,j)
+          h_R(i+1,j) = h_in(i+1,j)
+        enddo
+      endif
+    enddo
+  endif
+
   if (use_CW84) then
     call PPM_limit_CW84(h_in, h_L, h_R, G, isl, iel, jsl, jel)
   else
@@ -1915,7 +1969,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
 end subroutine PPM_reconstruction_x
 
 !> Calculates left/right edge values for PPM reconstruction.
-subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd)
+subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_2nd, OBC)
   type(ocean_grid_type),             intent(in)  :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in !< Layer thickness, in H.
   real, dimension(SZI_(G),SZJ_(G)),  intent(out) :: h_L  !< Left thickness in the
@@ -1931,6 +1985,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   logical, optional,                 intent(in)  :: simple_2nd !< If true, use the
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
+  type(ocean_OBC_type), pointer,     optional    :: OBC !< Open boundaries control structure.
 
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G))  :: slp ! The slopes.
@@ -1939,10 +1994,18 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   real :: dMx, dMn
   logical :: use_CW84, use_2nd
   character(len=256) :: mesg
-  integer :: i, j, isl, iel, jsl, jel, stencil
+  integer :: i, j, isl, iel, jsl, jel, n, stencil
+  logical :: local_open_BC
+  type(OBC_segment_type), pointer :: segment
 
   use_CW84 = .false. ; if (present(monotonic)) use_CW84 = monotonic
   use_2nd = .false. ; if (present(simple_2nd)) use_2nd = simple_2nd
+
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
+
   isl = LB%ish ; iel = LB%ieh ; jsl = LB%jsh-1 ; jel = LB%jeh+1
 
   ! This is the stencil of the reconstruction, not the scheme overall.
@@ -1983,6 +2046,21 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
       endif
     enddo ; enddo
 
+    if (local_open_BC) then
+      do n=1, OBC%number_of_segments
+        segment => OBC%segment(n)
+        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (segment%direction == OBC_DIRECTION_S .or. &
+            segment%direction == OBC_DIRECTION_N) then
+          J=segment%HI%JsdB
+          do i=segment%HI%isd,segment%HI%ied
+            slp(i,j+1) = 0.0
+            slp(i,j) = 0.0
+          enddo
+        endif
+      enddo
+    endif
+
     do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
@@ -1992,6 +2070,30 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
       h_L(i,j) = 0.5*( h_jm1 + h_in(i,j) ) + oneSixth*( slp(i,j-1) - slp(i,j) )
       h_R(i,j) = 0.5*( h_jp1 + h_in(i,j) ) + oneSixth*( slp(i,j) - slp(i,j+1) )
     enddo ; enddo
+  endif
+
+  if (local_open_BC) then
+    do n=1, OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (segment%direction == OBC_DIRECTION_N) then
+        J=segment%HI%JsdB
+        do i=segment%HI%isd,segment%HI%ied
+          h_L(i,j+1) = h_in(i,j)
+          h_R(i,j+1) = h_in(i,j)
+          h_L(i,j) = h_in(i,j)
+          h_R(i,j) = h_in(i,j)
+        enddo
+      elseif (segment%direction == OBC_DIRECTION_S) then
+        J=segment%HI%JsdB
+        do i=segment%HI%isd,segment%HI%ied
+          h_L(i,j) = h_in(i,j+1)
+          h_R(i,j) = h_in(i,j+1)
+          h_L(i,j+1) = h_in(i,j+1)
+          h_R(i,j+1) = h_in(i,j+1)
+        enddo
+      endif
+    enddo
   endif
 
   if (use_CW84) then

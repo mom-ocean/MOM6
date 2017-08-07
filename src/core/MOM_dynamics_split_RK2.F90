@@ -50,6 +50,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, radiation_open_bdry_conds
 use MOM_open_boundary,         only : open_boundary_zero_normal_flow
+use MOM_open_boundary,         only : open_boundary_test_extern_h
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -321,6 +322,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then
+!   call open_boundary_test_extern_h(G, CS%OBC, h)
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
@@ -1202,37 +1204,5 @@ end subroutine end_dyn_split_RK2
 !!  does not have its own control structure, but shares the same
 !!  control structure with MOM.F90 and the other MOM_dynamics_...
 !!  modules.
-!!
-!!  Macros written all in capital letters are defined in MOM_memory.h.
-!!
-!!  \section section_gridlayout MOM grid layout
-!!
-!!  A small fragment of the grid is shown below:
-!!
-!! \verbatim
-!!    j+1  x ^ x ^ x
-!!
-!!    j+1  > o > o >
-!!
-!!    j    x ^ x ^ x
-!!
-!!    j    > o > o >
-!!
-!!    j-1  x ^ x ^ x
-!!
-!!        i-1  i  i+1
-!!
-!!           i  i+1
-!!
-!! \endverbatim
-!!
-!!  Fields at each point
-!!  * x =  q, CoriolisBu
-!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
-!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
-!!  * o =  h, bathyT, eta, T, S, tr
-!!
-!!  The boundaries always run through q grid points (x).
-
 
 end module MOM_dynamics_split_RK2

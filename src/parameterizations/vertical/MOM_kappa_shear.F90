@@ -808,7 +808,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
             ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
             wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
           enddo
-          ! Use Adcroft's 1/0=0 convention.
+          ! Use the 1/0=0 convention.
           I_wt_tot = 0.0 ; if (wt_tot > 0.0) I_wt_tot = 1.0/wt_tot
 
           do K=1,nzc+1

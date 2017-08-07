@@ -369,6 +369,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
+  if (.not.(CS%Laplacian .or. CS%biharmonic)) return
 
   find_FrictWork = (CS%id_FrictWork > 0)
   if (CS%id_FrictWorkIntz > 0)    find_FrictWork = .true.
@@ -580,7 +581,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         v0(i,J) = CS%IDXDY2v(i,J)*(CS%DY2q(I,J)*sh_xy(I,J) - CS%DY2q(I-1,J)*sh_xy(I-1,J)) - &
                   CS%IDX2dyCv(i,J)*(CS%DX2h(i,j+1)*sh_xx(i,j+1) - CS%DX2h(i,j)*sh_xx(i,j))
       enddo ; enddo
-      if (apply_OBC .and. OBC%zero_biharmonic) then
+      if (apply_OBC) then; if (OBC%zero_biharmonic) then
         do n=1,OBC%number_of_segments
           I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
@@ -593,7 +594,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             enddo
           endif
         enddo
-      endif
+      endif; endif
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1227,9 +1228,13 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call MOM_error(FATAL,"ERROR: NOSLIP and BIHARMONIC cannot be defined "// &
                           "at the same time in MOM.")
 
-  if (.not.(CS%Laplacian .or. CS%biharmonic)) call MOM_error(WARNING, &
-    "hor_visc_init:  It is usually a very bad idea not to use either "//&
-    "LAPLACIAN or BIHARMONIC viscosity.")
+  if (.not.(CS%Laplacian .or. CS%biharmonic)) then
+    ! Only issue inviscid warning if not in single column mode (usually 2x2 domain)
+    if ( max(G%domain%niglobal, G%domain%njglobal)>2 ) call MOM_error(WARNING, &
+      "hor_visc_init:  It is usually a very bad idea not to use either "//&
+      "LAPLACIAN or BIHARMONIC viscosity.")
+    return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
+  endif
 
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0
@@ -1572,10 +1577,11 @@ subroutine hor_visc_end(CS)
 !                 hor_visc_init.
   type(hor_visc_CS), pointer :: CS
 
-  DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
-  DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
-
-  DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
+  if (CS%Laplacian .or. CS%biharmonic) then
+    DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
+    DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)
+    DEALLOC_(CS%reduction_xx) ; DEALLOC_(CS%reduction_xy)
+  endif
 
   if (CS%Laplacian) then
     DEALLOC_(CS%Kh_bg_xx) ; DEALLOC_(CS%Kh_bg_xy)

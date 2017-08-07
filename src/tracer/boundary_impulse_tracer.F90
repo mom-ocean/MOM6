@@ -503,7 +503,7 @@ end subroutine boundary_impulse_tracer_end
 !! mean age.
 !!
 !! A boundary impulse response (BIR) is a passive tracer whose surface boundary condition is a rectangle
-!! function with width $\Delta t$. In the case of unsteady flow, multiple BIRs, initiated at different
+!! function with width \f$\Delta t\f$. In the case of unsteady flow, multiple BIRs, initiated at different
 !! times in the model can be used to infer the transit time distribution or Green's function between
 !! the oceanic surface and interior. In the case of steady or cyclostationary flow, a single BIR is
 !! sufficient.
