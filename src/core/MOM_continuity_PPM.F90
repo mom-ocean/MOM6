@@ -367,23 +367,6 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
     endif
     do I=ish-1,ieh ; visc_rem(I,k) = 1.0 ; enddo
   enddo
-! if (local_open_BC) then
-!   do n=1, OBC%number_of_segments
-!     segment => OBC%segment(n)
-!     if (.not. segment%on_pe .or. segment%specified) cycle
-!     if (segment%direction == OBC_DIRECTION_E) then
-!       I=segment%HI%IsdB
-!       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-!         h_in(i+1,j,k) = h_in(i,j,k)
-!       enddo ; enddo
-!     elseif (segment%direction == OBC_DIRECTION_W) then
-!       I=segment%HI%IsdB
-!       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-!           h_in(i,j,k) = h_in(i+1,j,k)
-!       enddo ; enddo
-!     endif
-!   enddo
-! endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
@@ -1185,23 +1168,6 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     endif
     do i=ish,ieh ; visc_rem(i,k) = 1.0 ; enddo
   enddo
-! if (local_open_BC) then
-!   do n=1, OBC%number_of_segments
-!     segment => OBC%segment(n)
-!     if (.not. segment%on_pe .or. segment%specified) cycle
-!     if (segment%direction == OBC_DIRECTION_N) then
-!       J=segment%HI%JsdB
-!       do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-!         h_in(i,j+1,k) = h_in(i,j,k)
-!       enddo ; enddo
-!     elseif (segment%direction == OBC_DIRECTION_S) then
-!       J=segment%HI%JsdB
-!       do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-!         h_in(i,j,k) = h_in(i,j+1,k)
-!       enddo ; enddo
-!     endif
-!   enddo
-! endif
   call cpu_clock_end(id_clock_update)
 
   call cpu_clock_begin(id_clock_correct)
