@@ -640,7 +640,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
         hbelow = 0.0
         do k=nz,1,-1
           hbelow = hbelow + h(i,j,k) * H_to_m
-          hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
+          hint = H_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
           PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K)) * &
