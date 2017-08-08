@@ -86,7 +86,7 @@ end type neutral_diffusion_CS
 #include "version_variable.h"
 character(len=40)  :: mdl = "MOM_neutral_diffusion" ! module name
 
-logical, parameter :: debug_this_module = .false. ! If true, verbose output of find neutral position
+logical :: debug_this_module = .true. ! If true, verbose output of find neutral position
 
 contains
 
@@ -160,6 +160,10 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                      "exiting the iterative loop to find the neutral surface",    &
                      default=10)
     endif
+    call get_param(param_file, mdl, "NDIFF_DEBUG", debug_this_module,             &
+                   "Turns on verbose output for discontinuous neutral \n"//      &
+                   "diffusion routines.", &
+                   default = .false.)
   endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
