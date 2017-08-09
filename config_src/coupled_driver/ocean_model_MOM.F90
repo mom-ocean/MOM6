@@ -60,6 +60,7 @@ use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
+use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
@@ -77,7 +78,7 @@ use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
 #include <MOM_memory.h>
 
 #ifdef _USE_GENERIC_TRACER
-use MOM_generic_tracer, only : MOM_generic_flux_init,MOM_generic_tracer_fluxes_accumulate
+use MOM_generic_tracer, only : MOM_generic_tracer_fluxes_accumulate
 #endif
 
 implicit none ; private
@@ -708,7 +709,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 
   if (OS%use_ice_shelf) then
-     call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+    call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
   endif
 
 end subroutine ocean_model_save_restart
@@ -858,74 +859,26 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
 
-!   I have no idea what the following subroutine was intended to do, but it
-! appears to be necessary for compiling the Memphis coupled model.  In the MOM
-! version, it makes a call to something in the "OCEAN_TPM_MOD_FLUX_INIT".  I
-! believe that the equivalent calls are already taken care of inside of
-! MOM_initialize, and given that it has no arguments, in the MOM paradigm,
-! it can do nothing. I think that it should be elminated.  -RWH
+!> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
+!! as determined by various run-time parameters.  It can be called from
+!! non-ocean PEs, or PEs that have not yet been initialzed, and it can safely
+!! be called multiple times.
+subroutine ocean_model_flux_init(OS, verbosity)
+  type(ocean_state_type), optional, pointer :: OS  !< An optional pointer to the ocean state,
+                                             !! used to figure out if this is an ocean PE that
+                                             !! has already been initialized.
+  integer, optional, intent(in) :: verbosity !< A 0-9 integer indicating a level of verbosity.
 
-! UPDATE May, 8 2007
-! added aof_set_couple_flux function calls to this routine. These calls
-! are only made by non Ocean PEs and only when CFCs are being used (though
-! this condition may expand. These calls are normally done during
-! ocean_model_init. The problem is that they are only done by Ocean PEs. All
-! processors need to make this call in order to get the number of ocean/atmos
-! fluxes correct in the coupler framework.
-! The trick now is to let the atmos pes know when there is no CFCs and not
-! to call aof_set_coupler_flux
-!WGA
-
-subroutine ocean_model_flux_init(OS)
-  type(ocean_state_type), optional, pointer :: OS
-
-  integer :: dummy
-  character(len=128) :: default_ice_restart_file, default_ocean_restart_file
-  character(len=40)  :: mdl = "ocean_model_flux_init"  ! This module's name.
-  type(param_file_type) :: param_file !< A structure to parse for run-time parameters
-  type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
-  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
   logical :: OS_is_set
+  integer :: verbose
 
   OS_is_set = .false. ; if (present(OS)) OS_is_set = associated(OS)
 
-  call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
+  ! Use this to control the verbosity of output; consider rethinking this logic later.
+  verbose = 5 ; if (OS_is_set) verbose = 3
+  if (present(verbosity)) verbose = verbosity
 
-  call get_param(param_file, mdl, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
-                 default=.false., do_not_log=.true.)
-  call get_param(param_file, mdl, "USE_generic_tracer", use_MOM_generic_tracer,&
-                 default=.false., do_not_log=.true.)
-
-  call close_param_file(param_file, quiet_close=.true.)
-
-  if(.not.OS_is_set) then
-    if (use_OCMIP_CFCs)then
-      default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
-      default_ocean_restart_file = 'ocmip2_cfc.res.nc'
-
-      dummy = aof_set_coupler_flux('cfc_11_flux', &
-        flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-        param = (/ 9.36e-07, 9.7561e-06 /), &
-        ice_restart_file = default_ice_restart_file, &
-        ocean_restart_file = default_ocean_restart_file,  &
-        caller = "register_OCMIP2_CFC")
-      dummy = aof_set_coupler_flux('cfc_12_flux', &
-        flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-        param = (/ 9.36e-07, 9.7561e-06 /), &
-        ice_restart_file = default_ice_restart_file, &
-        ocean_restart_file = default_ocean_restart_file, &
-        caller = "register_OCMIP2_CFC")
-    endif
-  endif
-
-  if (use_MOM_generic_tracer) then
-#ifdef _USE_GENERIC_TRACER
-    call MOM_generic_flux_init()
-#else
-    call MOM_error(FATAL, &
-       "call_tracer_register: use_MOM_generic_tracer=.true. BUT not compiled with _USE_GENERIC_TRACER")
-#endif
-  endif
+  call call_tracer_flux_init(verbosity=verbose)
 
 end subroutine ocean_model_flux_init
 
@@ -1084,6 +1037,7 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 
 
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
+
 end subroutine ocean_public_type_chksum
 
 end module ocean_model_mod
