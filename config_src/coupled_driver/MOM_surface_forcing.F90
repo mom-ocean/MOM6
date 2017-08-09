@@ -67,12 +67,15 @@ use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
 use MOM_spatial_means,    only : adjust_area_mean_to_zero
 use MOM_variables,        only : surface
-use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init, user_revise_forcing_CS
+use user_revise_forcing,  only : user_alter_forcing, user_revise_forcing_init
+use user_revise_forcing,  only : user_revise_forcing_CS
 
-use coupler_types_mod,        only : coupler_2d_bc_type
-use data_override_mod,        only : data_override_init, data_override
-use fms_mod,                  only : read_data, stdout
-use mpp_mod,                  only : mpp_chksum
+use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
+use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
+use coupler_types_mod,    only : coupler_type_copy_data
+use data_override_mod,    only : data_override_init, data_override
+use fms_mod,              only : read_data, stdout
+use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 
@@ -729,10 +732,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif
 
+  if (.not.coupler_type_initialized(fluxes%tr_fluxes)) &
+    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+
+  call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
   !   At a later time, it might prove valuable to translate this array into the
   ! index space of the ocean model, rather than leaving it in the (haloless)
   ! arrays that come in from the surface forcing.
-  fluxes%tr_fluxes => IOB%fluxes
+!###  fluxes%tr_fluxes => IOB%fluxes
 
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to fluxes
@@ -1227,16 +1235,9 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
       write(outunit,100) 'iobt%area_berg      ', mpp_chksum( iobt%area_berg      )
     if (ASSOCIATED(iobt%mass_berg)) &
       write(outunit,100) 'iobt%mass_berg      ', mpp_chksum( iobt%mass_berg      )
-
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
-    do n = 1, iobt%fluxes%num_bcs  !{
-       do m = 1, iobt%fluxes%bc(n)%num_fields  !{
-          write(outunit,101) 'iobt%',trim(iobt%fluxes%bc(n)%name), &
-               trim(iobt%fluxes%bc(n)%field(m)%name), &
-               mpp_chksum(iobt%fluxes%bc(n)%field(m)%values)
-       enddo  !} m
-    enddo  !} n
-101 FORMAT("   CHECKSUM::",A6,a,'%',a," = ",Z20)
+
+    call coupler_type_write_chksums(iobt%fluxes, outunit, 'iobt%')
 
 end subroutine ice_ocn_bnd_type_chksum
 
