@@ -65,7 +65,7 @@ use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
-use coupler_types_mod, only : coupler_2d_bc_type
+use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
@@ -201,12 +201,26 @@ contains
 ! <DESCRIPTION>
 ! Initialize the ocean model.
 ! </DESCRIPTION>
-!
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
-  type(ocean_public_type), target, intent(inout) :: Ocean_sfc
-  type(ocean_state_type),          pointer       :: OS
-  type(time_type),                 intent(in)    :: Time_init
-  type(time_type),                 intent(in)    :: Time_in
+
+!> ocean_model_init initializes the ocean model, including registering fields
+!! for restarts and reading restart files if appropriate.
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
+  type(ocean_public_type), target, &
+                       intent(inout) :: Ocean_sfc !< A structure containing various
+                                !! publicly visible ocean surface properties after initialization,
+                                !! the data in this type is intent(out).
+  type(ocean_state_type), pointer    :: OS        !< A structure whose internal
+                                !! contents are private to ocean_model_mod that may be used to
+                                !! contain all information about the ocean's interior state.
+  type(time_type),     intent(in)    :: Time_init !< The start time for the coupled model's calendar
+  type(time_type),     intent(in)    :: Time_in   !< The time at which to initialize the ocean model.
+  type(coupler_1d_bc_type), &
+             optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes, and can be used to spawn related
+                                              !! internal variables in the ice model.
+
 !   This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
@@ -249,7 +263,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
-  if (coupler_type_initialized(Ocean_sfc%fields)) then
+  if (present(gas_fields_ocn)) then
+    call coupler_type_spawn(gas_fields_ocn, OS%state%tr_fields, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+  elseif (coupler_type_initialized(Ocean_sfc%fields)) then
     call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
                             (/is,is,ie,ie/), (/js,js,je,je/))
   endif
@@ -344,12 +361,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%write_energy_time = Time_init + OS%energysavedays * &
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
-  if(ASSOCIATED(OS%grid%Domain%maskmap)) then
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap)
+  if (ASSOCIATED(OS%grid%Domain%maskmap)) then
+    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                      OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap, &
+                                      gas_fields_ocn=gas_fields_ocn)
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       OS%MOM_CSp%diag)
+    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                      OS%MOM_CSp%diag, gas_fields_ocn=gas_fields_ocn)
   endif
 !  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
 
@@ -731,15 +749,22 @@ end subroutine ocean_model_save_restart
 
 !=======================================================================
 
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap)
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
+                                        gas_fields_ocn)
   type(domain2D), intent(in)             :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
   type(diag_ctrl), intent(in)            :: diag
   logical, intent(in), optional          :: maskmap(:,:)
+  type(coupler_1d_bc_type), &
+                 optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes.
+
   integer :: xsz, ysz, layout(2)
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
-  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
+  integer :: isc, iec, jsc, jec
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
@@ -748,16 +773,15 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap)
   else
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
+  call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
-  allocate ( Ocean_sfc%t_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%s_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%u_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%v_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%sea_lev(isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%area   (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%frazil (isc_bnd:iec_bnd,jsc_bnd:jec_bnd))
+  allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%s_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%u_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%v_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
+             Ocean_sfc%area   (isc:iec,jsc:jec), &
+             Ocean_sfc%frazil (isc:iec,jsc:jec))
 
   Ocean_sfc%t_surf  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
   Ocean_sfc%s_surf  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
@@ -767,6 +791,11 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap)
   Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
   Ocean_sfc%area    = 0.0
   Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
+
+  if (present(gas_fields_ocn)) then
+    call coupler_type_spawn(gas_fields_ocn, Ocean_sfc%fields, (/isc,isc,iec,iec/), &
+                              (/jsc,jsc,jec,jec/), suffix = '_ocn', as_needed=.true.)
+  endif
 
 end subroutine initialize_ocean_public_type
 
