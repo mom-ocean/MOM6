@@ -32,8 +32,9 @@ module MOM_tracer_flow_control
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type, close_param_file
 use MOM_forcing_type, only : forcing, optics_type
+use MOM_get_input, only : Get_MOM_input
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_open_boundary, only : ocean_OBC_type
@@ -61,7 +62,7 @@ use ideal_age_example, only : ideal_age_stock, ideal_age_example_end, ideal_age_
 use regional_dyes, only : register_dye_tracer, initialize_dye_tracer
 use regional_dyes, only : dye_tracer_column_physics, dye_tracer_surface_state
 use regional_dyes, only : dye_stock, regional_dyes_end, dye_tracer_CS
-use MOM_OCMIP2_CFC, only : register_OCMIP2_CFC, initialize_OCMIP2_CFC
+use MOM_OCMIP2_CFC, only : register_OCMIP2_CFC, initialize_OCMIP2_CFC, flux_init_OCMIP2_CFC
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 use MOM_OCMIP2_CFC, only : OCMIP2_CFC_stock, OCMIP2_CFC_end, OCMIP2_CFC_CS
 use oil_tracer, only : register_oil_tracer, initialize_oil_tracer
@@ -73,7 +74,7 @@ use advection_test_tracer, only : advection_test_stock, advection_test_tracer_en
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
-use MOM_generic_tracer, only : end_MOM_generic_tracer, MOM_generic_tracer_get
+use MOM_generic_tracer, only : end_MOM_generic_tracer, MOM_generic_tracer_get, MOM_generic_flux_init
 use MOM_generic_tracer, only : MOM_generic_tracer_stock, MOM_generic_tracer_min_max, MOM_generic_tracer_CS
 #endif
 use pseudo_salt_tracer, only : register_pseudo_salt_tracer, initialize_pseudo_salt_tracer
@@ -88,7 +89,7 @@ implicit none ; private
 
 public call_tracer_register, tracer_flow_control_init, call_tracer_set_forcing
 public call_tracer_column_fns, call_tracer_surface_state, call_tracer_stocks
-public get_chl_from_model, tracer_flow_control_end
+public call_tracer_flux_init, get_chl_from_model, tracer_flow_control_end
 
 type, public :: tracer_flow_control_CS ; private
   logical :: use_USER_tracer_example = .false.
@@ -118,6 +119,42 @@ type, public :: tracer_flow_control_CS ; private
 end type tracer_flow_control_CS
 
 contains
+
+!> This subroutine carries out a series of calls to initialize the air-sea
+!! tracer fluxes, but it does not record the generated indicies, and it may
+!! be called _before_ the ocean model has been initialized and may be called
+!! on non-ocean PEs.  It is not necessary to call this routine for ocean-only
+!! runs, because the same calls are made again inside of the routines called by
+!! call_tracer_register
+subroutine call_tracer_flux_init(verbosity)
+  integer, optional, intent(in) :: verbosity !< A 0-9 integer indicating a level of verbosity.
+
+  type(param_file_type) :: param_file ! A structure to parse for run-time parameters
+  character(len=40)  :: mdl = "call_tracer_flux_init"  ! This module's name.
+  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
+
+  ! Determine which tracer routines with tracer fluxes are to be called.  Note
+  ! that not every tracer package is required to have a flux_init call.
+  call get_MOM_Input(param_file, check_params=.false.)
+
+  call get_param(param_file, mdl, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_generic_tracer", use_MOM_generic_tracer,&
+                 default=.false., do_not_log=.true.)
+  call close_param_file(param_file, quiet_close=.true.)
+
+  if (use_OCMIP_CFCs) call flux_init_OCMIP2_CFC(verbosity=verbosity)
+  if (use_MOM_generic_tracer) then
+#ifdef _USE_GENERIC_TRACER
+    call MOM_generic_flux_init(verbosity=verbosity)
+#else
+    call MOM_error(FATAL, &
+       "call_tracer_flux_init: use_MOM_generic_tracer=.true. but MOM6 was "//&
+       "not compiled with _USE_GENERIC_TRACER")
+#endif
+  endif
+
+end subroutine call_tracer_flux_init
 
 !> The following 5 subroutines and associated definitions provide the
 !! machinery to register and call the subroutines that initialize
@@ -195,7 +232,8 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 #ifndef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) call MOM_error(FATAL, &
-       "call_tracer_register: use_MOM_generic_tracer=.true. BUT not compiled")
+       "call_tracer_register: use_MOM_generic_tracer=.true. but MOM6 was "//&
+       "not compiled with _USE_GENERIC_TRACER")
 #endif
 
 !    Add other user-provided calls to register tracers for restarting here. Each
