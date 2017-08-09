@@ -66,6 +66,8 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_2d_bc_type
+use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
+use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -224,6 +226,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
+  integer :: is, ie, js, je
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: offline_tracer_mode
 
@@ -238,13 +241,18 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
 
-  OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
       offline_tracer_mode=offline_tracer_mode)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
+
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  if (coupler_type_initialized(Ocean_sfc%fields)) then
+    call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+  endif
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -400,6 +408,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   real :: weight            ! Flux accumulation weight
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
+  integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
@@ -414,6 +423,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                     "ocean_state_type structure. ocean_model_init must be "//  &
                     "called first to allocate this structure.")
     return
+  endif
+
+  if (.not.coupler_type_initialized(OS%state%tr_fields)) then
+    is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+    call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
   endif
 
 !  Translate Ice_ocean_boundary into fluxes.
@@ -830,8 +845,14 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm,
       "Ocean_sfc%stagger has the unrecognized value of "//trim(val_str))
   endif
 
-  if (.not.associated(state%tr_fields,Ocean_sfc%fields)) &
-    call MOM_error(FATAL,'state%tr_fields is not pointing to Ocean_sfc%fields')
+  if (coupler_type_initialized(state%tr_fields)) then
+    if (.not.coupler_type_initialized(Ocean_sfc%fields)) then
+      call coupler_type_spawn(state%tr_fields, Ocean_sfc%fields, &
+                              (/isc_bnd,isc_bnd,iec_bnd,iec_bnd/), &
+                              (/jsc_bnd,jsc_bnd,jec_bnd,jec_bnd/) )
+    endif
+    call coupler_type_copy_data(state%tr_fields, Ocean_sfc%fields)
+  endif
 
 end subroutine convert_state_to_ocean_type
 
@@ -1026,16 +1047,7 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
     write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
     write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
 
-    do n = 1, ocn%fields%num_bcs  !{
-       do m = 1, ocn%fields%bc(n)%num_fields  !{
-          write(outunit,101) 'ocean%',trim(ocn%fields%bc(n)%name), &
-               trim(ocn%fields%bc(n)%field(m)%name), &
-               mpp_chksum(ocn%fields%bc(n)%field(m)%values)
-       enddo  !} m
-    enddo  !} n
-101 FORMAT("   CHECKSUM::",A6,a,'%',a," = ",Z20)
-
-
+    call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
