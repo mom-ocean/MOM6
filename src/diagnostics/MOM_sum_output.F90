@@ -461,26 +461,27 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
       tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
     enddo ; enddo ; enddo
 
+    ! This block avoids using the points beyond an open boundary condition
+    ! in the accumulation of mass, but perhaps it would be unnecessary if there
+    ! were a more judicious use of masks in the loops 4 or 7 lines above.
     if (local_open_BC) then
       do ns=1, OBC%number_of_segments
         segment => OBC%segment(ns)
         if (.not. segment%on_pe .or. segment%specified) cycle
+        I=segment%HI%IsdB ; J=segment%HI%JsdB
         if (segment%direction == OBC_DIRECTION_E) then
           do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
             tmp1(i+1,j,k) = 0.0
           enddo ; enddo
         elseif (segment%direction == OBC_DIRECTION_W) then
-          I=segment%HI%IsdB
           do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
             tmp1(i,j,k) = 0.0
           enddo ; enddo
         elseif (segment%direction == OBC_DIRECTION_N) then
-          J=segment%HI%JsdB
           do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
             tmp1(i,j+1,k) = 0.0
           enddo ; enddo
         elseif (segment%direction == OBC_DIRECTION_S) then
-          J=segment%HI%JsdB
           do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
             tmp1(i,j,k) = 0.0
           enddo ; enddo
