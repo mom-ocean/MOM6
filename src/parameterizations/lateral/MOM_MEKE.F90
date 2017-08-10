@@ -953,9 +953,6 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
   if (CS%viscosity_coeff/=0. .and. .not. laplacian) call MOM_error(FATAL, &
                  "LAPLACIAN must be true if MEKE_VISCOSITY_COEFF is true.")
 
-  call get_param(param_file, mdl, "USE_VARIABLE_MIXING", useVarMix, default=.false., do_not_log=.true.)
-  if (.not. useVarMix .and. CS%aEady>0.) call MOM_error(FATAL, &
-                 "USE_VARIABLE_MIXING must be true if USE_MEKE is true and MEKE_ALPHA_EADY>0.")
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
 
   ! Allocation of storage NOT shared with other modules

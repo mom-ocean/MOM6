@@ -24,6 +24,7 @@ use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query, set_tracer_data
+use MOM_open_boundary, only : open_boundary_test_extern_h
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, MOM_restart_CS
@@ -52,6 +53,7 @@ use ISOMIP_initialization, only : ISOMIP_initialize_temperature_salinity
 use baroclinic_zone_initialization, only : baroclinic_zone_init_temperature_salinity
 use benchmark_initialization, only : benchmark_initialize_thickness
 use benchmark_initialization, only : benchmark_init_temperature_salinity
+use Neverland_initialization, only : Neverland_initialize_thickness
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
@@ -250,6 +252,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t ISOMIP - use a configuration for the \n"//&
              " \t\t ISOMIP test case. \n"//&
              " \t benchmark - use the benchmark test case thicknesses. \n"//&
+             " \t Neverland - use the Neverland test case thicknesses. \n"//&
              " \t search - search a density profile for the interface \n"//&
              " \t\t densities. This is not yet implemented. \n"//&
              " \t circle_obcs - the circle_obcs test case is used. \n"//&
@@ -279,6 +282,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                  just_read_params=just_read)
        case ("benchmark"); call benchmark_initialize_thickness(h, G, GV, PF, &
                                     tv%eqn_of_state, tv%P_Ref, just_read_params=just_read)
+       case ("Neverland"); call Neverland_initialize_thickness(h, G, GV, PF, &
+                                 tv%eqn_of_state, tv%P_Ref)
        case ("search"); call initialize_thickness_search
        case ("circle_obcs"); call circle_obcs_initialize_thickness(h, G, GV, PF, &
                                       just_read_params=just_read)
@@ -569,6 +574,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
+! call open_boundary_test_extern_h(G, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
