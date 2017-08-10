@@ -86,7 +86,7 @@ end type neutral_diffusion_CS
 #include "version_variable.h"
 character(len=40)  :: mdl = "MOM_neutral_diffusion" ! module name
 
-logical :: debug_this_module = .true. ! If true, verbose output of find neutral position
+logical :: debug_this_module = .false. ! If true, verbose output of find neutral position
 
 contains
 
@@ -1272,7 +1272,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
         write (*,*) "PoL(k_surface-1), PoL(k_surface): ", PoL(k_surface-1), PoL(k_surface)
         write (*,*) "KoR(k_surface-1), KoR(k_surface): ", KoR(k_surface-1), KoR(k_surface)
         write (*,*) "PoR(k_surface-1), PoR(k_surface): ", PoR(k_surface-1), PoR(k_surface)
-        call MOM_error(FATAL, "Effective thickness is negative")
+        call MOM_error(WARNING, "Effective thickness is negative")
       endif
     endif
 
@@ -1333,28 +1333,27 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   integer,               intent(in   ) :: kl             !< Layer in the searched column
   integer,               intent(in   ) :: ki             !< Interface of the searched column
   logical,               intent(in   ) :: same_direction !< Searching in the same direction as last time
-  logical, dimension(:), intent(in   ) :: top_connected  !< True if the top interface was pointed to
-  logical, dimension(:), intent(in   ) :: bot_connected  !< True if the top interface was pointed to
+  logical, dimension(:), intent(inout) :: top_connected  !< True if the top interface was pointed to
+  logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
   real,                  intent(  out) :: out_P          !< Position within searched column
   integer,               intent(  out) :: out_K          !< Layer within searched column
 
   ! Check if everything in this layer is denser than neutral surface or if at the top of the water column
   if ((kl==1 .and. ki==1)) then
     if (debug_this_module)  write(*,*) "At surface"
-    out_P = 0.
-    out_K = kl
+    out_P = 0. ; out_K = kl
   ! Connects somewhere within discontinuity
-  elseif ( (kl > 1.) .and. (dRhoTopm1<=0.) .and. (dRhoTop>0) )then
+  elseif ( (kl > 1.) .and. (dRhoTopm1<=0.) .and. (dRhoTop>0) .and. (.not. bot_connected(kl-1)) ) then
     if (debug_this_module)  write(*,*) "Connect within discontinuity, point to bottom of last layer"
-    out_P = 1.
-    out_K = kl - 1
+    out_P = 1. ; out_K = kl - 1
   elseif ( (kl > 1.) .and. (dRhoTopm1==0.) .and. (dRhoTop==0.) )then
     if (lastK == kl .and. lastP>0.) then
       out_P = lastP ; out_K = lastK
     elseif (.not. bot_connected(kl-1)) then
       if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to bottom of previous"
       out_P = 1. ; out_K = kl-1
-    elseif (top_connected(kl)) then
+    elseif (top_connected(kl) .and. dRhoBot == 0.) then
+      if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to bottom of current"
       out_P = 1. ; out_K = kl
     else
       if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to top of layer"
@@ -1364,32 +1363,31 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   elseif (dRhoTop == 0. .and. dRhoBot == 0.) then
     if (same_direction) then
       if (debug_this_module)  write(*,*) "Perfectly stratified same direction, point to last position"
-      out_P = lastP
-      out_K = lastK
+      out_P = lastP ; out_K = lastK
     else
       if (top_connected(kl)) then
         if (debug_this_module)  write(*,*) "Perfectly stratified point to bottom of current layer"
-        out_P = 1.
-        out_K = kl
+        out_P = 1. ; out_K = kl
       else
         if (debug_this_module)  write(*,*) "Perfectly stratified point to top of current layer"
-        out_P = 0.
-        out_K = kl
+        out_P = 0. ; out_K = kl
       endif
     endif
   elseif (dRhoTop > dRhoBot) then
     if (debug_this_module)  write(*,*) "Unstably stratified point to bottom"
-    out_P = 1.
-    out_K = kl
+    out_P = 1. ; out_K = kl
   elseif (dRhoTop == 0. .and. dRhoBot > 0.) then
     if (debug_this_module)  write(*,*) "Connects exactly at top of current layer"
-    out_P = 0.
-    out_K = kl
+    out_P = 0. ; out_K = kl
   else
     if (debug_this_module)  write(*,*) "Zero crossing point within layer"
-    out_P = interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot)
+    out_P = MAX(interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot), lastP)
     out_K = kl
+    top_connected(kl-1) = .true. ; bot_connected(kl-1) = .true.
   endif
+
+  ! Make sure that position when searching in layer is always increasing
+!  if (lastK == out_K) out_P = MAX(out_P, lastP)
 
   ! Check to make sure that the layer index is always increasing
   if ( (out_K < lastK) .and. lastP==0. .and. out_P == 1. ) then
@@ -2277,11 +2275,11 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
                                    (/1,1,2,2,2,3,3,3,3,3,3,3/),  & ! KoL
                                    (/1,1,1,1,1,1,2,2,2,3,3,3/), & ! KoR
-                                   (/0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.5, 1.0, 1.0/), & ! pL
+                                   (/0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0/), & ! pL
                                    (/0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1.0/), & ! pR
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column with mixed layer')
-  Tl = (/14.,14.,10./) ; Tr = (/10.,14.,8./)
+  Tl = (/14.,14.,6./) ; Tr = (/10.,14.,6/)
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
@@ -2289,10 +2287,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
                                    (/1,1,2,2,3,3,3,3,3,3,3,3/), & ! KoL
                                    (/1,1,1,1,1,1,1,2,2,3,3,3/), & ! KoR
-                                   (/0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.25, 1.0, 1.0/), & ! pL
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.5, 1.0/), & ! pR
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 6.0, 0.0/), & ! hEff
-                                   'Right column with unstable mixed layer')
+                                   (/0.0, 1.0, 0.0, 1.0, 0.0, .25, .25, .25, .25, 0.0, 1.0, 1.0/), & ! pL
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0/), & ! pR
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10., 0.0/), & ! hEff
+                                   'Left mixed layer, right unstable mixed layer')
   Til(:,1) = (/8.,12.,10./) ; Til(:,2) = (/12.,10.,2./)
   Tir(:,1) = (/10.,14.,12./) ; TiR(:,2) = (/14.,12.,4./)
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
