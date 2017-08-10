@@ -212,7 +212,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * GV%m_to_H
+        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))
       endif
 
     enddo ! I
@@ -296,7 +296,7 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
         if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * GV%m_to_H
+        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))
       endif
 
     enddo ! i
