@@ -555,6 +555,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-), in m or kg m-2 (H for short).
     h_arith, &  ! The arithmetic mean thickness, in m or kg m-2.
+    h_delta, &  ! The lateral difference of thickness, in m or kg m-2.
     hvel, &     ! hvel is the thickness used at a velocity grid point, in H.
     hvel_shelf  ! The equivalent of hvel under shelves, in H.
   real, dimension(SZIB_(G),SZK_(G)+1) :: &
@@ -631,7 +632,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 !$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u, &
 !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                             &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,   &
+!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,   &
 !$OMP                                  botfn,zh,Dmin,zcol,a,do_any_shelf,do_i_shelf,zi_dir, &
 !$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
   do j=G%Jsc,G%Jec
@@ -646,6 +647,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) then
       h_harm(I,k) = 2.0*h(i,j,k)*h(i+1,j,k) / (h(i,j,k)+h(i+1,j,k)+h_neglect)
       h_arith(I,k) = 0.5*(h(i+1,j,k)+h(i,j,k))
+      h_delta(I,k) = h(i+1,j,k) - h(i,j,k)
     endif ; enddo ; enddo
     do I=Isq,Ieq
       Dmin(I) = min(G%bathyT(i,j), G%bathyT(i+1,j)) * m_to_H
@@ -656,11 +658,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
       do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
+          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(I,k) = 0. ; enddo
           Dmin(I) = G%bathyT(i,j) * m_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-          do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; enddo
+          do k=1,nz ; h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; h_delta(I,k) = 0. ; enddo
           Dmin(I) = G%bathyT(i+1,j) * m_to_H
           zi_dir(I) = 1
         endif
@@ -676,7 +678,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
       do I=Isq,Ieq ; z_i(I,nz+1) = 0.0 ; enddo
       do k=nz,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
         hvel(I,k) = h_harm(I,k)
-        if (u(I,j,k) * (h(i+1,j,k)-h(i,j,k)) < 0) then
+        if (u(I,j,k) * h_delta(I,k) < 0) then
           z2 = z_i(I,k+1) ; botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
           hvel(I,k) = (1.0-botfn)*h_harm(I,k) + botfn*h_arith(I,k)
         endif
@@ -697,7 +699,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
           z_i(I,k) = max(zh(I), z_clear) * I_Hbbl(I)
 
           hvel(I,k) = h_arith(I,k)
-          if (u(I,j,k) * (h(i+1,j,k)-h(i,j,k)) > 0) then
+          if (u(I,j,k) * h_delta(I,k) > 0) then
             if (zh(I) * I_Hbbl(I) < CS%harm_BL_val) then
               hvel(I,k) = h_harm(I,k)
             else
@@ -743,7 +745,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
               zh(I) = zh(I) + h_harm(I,k)
 
               hvel_shelf(I,k) = hvel(I,k)
-              if (u(I,j,k) * (h(i+1,j,k)-h(i,j,k)) > 0) then
+              if (u(I,j,k) * h_delta(I,k) > 0) then
                 if (zh(I) * I_HTbl(I) < CS%harm_BL_val) then
                   hvel_shelf(I,k) = min(hvel(I,k), h_harm(I,k))
                 else
@@ -793,7 +795,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 !$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v, &
 !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                                &
-!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,hvel,z2,zi_dir, &
+!$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,zi_dir, &
 !$OMP                                  botfn,zh,Dmin,zcol1,zcol2,a,do_any_shelf,do_i_shelf,  &
 !$OMP                                  a_shelf,Ztop_min,I_HTbl,hvel_shelf,topfn,h_ml,z2_wt,z_clear)
   do J=Jsq,Jeq
@@ -808,6 +810,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     do k=1,nz ; do i=is,ie ; if (do_i(i)) then
       h_harm(i,k) = 2.0*h(i,j,k)*h(i,j+1,k) / (h(i,j,k)+h(i,j+1,k)+h_neglect)
       h_arith(i,k) = 0.5*(h(i,j+1,k)+h(i,j,k))
+      h_delta(i,k) = h(i,j+1,k) - h(i,j,k)
     endif ; enddo ; enddo
     do i=is,ie
       Dmin(i) = min(G%bathyT(i,j), G%bathyT(i,j+1)) * m_to_H
@@ -818,11 +821,11 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
       do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; enddo
+          do k=1,nz ; h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(i,k) = 0. ; enddo
           Dmin(I) = G%bathyT(i,j) * m_to_H
           zi_dir(I) = -1
         elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-          do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; enddo
+          do k=1,nz ; h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; h_delta(i,k) = 0. ; enddo
           Dmin(i) = G%bathyT(i,j+1) * m_to_H
           zi_dir(i) = 1
         endif
@@ -839,7 +842,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 
       do k=nz,1,-1 ; do i=is,ie ; if (do_i(i)) then
         hvel(i,k) = h_harm(i,k)
-        if (v(i,J,k) * (h(i,j+1,k)-h(i,j,k)) < 0) then
+        if (v(i,J,k) * h_delta(i,k) < 0) then
           z2 = z_i(i,k+1) ; botfn = 1.0 / (1.0 + 0.09*z2*z2*z2*z2*z2*z2)
           hvel(i,k) = (1.0-botfn)*h_harm(i,k) + botfn*h_arith(i,k)
         endif
@@ -862,7 +865,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
         z_i(I,k) = max(zh(i), z_clear) * I_Hbbl(i)
 
         hvel(i,k) = h_arith(i,k)
-        if (v(i,J,k) * (h(i,j+1,k)-h(i,j,k)) > 0) then
+        if (v(i,J,k) * h_delta(i,k) > 0) then
           if (zh(i) * I_Hbbl(i) < CS%harm_BL_val) then
             hvel(i,k) = h_harm(i,k)
           else
@@ -906,7 +909,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
               zh(i) = zh(i) + h_harm(i,k)
 
               hvel_shelf(i,k) = hvel(i,k)
-              if (v(i,j,k) * (h(i,j+1,k)-h(i,j,k)) > 0) then
+              if (v(i,J,k) * h_delta(i,k) > 0) then
                 if (zh(i) * I_HTbl(i) < CS%harm_BL_val) then
                   hvel_shelf(i,k) = min(hvel(i,k), h_harm(i,k))
                 else
