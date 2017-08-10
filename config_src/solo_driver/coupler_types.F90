@@ -639,10 +639,9 @@ subroutine CT_spawn_1d_2d(var_in, var, idim, jdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
-          var%bc(n)%field(m)%values(:,:) = 0.0
-        endif
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
+        var%bc(n)%field(m)%values(:,:) = 0.0
       enddo
     enddo
 
@@ -746,10 +745,9 @@ subroutine CT_spawn_1d_3d(var_in, var, idim, jdim, kdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed) .and. (var%ks<=var%ke)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
-          var%bc(n)%field(m)%values(:,:,:) = 0.0
-        endif
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
+        var%bc(n)%field(m)%values(:,:,:) = 0.0
       enddo
     enddo
 
@@ -845,10 +843,9 @@ subroutine CT_spawn_2d_2d(var_in, var, idim, jdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
-          var%bc(n)%field(m)%values(:,:) = 0.0
-        endif
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
+        var%bc(n)%field(m)%values(:,:) = 0.0
       enddo
     enddo
 
@@ -952,10 +949,9 @@ subroutine CT_spawn_2d_3d(var_in, var, idim, jdim, kdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed) .and. (var%ks<=var%ke)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
-          var%bc(n)%field(m)%values(:,:,:) = 0.0
-        endif
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
+        var%bc(n)%field(m)%values(:,:,:) = 0.0
       enddo
     enddo
 
@@ -1051,10 +1047,9 @@ subroutine CT_spawn_3d_2d(var_in, var, idim, jdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
-          var%bc(n)%field(m)%values(:,:) = 0.0
-        endif
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed) )
+        var%bc(n)%field(m)%values(:,:) = 0.0
       enddo
     enddo
 
@@ -1157,10 +1152,10 @@ subroutine CT_spawn_3d_3d(var_in, var, idim, jdim, kdim, suffix, as_needed)
           write (error_msg, *) trim(error_header), ' var%bc(', n, ')%field(', m, ')%values already associated'
           call mpp_error(FATAL, trim(error_msg))
         endif
-        if ((var%isd<=var%ied) .and. (var%jsd<=var%jed) .and. (var%ks<=var%ke)) then
-          allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
-          var%bc(n)%field(m)%values(:,:,:) = 0.0
-        endif
+
+        ! Note that this may be allocating a zero-sized array, which is legal in Fortran.
+        allocate ( var%bc(n)%field(m)%values(var%isd:var%ied,var%jsd:var%jed,var%ks:var%ke) )
+        var%bc(n)%field(m)%values(:,:,:) = 0.0
       enddo
     enddo
 
