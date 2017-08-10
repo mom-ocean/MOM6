@@ -4,7 +4,7 @@ module ocn_comp_mct
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 ! mct modules
-use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval
+use ESMF,                only: ESMF_clock, ESMF_time, ESMF_timeInterval, ESMF_TimeInc
 use ESMF,                only: ESMF_ClockGet, ESMF_TimeGet, ESMF_TimeIntervalGet
 use seq_cdata_mod,       only: seq_cdata
 use seq_cdata_mod,       only: seq_cdata_setptrs
@@ -77,9 +77,10 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   !  local variables
   type(time_type)     :: time_init         !< Start time of coupled model's calendar
-  type(time_type)     :: time_in           !< Start time for ocean model at initialization
+  type(time_type)     :: time_in           !< Time at the beginning of the first ocn coupling interval
   type(ESMF_time)     :: current_time      !< Current time
-  type(ESMF_timeInterval) :: time_interval !< Time interval
+  type(ESMF_time)     :: time_in_ESMF      !< Time after first ocean coupling interval (of type ESMF_time)
+  type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=384)  :: runid             !< Run ID
   character(len=384)  :: runtype           !< Run type
@@ -104,8 +105,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(mct_gGrid)           :: MOM_MCT_dom3d           !< for 3d streams, local
 
   ! time management
-  integer                   :: ocn_cpl_dt
-  real (kind=8)             :: mom_cpl_dt
+  integer                   :: ocn_cpl_dt   !< one ocn coupling interval in seconds. (to be received from cesm)
+  real (kind=8)             :: mom_cpl_dt   !< one ocn coupling interval in seconds. (internal)
   real (kind=8), parameter  ::        &
       seconds_in_minute =    60.0d0, &
       seconds_in_hour   =  3600.0d0, &
@@ -122,7 +123,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   integer :: km=1                   !< Number of vertical levels
   integer :: nx_block=0, ny_block=0 !< Size of block domain in x,y dir including ghost cells
   integer :: max_blocks_clinic=0    !< Max. number of blocks per processor in each distribution
-  integer :: ncouple_per_day = 48
+  integer :: ncouple_per_day
   logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
                                     !! (partially-coupled option)
   character(len=128) :: err_msg     !< Error message
@@ -154,14 +155,26 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   inst_index  = seq_comm_inst(MOM_MCT_ID)
   inst_suffix = seq_comm_suffix(MOM_MCT_ID)
 
-  ! Initialize MOM6
   call t_startf('MOM_init')
+
+  ! Initialize MOM6 comm
   call MOM_infra_init(mpicom_ocn)
-  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
-  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
+  ! Get the ESMF clock instance (assigned by CESM for MOM6)
+  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
+
+  ! Get the initial CESM time
+  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Compute time_in: time at the beginning of the first ocn coupling interval
+  !   (In CESM, ocean component is lagged by one ocean coupling interval, so:
+  !   time_in = time_init + ocn_cpl_interval )
+  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
+  call ESMF_TimeGet(time_in_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
@@ -176,8 +189,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(6,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, TimeStep=time_interval, rc=rc)
-    call ESMF_TimeIntervalGet(time_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+    call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+    call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
     write(6,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
@@ -272,6 +285,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   call seq_timemgr_EClockGetData(EClock, dtime=ocn_cpl_dt)
 
   ! \todo Need interface to get dt from MOM6
+  ncouple_per_day = seconds_in_day / ocn_cpl_dt
   mom_cpl_dt = seconds_in_day / ncouple_per_day
   if (mom_cpl_dt /= ocn_cpl_dt) then
      write(*,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
@@ -340,21 +354,24 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(mct_aVect),  intent(inout) :: x2o_o   !< Fluxes from coupler to ocean, computed by ocean
   type(mct_aVect),  intent(inout) :: o2x_o   !< Fluxes from ocean to coupler, computed by ocean
   ! Local variables
-  type(ESMF_time) :: current_time
-  type(ESMF_timeInterval) :: time_interval
+  type(ESMF_time) :: current_time             !< Time to be reached at the end of ocean cpl interval
+  type(ESMF_time) :: time_start_ESMF          !< Time at the start of the coupling interval
+  type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg
 
-  ! Translate the current time (start of coupling interval)
-  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
-  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  ! Compute the time at the start of this coupling interval
+  call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
+  call ESMF_TimeGet(time_start_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
+    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(6,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
@@ -365,15 +382,14 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(6,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+    call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+    write(6,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
   ! Translate the coupling time interval
-  call ESMF_ClockGet(EClock, TimeStep=time_interval, rc=rc)
-  call ESMF_TimeIntervalGet(time_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-  time_start = set_date(year, month, day, 0, 0, seconds, err_msg=err_msg)
-  if (debug .and. is_root_pe()) then
-    write(6,*) 'ocn_run_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
-  endif
+    call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
   coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
 
   ! set (actually, get from mct) the cdata pointers:
