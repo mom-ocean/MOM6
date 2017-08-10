@@ -1799,10 +1799,9 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
     enddo ; enddo
   endif
 
-  if (.not.coupler_type_initialized(fluxes%tr_fluxes)) &
-    call coupler_type_spawn(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-  call coupler_type_increment_data(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
+  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
+      coupler_type_initialized(flux_tmp%tr_fluxes)) &
+    call coupler_type_increment_data(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
                               scale_factor=wt2, scale_prev=wt1)
 
 end subroutine forcing_accumulate

@@ -267,6 +267,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call coupler_type_spawn(gas_fields_ocn, OS%state%tr_fields, &
                             (/is,is,ie,ie/), (/js,js,je,je/))
   elseif (coupler_type_initialized(Ocean_sfc%fields)) then
+    !### I think that this is never used.
     call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
                             (/is,is,ie,ie/), (/js,js,je,je/))
   endif
@@ -369,7 +370,17 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
                                       OS%MOM_CSp%diag, gas_fields_ocn=gas_fields_ocn)
   endif
-!  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
+
+  ! This call can only occur here if the coupler_bc_type variables have been
+  ! initialized already using the information from gas_fields_ocn.
+  if (present(gas_fields_ocn)) then
+    call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
+             OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
+             OS%grid, OS%GV, OS%MOM_CSp)
+
+    call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                     OS%MOM_CSp%use_conT_absS)
+  endif
 
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%MOM_CSp%diag)
@@ -443,11 +454,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     return
   endif
 
-  if (.not.coupler_type_initialized(OS%state%tr_fields)) then
-    is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
-    call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-  endif
+  ! This is benign but not necessary if ocean_model_init_sfc was called or if
+  ! OS%state%tr_fields was spawnded in ocean_model_init.  Consider removing it.
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                          (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
 !  Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
@@ -538,7 +549,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                   OS%MOM_CSp%use_conT_absS)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
@@ -799,7 +811,8 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
 end subroutine initialize_ocean_public_type
 
-subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm, press_to_z)
+subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
+                                       patm, press_to_z)
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
@@ -876,9 +889,11 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm,
 
   if (coupler_type_initialized(state%tr_fields)) then
     if (.not.coupler_type_initialized(Ocean_sfc%fields)) then
-      call coupler_type_spawn(state%tr_fields, Ocean_sfc%fields, &
-                              (/isc_bnd,isc_bnd,iec_bnd,iec_bnd/), &
-                              (/jsc_bnd,jsc_bnd,jec_bnd,jec_bnd/) )
+      call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
+               "Ocean_sfc%fields has not been initialized.")
+!      call coupler_type_spawn(state%tr_fields, Ocean_sfc%fields, &
+!                              (/isc_bnd,isc_bnd,iec_bnd,iec_bnd/), &
+!                              (/jsc_bnd,jsc_bnd,jec_bnd,jec_bnd/) )
     endif
     call coupler_type_copy_data(state%tr_fields, Ocean_sfc%fields)
   endif
@@ -900,11 +915,18 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_state_type),  pointer       :: OS
   type(ocean_public_type), intent(inout) :: Ocean_sfc
 
+  integer :: is, ie, js, je
+
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                          (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
+
   call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                   OS%MOM_CSp%use_conT_absS)
 
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
