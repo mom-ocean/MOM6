@@ -1,19 +1,19 @@
 module coupler_indices
 
   ! MCT types
-  use mct_mod, only : mct_aVect
+  use mct_mod,             only : mct_aVect
   ! MCT fucntions
-  use mct_mod, only : mct_avect_indexra, mct_aVect_init, mct_aVect_clean
-  use seq_flds_mod, only : seq_flds_x2o_fields, seq_flds_o2x_fields
-  use seq_flds_mod, only : seq_flds_i2o_per_cat, ice_ncat
+  use mct_mod,             only : mct_avect_indexra, mct_aVect_init, mct_aVect_clean
+  use seq_flds_mod,        only : seq_flds_x2o_fields, seq_flds_o2x_fields
+  use seq_flds_mod,        only : seq_flds_i2o_per_cat, ice_ncat
 
   ! MOM types
-  use MOM_grid,       only : ocean_grid_type
+  use MOM_grid,            only : ocean_grid_type
   use MOM_surface_forcing, only: ice_ocean_boundary_type
   ! MOM functions
-  use MOM_domains,    only : pass_var, AGRID
-  use ocean_model_mod, only : ocean_public_type
-
+  use MOM_domains,         only : pass_var, AGRID
+  use ocean_model_mod,     only : ocean_public_type
+  use MOM_error_handler,   only : MOM_error, FATAL
   implicit none
 
   private
@@ -116,6 +116,7 @@ contains
     call mct_aVect_init(x2o, rList=seq_flds_x2o_fields, lsize=1)
     call mct_aVect_init(o2x, rList=seq_flds_o2x_fields, lsize=1)
 
+    ! ocean to coupler
     ind%o2x_So_t          = mct_avect_indexra(o2x,'So_t')
     ind%o2x_So_u          = mct_avect_indexra(o2x,'So_u')
     ind%o2x_So_v          = mct_avect_indexra(o2x,'So_v')
@@ -127,6 +128,8 @@ contains
     ind%o2x_Fioo_q        = mct_avect_indexra(o2x,'Fioo_q')
     ind%o2x_Faoo_fco2_ocn = mct_avect_indexra(o2x,'Faoo_fco2_ocn',perrWith='quiet')
     ind%o2x_Faoo_fdms_ocn = mct_avect_indexra(o2x,'Faoo_fdms_ocn',perrWith='quiet')
+
+    ! coupler to ocean
     ind%x2o_Si_ifrac      = mct_avect_indexra(x2o,'Si_ifrac')
     ind%x2o_Sa_pslv       = mct_avect_indexra(x2o,'Sa_pslv')
     ind%x2o_So_duu10n     = mct_avect_indexra(x2o,'So_duu10n')
@@ -134,7 +137,6 @@ contains
     ind%x2o_Sw_lamult     = mct_avect_indexra(x2o,'Sw_lamult')
     ind%x2o_Sw_ustokes    = mct_avect_indexra(x2o,'Sw_ustokes')
     ind%x2o_Sw_vstokes    = mct_avect_indexra(x2o,'Sw_vstokes')
-
     ind%x2o_Foxx_tauy     = mct_avect_indexra(x2o,'Foxx_tauy')
     ind%x2o_Foxx_taux     = mct_avect_indexra(x2o,'Foxx_taux')
     ind%x2o_Foxx_swnet    = mct_avect_indexra(x2o,'Foxx_swnet')
@@ -226,7 +228,8 @@ contains
       do i=grid%isc,grid%iec
         n = n+1
         ig = i + grid%idg_offset
-        o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg) * grid%mask2dT(i,j)
+        ! surface temperature in Kelvin
+        o2x(ind%o2x_So_t, n) = ocn_public%t_surf(ig,jg)  * grid%mask2dT(i,j)
         o2x(ind%o2x_So_s, n) = ocn_public%s_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_u, n) = ocn_public%u_surf(ig,jg) * grid%mask2dT(i,j)
         o2x(ind%o2x_So_v, n) = ocn_public%v_surf(ig,jg) * grid%mask2dT(i,j)
@@ -292,15 +295,18 @@ slp_R=0.
   end subroutine ocn_export
 
 
-  subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind)
-    type(ice_ocean_boundary_type), intent(inout)   :: ice_ocean_boundary !< A type for the ice ocean boundary
-    type(ocean_grid_type), intent(in)           :: grid
-    !type(mct_aVect), intent(in)                 :: x2o_o
-    real(kind=8), intent(in)                 :: x2o_o(:,:)
-    type(cpl_indices), intent(inout)            :: ind
+  subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind, sw_decomp, c1, c2, c3, c4)
+    type(ice_ocean_boundary_type), intent(inout) :: ice_ocean_boundary !< A type for the ice ocean boundary
+    type(ocean_grid_type),         intent(in)    :: grid
+    !type(mct_aVect),              intent(in)    :: x2o_o
+    real(kind=8),                  intent(in)    :: x2o_o(:,:)
+    type(cpl_indices),             intent(inout) :: ind
+    logical,                       intent(in)    :: sw_decomp             !< controls if shortwave is decomposed
+                                                                          !! into four components
+    real(kind=8),                  intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
     ! local variables
-    integer           :: i, j, k, ig, jg
+    integer               :: i, j, k, ig, jg !< grid indices
 
     ! variable that are not in ice_ocean_boundary:
     ! latent (x2o_Foxx_lat)
@@ -324,11 +330,6 @@ slp_R=0.
 
     ! need wind_stress_multiplier?
 
-    ! Copy from x2o to ice_ocean_boundary. ice_ocean_boundary uses global indexing with no halos.
-    write(*,*) 'max. k is:', (grid%jec-grid%jsc+1) * (grid%iec-grid%isc+1)
-    ! zonal wind stress (taux)
-    write(*,*) 'taux', SIZE(x2o_o(ind%x2o_Foxx_taux,:))
-    write(*,*) 'ice_ocean_boundary%u_flux', SIZE(ice_ocean_boundary%u_flux(:,:))
     k = 0
     do j = grid%jsc, grid%jec
       jg = j + grid%jdg_offset
@@ -336,33 +337,43 @@ slp_R=0.
         k = k + 1 ! Increment position within gindex
         ig = i + grid%idg_offset
         ! zonal wind stress (taux)
-        ice_ocean_boundary%u_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_taux,k)
+        ice_ocean_boundary%u_flux(ig,jg) = x2o_o(ind%x2o_Foxx_taux,k)
         ! meridional wind stress (tauy)
-        ice_ocean_boundary%v_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_tauy,k)
-        ! sensible heat flux
-        ice_ocean_boundary%t_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_sen,k)
+        ice_ocean_boundary%v_flux(ig,jg) = x2o_o(ind%x2o_Foxx_tauy,k)
+        ! sensible heat flux (W/m2)
+        ice_ocean_boundary%t_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_sen,k)
         ! salt flux
-        ice_ocean_boundary%salt_flux(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_salt,k)
+        ice_ocean_boundary%salt_flux(ig,jg) = x2o_o(ind%x2o_Fioi_salt,k)
         ! heat flux from snow & ice melt
-        ice_ocean_boundary%calving_hflx(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_melth,k)
+        ice_ocean_boundary%calving_hflx(ig,jg) = x2o_o(ind%x2o_Fioi_melth,k)
         ! snow melt flux
-        ice_ocean_boundary%fprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Fioi_meltw,k)
+        !ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Fioi_meltw,k)
         ! river runoff flux
-        ice_ocean_boundary%runoff(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_rofl,k)
+        ice_ocean_boundary%runoff(ig,jg) = x2o_o(ind%x2o_Foxx_rofl,k)
         ! ice runoff flux
-        ice_ocean_boundary%calving(ig,jg) = 0.0 ! x20_o(ind%x2o_Foxx_rofi,k)
+        ice_ocean_boundary%calving(ig,jg) = x2o_o(ind%x2o_Foxx_rofi,k)
         ! liquid precipitation (rain)
-        ice_ocean_boundary%lprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Faxa_rain,k)
-        ! froze precipitation (snow)
-        ice_ocean_boundary%fprec(ig,jg) = 0.0 ! x20_o(ind%x2o_Faxa_snow,k)
-        !!!!!!! LONGWAVE NEEDS TO BE FIXED !!!!!!!
-        ! longwave radiation (up)
-        ice_ocean_boundary%lw_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Foxx_lwup)
-        ! longwave radiation (down)
-        ice_ocean_boundary%lw_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Faxa_lwdn)
-        !!!!!!! SHORTWAVE NEEDS TO BE COMBINED !!!!!!!
-        ! net short-wave heat flux
-        ice_ocean_boundary%u_flux(ig,jg) = 0.0 ! x20_o(k,ind%x2o_Foxx_swnet)
+        ice_ocean_boundary%lprec(ig,jg) = x2o_o(ind%x2o_Faxa_rain,k)
+        ! frozen precipitation (snow)
+        ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Faxa_snow,k)
+        ! evaporation flux (kg/m2/s)
+        ice_ocean_boundary%q_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_evap,k)
+        ! longwave radiation, sum up and down (W/m2)
+        ice_ocean_boundary%lw_flux(ig,jg) = x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)
+        if (sw_decomp) then
+          ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
+          ! 1) visible, direct shortwave (W/m2)
+          ice_ocean_boundary%sw_flux_vis_dir(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c1
+          ! 2) visible, diffuse shortwave (W/m2)
+          ice_ocean_boundary%sw_flux_vis_dif(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c2
+          ! 3) near-IR, direct shortwave (W/m2)
+          ice_ocean_boundary%sw_flux_nir_dir(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c3
+          ! 4) near-IR, diffuse shortwave (W/m2)
+          ice_ocean_boundary%sw_flux_nir_dif(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c4
+        else
+          call MOM_error(FATAL,"fill_ice_ocean_bnd: this option has not been implemented yet."// &
+                        "Shortwave must be decomposed using coeffs. c1, c2, c3, c4.");
+        endif
       enddo
     enddo
 
