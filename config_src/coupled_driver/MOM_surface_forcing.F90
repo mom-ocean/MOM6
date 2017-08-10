@@ -359,6 +359,15 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
 
+  if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
+      coupler_type_initialized(IOB%fluxes)) &
+    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+  !   It might prove valuable to use the same array extents as the rest of the
+  ! ocean model, rather than using haloless arrays, in which case the last line
+  ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
+
+
   if (CS%allow_flux_adjustments) then
    fluxes%heat_added(:,:)=0.0
    fluxes%salt_flux_added(:,:)=0.0
@@ -732,15 +741,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif
 
-  if (.not.coupler_type_initialized(fluxes%tr_fluxes)) &
-    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-
-  call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
-  !   At a later time, it might prove valuable to translate this array into the
-  ! index space of the ocean model, rather than leaving it in the (haloless)
-  ! arrays that come in from the surface forcing.
-!###  fluxes%tr_fluxes => IOB%fluxes
+  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
+      coupler_type_initialized(IOB%fluxes)) &
+    call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
 
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to fluxes
