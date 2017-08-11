@@ -439,7 +439,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
             CS%Pint(i+1,j,:), CS%T_i(i+1,j,:,:), CS%S_i(i+1,j,:,:), CS%dRdT_i(i+1,j,:,:), CS%dRdS_i(i+1,j,:,:), &
             CS%uPoL(I,j,:), CS%uPoR(I,j,:), CS%uKoL(I,j,:), CS%uKoR(I,j,:), CS%uhEff(I,j,:),                    &
             CS%refine_position, CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                         &
-            CS%ppoly_coeffs_T(i+1,j,:,:), CS%ppoly_coeffs_S(i+1,j,:,:), EOS, CS%max_iter, CS%tolerance)
+            CS%ppoly_coeffs_T(i+1,j,:,:), CS%ppoly_coeffs_S(i+1,j,:,:), EOS, CS%max_iter, CS%tolerance, CS%ref_pres)
       endif
     endif
   enddo ; enddo
@@ -458,7 +458,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
             CS%Pint(i,j+1,:), CS%T_i(i,j+1,:,:), CS%S_i(i,j+1,:,:), CS%dRdT_i(i,j+1,:,:), CS%dRdS_i(i,j+1,:,:), &
             CS%vPoL(I,j,:), CS%vPoR(I,j,:), CS%vKoL(I,j,:), CS%vKoR(I,j,:), CS%vhEff(I,j,:),                    &
             CS%refine_position, CS%ppoly_coeffs_T(i,j,:,:), CS%ppoly_coeffs_S(i,j,:,:),                         &
-            CS%ppoly_coeffs_T(i,j+1,:,:), CS%ppoly_coeffs_S(i,j+1,:,:), EOS, CS%max_iter, CS%tolerance)
+            CS%ppoly_coeffs_T(i,j+1,:,:), CS%ppoly_coeffs_S(i,j+1,:,:), EOS, CS%max_iter, CS%tolerance, CS%ref_pres)
       endif
     endif
   enddo ; enddo
@@ -1049,7 +1049,7 @@ end subroutine find_neutral_surface_positions_continuous
 !! of combined interfaces using intracell reconstructions of T/S
 subroutine find_neutral_surface_positions_discontinuous(nk, deg,                                                   &
                 Pres_l, Tl, Sl, dRdT_l, dRdS_l, Pres_r, Tr, Sr, dRdT_r, dRdS_r, PoL, PoR, KoL, KoR, hEff,          &
-                refine_pos_in, ppoly_T_l, ppoly_S_l, ppoly_T_r, ppoly_S_r, EOS, max_iter, tolerance)
+                refine_pos_in, ppoly_T_l, ppoly_S_l, ppoly_T_r, ppoly_S_r, EOS, max_iter, tolerance, ref_pres)
   integer,                    intent(in)    :: nk        !< Number of levels
   integer,                    intent(in)    :: deg       !< Degree of polynomial used for reconstructions
   real, dimension(nk+1),      intent(in)    :: Pres_l    !< Left-column interface pressure (Pa)
@@ -1077,6 +1077,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
   type(EOS_type),             optional, pointer    :: EOS       !< Equation of state structure
   integer,                    optional, intent(in) :: max_iter  !< Maximum number of iterations in refine_position
   real,                       optional, intent(in) :: tolerance !< Convergence criterion for refine_position
+  real,                       optional, intent(in) :: ref_pres  !< Reference pressure to use for deriviative calculation
 
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
@@ -1108,7 +1109,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
     refine_pos = refine_pos_in
     if (refine_pos .and. (.not. ( present(ppoly_T_l) .and. present(ppoly_S_l) .and.  &
                                   present(ppoly_T_r) .and. present(ppoly_S_r) .and.  &
-                                  present(tolerance) .and. present(max_iter)) ) ) &
+                                  present(tolerance) .and. present(max_iter) .and. present(ref_pres) ) )) &
         call MOM_error(FATAL, "fine_neutral_surface_positions_discontinuous: refine_pos is requested, but polynomial"// &
                               "coefficients not available for T and S")
   endif
@@ -1186,7 +1187,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
         if ( (k_surface > 1) .and. ( KoL(k_surface) == KoL(k_surface-1) ) ) min_bound = PoL(k_surface-1)
         PoL(k_surface) = refine_nondim_position(max_iter, tolerance, Tr(kl_right,ki_right), Sr(kl_right,ki_right),     &
                     dRdT_r(kl_right,ki_right), dRdS_r(kl_right,ki_right), Pres_l(kl_left), Pres_l(kl_left+1),          &
-                    deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot, min_bound)
+                    deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot, min_bound, &
+                    ref_pres)
       endif
       if (PoL(k_surface) == 0.) top_connected_l(KoL(k_surface)) = .true.
       if (PoL(k_surface) == 1.) bot_connected_l(KoL(k_surface)) = .true.
@@ -1229,7 +1231,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
         if ( (k_surface > 1) .and. ( KoR(k_surface) == KoR(k_surface-1) ) ) min_bound = PoR(k_surface-1)
         PoR(k_surface) = refine_nondim_position(max_iter, tolerance, Tl(kl_left,ki_left), Sl(kl_left,ki_left),         &
                   dRdT_l(kl_left,ki_left), dRdS_l(kl_left,ki_left), Pres_r(kl_right), Pres_r(kl_right+1),              &
-                  deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot, min_bound)
+                  deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot, min_bound, &
+                  ref_pres)
       endif
       if (PoR(k_surface) == 0.) top_connected_r(KoR(k_surface)) = .true.
       if (PoR(k_surface) == 1.) bot_connected_r(KoR(k_surface)) = .true.
@@ -1443,7 +1446,7 @@ end function interpolate_for_nondim_position
 !! available), Brent's method is used following the implementation found at
 !! https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
 real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, deg, &
-      ppoly_T, ppoly_S, EOS, x0, drho_top, drho_bot, min_bound, force_brent)
+      ppoly_T, ppoly_S, EOS, x0, drho_top, drho_bot, min_bound, ref_pres, force_brent)
   integer,            intent(in) :: max_iter    !< Number of maximum iterations to use
   real,               intent(in) :: tolerance   !< Convergence criterion for delta_rho
   real,               intent(in) :: T_ref       !< Temperature of the neutral surface at the searched from interface
@@ -1461,16 +1464,18 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
                                                 !! surface connects. If interpolate_for_nondim_position was
                                                 !! previously called, this would be based on linear profile of dRho
   real,               intent(in) :: drho_top, drho_bot, min_bound
+  real,               intent(in) :: ref_pres    !< Optionally use a different reference pressure other than local
   type(EOS_type),     pointer    :: EOS         !< Equation of state structure
   logical, optional,  intent(in) :: force_brent !< Forces the use of Brent's method instead of Newton's method to find
                                                 !! position of neutral surface
+
   ! Local variables
   integer :: form_of_EOS
   integer :: iter
   logical :: do_newton, do_brent
 
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
-  real :: P_int, P_min ! Interpolated pressure
+  real :: P_int, P_min, P_ref ! Interpolated pressure
   real :: delta_rho_init, delta_rho_final, x_init
   real :: T, S, alpha, beta, alpha_avg, beta_avg
   ! Newton's Method variables
@@ -1481,7 +1486,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
 
   real :: P_last
   logical :: debug = .false.
-
+  if (ref_pres>=0.) P_ref = ref_pres
   delta_P = P_bot-P_top
   refine_nondim_position = min_bound
   x_init = refine_nondim_position
@@ -1496,7 +1501,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
 
   ! Check to make sure that a root exists between the minimum bound and the bottom of the layer
   call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, &
-                      EOS, delta_rho)
+                      ref_pres, EOS, delta_rho)
   delta_rho_init = delta_rho
   if ( SIGN(1.,delta_rho) == SIGN(1.,drho_bot) ) then
     ! Return the position of min_bound if closer to 0 than drho_bot
@@ -1521,15 +1526,21 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
     do iter = 1, max_iter
       ! Evaluate delta_rho(x0)
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, EOS, &
-                          delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
+                          refine_nondim_position, ref_pres, EOS, delta_rho, P_int, T, S, alpha_avg, &
+                          beta_avg, delta_T, delta_S)
       ! Check for convergence
       if (ABS(delta_rho) <= tolerance) then
         do_brent = .false.
         exit
       endif
       ! Evaluate total derivative of delta_rho
-      call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+      if (ref_pres<0.) P_ref = P_int
+      call calculate_density_second_derivs_scalar( T, S, P_ref, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+      ! In the case of a constant reference pressure, no dependence on neutral direction with pressure
+      if (ref_pres>=0.) then
+        dalpha_dP = 0. ; dbeta_dP = 0.
+      endif
       dalpha_dS = dbeta_dT ! Cross derivatives are identicial
       ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
       dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
@@ -1578,7 +1589,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     machep = EPSILON(sa)
     ! Find the bracketing interval based on where the sign changes
     call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
-                        refine_nondim_position, EOS, delta_rho)
+                        refine_nondim_position, ref_pres, EOS, delta_rho)
     ! Bracketed between min_bound and 1.
     if ( SIGN(1.,delta_rho)*SIGN(1.,drho_bot)==-1. ) then
       sa = refine_nondim_position ; fa = delta_rho
@@ -1645,7 +1656,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
         sb = sb - tol
       end if
       call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
-                        sb, EOS, fb)
+                        sb, ref_pres, EOS, fb)
       if ( ( 0. < fb .and. 0. < fc ) .or. &
            ( fb <= 0. .and. fc <= 0. ) ) then
         c = sa
@@ -1678,7 +1689,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
     call MOM_error(WARNING, "refine_nondim_position>1.")
-    refine_nondim_position = x0
+    refine_nondim_position = MAX(x0,min_bound)
   endif
 
   if (refine_nondim_position<0.) then
@@ -1692,19 +1703,12 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
     call MOM_error(WARNING, "refine_nondim_position<0.")
-    refine_nondim_position = x0
+    refine_nondim_position = MAX(x0,min_bound)
   endif
-
-  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
-                      refine_nondim_position, EOS, delta_rho)
-  if (ABS(delta_rho)>=ABS(delta_rho_init)) then
-    refine_nondim_position = x_init
-  endif
-
 
   if (debug) then
     call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
-                        refine_nondim_position, EOS, delta_rho)
+                        refine_nondim_position, ref_pres, EOS, delta_rho)
     write (*,*) "End delta_rho: ", delta_rho
     write (*,*) "x0, delta_x: ", x0, refine_nondim_position-x0
     write (*,*) "Iterations: ", iter
@@ -1715,7 +1719,7 @@ end function refine_nondim_position
 
 !> Calculate the difference in neutral density between a reference T, S, alpha, and beta
 !! and a point on the polynomial reconstructions of T, S
-subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, EOS, &
+subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, ref_pres, EOS, &
                           delta_rho, P_out, T_out, S_out, alpha_avg_out, beta_avg_out, delta_T_out, delta_S_out)
   integer,                intent(in)  :: deg       !< Degree of polynomial reconstruction
   real,                   intent(in)  :: T_ref     !< Temperature at reference surface
@@ -1727,6 +1731,7 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   real, dimension(deg+1), intent(in)  :: ppoly_T   !< Coefficients of T reconstruction
   real, dimension(deg+1), intent(in)  :: ppoly_S   !< Coefficients of S reconstruciton
   real,                   intent(in)  :: x0        !< Nondimensional position to evaluate
+  real,                   intent(in)  :: ref_pres  !< Reference pressure
   type(EOS_type),         pointer     :: EOS       !< Equation of state structure
   real,                   intent(out) :: delta_rho
   real,         optional, intent(out) :: P_out         !< Pressure at point x0
@@ -1738,10 +1743,18 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   real,         optional, intent(out) :: delta_S_out   !< Difference in salinity between reference and x0
 
   real :: alpha, beta, alpha_avg, beta_avg, P_int, T, S, delta_T, delta_S
+
   P_int = (1. - x0)*P_top + x0*P_bot
   T = evaluation_polynomial( ppoly_T, deg+1, x0 )
   S = evaluation_polynomial( ppoly_S, deg+1, x0 )
-  call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+  ! Interpolated pressure if using locally referenced neutral density
+  if (ref_pres<0.) then
+    call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+  else
+  ! Constant reference pressure (isopycnal)
+    call calculate_density_derivs_scalar( T, S, ref_pres, alpha, beta, EOS )
+  endif
+
 
   ! Calculate the f(P) term for Newton's method
   alpha_avg = 0.5*( alpha + alpha_ref )
@@ -2296,23 +2309,23 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ! Unit tests for refine_nondim_position
   ! Tests using Newton's method
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0., -1.), &
             "Temperature stratified (Newton) "))
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0., -1.), &
             "Salinity stratified    (Newton) "))
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0., -1.), &
             "Temp/Salt stratified   (Newton) "))
   ! Tests using Brent's method
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0.,force_brent = .true.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/35., 0./), EOS, 0., -1., 1., 0., -1., force_brent = .true.), &
             "Temperature stratified (Brent)  "))
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0.,force_brent = .true.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/20., 0./), (/34., 2./), EOS, 0., -2., 2., 0., -1., force_brent = .true.), &
             "Salinity stratified    (Brent)  "))
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or. (test_rnp(0.5,refine_nondim_position( &
-            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0.,force_brent = .true.), &
+            100, 0., 20., 35., -1., 2., 0., 1., 1, (/21., -2./), (/34., 2./), EOS, 0., -1., 1., 0., -1., force_brent = .true.), &
             "Temp/Salt stratified   (Brent)  "))
   deallocate(EOS)
 
