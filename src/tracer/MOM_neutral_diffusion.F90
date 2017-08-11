@@ -43,6 +43,7 @@ type, public :: neutral_diffusion_CS ; private
   logical :: refine_position = .false.
   integer :: max_iter ! Maximum number of iterations if refine_position is defined
   real :: tolerance   ! Convergence criterion representing difference from true neutrality
+  real :: ref_pres    ! Reference pressure, negative if using locally referenced neutral density
 
   ! Positions of neutral surfaces in both the u, v directions
   real,    allocatable, dimension(:,:,:) :: uPoL  ! Non-dimensional position with left layer uKoL-1, u-point
@@ -129,6 +130,11 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, CS)
                  "If false, a PPM discontinuous reconstruction of T and S    \n"//  &
                  "is done which results in a higher order routine but exacts \n"//  &
                  "a higher computational cost.", default=.true.)
+  call get_param(param_file, mdl, "NDIFF_REF_PRES", CS%ref_pres,                    &
+                 "The reference pressure (Pa) used for the derivatives of    \n"//  &
+                 "the equation of state. If negative (default), local        \n"//  &
+                 "pressure is used.", &
+                 default = -1.)
   ! Initialize and configure remapping
   if (CS%continuous_reconstruction .eqv. .false.) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", CS%boundary_extrap, &
@@ -354,6 +360,10 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S            ! Reconstruction slopes
   integer :: iMethod
+  real, dimension(SZI_(G)+1) :: ref_pres ! Reference pressure used to calculate alpha/beta
+
+  ! If doing along isopycnal diffusion (as opposed to neutral diffusion, set the reference pressure)
+  if (CS%ref_pres>=0.) ref_pres(:) = CS%ref_pres
 
   if (CS%continuous_reconstruction) then
     CS%dRdT(:,:,:) = 0.
@@ -364,6 +374,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     CS%dRdT_i(:,:,:,:) = 0.
     CS%dRdS_i(:,:,:,:) = 0.
   endif
+
+  ! Calculate pressure at interfaces
+  CS%Pint(:,:,1) = 0.
+  do k=1,G%ke ; do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
+    CS%Pint(i,j,k+1) = CS%Pint(i,j,k) + h(i,j,k)*GV%H_to_Pa
+  enddo ; enddo ; enddo
 
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
@@ -379,26 +395,21 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
       endif
     enddo
 
-    ! Calculate interface properties
-    CS%Pint(:,j,1) = 0. ! Assume P=0 (Pa) at surface - needs correcting for atmospheric and ice loading - AJA
     ! Continuous reconstruction
     if (CS%continuous_reconstruction) then
-      do k = 1, G%ke
-          call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), CS%Pint(:,j,k), &
-                                        CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
-        if (k<=G%ke) then
-          CS%Pint(:,j,k+1) = CS%Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
-        endif
+      do k = 1, G%ke+1
+        if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
+        call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), ref_pres, &
+                                      CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
       enddo
     else ! Discontinuous reconstruction
       do k = 1, G%ke
-        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), CS%Pint(:,j,k), &
+        if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
+        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
                                       CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, EOS)
-        if (k<=G%ke) then
-          CS%Pint(:,j,k+1) = CS%Pint(:,j,k) + h(:,j,k) * GV%H_to_Pa ! Pressure at next interface, k+1 (Pa)
-          call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), CS%Pint(:,j,k+1), &
-                                        CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
-        endif
+        if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k+1)
+        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
+                                         CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
       enddo
     endif
   enddo
