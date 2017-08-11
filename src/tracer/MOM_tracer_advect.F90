@@ -315,8 +315,8 @@ end subroutine advect_tracer
 !! a monotonic piecewise linear scheme.
 subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr
@@ -579,8 +579,8 @@ end subroutine advect_x
 !! linear scheme.
 subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                     is, ie, js, je, k, G, GV, usePPM, useHuynh)
-  type(ocean_grid_type),                     intent(inout) :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
+  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr
@@ -865,7 +865,7 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_tracer_advect" ! This module's name.
+  character(len=40)  :: mdl = "MOM_tracer_advect" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (associated(CS)) then
@@ -877,11 +877,11 @@ subroutine tracer_advect_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DT", CS%dt, fail_if_missing=.true., &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
           desc="The (baroclinic) dynamics time step.", units="s")
-  call get_param(param_file, mod, "DEBUG", CS%debug, default=.false.)
-  call get_param(param_file, mod, "TRACER_ADVECTION_SCHEME", mesg, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "TRACER_ADVECTION_SCHEME", mesg, &
           desc="The horizontal transport scheme for tracers:\n"//&
           "  PLM    - Piecewise Linear Method\n"//&
           "  PPM:H3 - Piecewise Parabolic Method (Huyhn 3rd order)\n"// &
@@ -939,35 +939,5 @@ end subroutine tracer_advect_end
 !!  it is essential that the volume fluxes should be correct.  It is
 !!  also important that the tracer advection occurs before each
 !!  calculation of the diabatic forcing.
-!!
-!!  \section section_gridlayout MOM grid layout
-!!
-!!  A small fragment of the grid is shown below:
-!!
-!! \verbatim
-!!    j+1  x ^ x ^ x
-!!
-!!    j+1  > o > o >
-!!
-!!    j    x ^ x ^ x
-!!
-!!    j    > o > o >
-!!
-!!    j-1  x ^ x ^ x
-!!
-!!        i-1  i  i+1
-!!
-!!           i  i+1
-!!
-!! \endverbatim
-!!
-!!  Fields at each point
-!!  * x =  q, CoriolisBu
-!!  * ^ =  v, PFv, CAv, vh, diffv, tauy, vbt, vhtr
-!!  * > =  u, PFu, CAu, uh, diffu, taux, ubt, uhtr
-!!  * o =  h, bathyT, eta, T, S, tr
-!!
-!!  The boundaries always run through q grid points (x).
-!!
 
 end module MOM_tracer_advect

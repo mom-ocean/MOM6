@@ -74,7 +74,8 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use coupler_util, only : set_coupler_values, ind_csurf
+
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -145,8 +146,8 @@ contains
 
 function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI
-  type(verticalGrid_type),    intent(in) :: GV
-  type(param_file_type),      intent(in) :: param_file
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(oil_tracer_CS),        pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
   type(MOM_restart_CS),       pointer    :: restart_CS
@@ -164,7 +165,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "oil_tracer" ! This module's name.
+  character(len=40)  :: mdl = "oil_tracer" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying oils
@@ -181,51 +182,51 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "OIL_IC_FILE", CS%IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "OIL_IC_FILE", CS%IC_file, &
                  "The file in which the oil tracer initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mod, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/CFC_IC_FILE", CS%IC_file)
   endif
-  call get_param(param_file, mod, "OIL_IC_FILE_IS_Z", CS%Z_IC_file, &
+  call get_param(param_file, mdl, "OIL_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, OIL_IC_FILE is in depth space, not layer space", &
                  default=.false.)
 
-  call get_param(param_file, mod, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
                  "If true, the tracers are masked out in massless layer. \n"//&
                  "This can be a problem with time-averages.", default=.false.)
-  call get_param(param_file, mod, "OIL_MAY_REINIT", CS%oil_may_reinit, &
+  call get_param(param_file, mdl, "OIL_MAY_REINIT", CS%oil_may_reinit, &
                  "If true, oil tracers may go through the initialization \n"//&
                  "code if they are not found in the restart files. \n"//&
                  "Otherwise it is a fatal error if the oil tracers are not \n"//&
                  "found in the restart files of a restarted run.", &
                  default=.false.)
-  call get_param(param_file, mod, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LONGITUDE", CS%oil_source_longitude, &
                  "The geographic longitude of the oil source.", units="degrees E", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LATITUDE", CS%oil_source_latitude, &
                  "The geographic latitude of the oil source.", units="degrees N", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "OIL_SOURCE_LAYER", CS%oil_source_k, &
+  call get_param(param_file, mdl, "OIL_SOURCE_LAYER", CS%oil_source_k, &
                  "The layer into which the oil is introduced, or a \n"//&
                  "negative number for a vertically uniform source, \n"//&
                  "or 0 not to use this tracer.", units="Layer", default=0)
-  call get_param(param_file, mod, "OIL_SOURCE_RATE", CS%oil_source_rate, &
+  call get_param(param_file, mdl, "OIL_SOURCE_RATE", CS%oil_source_rate, &
                  "The rate of oil injection.", units="kg s-1", default=1.0)
-  call get_param(param_file, mod, "OIL_DECAY_DAYS", CS%oil_decay_days, &
+  call get_param(param_file, mdl, "OIL_DECAY_DAYS", CS%oil_decay_days, &
                  "The decay timescale in days (if positive), or no decay \n"//&
                  "if 0, or use the temperature dependent decay rate of \n"//&
                  "Adcroft et al. (GRL, 2010) if negative.", units="days", &
                  default=0.0)
-  call get_param(param_file, mod, "OIL_DATED_START_YEAR", CS%oil_start_year, &
+  call get_param(param_file, mdl, "OIL_DATED_START_YEAR", CS%oil_start_year, &
                  "The time at which the oil source starts", units="years", &
                  default=0.0)
-  call get_param(param_file, mod, "OIL_DATED_END_YEAR", CS%oil_end_year, &
+  call get_param(param_file, mdl, "OIL_DATED_END_YEAR", CS%oil_end_year, &
                  "The time at which the oil source ends", units="years", &
                  default=1.0e99)
 
@@ -235,7 +236,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     if (CS%oil_source_k(m)/=0) then
       write(name_tag(1:3),'("_",I2.2)') m
       CS%ntr = CS%ntr + 1
-      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mod)
+      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mdl)
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
         CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))
@@ -244,7 +245,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
       endif
     endif
   enddo
-  call log_param(param_file, mod, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
+  call log_param(param_file, mdl, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
@@ -278,9 +279,9 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(oil_tracer_CS),                pointer    :: CS
@@ -422,13 +423,13 @@ end subroutine initialize_oil_tracer
 
 subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, tv, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
+  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
   type(oil_tracer_CS),                pointer    :: CS
-  type(thermo_var_ptrs),              intent(in) :: tv
+  type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
 !   This subroutine applies diapycnal diffusion and any other column
@@ -560,9 +561,9 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
 end subroutine oil_tracer_column_physics
 
 function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(oil_tracer_CS),                pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -613,30 +614,34 @@ function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function oil_stock
 
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
+!! This particular tracer package does not report anything back to the coupler.
 subroutine oil_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                 intent(in)    :: G
-  type(surface),                         intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  type(oil_tracer_CS),                   pointer       :: CS
-!   This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_oil_tracer.
-  integer :: m, is, ie, js, je
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(oil_tracer_CS),    pointer       :: CS !< The control structure returned by a previous
+                                              !! call to register_oil_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,CS%ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,m), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

@@ -36,7 +36,7 @@ module ocean_model_mod
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : calculate_surface_state, finish_MOM_initialization
-use MOM, only : step_tracers
+use MOM, only : step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -61,11 +61,14 @@ use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
 use MOM_time_manager, only : time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
+use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
-use coupler_types_mod, only : coupler_2d_bc_type
+use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
+use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
+use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -82,7 +85,7 @@ use MOM_wave_interface, only: Import_Stokes_Drift
 #include <MOM_memory.h>
 
 #ifdef _USE_GENERIC_TRACER
-use MOM_generic_tracer, only : MOM_generic_flux_init,MOM_generic_tracer_fluxes_accumulate
+use MOM_generic_tracer, only : MOM_generic_tracer_fluxes_accumulate
 #endif
 
 implicit none ; private
@@ -139,7 +142,7 @@ type, public ::  ocean_public_type
   type(coupler_2d_bc_type) :: fields    ! A structure that may contain an
                                         ! array of named tracer-related fields.
   integer                  :: avg_kount ! Used for accumulating averages of this type.
-  integer, dimension(3)    :: axes = 0  ! Axis numbers that are available
+  integer, dimension(2)    :: axes = 0  ! Axis numbers that are available
                                         ! for I/O using this surface data.
 end type ocean_public_type
 
@@ -204,12 +207,26 @@ contains
 ! <DESCRIPTION>
 ! Initialize the ocean model.
 ! </DESCRIPTION>
-!
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
-  type(ocean_public_type), target, intent(inout) :: Ocean_sfc
-  type(ocean_state_type),          pointer       :: OS
-  type(time_type),                 intent(in)    :: Time_init
-  type(time_type),                 intent(in)    :: Time_in
+
+!> ocean_model_init initializes the ocean model, including registering fields
+!! for restarts and reading restart files if appropriate.
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
+  type(ocean_public_type), target, &
+                       intent(inout) :: Ocean_sfc !< A structure containing various
+                                !! publicly visible ocean surface properties after initialization,
+                                !! the data in this type is intent(out).
+  type(ocean_state_type), pointer    :: OS        !< A structure whose internal
+                                !! contents are private to ocean_model_mod that may be used to
+                                !! contain all information about the ocean's interior state.
+  type(time_type),     intent(in)    :: Time_init !< The start time for the coupled model's calendar
+  type(time_type),     intent(in)    :: Time_in   !< The time at which to initialize the ocean model.
+  type(coupler_1d_bc_type), &
+             optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes, and can be used to spawn related
+                                              !! internal variables in the ice model.
+
 !   This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
@@ -226,10 +243,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   real :: G_Earth     ! The gravitational acceleration in m s-2.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ocean_model_init"  ! This module's name.
+  character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
-  type(param_file_type) :: param_file
+  integer :: is, ie, js, je
+  type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: offline_tracer_mode
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
@@ -243,7 +261,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%is_ocean_pe = Ocean_sfc%is_ocean_pe
   if (.not.OS%is_ocean_pe) return
 
-  OS%state%tr_fields => Ocean_sfc%fields
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
       offline_tracer_mode=offline_tracer_mode)
@@ -251,23 +268,33 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
 
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  if (present(gas_fields_ocn)) then
+    call coupler_type_spawn(gas_fields_ocn, OS%state%tr_fields, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+  elseif (coupler_type_initialized(Ocean_sfc%fields)) then
+    !### I think that this is never used.
+    call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                            (/is,is,ie,ie/), (/js,js,je,je/))
+  endif
+
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "RESTART_CONTROL", OS%Restart_control, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "RESTART_CONTROL", OS%Restart_control, &
                  "An integer whose bits encode which restart files are \n"//&
                  "written. Add 2 (bit 1) for a time-stamped file, and odd \n"//&
                  "(bit 0) for a non-time-stamped file.  A restart file \n"//&
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
-  call get_param(param_file, mod, "TIMEUNIT", Time_unit, &
+  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
                  "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
-  call get_param(param_file, mod, "ENERGYSAVEDAYS",OS%energysavedays, &
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS",OS%energysavedays, &
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(0,days=1), timeunit=Time_unit)
 
-  call get_param(param_file, mod, "OCEAN_SURFACE_STAGGER", stagger, &
+  call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the surface velocity field that is \n"//&
                  "returned to the coupler.  Valid values include \n"//&
@@ -278,38 +305,38 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   else ; call MOM_error(FATAL,"ocean_model_init: OCEAN_SURFACE_STAGGER = "// &
                         trim(stagger)//" is invalid.") ; endif
 
-  call get_param(param_file, mod, "RESTORE_SALINITY",OS%restore_salinity, &
+  call get_param(param_file, mdl, "RESTORE_SALINITY",OS%restore_salinity, &
                  "If true, the coupled driver will add a globally-balanced \n"//&
                  "fresh-water flux that drives sea-surface salinity \n"//&
                  "toward specified values.", default=.false.)
-  call get_param(param_file, mod, "RESTORE_TEMPERATURE",OS%restore_temp, &
+  call get_param(param_file, mdl, "RESTORE_TEMPERATURE",OS%restore_temp, &
                  "If true, the coupled driver will add a  \n"//&
                  "heat flux that drives sea-surface temperauture \n"//&
                  "toward specified values.", default=.false.)
-  call get_param(param_file, mod, "RHO_0", Rho0, &
+  call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "G_EARTH", G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file, mod, "ICE_SHELF",  OS%use_ice_shelf, &
+  call get_param(param_file, mdl, "ICE_SHELF",  OS%use_ice_shelf, &
                  "If true, enables the ice shelf model.", default=.false.)
 
-  call get_param(param_file, mod, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
+  call get_param(param_file, mdl, "ICEBERGS_APPLY_RIGID_BOUNDARY",  OS%icebergs_apply_rigid_boundary, &
                  "If true, allows icebergs to change boundary condition felt by ocean", default=.false.)
 
   if (OS%icebergs_apply_rigid_boundary) then
-    call get_param(param_file, mod, "KV_ICEBERG",  OS%kv_iceberg, &
+    call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
                  "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
-    call get_param(param_file, mod, "DENSITY_ICEBERGS",  OS%density_iceberg, &
+    call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
                   "A typical density of icebergs.", units="kg m-3", default=917.0)
-    call get_param(param_file, mod, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
+    call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
-    call get_param(param_file, mod, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
+    call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
                  "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
                   "below berg are set to zero. Not applied for negative \n"//&
                  " values.", units="non-dim", default=-1.0)
@@ -349,13 +376,25 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in)
   OS%write_energy_time = Time_init + OS%energysavedays * &
       (1 + (OS%Time - Time_init) / OS%energysavedays)
 
-  if(ASSOCIATED(OS%grid%Domain%maskmap)) then
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                       maskmap=OS%grid%Domain%maskmap)
+  if (ASSOCIATED(OS%grid%Domain%maskmap)) then
+    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                      OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap, &
+                                      gas_fields_ocn=gas_fields_ocn)
   else
-     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc)
+    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
+                                      OS%MOM_CSp%diag, gas_fields_ocn=gas_fields_ocn)
   endif
-!  call convert_state_to_ocean_type(state, Ocean_sfc, OS%grid)
+
+  ! This call can only occur here if the coupler_bc_type variables have been
+  ! initialized already using the information from gas_fields_ocn.
+  if (present(gas_fields_ocn)) then
+    call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
+             OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
+             OS%grid, OS%GV, OS%MOM_CSp)
+
+    call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                     OS%MOM_CSp%use_conT_absS)
+  endif
 
   call close_param_file(param_file)
   call diag_mediator_close_registration(OS%MOM_CSp%diag)
@@ -412,6 +451,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   real :: weight            ! Flux accumulation weight
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
+  integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
@@ -427,6 +467,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                     "called first to allocate this structure.")
     return
   endif
+
+  ! This is benign but not necessary if ocean_model_init_sfc was called or if
+  ! OS%state%tr_fields was spawnded in ocean_model_init.  Consider removing it.
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                          (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
 !  Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
@@ -488,7 +534,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_tracers(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   else
     call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   endif
@@ -512,7 +558,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
 !  See if it is time to write out the energy.
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
-      (OS%MOM_CSp%dt_trans==0.0)) then
+      (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
     call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
@@ -522,7 +568,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                   OS%MOM_CSp%use_conT_absS)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
@@ -541,7 +588,7 @@ end subroutine update_ocean_model
 !
 
 subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice, latent_heat_fusion, state, time_step, berg_area_threshold)
-  type(ocean_grid_type),              intent(inout)    :: G
+  type(ocean_grid_type),              intent(inout)    :: G    !< The ocean's grid structure
   type(forcing),                      intent(inout) :: fluxes
   type(surface),                      intent(inout) :: state
   logical,                            intent(in) :: use_ice_shelf
@@ -634,33 +681,34 @@ subroutine add_berg_flux_to_shelf(G, fluxes, use_ice_shelf, density_ice, kv_ice,
 end subroutine add_berg_flux_to_shelf
 
 subroutine ocean_model_restart(OS, timestamp)
-   type(ocean_state_type),        pointer :: OS
-   character(len=*), intent(in), optional :: timestamp
+  type(ocean_state_type),        pointer :: OS
+  character(len=*), intent(in), optional :: timestamp
 
-   if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_restart "//&
-       "called with a non-zero dt_trans.  Additional restart fields are required.")
-   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
-       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
-       "restart files can only be created after the buoyancy forcing is applied.")
+  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+       "with inconsistent dynamics and advective times.  Additional restart fields "//&
+       "that have not been coded yet would be required for reproducibility.")
+  if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
+      "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
+      "restart files can only be created after the buoyancy forcing is applied.")
 
-   if (BTEST(OS%Restart_control,1)) then
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                               OS%dirs%restart_output_dir, .true.)
-     if (OS%use_ice_shelf) then
-        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-     endif
-   endif
-   if (BTEST(OS%Restart_control,0)) then
-     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                       OS%MOM_CSp%restart_CSp, GV=OS%GV)
-     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-                               OS%dirs%restart_output_dir)
-     if (OS%use_ice_shelf) then
-        call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
-     endif
-   endif
+  if (BTEST(OS%Restart_control,1)) then
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                      OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                              OS%dirs%restart_output_dir, .true.)
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
+    endif
+  endif
+  if (BTEST(OS%Restart_control,0)) then
+    call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
+                      OS%MOM_CSp%restart_CSp, GV=OS%GV)
+    call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
+                              OS%dirs%restart_output_dir)
+    if (OS%use_ice_shelf) then
+      call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+    endif
+  endif
 
 end subroutine ocean_model_restart
 ! </SUBROUTINE> NAME="ocean_model_restart"
@@ -710,9 +758,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (OS%MOM_CSp%dt_trans > 0.0) call MOM_error(WARNING, "ocean_model_save_restart "//&
-       "called with a non-zero dt_trans.  Additional restart fields are required.")
-   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
+  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+       "with inconsistent dynamics and advective times.  Additional restart fields "//&
+       "that have not been coded yet would be required for reproducibility.")
+  if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")
 
@@ -724,21 +773,29 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 
   if (OS%use_ice_shelf) then
-     call  ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
+    call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir)
   endif
 
 end subroutine ocean_model_save_restart
 
 !=======================================================================
 
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
+                                        gas_fields_ocn)
   type(domain2D), intent(in)             :: input_domain
   type(ocean_public_type), intent(inout) :: Ocean_sfc
+  type(diag_ctrl), intent(in)            :: diag
   logical, intent(in), optional          :: maskmap(:,:)
+  type(coupler_1d_bc_type), &
+                 optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes.
+
   integer :: xsz, ysz, layout(2)
   ! ice-ocean-boundary fields are always allocated using absolute indicies
   ! and have no halos.
-  integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
+  integer :: isc, iec, jsc, jec
 
   call mpp_get_layout(input_domain,layout)
   call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
@@ -747,16 +804,15 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
   else
      call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
   endif
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
+  call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
-  allocate ( Ocean_sfc%t_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%s_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%u_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%v_surf (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%sea_lev(isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%area   (isc_bnd:iec_bnd,jsc_bnd:jec_bnd), &
-             Ocean_sfc%frazil (isc_bnd:iec_bnd,jsc_bnd:jec_bnd))
+  allocate ( Ocean_sfc%t_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%s_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%u_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%v_surf (isc:iec,jsc:jec), &
+             Ocean_sfc%sea_lev(isc:iec,jsc:jec), &
+             Ocean_sfc%area   (isc:iec,jsc:jec), &
+             Ocean_sfc%frazil (isc:iec,jsc:jec))
 
   Ocean_sfc%t_surf  = 0.0  ! time averaged sst (Kelvin) passed to atmosphere/ice model
   Ocean_sfc%s_surf  = 0.0  ! time averaged sss (psu) passed to atmosphere/ice models
@@ -765,13 +821,20 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, maskmap)
   Ocean_sfc%sea_lev = 0.0  ! time averaged thickness of top model grid cell (m) plus patm/rho0/grav
   Ocean_sfc%frazil  = 0.0  ! time accumulated frazil (J/m^2) passed to ice model
   Ocean_sfc%area    = 0.0
+  Ocean_sfc%axes    = diag%axesT1%handles !diag axes to be used by coupler tracer flux diagnostics
+
+  if (present(gas_fields_ocn)) then
+    call coupler_type_spawn(gas_fields_ocn, Ocean_sfc%fields, (/isc,isc,iec,iec/), &
+                              (/jsc,jsc,jec,jec/), suffix = '_ocn', as_needed=.true.)
+  endif
 
 end subroutine initialize_ocean_public_type
 
-subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm, press_to_z)
+subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
+                                       patm, press_to_z)
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc
-  type(ocean_grid_type),   intent(inout) :: G
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   logical,                 intent(in)    :: use_conT_absS
   real,          optional, intent(in)    :: patm(:,:)
   real,          optional, intent(in)    :: press_to_z
@@ -843,8 +906,16 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm,
       "Ocean_sfc%stagger has the unrecognized value of "//trim(val_str))
   endif
 
-  if (.not.associated(state%tr_fields,Ocean_sfc%fields)) &
-    call MOM_error(FATAL,'state%tr_fields is not pointing to Ocean_sfc%fields')
+  if (coupler_type_initialized(state%tr_fields)) then
+    if (.not.coupler_type_initialized(Ocean_sfc%fields)) then
+      call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
+               "Ocean_sfc%fields has not been initialized.")
+!      call coupler_type_spawn(state%tr_fields, Ocean_sfc%fields, &
+!                              (/isc_bnd,isc_bnd,iec_bnd,iec_bnd/), &
+!                              (/jsc_bnd,jsc_bnd,jec_bnd,jec_bnd/) )
+    endif
+    call coupler_type_copy_data(state%tr_fields, Ocean_sfc%fields)
+  endif
 
 end subroutine convert_state_to_ocean_type
 
@@ -863,80 +934,42 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   type(ocean_state_type),  pointer       :: OS
   type(ocean_public_type), intent(inout) :: Ocean_sfc
 
+  integer :: is, ie, js, je
+
+  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
+  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+                          (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
+
   call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+                                   OS%MOM_CSp%use_conT_absS)
 
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
 
-!   I have no idea what the following subroutine was intended to do, but it
-! appears to be necessary for compiling the Memphis coupled model.  In the MOM
-! version, it makes a call to something in the "OCEAN_TPM_MOD_FLUX_INIT".  I
-! believe that the equivalent calls are already taken care of inside of
-! MOM_initialize, and given that it has no arguments, in the MOM paradigm,
-! it can do nothing. I think that it should be elminated.  -RWH
+!> ocean_model_flux_init is used to initialize properties of the air-sea fluxes
+!! as determined by various run-time parameters.  It can be called from
+!! non-ocean PEs, or PEs that have not yet been initialzed, and it can safely
+!! be called multiple times.
+subroutine ocean_model_flux_init(OS, verbosity)
+  type(ocean_state_type), optional, pointer :: OS  !< An optional pointer to the ocean state,
+                                             !! used to figure out if this is an ocean PE that
+                                             !! has already been initialized.
+  integer, optional, intent(in) :: verbosity !< A 0-9 integer indicating a level of verbosity.
 
-! UPDATE May, 8 2007
-! added aof_set_couple_flux function calls to this routine. These calls
-! are only made by non Ocean PEs and only when CFCs are being used (though
-! this condition may expand. These calls are normally done during
-! ocean_model_init. The problem is that they are only done by Ocean PEs. All
-! processors need to make this call in order to get the number of ocean/atmos
-! fluxes correct in the coupler framework.
-! The trick now is to let the atmos pes know when there is no CFCs and not
-! to call aof_set_coupler_flux
-!WGA
+  logical :: OS_is_set
+  integer :: verbose
 
-subroutine ocean_model_flux_init(OS)
-  type(ocean_state_type),  pointer :: OS
-  integer :: dummy
-  character(len=128) :: default_ice_restart_file, default_ocean_restart_file
-  character(len=40)  :: mod = "ocean_model_flux_init"  ! This module's name.
+  OS_is_set = .false. ; if (present(OS)) OS_is_set = associated(OS)
 
-  type(param_file_type) :: param_file
-  type(directories) :: dirs_tmp  ! A structure containing several relevant directory paths.
-  logical :: use_OCMIP_CFCs, use_MOM_generic_tracer
+  ! Use this to control the verbosity of output; consider rethinking this logic later.
+  verbose = 5 ; if (OS_is_set) verbose = 3
+  if (present(verbosity)) verbose = verbosity
 
-  call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
-
-  call get_param(param_file, mod, "USE_OCMIP2_CFC", use_OCMIP_CFCs, &
-                 default=.false.)
-  call get_param(param_file, mod, "USE_generic_tracer", use_MOM_generic_tracer,&
-                 default=.false.)
-
-  call close_param_file(param_file, quiet_close=.true.)
-
-  if(.not.associated(OS)) then
-    if (use_OCMIP_CFCs)then
-      default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
-      default_ocean_restart_file = 'ocmip2_cfc.res.nc'
-
-      dummy = aof_set_coupler_flux('cfc_11_flux', &
-        flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-        param = (/ 9.36e-07, 9.7561e-06 /), &
-        ice_restart_file = default_ice_restart_file, &
-        ocean_restart_file = default_ocean_restart_file,  &
-        caller = "register_OCMIP2_CFC")
-      dummy = aof_set_coupler_flux('cfc_12_flux', &
-        flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-        param = (/ 9.36e-07, 9.7561e-06 /), &
-        ice_restart_file = default_ice_restart_file, &
-        ocean_restart_file = default_ocean_restart_file, &
-        caller = "register_OCMIP2_CFC")
-    endif
-  endif
-
-  if (use_MOM_generic_tracer) then
-#ifdef _USE_GENERIC_TRACER
-    call MOM_generic_flux_init
-#else
-    call MOM_error(FATAL, &
-       "call_tracer_register: use_MOM_generic_tracer=.true. BUT not compiled with _USE_GENERIC_TRACER")
-#endif
-  endif
+  call call_tracer_flux_init(verbosity=verbose)
 
 end subroutine ocean_model_flux_init
 
@@ -1084,17 +1117,9 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
     write(outunit,100) 'ocean%sea_lev  ',mpp_chksum(ocn%sea_lev)
     write(outunit,100) 'ocean%frazil   ',mpp_chksum(ocn%frazil )
 
-    do n = 1, ocn%fields%num_bcs  !{
-       do m = 1, ocn%fields%bc(n)%num_fields  !{
-          write(outunit,101) 'ocean%',trim(ocn%fields%bc(n)%name), &
-               trim(ocn%fields%bc(n)%field(m)%name), &
-               mpp_chksum(ocn%fields%bc(n)%field(m)%values)
-       enddo  !} m
-    enddo  !} n
-101 FORMAT("   CHECKSUM::",A6,a,'%',a," = ",Z20)
-
-
+    call coupler_type_write_chksums(ocn%fields, outunit, 'ocean%')
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
+
 end subroutine ocean_public_type_chksum
 
 end module ocean_model_mod

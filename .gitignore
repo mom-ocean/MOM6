@@ -1,8 +1,5 @@
 # Ignore vim and emacs files
 *.swp
 *~
-# For locally install doxygen/
-doxygen
-doxygen.log
-# For locally generated html /
 html
+*.log

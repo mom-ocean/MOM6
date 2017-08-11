@@ -74,7 +74,7 @@ program MOM_main
   character(len=4), parameter :: vers_num = 'v2.0'
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_main (MOM_sum_driver)" ! This module's name.
+  character(len=40)  :: mdl = "MOM_main (MOM_sum_driver)" ! This module's name.
   character(len=200) :: mesg
 
   !#######################################################################
@@ -183,9 +183,9 @@ program MOM_main
 contains
 
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
-  type(ocean_grid_type), intent(in)             :: G
+  type(ocean_grid_type), intent(in)             :: G    !< The ocean's grid structure
   real, intent(out), dimension(SZI_(G),SZJ_(G)) :: D
-  type(param_file_type), intent(in)             :: param_file
+  type(param_file_type), intent(in)             :: param_file !< A structure to parse for run-time parameters
   real,                  intent(in)             :: max_depth
 ! Arguments: D          - the bottom depth in m. Intent out.
 !  (in)      G          - The ocean's grid structure.
@@ -200,15 +200,15 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   real :: x, y
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "benchmark_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "benchmark_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call MOM_mesg("  benchmark_initialization.F90, benchmark_initialize_topography: setting topography", 5)
 
-  call log_version(param_file, mod, version)
-  call get_param(param_file, mod, "MINIMUM_DEPTH", min_depth, &
+  call log_version(param_file, mdl, version)
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
 
   PI = 4.0*atan(1.0)

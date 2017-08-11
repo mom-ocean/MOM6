@@ -1,51 +1,7 @@
-!> The module calculates interface heights, including free surface height.
+!> Functions for calculating interface heights, including free surface height.
 module MOM_interface_heights
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
-
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, February 2001                                  *
-!*                                                                     *
-!*    The subroutines here calculate the heights of interfaces in a    *
-!*  way that is consistent with the calculations in the pressure       *
-!*  gradient acceleration calculation.  In a Boussinseq model this is  *
-!*  pretty simple vertical sum, but in a non-Boussinesq model it uses  *
-!*  integrals of the equation of state.                                *
-!*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, bathyT                                *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : log_version
@@ -60,42 +16,38 @@ implicit none ; private
 
 public find_eta
 
+!> Calculates the heights of sruface or all interfaces from layer thicknesses.
 interface find_eta
   module procedure find_eta_2d, find_eta_3d
 end interface find_eta
 
 contains
 
+!> Calculates the heights of all interfaces between layers, using the appropriate
+!! form for consistency with the calculation of the pressure gradient forces.
+!! Additionally, these height may be dilated for consistency with the
+!! corresponding time-average quantity from the barotropic calculation.
 subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
-  type(ocean_grid_type),                      intent(in)  :: G
-  type(verticalGrid_type),                    intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h
-  type(thermo_var_ptrs),                      intent(in)  :: tv
-  real,                                       intent(in)  :: G_Earth
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
-  integer,                          optional, intent(in)  :: halo_size
-
-!   This subroutine determines the heights of all interfaces between layers,
-! using the appropriate form for consistency with the calculation of the
-! pressure gradient forces.  Additionally, these height may be dilated for
-! consistency with the corresponding time-average quantity from the barotropic
-! calculation.
-
-! Arguments:
-!  (in)      h       - layer thickness H (meter or kg/m2)
-!  (in)      tv      - structure pointing to thermodynamic variables
-!  (in)      G_Earth - Earth gravitational acceleration (m/s2)
-!  (in)      G       - ocean grid structure
-!  (in)      GV      - The ocean's vertical grid structure.
-!  (out)     eta     - layer interface heights (meter)
-!  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
-!                      free surface height (Boussinesq) or total water column
-!                      mass per unit aread (non-Boussinesq).  This is used to
-!                      dilate the layer thicknesses when calculating interface
-!                      heights, in H (m or kg m-2).
-! (in,opt) halo_size - width of halo points on which to calculate eta
-
+  type(ocean_grid_type),                      intent(in)  :: G         !< The ocean's grid
+                                                                       !! structure.
+  type(verticalGrid_type),                    intent(in)  :: GV        !< The ocean's vertical
+                                                                       !! grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h         !< Layer thicknesses, in H
+                                                                       !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                      intent(in)  :: tv        !< A structure pointing to
+                                                                       !! various thermodynamic
+                                                                       !! variables.
+  real,                                       intent(in)  :: G_Earth   !< Earth gravitational
+                                                                       !! acceleration (m/s2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: eta       !< layer interface heights
+                                                                       !! (meter).
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt    !< optional barotropic
+             !! variable that gives the "correct" free surface height (Boussinesq) or total water
+             !! column mass per unit area (non-Boussinesq).  This is used to dilate the layer.
+             !! thicknesses when calculating interfaceheights, in H (m or kg m-2).
+  integer,                          optional, intent(in)  :: halo_size !< width of halo points on
+                                                                       !! which to calculate eta.
+  ! Local variables
   real :: p(SZI_(G),SZJ_(G),SZK_(G)+1)
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(G)) ! The change in geopotential height
                                           ! across a layer, in m2 s-2.
@@ -184,34 +136,30 @@ subroutine find_eta_3d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
 
 end subroutine find_eta_3d
 
-
+!> Calculates the free surface height, using the appropriate form for consistency
+!! with the calculation of the pressure gradient forces.  Additionally, the sea
+!! surface height may be adjusted for consistency with the corresponding
+!! time-average quantity from the barotropic calculation.
 subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
-  type(ocean_grid_type),                      intent(in)  :: G
-  type(verticalGrid_type),                    intent(in)  :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h
-  type(thermo_var_ptrs),                      intent(in)  :: tv
-  real,                                       intent(in)  :: G_Earth
-  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt
-  integer,                          optional, intent(in)  :: halo_size
-
-!   This subroutine determines the free surface height, using the appropriate
-! form for consistency with the calculation of the pressure gradient forces.
-! Additionally, the sea surface height may be adjusted for consistency with the
-! corresponding time-average quantity from the barotropic calculation.
-
-! Arguments:
-!  (in)       h      - layer thickness (meter or kg/m2)
-!  (in)      tv      - structure pointing to various thermodynamic variables
-!  (in)      G_Earth - Earth gravitational acceleration (m/s2)
-!  (in)      G       - ocean grid structure
-!  (in)      GV      - The ocean's vertical grid structure.
-!  (out)     eta     - free surface height relative to mean sea level (z=0) (m)
-!  (in,opt)  eta_bt  - optional barotropic variable that gives the "correct"
-!                      free surface height (Boussinesq) or total water column
-!                      mass per unit aread (non-Boussinesq), in H (m or kg m-2)
-!  (in,opt)  halo_size - width of halo points on which to calculate eta
-
+  type(ocean_grid_type),                      intent(in)  :: G        !< The ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV       !< The ocean's vertical grid
+                                                                      !! structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h        !< Layer thicknesses, in H
+                                                                      !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                      intent(in)  :: tv       !< A structure pointing to
+                                                                      !! various thermodynamic
+                                                                      !! variables.
+  real,                                       intent(in)  :: G_Earth  !< Earth gravitational
+                                                                      !! acceleration (m/s2).
+  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: eta      !< free surface height
+                                                                      !! relative to mean sea
+                                                                      !! level (z=0) (m).
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)  :: eta_bt   !< optional barotropic
+                   !! variable that gives the "correct" free surface height (Boussinesq) or total
+                   !! water column mass per unit area (non-Boussinesq), in H (m or kg m-2).
+  integer,                          optional, intent(in)  :: halo_size !< width of halo points on
+                                                                       !! which to calculate eta.
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: &
     p     ! The pressure in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -270,7 +218,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
       enddo ; enddo ; enddo
     endif
     if (present(eta_bt)) then
-      !   Dilate the water column to agree with the the time-averaged column
+      !   Dilate the water column to agree with the time-averaged column
       ! mass from the barotropic solution.
 !$OMP do
       do j=js,je

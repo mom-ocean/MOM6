@@ -4,7 +4,7 @@ module MOM_fixed_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_debugging, only : hchksum, qchksum, uchksum, vchksum
+use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
@@ -25,14 +25,20 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
+
 use user_initialization, only : user_initialize_topography
 use DOME_initialization, only : DOME_initialize_topography
 use ISOMIP_initialization, only : ISOMIP_initialize_topography
 use benchmark_initialization, only : benchmark_initialize_topography
+use Neverland_initialization, only : Neverland_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
+use Kelvin_initialization, only : Kelvin_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
+use shelfwave_initialization, only : shelfwave_initialize_topography
+use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
+use dense_water_initialization, only : dense_water_initialize_topography
 
 use netcdf
 
@@ -56,16 +62,16 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   ! Local
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
   character(len=200) :: config
-  character(len=40)  :: mod = "MOM_fixed_initialization" ! This module's name.
+  character(len=40)  :: mdl = "MOM_fixed_initialization" ! This module's name.
   logical :: debug
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 
   call callTree_enter("MOM_initialize_fixed(), MOM_fixed_initialization.F90")
-  call log_version(PF, mod, version, "")
-  call get_param(PF, mod, "DEBUG", debug, default=.false.)
+  call log_version(PF, mdl, version, "")
+  call get_param(PF, mdl, "DEBUG", debug, default=.false.)
 
-  call get_param(PF, mod, "INPUTDIR", inputdir, &
+  call get_param(PF, mdl, "INPUTDIR", inputdir, &
          "The directory in which input files are found.", default=".")
   inputdir = slasher(inputdir)
 
@@ -95,13 +101,13 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
   if (debug) then
     call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
-    call uchksum(G%mask2dCu, 'MOM_initialize_fixed: mask2dCu ', G%HI)
-    call vchksum(G%mask2dCv, 'MOM_initialize_fixed: mask2dCv ', G%HI)
+    call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
+                  G%mask2dCv, G%HI)
     call qchksum(G%mask2dBu, 'MOM_initialize_fixed: mask2dBu ', G%HI)
   endif
 
 ! Modulate geometric scales according to geography.
-  call get_param(PF, mod, "CHANNEL_CONFIG", config, &
+  call get_param(PF, mdl, "CHANNEL_CONFIG", config, &
                  "A parameter that determines which set of channels are \n"//&
                  "restricted to specific  widths.  Options are:\n"//&
                  " \t none - All channels have the grid width.\n"//&
@@ -124,7 +130,7 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
 
 !   This call sets the topography at velocity points.
   if (G%bathymetry_at_vel) then
-    call get_param(PF, mod, "VELOCITY_DEPTH_CONFIG", config, &
+    call get_param(PF, mdl, "VELOCITY_DEPTH_CONFIG", config, &
                    "A string that determines how the topography is set at \n"//&
                    "velocity points. This may be 'min' or 'max'.", &
                    default="max")
@@ -146,6 +152,8 @@ subroutine MOM_initialize_fixed(G, OBC, PF, write_geom, output_dir)
     call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI)
     call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI)
   endif
+
+  call initialize_grid_rotation_angle(G, PF)
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
   call compute_global_grid_integrals(G)
@@ -169,10 +177,10 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
 !  This is a separate subroutine so that it can be made public and shared with
 !  the ice-sheet code or other components.
 ! Set up the bottom depth, G%bathyT either analytically or from file
-  character(len=40)  :: mod = "MOM_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mdl = "MOM_initialize_topography" ! This subroutine's name.
   character(len=200) :: config
 
-  call get_param(PF, mod, "TOPO_CONFIG", config, &
+  call get_param(PF, mdl, "TOPO_CONFIG", config, &
                  "This specifies how bathymetry is specified: \n"//&
                  " \t file - read bathymetric information from the file \n"//&
                  " \t\t specified by (TOPO_FILE).\n"//&
@@ -184,14 +192,19 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t halfpipe - a zonally uniform channel with a half-sine \n"//&
                  " \t\t profile in the meridional direction. \n"//&
                  " \t benchmark - use the benchmark test case topography. \n"//&
+                 " \t Neverland - use the Neverland test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
                  " \t\t DOME sill-overflow test case. \n"//&
                  " \t ISOMIP - use a slope and channel configuration for the \n"//&
                  " \t\t ISOMIP test case. \n"//&
                  " \t DOME2D - use a shelf and slope configuration for the \n"//&
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
+                 " \t Kelvin - flat but with rotated land mask.\n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t shelfwave - exponential slope for shelfwave test case.\n"//&
+                 " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
+                 " \t dense - Denmark Strait-like dense water formation and overflow.\n"//&
                  " \t USER - call a user modified routine.", &
                  fail_if_missing=.true.)
   max_depth = -1.e9; call read_param(PF, "MAXIMUM_DEPTH", max_depth)
@@ -204,20 +217,25 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("DOME");      call DOME_initialize_topography(D, G, PF, max_depth)
     case ("ISOMIP");    call ISOMIP_initialize_topography(D, G, PF, max_depth)
     case ("benchmark"); call benchmark_initialize_topography(D, G, PF, max_depth)
+    case ("Neverland"); call Neverland_initialize_topography(D, G, PF, max_depth)
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
+    case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
+    case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
+    case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
+    case ("dense");     call dense_water_initialize_topography(D, G, PF, max_depth)
     case ("USER");      call user_initialize_topography(D, G, PF, max_depth)
     case default ;      call MOM_error(FATAL,"MOM_initialize_topography: "// &
       "Unrecognized topography setup '"//trim(config)//"'")
   end select
   if (max_depth>0.) then
-    call log_param(PF, mod, "MAXIMUM_DEPTH", max_depth, &
+    call log_param(PF, mdl, "MAXIMUM_DEPTH", max_depth, &
                    "The maximum depth of the ocean.", units="m")
   else
     max_depth = diagnoseMaximumDepth(D,G)
-    call log_param(PF, mod, "!MAXIMUM_DEPTH", max_depth, &
+    call log_param(PF, mdl, "!MAXIMUM_DEPTH", max_depth, &
                    "The (diagnosed) maximum depth of the ocean.", units="m")
   endif
   if (trim(config) .ne. "DOME") then

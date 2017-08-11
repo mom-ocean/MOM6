@@ -331,74 +331,87 @@ character(len=120) function remove_spaces(string)
 end function remove_spaces
 
 !> Returns true if a unit test of string_functions fails.
-logical function string_functions_unit_tests()
+logical function string_functions_unit_tests(verbose)
+  ! Arguments
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  ! Local variables
   integer :: i(5) = (/ -1, 1, 3, 3, 0 /)
   real :: r(8) = (/ 0., 1., -2., 1.3, 3.E-11, 3.E-11, 3.E-11, -5.1E12 /)
-  logical :: fail, verbose
-  verbose = .false.
+  logical :: fail, v
   fail = .false.
+  v = verbose
   write(*,*) '==== MOM_string_functions: string_functions_unit_tests ==='
-  fail = fail .or. localTestS(left_int(-1),'-1')
-  fail = fail .or. localTestS(left_ints(i(:)),'-1, 1, 3, 3, 0')
-  fail = fail .or. localTestS(left_real(0.),'0.0')
-  fail = fail .or. localTestS(left_reals(r(:)),'0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
-  fail = fail .or. localTestS(left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
-  fail = fail .or. localTestS(left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
-  fail = fail .or. localTestS(extractWord("One Two,Three",1),"One")
-  fail = fail .or. localTestS(extractWord("One Two,Three",2),"Two")
-  fail = fail .or. localTestS(extractWord("One Two,Three",3),"Three")
-  fail = fail .or. localTestS(extractWord("One Two,  Three",3),"Three")
-  fail = fail .or. localTestS(extractWord(" One Two,Three",1),"One")
-  fail = fail .or. localTestS(extract_word("One,Two,Three",",",3),"Three")
-  fail = fail .or. localTestS(extract_word("One,Two,Three",",",4),"")
-  fail = fail .or. localTestS(remove_spaces("1 2 3"),"123")
-  fail = fail .or. localTestS(remove_spaces(" 1 2 3"),"123")
-  fail = fail .or. localTestS(remove_spaces("1 2 3 "),"123")
-  fail = fail .or. localTestS(remove_spaces("123"),"123")
-  fail = fail .or. localTestS(remove_spaces(" "),"")
-  fail = fail .or. localTestS(remove_spaces(""),"")
-  fail = fail .or. localTestI(extract_integer("1","",1),1)
-  fail = fail .or. localTestI(extract_integer("1,2,3",",",1),1)
-  fail = fail .or. localTestI(extract_integer("1,2",",",2),2)
-  fail = fail .or. localTestI(extract_integer("1,2",",",3),0)
-  fail = fail .or. localTestI(extract_integer("1,2",",",4,4),4)
-  fail = fail .or. localTestR(extract_real("1.","",1),1.)
-  fail = fail .or. localTestR(extract_real("1.,2.,3.",",",1),1.)
-  fail = fail .or. localTestR(extract_real("1.,2.",",",2),2.)
-  fail = fail .or. localTestR(extract_real("1.,2.",",",3),0.)
-  fail = fail .or. localTestR(extract_real("1.,2.",",",4,4.),4.)
+  fail = fail .or. localTestS(v,left_int(-1),'-1')
+  fail = fail .or. localTestS(v,left_ints(i(:)),'-1, 1, 3, 3, 0')
+  fail = fail .or. localTestS(v,left_real(0.),'0.0')
+  fail = fail .or. localTestS(v,left_reals(r(:)),'0.0, 1.0, -2.0, 1.3, 3*3.0E-11, -5.1E+12')
+  fail = fail .or. localTestS(v,left_reals(r(:),sep=' '),'0.0 1.0 -2.0 1.3 3*3.0E-11 -5.1E+12')
+  fail = fail .or. localTestS(v,left_reals(r(:),sep=','),'0.0,1.0,-2.0,1.3,3*3.0E-11,-5.1E+12')
+  fail = fail .or. localTestS(v,extractWord("One Two,Three",1),"One")
+  fail = fail .or. localTestS(v,extractWord("One Two,Three",2),"Two")
+  fail = fail .or. localTestS(v,extractWord("One Two,Three",3),"Three")
+  fail = fail .or. localTestS(v,extractWord("One Two,  Three",3),"Three")
+  fail = fail .or. localTestS(v,extractWord(" One Two,Three",1),"One")
+  fail = fail .or. localTestS(v,extract_word("One,Two,Three",",",3),"Three")
+  fail = fail .or. localTestS(v,extract_word("One,Two,Three",",",4),"")
+  fail = fail .or. localTestS(v,remove_spaces("1 2 3"),"123")
+  fail = fail .or. localTestS(v,remove_spaces(" 1 2 3"),"123")
+  fail = fail .or. localTestS(v,remove_spaces("1 2 3 "),"123")
+  fail = fail .or. localTestS(v,remove_spaces("123"),"123")
+  fail = fail .or. localTestS(v,remove_spaces(" "),"")
+  fail = fail .or. localTestS(v,remove_spaces(""),"")
+  fail = fail .or. localTestI(v,extract_integer("1","",1),1)
+  fail = fail .or. localTestI(v,extract_integer("1,2,3",",",1),1)
+  fail = fail .or. localTestI(v,extract_integer("1,2",",",2),2)
+  fail = fail .or. localTestI(v,extract_integer("1,2",",",3),0)
+  fail = fail .or. localTestI(v,extract_integer("1,2",",",4,4),4)
+  fail = fail .or. localTestR(v,extract_real("1.","",1),1.)
+  fail = fail .or. localTestR(v,extract_real("1.,2.,3.",",",1),1.)
+  fail = fail .or. localTestR(v,extract_real("1.,2.",",",2),2.)
+  fail = fail .or. localTestR(v,extract_real("1.,2.",",",3),0.)
+  fail = fail .or. localTestR(v,extract_real("1.,2.",",",4,4.),4.)
   if (.not. fail) write(*,*) 'Pass'
-  write(*,*) '=========================================================='
   string_functions_unit_tests = fail
-  contains
-  logical function localTestS(str1,str2)
-    character(len=*) :: str1, str2
-    localTestS=.false.
-    if (trim(str1)/=trim(str2)) localTestS=.true.
-    if (localTestS .or. verbose) then
-      write(*,*) '>'//trim(str1)//'<'
-      if (localTestS) write(*,*) trim(str1),':',trim(str2), '<-- FAIL'
-    endif
-  end function localTestS
-  logical function localTestI(i1,i2)
-    integer :: i1,i2
-    localTestI=.false.
-    if (i1/=i2) localTestI=.true.
-    if (localTestI .or. verbose) then
-      write(*,*) i1,i2
-      if (localTestI) write(*,*) i1,'!=',i2, '<-- FAIL'
-    endif
-  end function localTestI
-  logical function localTestR(r1,r2)
-    real :: r1,r2
-    localTestR=.false.
-    if (r1/=r2) localTestR=.true.
-    if (localTestR .or. verbose) then
-      write(*,*) r1,r2
-      if (localTestR) write(*,*) r1,'!=',r2, '<-- FAIL'
-    endif
-  end function localTestR
 end function string_functions_unit_tests
+
+!> True if str1 does not match str2. False otherwise.
+logical function localTestS(verbose,str1,str2)
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  character(len=*), intent(in) :: str1 !< String
+  character(len=*), intent(in) :: str2 !< String
+  localTestS=.false.
+  if (trim(str1)/=trim(str2)) localTestS=.true.
+  if (localTestS .or. verbose) then
+    write(*,*) '>'//trim(str1)//'<'
+    if (localTestS) write(*,*) trim(str1),':',trim(str2), '<-- FAIL'
+  endif
+end function localTestS
+
+!> True if i1 is not equal to i2. False otherwise.
+logical function localTestI(verbose,i1,i2)
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  integer, intent(in) :: i1 !< Integer
+  integer, intent(in) :: i2 !< Integer
+  localTestI=.false.
+  if (i1/=i2) localTestI=.true.
+  if (localTestI .or. verbose) then
+    write(*,*) i1,i2
+    if (localTestI) write(*,*) i1,'!=',i2, '<-- FAIL'
+  endif
+end function localTestI
+
+!> True if r1 is not equal to r2. False otherwise.
+logical function localTestR(verbose,r1,r2)
+  logical, intent(in) :: verbose !< If true, write results to stdout
+  real, intent(in) :: r1 !< Float
+  real, intent(in) :: r2 !< Float
+  localTestR=.false.
+  if (r1/=r2) localTestR=.true.
+  if (localTestR .or. verbose) then
+    write(*,*) r1,r2
+    if (localTestR) write(*,*) r1,'!=',r2, '<-- FAIL'
+  endif
+end function localTestR
 
 !> Returns a directory name that is terminated with a "/" or "./" if the
 !! argument is an empty string.

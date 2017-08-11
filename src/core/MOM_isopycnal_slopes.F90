@@ -16,20 +16,21 @@ public calc_isoneutral_slopes
 
 contains
 
+!> Calculate isopycnal slopes, and optionally return N2 used in calculation.
 subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
                                   slope_x, slope_y, N2_u, N2_v, halo)
-  type(ocean_grid_type),                       intent(in)    :: G
-  type(verticalGrid_type),                     intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e
-  type(thermo_var_ptrs),                       intent(in)    :: tv
+  type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),    intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),  intent(in)    :: e    !< Interface heights (m)
+  type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
   real,                                        intent(in)    :: dt_kappa_smooth
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: N2_u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: N2_v
-  optional                                                     :: N2_u, N2_v
-  integer, optional,                             intent(in)    :: halo
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: slope_x !< Isopycnal slope in i-direction (nondim)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: slope_y !< Isopycnal slope in j-direction (nondim)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: N2_u !< Brunt-Vaisala frequency squared at u-points (s-2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(inout) :: N2_v !< Brunt-Vaisala frequency squared at u-points (s-2)
+  optional                                                   :: N2_u, N2_v
+  integer, optional,                           intent(in)    :: halo !< Halo width over which to compute
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: &
     T, &          ! The temperature (or density) in C, with the values in
@@ -208,10 +209,10 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
           slope_x(I,j,K) = 0.0
         endif
 
-        if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+        if (present_N2_u) N2_u(I,j,k) = G_Rho0 * drdz * G%mask2dCu(I,j) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * GV%m_to_H
+        slope_x(I,j,K) = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j))
       endif
 
     enddo ! I
@@ -292,10 +293,10 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
           slope_y(i,J,K) = 0.0
         endif
 
-        if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz ! Square of Brunt-Vaisala frequency (s-2)
+        if (present_N2_v) N2_v(i,J,k) = G_Rho0 * drdz * G%mask2dCv(i,J) ! Square of Brunt-Vaisala frequency (s-2)
 
       else ! With .not.use_EOS, the layers are constant density.
-        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * GV%m_to_H
+        slope_y(i,J,K) = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J))
       endif
 
     enddo ! i
@@ -303,32 +304,20 @@ subroutine calc_isoneutral_slopes(G, GV, h, e, tv, dt_kappa_smooth, &
 
 end subroutine calc_isoneutral_slopes
 
+!> Returns tracer arrays (nominally T and S) with massless layers filled with
+!! sensible values, by diffusing vertically with a small but constant diffusivity.
 subroutine vert_fill_TS(h, T_in, S_in, kappa, dt, T_f, S_f, G, GV, halo_here)
-  type(ocean_grid_type),                    intent(in)    :: G
-  type(verticalGrid_type),                  intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: T_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: S_in
-  real,                                     intent(in)    :: kappa
-  real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: T_f
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: S_f
-  integer,                        optional, intent(in)    :: halo_here
-!    This subroutine fills massless layers with sensible values of two
-!*  tracer arrays (nominally temperature and salinity) by diffusing
-!*  vertically with a (small?) constant diffusivity.
-
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (in)      T_in - The input temperature, in K.
-!  (in)      S_in - The input salinity, in psu.
-!  (in)      kappa - The diapycnal diffusivity, in m2 s-1.
-!  (in)      dt - Time increment in s.
-!  (out)     T_f - The filled temperature, in K.
-!  (out)     S_f - The filled salinity, in psu.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in,opt)  halo_here - the number of halo points to work on, 0 by default.
-
+  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: T_in !< Temperature (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: S_in !< Salinity (psu)
+  real,                                     intent(in)    :: kappa !< A vertical diffusivity to use for smoothing (m2 s-1)
+  real,                                     intent(in)    :: dt   !< The time increment, in s.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: T_f  !< Filled temperature (deg C)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: S_f  !< Filed salinity (psu)
+  integer,                        optional, intent(in)    :: halo_here !< Halo width over which to compute
+  ! Local variables
   real :: ent(SZI_(G),SZK_(G)+1)   ! The diffusive entrainment (kappa*dt)/dz
                                    ! between layers in a timestep in m or kg m-2.
   real :: b1(SZI_(G)), d1(SZI_(G)) ! b1, c1, and d1 are variables used by the

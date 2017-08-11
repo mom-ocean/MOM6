@@ -180,7 +180,7 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day_start
   type(time_type),       intent(in)    :: day_interval
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 ! This subroutine calls other subroutines in this file to get surface forcing fields.
@@ -254,7 +254,6 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
     endif
   endif
   if (associated(CS%tracer_flow_CSp)) then
-    if (.not.associated(fluxes%tr_fluxes)) allocate(fluxes%tr_fluxes)
     call call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS%tracer_flow_CSp)
   endif
 
@@ -268,7 +267,7 @@ end subroutine set_forcing
 
 subroutine buoyancy_forcing_allocate(fluxes, G, CS)
   type(forcing),         intent(inout) :: fluxes
-  type(ocean_grid_type), intent(in)    :: G
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine allocates arrays for buoyancy forcing.
@@ -415,7 +414,7 @@ subroutine wind_forcing_zero(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! subroutine sets the surface wind stresses to zero
@@ -468,7 +467,7 @@ subroutine wind_forcing_2gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to double gyre.
@@ -512,7 +511,7 @@ subroutine wind_forcing_1gyre(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to single gyre.
@@ -555,7 +554,7 @@ subroutine wind_forcing_gyres(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(in)    :: G
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses according to gyres.
@@ -608,7 +607,7 @@ subroutine wind_forcing_from_file(state, fluxes, day, G, CS)
   type(surface),            intent(inout) :: state
   type(forcing),            intent(inout) :: fluxes
   type(time_type),          intent(in)    :: day
-  type(ocean_grid_type),    intent(inout) :: G
+  type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer       :: CS
 
 ! This subroutine sets the surface wind stresses.
@@ -715,8 +714,9 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(inout) :: G
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -918,8 +918,9 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !  This subroutine specifies the current surface fluxes of buoyancy
@@ -975,8 +976,9 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
   type(surface),         intent(inout) :: state
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
-  real,                  intent(in)    :: dt
-  type(ocean_grid_type), intent(in)    :: G
+  real,                  intent(in)    :: dt   !< The amount of time over which
+                                               !! the fluxes apply, in s
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   type(surface_forcing_CS), pointer    :: CS
 
 !    This subroutine specifies the current surface fluxes of buoyancy
@@ -1067,7 +1069,7 @@ end subroutine buoyancy_forcing_linear
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
                                 filename_suffix)
   type(surface_forcing_CS),   pointer       :: CS
-  type(ocean_grid_type),      intent(inout) :: G
+  type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure
   type(time_type),            intent(in)    :: Time
   character(len=*),           intent(in)    :: directory
   logical,          optional, intent(in)    :: time_stamped
@@ -1091,8 +1093,8 @@ end subroutine forcing_save_restart
 
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type),           intent(in) :: Time
-  type(ocean_grid_type),     intent(in) :: G
-  type(param_file_type),     intent(in) :: param_file
+  type(ocean_grid_type),     intent(in) :: G    !< The ocean's grid structure
+  type(param_file_type),     intent(in) :: param_file !< A structure to parse for run-time parameters
   type(diag_ctrl), target,   intent(in) :: diag
   type(surface_forcing_CS),  pointer    :: CS
   type(tracer_flow_control_CS), pointer :: tracer_flow_CSp
@@ -1110,7 +1112,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   type(time_type)    :: Time_frc
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_surface_forcing" ! This module's name.
+  character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=60)  :: axis_units
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
 
@@ -1128,128 +1130,128 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "INPUTDIR", CS%inputdir, &
+  call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, &
                  "The directory in which all input files are found.", &
                  default=".")
   CS%inputdir = slasher(CS%inputdir)
 
-  call get_param(param_file, mod, "ADIABATIC", CS%adiabatic, &
+  call get_param(param_file, mdl, "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
-  call get_param(param_file, mod, "VARIABLE_WINDS", CS%variable_winds, &
+  call get_param(param_file, mdl, "VARIABLE_WINDS", CS%variable_winds, &
                  "If true, the winds vary in time after the initialization.", &
                  default=.true.)
-  call get_param(param_file, mod, "VARIABLE_BUOYFORCE", CS%variable_buoyforce, &
+  call get_param(param_file, mdl, "VARIABLE_BUOYFORCE", CS%variable_buoyforce, &
                  "If true, the buoyancy forcing varies in time after the \n"//&
                  "initialization of the model.", default=.true.)
 
-  call get_param(param_file, mod, "BUOY_CONFIG", CS%buoy_config, &
+  call get_param(param_file, mdl, "BUOY_CONFIG", CS%buoy_config, &
                  "The character string that indicates how buoyancy forcing \n"//&
                  "is specified. Valid options include (file), (zero), \n"//&
                  "(linear), (USER), and (NONE).", fail_if_missing=.true.)
   if (trim(CS%buoy_config) == "file") then
-    call get_param(param_file, mod, "LONGWAVEDOWN_FILE", CS%longwavedown_file, &
+    call get_param(param_file, mdl, "LONGWAVEDOWN_FILE", CS%longwavedown_file, &
                  "The file with the downward longwave heat flux, in \n"//&
                  "variable lwdn_sfc.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "LONGWAVEUP_FILE", CS%longwaveup_file, &
+    call get_param(param_file, mdl, "LONGWAVEUP_FILE", CS%longwaveup_file, &
                  "The file with the upward longwave heat flux, in \n"//&
                  "variable lwup_sfc.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "EVAPORATION_FILE", CS%evaporation_file, &
+    call get_param(param_file, mdl, "EVAPORATION_FILE", CS%evaporation_file, &
                  "The file with the evaporative moisture flux, in \n"//&
                  "variable evap.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
+    call get_param(param_file, mdl, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
                  "The file with the sensible heat flux, in \n"//&
                  "variable shflx.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SHORTWAVEUP_FILE", CS%shortwaveup_file, &
+    call get_param(param_file, mdl, "SHORTWAVEUP_FILE", CS%shortwaveup_file, &
                  "The file with the upward shortwave heat flux.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "SHORTWAVEDOWN_FILE", CS%shortwavedown_file, &
+    call get_param(param_file, mdl, "SHORTWAVEDOWN_FILE", CS%shortwavedown_file, &
                  "The file with the downward shortwave heat flux.", &
                  fail_if_missing=.true.)
-    call get_param(param_file, mod, "SNOW_FILE", CS%snow_file, &
+    call get_param(param_file, mdl, "SNOW_FILE", CS%snow_file, &
                  "The file with the downward frozen precip flux, in \n"//&
                  "variable snow.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "PRECIP_FILE", CS%precip_file, &
+    call get_param(param_file, mdl, "PRECIP_FILE", CS%precip_file, &
                  "The file with the downward total precip flux, in \n"//&
                  "variable precip.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "FRESHDISCHARGE_FILE", CS%freshdischarge_file, &
+    call get_param(param_file, mdl, "FRESHDISCHARGE_FILE", CS%freshdischarge_file, &
                  "The file with the fresh and frozen runoff/calving fluxes, \n"//&
                  "invariables disch_w and disch_s.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SSTRESTORE_FILE", CS%SSTrestore_file, &
+    call get_param(param_file, mdl, "SSTRESTORE_FILE", CS%SSTrestore_file, &
                  "The file with the SST toward which to restore in \n"//&
                  "variable TEMP.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
+    call get_param(param_file, mdl, "SALINITYRESTORE_FILE", CS%salinityrestore_file, &
                  "The file with the surface salinity toward which to \n"//&
                  "restore in variable SALT.", fail_if_missing=.true.)
   endif
-  call get_param(param_file, mod, "WIND_CONFIG", CS%wind_config, &
+  call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing \n"//&
                  "is specified. Valid options include (file), (2gyre), \n"//&
                  "(1gyre), (gyres), (zero), and (USER).", fail_if_missing=.true.)
   if (trim(CS%wind_config) == "file") then
-    call get_param(param_file, mod, "WIND_FILE", CS%wind_file, &
+    call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in \n"//&
                  "variables STRESS_X and STRESS_Y.", fail_if_missing=.true.)
-    call get_param(param_file, mod, "WINDSTRESS_X_VAR",CS%stress_x_var, &
+    call get_param(param_file, mdl, "WINDSTRESS_X_VAR",CS%stress_x_var, &
                  "The name of the x-wind stress variable in WIND_FILE.", &
                  default="STRESS_X")
-    call get_param(param_file, mod, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
+    call get_param(param_file, mdl, "WINDSTRESS_Y_VAR", CS%stress_y_var, &
                  "The name of the y-wind stress variable in WIND_FILE.", &
                  default="STRESS_Y")
-    call get_param(param_file, mod, "WINDSTRESS_STAGGER",CS%wind_stagger, &
+    call get_param(param_file, mdl, "WINDSTRESS_STAGGER",CS%wind_stagger, &
                  "A character indicating how the wind stress components \n"//&
                  "are staggered in WIND_FILE.  This may be A or C for now.", &
                  default="A")
-    call get_param(param_file, mod, "WINDSTRESS_SCALE", CS%wind_scale, &
+    call get_param(param_file, mdl, "WINDSTRESS_SCALE", CS%wind_scale, &
                  "A value by which the wind stresses in WIND_FILE are rescaled.", &
                  default=1.0, units="nondim")
   endif
   if (trim(CS%wind_config) == "gyres") then
-    call get_param(param_file, mod, "TAUX_CONST", CS%gyres_taux_const, &
+    call get_param(param_file, mdl, "TAUX_CONST", CS%gyres_taux_const, &
                  "With the gyres wind_config, the constant offset in the \n"//&
                  "zonal wind stress profile: \n"//&
                  "  A in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_SIN_AMP",CS%gyres_taux_sin_amp, &
+    call get_param(param_file, mdl, "TAUX_SIN_AMP",CS%gyres_taux_sin_amp, &
                  "With the gyres wind_config, the sine amplitude in the \n"//&
                  "zonal wind stress profile: \n"//&
                  "  B in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_COS_AMP",CS%gyres_taux_cos_amp, &
+    call get_param(param_file, mdl, "TAUX_COS_AMP",CS%gyres_taux_cos_amp, &
                  "With the gyres wind_config, the cosine amplitude in \n"//&
                  "the zonal wind stress profile: \n"//&
                  "  C in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="Pa", default=0.0)
-    call get_param(param_file, mod, "TAUX_N_PIS",CS%gyres_taux_n_pis, &
+    call get_param(param_file, mdl, "TAUX_N_PIS",CS%gyres_taux_n_pis, &
                  "With the gyres wind_config, the number of gyres in \n"//&
                  "the zonal wind stress profile: \n"//&
                  "  n in taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L).", &
                  units="nondim", default=0.0)
   endif
-  call get_param(param_file, mod, "SOUTHLAT", CS%south_lat, &
+  call get_param(param_file, mdl, "SOUTHLAT", CS%south_lat, &
                  "The southern latitude of the domain or the equivalent \n"//&
                  "starting value for the y-axis.", units=axis_units, default=0.)
-  call get_param(param_file, mod, "LENLAT", CS%len_lat, &
+  call get_param(param_file, mdl, "LENLAT", CS%len_lat, &
                  "The latitudinal or y-direction length of the domain.", &
                  units=axis_units, fail_if_missing=.true.)
-   call get_param(param_file, mod, "RHO_0", CS%Rho0, &
+   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to \n"//&
                  "calculate accelerations and the mass for conservation \n"//&
                  "properties, or with BOUSSINSEQ false to convert some \n"//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0)
-  call get_param(param_file, mod, "RESTOREBUOY", CS%restorebuoy, &
+  call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back \n"//&
                  "toward some specified surface state with a rate \n"//&
                  "given by FLUXCONST.", default= .false.)
   if (CS%restorebuoy) then
-    call get_param(param_file, mod, "FLUXCONST", CS%Flux_const, &
+    call get_param(param_file, mdl, "FLUXCONST", CS%Flux_const, &
                  "The constant that relates the restoring surface fluxes \n"//&
                  "to the relative surface anomalies (akin to a piston \n"//&
                  "velocity).  Note the non-MKS units.", units="m day-1", &
@@ -1257,36 +1259,36 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     ! Convert CS%Flux_const from m day-1 to m s-1.
     CS%Flux_const = CS%Flux_const / 86400.0
     if (trim(CS%buoy_config) == "linear") then
-      call get_param(param_file, mod, "SST_NORTH", CS%T_north, &
+      call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature \n"//&
                  "at the northern end of the domain toward which to \n"//&
                  "to restore.", units="deg C", default=0.0)
-      call get_param(param_file, mod, "SST_SOUTH", CS%T_south, &
+      call get_param(param_file, mdl, "SST_SOUTH", CS%T_south, &
                  "With buoy_config linear, the sea surface temperature \n"//&
                  "at the southern end of the domain toward which to \n"//&
                  "to restore.", units="deg C", default=0.0)
-      call get_param(param_file, mod, "SSS_NORTH", CS%S_north, &
+      call get_param(param_file, mdl, "SSS_NORTH", CS%S_north, &
                  "With buoy_config linear, the sea surface salinity \n"//&
                  "at the northern end of the domain toward which to \n"//&
                  "to restore.", units="PSU", default=35.0)
-      call get_param(param_file, mod, "SSS_SOUTH", CS%S_south, &
+      call get_param(param_file, mdl, "SSS_SOUTH", CS%S_south, &
                  "With buoy_config linear, the sea surface salinity \n"//&
                  "at the southern end of the domain toward which to \n"//&
                  "to restore.", units="PSU", default=35.0)
     endif
   endif
-  call get_param(param_file, mod, "G_EARTH", CS%G_Earth, &
+  call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default = 9.80)
 
-  call get_param(param_file, mod, "GUST_CONST", CS%gust_const, &
+  call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", units="Pa", &
                  default=0.02)
-  call get_param(param_file, mod, "READ_GUST_2D", CS%read_gust_2d, &
+  call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from \n"//&
                  "an input file", default=.false.)
   if (CS%read_gust_2d) then
-    call get_param(param_file, mod, "GUST_2D_FILE", gust_file, &
+    call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in \n"//&
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed) ; CS%gust(:,:) = 0.0
@@ -1294,7 +1296,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call read_data(filename,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
                    timelevel=1) ! units should be Pa
   endif
-  call get_param(param_file, mod, "AXIS_UNITS", axis_units, default="degrees")
+  call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
 !  All parameter settings are now known.
 

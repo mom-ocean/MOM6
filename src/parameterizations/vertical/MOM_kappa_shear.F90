@@ -62,7 +62,7 @@ implicit none ; private
 
 public Calculate_kappa_shear, kappa_shear_init, kappa_shear_is_used
 
-type, public :: Kappa_shear_CS ! ; private
+type, public :: Kappa_shear_CS ; private
   real    :: RiNo_crit       ! The critical shear Richardson number for
                              ! shear-entrainment. The theoretical value is 0.25.
                              ! The values found by Jackson et al. are 0.25-0.35.
@@ -109,28 +109,50 @@ type, public :: Kappa_shear_CS ! ; private
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
-  character(len=40)  :: mod = "MOM_kappa_shear"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_kappa_shear"  ! This module's name.
 
 #undef  DEBUG
 #undef  ADD_DIAGNOSTICS
 
 contains
 
+!> Subroutine for calculating diffusivity and TKE
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  type(ocean_grid_type),                      intent(in)    :: G
-  type(verticalGrid_type),                    intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h
-  type(thermo_var_ptrs),                      intent(in)    :: tv
-  real, dimension(:,:),                       pointer       :: p_surf
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: tke_io
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kv_io ! really intent(out)
-  real,                                       intent(in)    :: dt
-  type(Kappa_shear_CS),                       pointer       :: CS
-  logical,                          optional, intent(in)    :: initialize_all
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
+                                                   !! available thermodynamic fields. Absent fields
+                                                   !! have NULL ptrs.
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
+                                                   !! (or NULL).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
+                                                   !! (not layer!) in m2 s-1.  Initially this is the
+                                                   !! value from the previous timestep, which may
+                                                   !! accelerate the iteration toward convergence.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
+                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! Initially this is the value from the previous
+                                                   !! timestep, which may accelerate the iteration
+                                                   !! toward convergence.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: kv_io  !< The vertical viscosity at each interface
+                                                   !! (not layer!) in m2 s-1. This discards any
+                                                   !! previous value i.e. intent(out) and simply
+                                                   !! sets Kv = Prandtl * Kd_turb
+  real,                    intent(in)    :: dt     !< Time increment, in s.
+  type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
+                                                   !! call to kappa_shear_init.
+  logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
+                                                   !! value of kappa is used to start the iterations
 !
 ! ----------------------------------------------
 ! Subroutine for calculating diffusivity and TKE
@@ -786,7 +808,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
             ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
             wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
           enddo
-          ! Use Adcroft's 1/0=0 convention.
+          ! Use the 1/0=0 convention.
           I_wt_tot = 0.0 ; if (wt_tot > 0.0) I_wt_tot = 1.0/wt_tot
 
           do K=1,nzc+1
@@ -906,17 +928,38 @@ end subroutine Calculate_kappa_shear
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
                                      u, v, T, Sal, N2, S2, ks_int, ke_int)
-!   This subroutine calculates the velocities, temperature and salinity that
-! the water column will have after mixing for dt with diffusivities kappa.  It
-! may also calculate the projected buoyancy frequency and shear.
-  integer,               intent(in)  :: nz
-  real, dimension(nz+1), intent(in)  :: kappa
-  real, dimension(nz),   intent(in)  :: u0, v0, T0, S0, dz
-  real, dimension(nz+1), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
-  real,                  intent(in)  :: dt
-  real, dimension(nz),   intent(inout) :: u, v, T, Sal
-  real, dimension(nz+1), optional, intent(inout) :: N2, S2
-  integer, optional,     intent(in)  :: ks_int, ke_int
+!<   This subroutine calculates the velocities, temperature and salinity that
+!! the water column will have after mixing for dt with diffusivities kappa.  It
+!! may also calculate the projected buoyancy frequency and shear.
+  integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
+                                              !! layers?).
+  real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
+                                              !! in m2 s-1.
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity, in m s-1.
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity, in m s-1.
+  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature, in C.
+  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity, in PSU.
+  real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers, in m.
+  real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses,
+                                              !! in m-1.
+  real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
+                                              !! temperature, in m s-2 C-1.
+  real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
+                                              !! salinity, in m s-2 PSU-1.
+  real,                  intent(in)    :: dt  !< The time step in s.
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt, in m s-1.
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt, in m s-1.
+  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt, in C.
+  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt, in PSU.
+  real, dimension(nz+1), optional, &
+                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces,
+                                              !! in s-2.
+  real, dimension(nz+1), optional, &
+                         intent(inout) :: S2  !< The squared shear at interfaces, in s-2.
+  integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
+  integer, optional,     intent(in)    :: ke_int !< The bottommost k-index with a non-zero
+                                              !! diffusivity.
+
   ! Arguments: kappa - The diapycnal diffusivity at interfaces, in m2 s-1.
   !  (in)      Sh - The shear at interfaces, in s-1.
   !  (in)      u0 - The initial zonal velocity, in m s-1.
@@ -1031,17 +1074,34 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
 
 end subroutine calculate_projected_state
 
+!> This subroutine calculates new, consistent estimates of TKE and kappa.
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                           nz, CS, K_Q, tke, kappa, kappa_src, local_src)
-  integer,               intent(in)  :: nz
-  real, dimension(nz+1), intent(in)  :: N2, S2, kappa_in, dz_Int, I_L2_bdry
-  real, dimension(nz),   intent(in)  :: Idz
-  real,                  intent(in)  :: f2
-  type(Kappa_shear_CS),  pointer     :: CS
-  real, dimension(nz+1), intent(inout) :: K_Q
-  real, dimension(nz+1), intent(out) :: tke, kappa
-  real, dimension(nz+1), optional, intent(out) :: kappa_src
-  real, dimension(nz+1), optional, intent(out) :: local_src
+  integer,               intent(in)    :: nz  !< The number of layers to work on.
+  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces,
+                                              !! in s-2.
+  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces, in s-2.
+  real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity,
+                                              !! in m2 s-1.
+  real, dimension(nz+1), intent(in)    :: dz_Int    !< The thicknesses associated with interfaces,
+                                              !! in m.
+  real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
+                                              !! boundaries, m2.
+  real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers, in m-1.
+  real,                  intent(in)    :: f2  !< The squared Coriolis parameter, in s-2.
+  type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
+  real, dimension(nz+1), intent(inout) :: K_Q !< The shear-driven diapycnal diffusivity divided by
+                                              !! the turbulent kinetic energy per unit mass at
+                                              !! interfaces, in s.
+  real, dimension(nz+1), intent(out)   :: tke !< The turbulent kinetic energy per unit mass at
+                                              !! interfaces, in units of m2 s-2.
+  real, dimension(nz+1), intent(out)   :: kappa     !< The diapycnal diffusivity at interfaces,
+                                              !! in m2 s-1.
+  real, dimension(nz+1), optional, &
+                         intent(out)   :: kappa_src !< The source term for kappa, in s-1.
+  real, dimension(nz+1), optional, &
+                         intent(out)   :: local_src !< The sum of all local sources for kappa,
+                                              !! in s-1.
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
 ! Arguments: N2 - The buoyancy frequency squared at interfaces, in s-2.
@@ -1643,12 +1703,15 @@ end subroutine find_kappa_tke
 
 
 logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
-  type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G
-  type(verticalGrid_type), intent(in)    :: GV
-  type(param_file_type),   intent(in)    :: param_file
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(Kappa_shear_CS),    pointer       :: CS
+  type(time_type),         intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(Kappa_shear_CS),    pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -1680,77 +1743,77 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   ! subgridscale inhomogeneity into account.
 
 ! Set default, read and log parameters
-  call log_version(param_file, mod, version, &
+  call log_version(param_file, mdl, version, &
     "Parameterization of shear-driven turbulence following Jackson, Hallberg and Legg, JPO 2008")
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_init, &
+  call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_init, &
                  "If true, use the Jackson-Hallberg-Legg (JPO 2008) \n"//&
                  "shear mixing parameterization.", default=.false.)
-  call get_param(param_file, mod, "RINO_CRIT", CS%RiNo_crit, &
+  call get_param(param_file, mdl, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25)
-  call get_param(param_file, mod, "SHEARMIX_RATE", CS%Shearmix_rate, &
+  call get_param(param_file, mdl, "SHEARMIX_RATE", CS%Shearmix_rate, &
                  "A nondimensional rate scale for shear-driven entrainment.\n"//&
                  "Jackson et al find values in the range of 0.085-0.089.", &
                  units="nondim", default=0.089)
-  call get_param(param_file, mod, "MAX_RINO_IT", CS%max_RiNo_it, &
+  call get_param(param_file, mdl, "MAX_RINO_IT", CS%max_RiNo_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the Richardson number driven mixing.", &
                  units="nondim", default=50)
-  call get_param(param_file, mod, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
-  call get_param(param_file, mod, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
+  call get_param(param_file, mdl, "KD", KD_normal, default=1.0e-7, do_not_log=.true.)
+  call get_param(param_file, mdl, "KD_KAPPA_SHEAR_0", CS%kappa_0, &
                  "The background diffusivity that is used to smooth the \n"//&
                  "density and shear profiles before solving for the \n"//&
                  "diffusivities. Defaults to value of KD.", units="m2 s-1", default=KD_normal)
-  call get_param(param_file, mod, "FRI_CURVATURE", CS%FRi_curvature, &
+  call get_param(param_file, mdl, "FRI_CURVATURE", CS%FRi_curvature, &
                  "The nondimensional curvature of the function of the \n"//&
                  "Richardson number in the kappa source term in the \n"//&
                  "Jackson et al. scheme.", units="nondim", default=-0.97)
-  call get_param(param_file, mod, "TKE_N_DECAY_CONST", CS%C_N, &
+  call get_param(param_file, mdl, "TKE_N_DECAY_CONST", CS%C_N, &
                  "The coefficient for the decay of TKE due to \n"//&
                  "stratification (i.e. proportional to N*tke). \n"//&
                  "The values found by Jackson et al. are 0.24-0.28.", &
                  units="nondim", default=0.24)
-!  call get_param(param_file, mod, "LAYER_KAPPA_STAGGER", CS%layer_stagger, &
+!  call get_param(param_file, mdl, "LAYER_KAPPA_STAGGER", CS%layer_stagger, &
 !                 default=.false.)
-  call get_param(param_file, mod, "TKE_SHEAR_DECAY_CONST", CS%C_S, &
+  call get_param(param_file, mdl, "TKE_SHEAR_DECAY_CONST", CS%C_S, &
                  "The coefficient for the decay of TKE due to shear (i.e. \n"//&
                  "proportional to |S|*tke). The values found by Jackson \n"//&
                  "et al. are 0.14-0.12.", units="nondim", default=0.14)
-  call get_param(param_file, mod, "KAPPA_BUOY_SCALE_COEF", CS%lambda, &
+  call get_param(param_file, mdl, "KAPPA_BUOY_SCALE_COEF", CS%lambda, &
                  "The coefficient for the buoyancy length scale in the \n"//&
                  "kappa equation.  The values found by Jackson et al. are \n"//&
                  "in the range of 0.81-0.86.", units="nondim", default=0.82)
-  call get_param(param_file, mod, "KAPPA_N_OVER_S_SCALE_COEF2", CS%lambda2_N_S, &
+  call get_param(param_file, mdl, "KAPPA_N_OVER_S_SCALE_COEF2", CS%lambda2_N_S, &
                  "The square of the ratio of the coefficients of the \n"//&
                  "buoyancy and shear scales in the diffusivity equation, \n"//&
                  "Set this to 0 (the default) to eliminate the shear scale. \n"//&
                  "This is only used if USE_JACKSON_PARAM is true.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mod, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
+  call get_param(param_file, mdl, "KAPPA_SHEAR_TOL_ERR", CS%kappa_tol_err, &
                  "The fractional error in kappa that is tolerated. \n"//&
                  "Iteration stops when changes between subsequent \n"//&
                  "iterations are smaller than this everywhere in a \n"//&
                  "column.  The peak diffusivities usually converge most \n"//&
                  "rapidly, and have much smaller errors than this.", &
                  units="nondim", default=0.1)
-  call get_param(param_file, mod, "TKE_BACKGROUND", CS%TKE_bg, &
+  call get_param(param_file, mdl, "TKE_BACKGROUND", CS%TKE_bg, &
                  "A background level of TKE used in the first iteration \n"//&
                  "of the kappa equation.  TKE_BACKGROUND could be 0.", &
                  units="m2 s-2", default=0.0)
-  call get_param(param_file, mod, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
+  call get_param(param_file, mdl, "KAPPA_SHEAR_ELIM_MASSLESS", CS%eliminate_massless, &
                  "If true, massless layers are merged with neighboring \n"//&
                  "massive layers in this calculation.  The default is \n"//&
                  "true and I can think of no good reason why it should \n"//&
                  "be false. This is only used if USE_JACKSON_PARAM is true.", &
                  default=.true.)
-  call get_param(param_file, mod, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
+  call get_param(param_file, mdl, "MAX_KAPPA_SHEAR_IT", CS%max_KS_it, &
                  "The maximum number of iterations that may be used to \n"//&
                  "estimate the time-averaged diffusivity.", units="nondim", &
                  default=13)
-  call get_param(param_file, mod, "PRANDTL_TURB", CS%Prandtl_turb, &
+  call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear \n"//&
                  "instability.", units="nondim", default=1.0, do_not_log=.true.)
-  call get_param(param_file, mod, "DEBUG_KAPPA_SHEAR", CS%debug, &
+  call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&
                  "be used in single-column mode!", default=.false.)
@@ -1762,7 +1825,7 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
 
   CS%nkml = 1
   if (GV%nkml>0) then
-    call get_param(param_file, mod, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
+    call get_param(param_file, mdl, "KAPPA_SHEAR_MERGE_ML",merge_mixedlayer, &
                  "If true, combine the mixed layers together before \n"//&
                  "solving the kappa-shear equations.", default=.true.)
     if (merge_mixedlayer) CS%nkml = GV%nkml
@@ -1790,8 +1853,8 @@ logical function kappa_shear_is_used(param_file)
 ! Reads the parameter "USE_JACKSON_PARAM" and returns state.
 !   This function allows other modules to know whether this parameterization will
 ! be used without needing to duplicate the log entry.
-  type(param_file_type), intent(in) :: param_file
-  call get_param(param_file, mod, "USE_JACKSON_PARAM", kappa_shear_is_used, &
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
+  call get_param(param_file, mdl, "USE_JACKSON_PARAM", kappa_shear_is_used, &
                  default=.false., do_not_log = .true.)
 end function kappa_shear_is_used
 

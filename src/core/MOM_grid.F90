@@ -437,7 +437,7 @@ logical function isPointInCell(G, i, j, x, y)
 end function isPointInCell
 
 subroutine set_first_direction(G, y_first)
-  type(ocean_grid_type), intent(inout) :: G
+  type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
   integer,               intent(in) :: y_first
 
   G%first_direction = y_first
@@ -578,7 +578,7 @@ end subroutine MOM_grid_end
 !! u-, v- and q- point coordinates are follow same pattern of replacing T with Cu, Cv and Bu respectively.
 !!
 !! Each location also has a 2D mask indicating whether the entire column is land or ocean.
-!! `mask2dT` is 1. is the column is wet or 0. is the T-cell is land.
-!! `mask2dCu` is 1. if both neighboring column are ocean, and 0. if either is land.
+!! `mask2dT` is 1 if the column is wet or 0 if the T-cell is land.
+!! `mask2dCu` is 1 if both neighboring column are ocean, and 0 if either is land.
 
 end module MOM_grid
