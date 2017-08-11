@@ -1075,7 +1075,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
   logical :: same_direction         ! True if searching in the same direction as previous neutral surface
   logical :: refine_pos             ! Use rootfinding to find the true neutral surface position
   real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
-  integer :: lastK_left, lastK_right
+  integer :: lastK_left, lastK_right, maxK_left, maxK_right
   real    :: lastP_left, lastP_right
   real    :: min_bound
   logical, dimension(nk) :: top_connected_l, top_connected_r
@@ -1084,7 +1084,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
 
   top_connected_l(:) = .false. ; top_connected_r(:) = .false.
   bot_connected_l(:) = .false. ; bot_connected_r(:) = .false.
-
+  maxK_left = -1 ; maxK_right = -1
   ! Vectors with all the values of the discontinuous reconstruction.
   ! Dimensions are [number of layers x number of interfaces]. Second dimension = 1 for top interface, = 2 for bottom
 !  real, dimension(nk,2) :: Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
@@ -1253,7 +1253,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
 
     if (debug_this_module)  write(*,'(A,I2,A,F6.2,A,I2,A,F6.2)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
       KoR(k_surface), " PoR:", PoR(k_surface)
-    if (debug_this_module)  write(*,*)
+    maxK_left= MAX(KoL(k_surface), maxK_left)
+    maxK_right= MAX(KoR(k_surface), maxK_right)
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
@@ -1262,17 +1263,27 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
            absolute_position_discontinuous(nk,Pres_l,KoL,PoL,k_surface-1)
       hR = absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface) - &
            absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface-1)
+      ! In the case of a layer being unstably stratified, may get a negative thickness. Set the previous position
+      ! to the current location
+      if (hL < 0.) then
+        if ( (KoL(k_surface)<maxK_left) .and. PoL(k_surface)==1.) then
+          KoL(k_surface) = maxK_left ; PoL(k_surface) = 0.
+        endif
+        PoL(k_surface-1) = PoL(k_surface) ; KoL(k_surface-1) = KoL(k_surface)
+        ! Make sure that the right point across a continuity is chose
+        hL = 0.
+      endif
+      if (hR < 0.) then
+        if ( (KoR(k_surface)<maxK_right) .and. PoR(k_surface)==1.) then
+          KoR(k_surface) = maxK_right ; PoR(k_surface) = 0.
+        endif
+        PoR(k_surface-1) = PoR(k_surface) ; KoR(k_surface-1) = KoR(k_surface)
+        hR = 0.
+      endif
       if ( hL + hR > 0.) then
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean
       else
         hEff(k_surface-1) = 0.
-      endif
-      if ( hEff(k_surface-1) < 0. ) then
-        write (*,*) "KoL(k_surface-1), KoL(k_surface): ", KoL(k_surface-1), KoL(k_surface)
-        write (*,*) "PoL(k_surface-1), PoL(k_surface): ", PoL(k_surface-1), PoL(k_surface)
-        write (*,*) "KoR(k_surface-1), KoR(k_surface): ", KoR(k_surface-1), KoR(k_surface)
-        write (*,*) "PoR(k_surface-1), PoR(k_surface): ", PoR(k_surface-1), PoR(k_surface)
-        call MOM_error(WARNING, "Effective thickness is negative")
       endif
     endif
 
@@ -1338,57 +1349,50 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   real,                  intent(  out) :: out_P          !< Position within searched column
   integer,               intent(  out) :: out_K          !< Layer within searched column
 
+  logical :: search_discontinuity
+  logical :: search_layer
+
+  search_layer = .true.
+  ! Bad values to make sure that the particular setup has been processed
+  out_P = -1. ; out_K = -1
   ! Check if everything in this layer is denser than neutral surface or if at the top of the water column
   if ((kl==1 .and. ki==1)) then
     if (debug_this_module)  write(*,*) "At surface"
     out_P = 0. ; out_K = kl
-  ! Connects somewhere within discontinuity
-  elseif ( (kl > 1.) .and. (dRhoTopm1<=0.) .and. (dRhoTop>0) .and. (.not. bot_connected(kl-1)) ) then
-    if (debug_this_module)  write(*,*) "Connect within discontinuity, point to bottom of last layer"
-    out_P = 1. ; out_K = kl - 1
-  elseif ( (kl > 1.) .and. (dRhoTopm1==0.) .and. (dRhoTop==0.) )then
-    if (lastK == kl .and. lastP>0.) then
-      out_P = lastP ; out_K = lastK
-    elseif (.not. bot_connected(kl-1)) then
-      if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to bottom of previous"
-      out_P = 1. ; out_K = kl-1
-    elseif (top_connected(kl) .and. dRhoBot == 0.) then
-      if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to bottom of current"
-      out_P = 1. ; out_K = kl
-    else
-      if (debug_this_module)  write(*,*) "Uniform across discontinuity, point to top of layer"
-      out_P = 0. ; out_K = kl
-    endif
-  ! Perfectly stratified layers
-  elseif (dRhoTop == 0. .and. dRhoBot == 0.) then
-    if (same_direction) then
-      if (debug_this_module)  write(*,*) "Perfectly stratified same direction, point to last position"
-      out_P = lastP ; out_K = lastK
-    else
-      if (top_connected(kl)) then
-        if (debug_this_module)  write(*,*) "Perfectly stratified point to bottom of current layer"
-        out_P = 1. ; out_K = kl
-      else
-        if (debug_this_module)  write(*,*) "Perfectly stratified point to top of current layer"
-        out_P = 0. ; out_K = kl
+    search_layer = .false.
+  ! Deal with the case where reconstruction is continuous
+  elseif ( (kl>1) .and. (dRhoTopm1==dRhoTop) ) then
+    if (dRhoTopm1 < dRhoTop) then
+      if (.not. bot_connected(kl-1)) then
+        out_P = 1. ; out_K = kl-1
+        search_layer = .false.
       endif
+    elseif ( (dRhoTopm1 == 0.) .and. (.not. bot_connected(kl-1))) then
+      out_P = 1 ; out_K = kl-1
+      search_layer = .false.
     endif
-  elseif (dRhoTop > dRhoBot) then
-    if (debug_this_module)  write(*,*) "Unstably stratified point to bottom"
-    out_P = 1. ; out_K = kl
-  elseif (dRhoTop == 0. .and. dRhoBot > 0.) then
-    if (debug_this_module)  write(*,*) "Connects exactly at top of current layer"
-    out_P = 0. ; out_K = kl
-  else
-    if (debug_this_module)  write(*,*) "Zero crossing point within layer"
-    out_P = MAX(interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot), lastP)
-    out_K = kl
-    top_connected(kl-1) = .true. ; bot_connected(kl-1) = .true.
+  elseif ( (kl>1) .and. (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
+    out_P = 1. ; out_K = kl-1
+    search_layer = .false.
   endif
 
-  ! Make sure that position when searching in layer is always increasing
-!  if (lastK == out_K) out_P = MAX(out_P, lastP)
+  if (search_layer) then
+    if (dRhoTop > 0.) then
+      out_P = 0. ; out_K = kl
+    elseif ( dRhoTop == 0. .and. (.not. top_connected(kl)) ) then
+      out_P = 0. ; out_K = kl
+    elseif (dRhoTop >= dRhoBot) then
+      out_P = 1. ; out_K = kl
+    else
+      if (debug_this_module)  write(*,*) "Zero crossing point within layer"
+      out_P = interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot)
+      out_K = kl
+    endif
+  endif
 
+  if ( (out_P < 0.) .and. (out_K < 0) ) then
+    call MOM_error(WARNING, "Unanticipated case in search_other_column_discontinuous")
+  endif
   ! Check to make sure that the layer index is always increasing
   if ( (out_K < lastK) .and. lastP==0. .and. out_P == 1. ) then
     out_K = lastK ; out_P = 0.
@@ -1563,6 +1567,10 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
                              ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
                              dS_dP*beta_avg + dT_dP*alpha_avg
+      if (d_delta_rho_dP == 0.) then
+        do_brent = .true.
+        exit
+      endif
       ! Newton step update
       P_last = P_int
       P_int = P_int - (delta_rho / d_delta_rho_dP)
@@ -1866,14 +1874,22 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
       else ! Discontinuous reconstruction
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
-        if (klt .ne. klb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+        if (klt .ne. klb) then
+          call MOM_error(WARNING, "Neutral surfaces span more than one layer")
+          Flx(k_sublayer) = 0.
+          cycle
+        endif
         T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
         T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
         T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
                                            PiL(k_sublayer), PiL(k_sublayer+1))
         krb = KoR(k_sublayer+1)
         krt = KoR(k_sublayer)
-        if (krt .ne. krb) call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+        if (krt .ne. krb) then
+          call MOM_error(WARNING, "Neutral surfaces span more than one layer")
+          Flx(k_sublayer) = 0.
+          cycle
+        endif
         T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), deg+1, PiR(k_sublayer+1))
         T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
         T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
@@ -2279,17 +2295,17 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1.0/), & ! pR
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column with mixed layer')
-  Tl = (/14.,14.,6./) ; Tr = (/10.,14.,6/)
+  Tl = (/14.,14.,6./) ; Tr = (/12.,16.,8./)
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
                                    (/1,1,2,2,3,3,3,3,3,3,3,3/), & ! KoL
-                                   (/1,1,1,1,1,1,1,2,2,3,3,3/), & ! KoR
-                                   (/0.0, 1.0, 0.0, 1.0, 0.0, .25, .25, .25, .25, 0.0, 1.0, 1.0/), & ! pL
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0/), & ! pR
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10., 0.0/), & ! hEff
+                                   (/1,1,1,1,1,1,2,2,3,3,3,3/), & ! KoR
+                                   (/0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, .75, 1.0/), & ! pL
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, .25, 1.0, 1.0/), & ! pR
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7.5, 0.0/), & ! hEff
                                    'Left mixed layer, right unstable mixed layer')
   Til(:,1) = (/8.,12.,10./) ; Til(:,2) = (/12.,10.,2./)
   Tir(:,1) = (/10.,14.,12./) ; TiR(:,2) = (/14.,12.,4./)
@@ -2298,9 +2314,9 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
                                    (/1,1,1,1,1,1,1,2,2,3,3,3/), & ! KoL
                                    (/1,1,2,2,3,3,3,3,3,3,3,3/), & ! KoR
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.75, 1.0/), & ! pL
-                                   (/0.0, 1.0, 0.0, 1.0, 0.0, 0.5, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0/), & ! pR
-                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 6.0, 0.0/), & ! hEff
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, .75, 1.0/), & ! pL
+                                   (/0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, .25, .25, 1.0, 1.0/), & ! pR
+                                   (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 7.5, 0.0/), & ! hEff
                                    'Two unstable mixed layers')
   deallocate(remap_CS)
 
