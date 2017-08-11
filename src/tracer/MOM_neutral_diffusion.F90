@@ -383,7 +383,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     CS%Pint(:,j,1) = 0. ! Assume P=0 (Pa) at surface - needs correcting for atmospheric and ice loading - AJA
     ! Continuous reconstruction
     if (CS%continuous_reconstruction) then
-      do k = 1, G%ke
+      do k = 1, G%ke+1
           call calculate_density_derivs(CS%Tint(:,j,k), CS%Sint(:,j,k), CS%Pint(:,j,k), &
                                         CS%dRdT(:,j,k), CS%dRdS(:,j,k), G%isc-1, G%iec-G%isc+3, EOS)
         if (k<=G%ke) then
