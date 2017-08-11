@@ -26,16 +26,17 @@ use shr_kind_mod,        only: shr_kind_r8
 
 ! MOM6 modules
 use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
-use ocean_model_mod,    only: ocean_model_init, get_state_pointers
+use ocean_model_mod,    only: ocean_model_init, get_state_pointers, ocean_model_restart
 use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
 use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_grid,           only: ocean_grid_type, get_global_grid_size
 use MOM_variables,      only: surface
 use MOM_error_handler,  only: MOM_error, FATAL, is_root_pe
 use MOM_time_manager,   only: time_type, set_date, set_time, set_calendar_type, NOLEAP
+use MOM_file_parser,    only: get_param, log_version, param_file_type
+use MOM_get_input,      only: Get_MOM_Input, directories
 use coupler_indices,    only: coupler_indices_init, cpl_indices
 use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
-
 
 ! By default make data private
 implicit none; private
@@ -54,8 +55,10 @@ implicit none; private
     type(surface), pointer           :: ocn_surface => NULL() !< The ocean surface state
     type(ice_ocean_boundary_type)    :: ice_ocean_boundary    !< The ice ocean boundary type
     type(seq_infodata_type), pointer :: infodata              !< The input info type
-    type(cpl_indices), public :: ind                          !< Variable IDs
-
+    type(cpl_indices), public        :: ind                   !< Variable IDs
+    ! runtime params
+    logical :: sw_decomp   !< Controls whether shortwave is decomposed into four components
+    real :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
   end type MCT_MOM_Data
 
   type(MCT_MOM_Data) :: glb                                   !< global structure
@@ -88,6 +91,11 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   logical             :: ldiag_cpl = .false.
   integer             :: isc, iec, jsc, jec, ni, nj     !< Indices for the start and end of the domain
                                                         !! in the x and y dir., respectively.
+  ! runi-time params
+  type(param_file_type) :: param_file           !< A structure to parse for run-time parameters
+  type(directories)     :: dirs_tmp             !< A structure containing several relevant directory paths
+  character(len=40)     :: mdl = "ocn_comp_mct" !< This module's name.
+
   ! mct variables (these are local for now)
   integer                   :: MOM_MCT_ID
   type(mct_gsMap), pointer  :: MOM_MCT_gsMap => NULL() !< 2d, points to cdata
@@ -194,6 +202,34 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   glb%ocn_public%pelist(:) = (/(i,i=pe0,pe0+npes)/)
   ! \todo Set other bits of glb$ocn_public
 
+  ! This include declares and sets the variable "version".
+  ! read useful runtime params
+  call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
+  !call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "SW_DECOMP", glb%sw_decomp, &
+                 "If True, read coeffs c1, c2, c3 and c4 and decompose" // &
+                 "the net shortwave radiation (SW) into four components:\n" // &
+                 "visible, direct shortwave  = c1 * SW \n" // &
+                 "visible, diffuse shortwave = c2 * SW \n" // &
+                 "near-IR, direct shortwave  = c3 * SW \n" // &
+                 "near-IR, diffuse shortwave = c4 * SW", default=.true.)
+  if (glb%sw_decomp) then
+    call get_param(param_file, mdl, "SW_c1", glb%c1, &
+                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "visible, direct shortwave.", units="nondim", default=0.285)
+    call get_param(param_file, mdl, "SW_c2", glb%c2, &
+                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "visible, diffuse shortwave.", units="nondim", default=0.285)
+    call get_param(param_file, mdl, "SW_c3", glb%c3, &
+                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "near-IR, direct shortwave.", units="nondim", default=0.215)
+    call get_param(param_file, mdl, "SW_c4", glb%c4, &
+                  "Coeff. used to convert net shortwave rad. into \n"//&
+                  "near-IR, diffuse shortwave.", units="nondim", default=0.215)
+  else
+    glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
+  endif
+
   ! Initialize the MOM6 model
   call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in)
 
@@ -250,8 +286,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! \todo Need interface to get dt from MOM6
   ncouple_per_day = seconds_in_day / ocn_cpl_dt
   mom_cpl_dt = seconds_in_day / ncouple_per_day
-  if (mom_cpl_dt /= ocn_cpl_dt) then ! \todo this check is trivial for now.
-     write(*,*) 'ERROR pop_cpl_dt and ocn_cpl_dt must be identical'
+  if (mom_cpl_dt /= ocn_cpl_dt) then
+     write(*,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
      call exit(0)
   end if
 
@@ -325,6 +361,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg
+  character(len=32)  :: timestamp      !< Name of intermediate restart file
 
   ! Compute the time at the start of this coupling interval
   call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
@@ -351,7 +388,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   endif
 
   ! Translate the coupling time interval
-    call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
   call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
   coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
 
@@ -359,17 +396,25 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
 
-  ! Check alarms for flag to write restart at end of day
-  write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
-  ! \todo Let MOM6 know to write restart...
-  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
-
   ! fill ice ocean boundary
-  call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind)
+  call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind, glb%sw_decomp, &
+                          glb%c1, glb%c2, glb%c3, glb%c4)
   if (debug .and. is_root_pe()) write(6,*) 'fill_ice_ocean_bnd'
 
   call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
                           time_start, coupling_timestep)
+
+  !--- write out intermediate restart file when needed.
+  ! Check alarms for flag to write restart at end of day
+  write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
+  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
+
+  if (write_restart_at_eod) then
+    !timestamp = date_to_string(EClock)
+    ! \todo add time stamp to ocean_model_restart
+    !call ocean_model_restart(glb%ocn_state, timestamp)
+    call ocean_model_restart(glb%ocn_state)
+  endif
 
 end subroutine ocn_run_mct
 
