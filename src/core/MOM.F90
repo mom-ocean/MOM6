@@ -3679,7 +3679,6 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
   endif
 
   if (associated(CS%tracer_flow_CSp)) then
-    if (.not.associated(state%tr_fields)) allocate(state%tr_fields)
     call call_tracer_surface_state(state, h, G, CS%tracer_flow_CSp)
   endif
 
