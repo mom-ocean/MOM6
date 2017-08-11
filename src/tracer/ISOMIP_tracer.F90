@@ -34,7 +34,8 @@ use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_coms, only : max_across_PEs
-use coupler_util, only : set_coupler_values, ind_csurf
+
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -409,24 +410,34 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
 
 end subroutine ISOMIP_tracer_column_physics
 
-!> This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
+!! This particular tracer package does not report anything back to the coupler.
 subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in)    :: G !< The ocean's grid structure.
-  type(surface),                            intent(inout) :: state !< A structure containing fields that describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h !< Layer thickness, in m or kg m-2.
-  type(ISOMIP_tracer_CS),                     pointer       :: CS !< The control structure returned by a previous call to ISOMIP_register_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(ISOMIP_tracer_CS), pointer       :: CS !< The control structure returned by a previous
+                                              !! call to ISOMIP_register_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,1), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

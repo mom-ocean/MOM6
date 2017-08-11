@@ -16,7 +16,9 @@ use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_variables,     only : surface, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_2d_bc_type
+use coupler_types_mod, only : coupler_2d_bc_type, coupler_type_spawn
+use coupler_types_mod, only : coupler_type_increment_data, coupler_type_initialized
+use coupler_types_mod, only : coupler_type_copy_data, coupler_type_destructor
 
 implicit none ; private
 
@@ -156,8 +158,8 @@ type, public :: forcing
                              !! C_p is is the same value as in thermovar_ptrs_type.
 
   ! passive tracer surface fluxes
-  type(coupler_2d_bc_type), pointer :: tr_fluxes => NULL() !< This structure
-     !! may contain an array of named fields used for passive tracer fluxes.
+  type(coupler_2d_bc_type) :: tr_fluxes !< This structure contains arrays of
+     !! of named fields used for passive tracer fluxes.
      !! All arrays in tr_fluxes use the coupler indexing, which has no halos.
      !! This is not a convenient convention, but imposed on MOM6 by the coupler.
 
@@ -1797,8 +1799,10 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
     enddo ; enddo
   endif
 
-  !### This needs to be replaced with an appropriate copy and average.
-  fluxes%tr_fluxes => flux_tmp%tr_fluxes
+  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
+      coupler_type_initialized(flux_tmp%tr_fluxes)) &
+    call coupler_type_increment_data(flux_tmp%tr_fluxes, fluxes%tr_fluxes, &
+                              scale_factor=wt2, scale_prev=wt1)
 
 end subroutine forcing_accumulate
 
@@ -2466,10 +2470,12 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%frac_shelf_v))         deallocate(fluxes%frac_shelf_v)
   if (associated(fluxes%rigidity_ice_u))       deallocate(fluxes%rigidity_ice_u)
   if (associated(fluxes%rigidity_ice_v))       deallocate(fluxes%rigidity_ice_v)
-  if (associated(fluxes%tr_fluxes))            deallocate(fluxes%tr_fluxes)
   if (associated(fluxes%ustar_berg))           deallocate(fluxes%ustar_berg)
   if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
+
+  call coupler_type_destructor(fluxes%tr_fluxes)
+
 end subroutine deallocate_forcing_type
 
 
