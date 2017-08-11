@@ -29,10 +29,13 @@ use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding
-use MOM_regridding,       only : build_zstar_column, build_rho_column, build_sigma_column
 use MOM_regridding,       only : set_regrid_params, get_regrid_size, uniformResolution
 use MOM_regridding,       only : getCoordinateInterfaces
+use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
 use regrid_consts,        only : coordinateMode
+use coord_zlike,          only : build_zstar_column
+use coord_sigma,          only : build_sigma_column
+use coord_rho,            only : build_rho_column
 
 use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
@@ -253,13 +256,13 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
       endif
 
       if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
-        call build_zstar_column(remap_cs%regrid_cs, nz, &
+        call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
                               G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-        call build_sigma_column(remap_cs%regrid_cs, nz, &
+        call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
                                 G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-        call build_rho_column(remap_cs%regrid_cs, remap_cs%remap_cs, nz, &
+        call build_rho_column(get_rho_CS(remap_cs%regrid_cs), remap_cs%remap_cs, nz, &
                               G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
                               eqn_of_state, zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
@@ -314,9 +317,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
-        call remapping_core_h(nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I,j,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k) == 0.) remapped_field(i, j, k:nz_dest) = missing_value
@@ -333,9 +335,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         endif
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
-        call remapping_core_h(nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k) == 0.) remapped_field(i,j,k) = missing_value
@@ -351,9 +352,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
           if (mask(i,j, 1) == 0.) cycle
         endif
         h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(nz_src, h(i,j,:), field(i,j,:), &
-                              nz_dest, h_dest(:), remapped_field(i,j,:), &
-                              remap_cs%remap_cs)
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
+                              nz_dest, h_dest(:), remapped_field(i,j,:))
         if (mask_vanished_layers) then ! This only works for z-like output
           do k=1, nz_dest
             if (h_dest(k)==0.) remapped_field(i,j,k) = missing_value

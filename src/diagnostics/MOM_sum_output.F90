@@ -66,6 +66,8 @@ use MOM_interface_heights, only : find_eta
 use MOM_io, only : create_file, fieldtype, flush_file, open_file, reopen_file, get_filename_appendix
 use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
+use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
 use MOM_time_manager, only : get_calendar_type, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
@@ -110,7 +112,6 @@ type, public :: sum_output_CS ; private
                                 ! 0 by default.
   logical :: use_temperature    !   If true, temperature and salinity are state
                                 ! variables.
-  logical :: use_repro_sum      !   If true, use a bitwise reproducing sum.
   real    :: fresh_water_input  !   The total mass of fresh water added by
                                 ! surface fluxes since the last time that
   real    :: mass_prev          !   The total ocean mass the last time that
@@ -159,14 +160,19 @@ end type sum_output_CS
 
 contains
 
+! #@# This subroutine needs a doxygen description.
 subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                                 Input_start_time, CS)
-  type(ocean_grid_type),    intent(in)    :: G
-  type(param_file_type),    intent(in)    :: param_file
-  character(len=*),         intent(in)    :: directory
-  integer, target,          intent(inout) :: ntrnc
-  type(time_type),          intent(in)    :: Input_start_time
-  type(Sum_output_CS),      pointer       :: CS
+  type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
+  type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
+                                                      !! parameters.
+  character(len=*),       intent(in)    :: directory  !< The directory where the energy file goes.
+  integer, target,        intent(inout) :: ntrnc      !< The integer that stores the number of times
+                                                      !! the velocity has been truncated since the
+                                                      !! last call to write_energy.
+  type(time_type),        intent(in)    :: Input_start_time !< The start time of the simulation.
+  type(Sum_output_CS),    pointer       :: CS         !< A pointer that is set to point to the
+                                                      !! control structure for this module.
 ! Arguments: G - The ocean's grid structure.
 !  (in)      param_file - A structure indicating the open file to parse for
 !                         model parameter values.
@@ -179,7 +185,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   real :: Rho_0, maxvel
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_sum_output" ! This module's name.
+  character(len=40)  :: mdl = "MOM_sum_output" ! This module's name.
   character(len=200) :: energyfile  ! The name of the energy file.
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
 
@@ -190,46 +196,42 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "CALCULATE_APE", CS%do_APE_calc, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CALCULATE_APE", CS%do_APE_calc, &
                  "If true, calculate the available potential energy of \n"//&
                  "the interfaces.  Setting this to false reduces the \n"//&
                  "memory footprint of high-PE-count models dramatically.", &
                  default=.true.)
-  call get_param(param_file, mod, "WRITE_STOCKS", CS%write_stocks, &
+  call get_param(param_file, mdl, "WRITE_STOCKS", CS%write_stocks, &
                  "If true, write the integrated tracer amounts to stdout \n"//&
                  "when the energy files are written.", default=.true.)
-  CS%use_repro_sum = .true.
-!  call get_param(param_file, mod, "USE_REPRODUCING_SUM", CS%use_repro_sum, &
-!                 "If true, use the integer sums that reproduce across PE count.", &
-!                 default = .true.)
-  call get_param(param_file, mod, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
+  call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state \n"//&
                  "variables.", default=.true.)
-  call get_param(param_file, mod, "DT", CS%dt, &
+  call get_param(param_file, mdl, "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.", units="s", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mod, "MAXTRUNC", CS%maxtrunc, &
+  call get_param(param_file, mdl, "MAXTRUNC", CS%maxtrunc, &
                  "The run will be stopped, and the day set to a very \n"//&
                  "large value if the velocity is truncated more than \n"//&
                  "MAXTRUNC times between energy saves.  Set MAXTRUNC to 0 \n"//&
                  "to stop if there is any truncation of velocities.", &
                  units="truncations save_interval-1", default=0)
 
-  call get_param(param_file, mod, "MAX_ENERGY", CS%max_Energy, &
+  call get_param(param_file, mdl, "MAX_ENERGY", CS%max_Energy, &
                  "The maximum permitted average energy per unit mass; the \n"//&
                  "model will be stopped if there is more energy than \n"//&
                  "this.  If zero or negative, this is set to 10*MAXVEL^2.", &
                  units="m2 s-2", default=0.0)
   if (CS%max_Energy <= 0.0) then
-    call get_param(param_file, mod, "MAXVEL", maxvel, &
+    call get_param(param_file, mdl, "MAXVEL", maxvel, &
                  "The maximum velocity allowed before the velocity \n"//&
                  "components are truncated.", units="m s-1", default=3.0e8)
     CS%max_Energy = 10.0 * maxvel**2
-    call log_param (param_file, mod, "MAX_ENERGY as used", CS%max_Energy)
+    call log_param (param_file, mdl, "MAX_ENERGY as used", CS%max_Energy)
   endif
 
-  call get_param(param_file, mod, "ENERGYFILE", energyfile, &
+  call get_param(param_file, mdl, "ENERGYFILE", energyfile, &
                  "The file to use to write the energies and globally \n"//&
                  "summed diagnostics.", default="ocean.stats")
 
@@ -240,15 +242,15 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
   end if
 
   CS%energyfile = trim(slasher(directory))//trim(energyfile)
-  call log_param(param_file, mod, "output_path/ENERGYFILE", CS%energyfile)
+  call log_param(param_file, mdl, "output_path/ENERGYFILE", CS%energyfile)
 #ifdef STATSLABEL
   CS%energyfile = trim(CS%energyfile)//"."//trim(adjustl(STATSLABEL))
 #endif
 
-  call get_param(param_file, mod, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
+  call get_param(param_file, mdl, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
                  "If true, use dates (not times) in messages to stdout", &
                  default=.true.)
-  call get_param(param_file, mod, "TIMEUNIT", CS%Timeunit, &
+  call get_param(param_file, mdl, "TIMEUNIT", CS%Timeunit, &
                  "The time unit in seconds a number of input fields", &
                  units="s", default=86400.0)
   if (CS%Timeunit < 0.0) CS%Timeunit = 86400.0
@@ -256,15 +258,15 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
 
   if (CS%do_APE_calc) then
-    call get_param(param_file, mod, "READ_DEPTH_LIST", CS%read_depth_list, &
+    call get_param(param_file, mdl, "READ_DEPTH_LIST", CS%read_depth_list, &
                    "Read the depth list from a file if it exists or \n"//&
                    "create that file otherwise.", default=.false.)
-    call get_param(param_file, mod, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
+    call get_param(param_file, mdl, "DEPTH_LIST_MIN_INC", CS%D_list_min_inc, &
                    "The minimum increment between the depths of the \n"//&
                    "entries in the depth-list file.", units="m", &
                    default=1.0E-10)
     if (CS%read_depth_list) then
-      call get_param(param_file, mod, "DEPTH_LIST_FILE", CS%depth_list_file, &
+      call get_param(param_file, mdl, "DEPTH_LIST_FILE", CS%depth_list_file, &
                    "The name of the depth list file.", default="Depth_list.nc")
       if (scan(CS%depth_list_file,'/') == 0) &
         CS%depth_list_file = trim(slasher(directory))//trim(CS%depth_list_file)
@@ -298,35 +300,28 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
-subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
-  type(ocean_grid_type),                     intent(in)    :: G
-  type(verticalGrid_type),                   intent(in)    :: GV
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h
-  type(thermo_var_ptrs),                     intent(in)    :: tv
-  type(time_type),                           intent(inout) :: day
-  integer,                                   intent(in)    :: n
-  type(Sum_output_CS),                       pointer       :: CS
-  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp
-
-
-!  This subroutine calculates and writes the total model energy, the
-! energy and mass of each layer, and other globally integrated
-! physical quantities.
-
-! Arguments: u - Zonal velocity, in m s-1.
-!  (in)      v - Meridional velocity, in m s-1.
-!  (in)      h - Layer thickness, in m.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in/out)  day - The current model time.
-!  (in)      n - The time step number of the current execution.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 MOM_sum_output_init.
+!>  This subroutine calculates and writes the total model energy, the
+!! energy and mass of each layer, and other globally integrated
+!! physical quantities.
+subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
+  type(ocean_grid_type),                     intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid
+                                                                  !! structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< The meridional velocity,
+                                                                  !! in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thicknesses, in H
+                                                                  !! (usually m or kg m-2).
+  type(thermo_var_ptrs),                     intent(in)    :: tv  !< A structure pointing to various
+                                                                  !! thermodynamic variables.
+  type(time_type),                           intent(inout) :: day !< The current model time.
+  integer,                                   intent(in)    :: n   !< The time step number of the
+                                                                  !! current execution.
+  type(Sum_output_CS),                       pointer       :: CS  !< The control structure returned
+                                                                  !! by a previous call to
+                                                                  !! MOM_sum_output_init.
+  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp !< tracer constrol structure.
+  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
@@ -395,7 +390,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   real :: H_to_m, H_to_kg_m2  ! Local copies of unit conversion factors.
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
-  integer :: i, j, k, is, ie, js, je, nz, m, Isq, Ieq, Jsq, Jeq
+  integer :: i, j, k, is, ie, js, je, ns, nz, m, Isq, Ieq, Jsq, Jeq
   integer :: l, lbelow, labove   ! indices of deep_area_vol, used to find
                                  ! H.  lbelow & labove are lower & upper
                                  ! limits for l in the search for lH.
@@ -416,6 +411,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   real, allocatable :: toten_PE(:)
   integer :: pe_num
   integer :: iyear, imonth, iday, ihour, iminute, isecond, itick ! For call to get_date()
+  logical :: local_open_BC
+  type(OBC_segment_type), pointer :: segment
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
@@ -442,6 +439,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1')
   endif
 
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = (OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)
+  endif ; endif
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   H_to_m = GV%H_to_m ; H_to_kg_m2 = GV%H_to_kg_m2
@@ -454,73 +456,62 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   enddo ; enddo
 
   if (GV%Boussinesq) then
-    if (CS%use_repro_sum) then
-      tmp1(:,:,:) = 0.0
+    tmp1(:,:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
+    enddo ; enddo ; enddo
+
+    ! This block avoids using the points beyond an open boundary condition
+    ! in the accumulation of mass, but perhaps it would be unnecessary if there
+    ! were a more judicious use of masks in the loops 4 or 7 lines above.
+    if (local_open_BC) then
+      do ns=1, OBC%number_of_segments
+        segment => OBC%segment(ns)
+        if (.not. segment%on_pe .or. segment%specified) cycle
+        I=segment%HI%IsdB ; J=segment%HI%JsdB
+        if (segment%direction == OBC_DIRECTION_E) then
+          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+            tmp1(i+1,j,k) = 0.0
+          enddo ; enddo
+        elseif (segment%direction == OBC_DIRECTION_W) then
+          do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+            tmp1(i,j,k) = 0.0
+          enddo ; enddo
+        elseif (segment%direction == OBC_DIRECTION_N) then
+          do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+            tmp1(i,j+1,k) = 0.0
+          enddo ; enddo
+        elseif (segment%direction == OBC_DIRECTION_S) then
+          do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+            tmp1(i,j,k) = 0.0
+          enddo ; enddo
+        endif
+      enddo
+    endif
+
+    mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+    do k=1,nz ; vol_lay(k) = (H_to_m/H_to_kg_m2)*mass_lay(k) ; enddo
+  else
+    tmp1(:,:,:) = 0.0
+    if (CS%do_APE_calc) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = h(i,j,k) * (H_to_kg_m2*areaTm(i,j))
+        tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
       enddo ; enddo ; enddo
       mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = (H_to_m/H_to_kg_m2)*mass_lay(k) ; enddo
+
+      call find_eta(h, tv, GV%g_Earth, G, GV, eta)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
+      enddo ; enddo ; enddo
+      vol_tot = H_to_m*reproducing_sum(tmp1, sums=vol_lay)
     else
-      do k=1,nz
-        vol_lay(k) = 0.0
-        do j=js,je ; do i=is,ie
-          vol_lay(k) = vol_lay(k) + h(i,j,k) * areaTm(i,j)
-        enddo ; enddo
-      enddo
-      call sum_across_PEs(vol_lay,nz)
-      do k=1,nz ; mass_lay(k) = H_to_kg_m2*vol_lay(k) ; enddo
-      do k=1,nz ; vol_lay(k) = H_to_m*vol_lay(k) ; enddo
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
+      enddo ; enddo ; enddo
+      mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
+      do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
     endif
-  else
-    if (CS%use_repro_sum) then
-      tmp1(:,:,:) = 0.0
-      if (CS%do_APE_calc) then
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-
-        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        vol_tot = H_to_m*reproducing_sum(tmp1, sums=vol_lay)
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          tmp1(i,j,k) = H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo ; enddo
-        mass_tot = reproducing_sum(tmp1, sums=mass_lay, EFP_sum=mass_EFP)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
-      endif
-    else ! not use_repro_sum
-      do k=1,nz
-        mass_lay(k) = 0.0
-        do j=js,je ; do i=is,ie
-          mass_lay(k) = mass_lay(k) + H_to_kg_m2 * h(i,j,k) * areaTm(i,j)
-        enddo ; enddo
-      enddo
-      if (CS%do_APE_calc) then
-        call find_eta(h, tv, GV%g_Earth, G, GV, eta)
-
-        do k=1,nz
-          vol_lay(k) = 0.0
-          do j=js,je ; do i=is,ie
-            vol_lay(k) = vol_lay(k) + (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
-          enddo ; enddo
-        enddo
-        call sum_across_PEs(vol_lay,nz)
-        call sum_across_PEs(mass_lay,nz)
-      else
-        call sum_across_PEs(mass_lay,nz)
-        do k=1,nz ; vol_lay(k) = mass_lay(k) / GV%Rho0 ; enddo
-      endif
-    endif ! use_repro_sum
   endif ! Boussinesq
-  if (.not.CS%use_repro_sum) then
-    mass_tot = 0.0
-    do k=1,nz ; mass_tot = mass_tot + mass_lay(k) ; enddo
-  endif
 
   nTr_stocks = 0
   if (present(tracer_CSp)) then
@@ -540,10 +531,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
 
   if (CS%previous_calls == 0) then
     CS%mass_prev = mass_tot ; CS%fresh_water_input = 0.0
-    if (CS%use_repro_sum) then
-      CS%mass_prev_EFP = mass_EFP
-      CS%fresh_water_in_EFP = real_to_EFP(0.0)
-    endif
+
+    CS%mass_prev_EFP = mass_EFP
+    CS%fresh_water_in_EFP = real_to_EFP(0.0)
 
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
@@ -634,22 +624,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
   endif
 
 ! Calculate the Kinetic Energy integrated over each layer.
-  if (CS%use_repro_sum) then
-    tmp1(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
-              (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
-    enddo ; enddo ; enddo
-  else
-    do k=1,nz
-      KE(k) = 0.0
-      do j=js,je ; do i=is,ie
-         KE(k) = KE(k) + 0.25 * (areaTm(i,j) * h(i,j,k)) * &
-              (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
-      enddo ; enddo
-      KE(k) = H_to_kg_m2 * KE(k)
-    enddo
-  endif
+  tmp1(:,:,:) = 0.0
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    tmp1(i,j,k) = (0.25 * H_to_kg_m2 * (areaTm(i,j) * h(i,j,k))) * &
+            (u(I-1,j,k)**2 + u(I,j,k)**2 + v(i,J-1,k)**2 + v(i,J,k)**2)
+  enddo ; enddo ; enddo
 
 !   Calculate the Available Potential Energy integrated over each
 ! interface.  With a nonlinear equation of state or with a bulk
@@ -662,7 +641,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         hbelow = 0.0
         do k=nz,1,-1
           hbelow = hbelow + h(i,j,k) * H_to_m
-          hint = (H_0APE(K) + hbelow - G%bathyT(i,j))
+          hint = H_0APE(K) + (hbelow - G%bathyT(i,j))
           hbot = H_0APE(K) - G%bathyT(i,j)
           hbot = (hbot + ABS(hbot)) * 0.5
           PE_pt(i,j,K) = 0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K)) * &
@@ -680,56 +659,25 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
         enddo
       enddo ; enddo
     endif
-    if (.not. CS%use_repro_sum) then
-      do j=js,je ; do i=is,ie ; do k=nz,1,-1
-        PE(K) = PE(K) + PE_pt(i,j,K)
-      enddo ; enddo ; enddo
-    endif
   endif
 
-  if (CS%use_repro_sum) then
-    KE_tot = reproducing_sum(tmp1, sums=KE)
-    PE_tot = 0.0
-    if (CS%do_APE_calc) &
-      PE_tot = reproducing_sum(PE_pt, sums=PE)
-    toten = KE_tot + PE_tot
-  else
-    pe_num = pe_here()+1-root_pe()
-    allocate(toten_PE(num_pes()))
-    toten_PE(:) = 0.0
-    do k=1,nz ; toten_PE(pe_num) = toten_PE(pe_num) + (PE(K)+KE(k)) ; enddo
-
-    call sum_across_PEs(toten_PE,num_pes())
-    toten = 0.0
-    do k=1,num_pes() ; toten = toten + toten_PE(k) ; enddo
-    deallocate(toten_PE)
-
-    call sum_across_PEs(KE,nz)
-    if (CS%do_APE_calc) call sum_across_PEs(PE,nz)
-  endif
+  KE_tot = reproducing_sum(tmp1, sums=KE)
+  PE_tot = 0.0
+  if (CS%do_APE_calc) &
+    PE_tot = reproducing_sum(PE_pt, sums=PE)
+  toten = KE_tot + PE_tot
 
   Salt = 0.0 ; Heat = 0.0
   if (CS%use_temperature) then
-    if (CS%use_repro_sum) then
-      Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
-                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
-        Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
-                        (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
-      enddo ; enddo ; enddo
-      Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
-      Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
-    else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        Salt = Salt + tv%S(i,j,k)*h(i,j,k)*areaTm(i,j)
-        Heat = Heat + tv%T(i,j,k)*h(i,j,k)*areaTm(i,j)
-      enddo ; enddo ; enddo
-      Salt = H_to_kg_m2 * Salt
-      Heat = (H_to_kg_m2) * (tv%C_p * Heat)
-      call sum_across_PEs(Salt)
-      call sum_across_PEs(Heat)
-    endif
+    Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * &
+                      (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
+      Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * &
+                      (h(i,j,k)*(H_to_kg_m2 * areaTm(i,j)))
+    enddo ; enddo ; enddo
+    Salt = reproducing_sum(Salt_int, EFP_sum=salt_EFP)
+    Heat = reproducing_sum(Temp_int, EFP_sum=heat_EFP)
   endif
 
 ! Calculate the maximum CFL numbers.
@@ -755,56 +703,44 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     max_CFL(2) = max(max_CFL(2), CFL_lin)
   enddo ; enddo ; enddo
 
-! Sum the various quantities across all the processors.  This sum
-! is NOT guaranteed to be bitwise reproducible, even on the same
-! decomposition.
   call sum_across_PEs(CS%ntrunc)
+  !   Sum the various quantities across all the processors.  This sum is NOT
+  ! guaranteed to be bitwise reproducible, even on the same decomposition.
+  !   The sum of Tr_stocks should be reimplemented using the reproducing sums.
   if (nTr_stocks > 0) call sum_across_PEs(Tr_stocks,nTr_stocks)
+
   call max_across_PEs(max_CFL(1))
   call max_across_PEs(max_CFL(2))
   if (CS%use_temperature .and. CS%previous_calls == 0) then
     CS%salt_prev = Salt ; CS%net_salt_input = 0.0
     CS%heat_prev = Heat ; CS%net_heat_input = 0.0
-    if (CS%use_repro_sum) then
-      CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
-      CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
-    endif
+
+    CS%salt_prev_EFP = salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
+    CS%heat_prev_EFP = heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
   Irho0 = 1.0/GV%Rho0
 
-  if (CS%use_repro_sum) then
-    if (CS%use_temperature) then
-      Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
-      Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
-      Salt_chg = EFP_to_real(Salt_chg_EFP) ; Salt_anom = EFP_to_real(Salt_anom_EFP)
-      Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
-      Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
-      Heat_chg = EFP_to_real(Heat_chg_EFP) ; Heat_anom = EFP_to_real(Heat_anom_EFP)
-    endif
-
-    mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
-    salin_mass_in = 0.0
-    if (GV%Boussinesq) then
-      mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-    else
-      ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
-      mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-      if (CS%use_temperature) &
-        salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)
-    endif
-    mass_chg = EFP_to_real(mass_chg_EFP)
-    mass_anom = EFP_to_real(mass_anom_EFP) - salin_mass_in
-  else
-    Salt_chg = Salt - CS%salt_prev  ; Salt_anom = Salt_chg - CS%net_salt_input
-    Heat_chg = Heat - CS%heat_prev  ; Heat_anom = Heat_chg - CS%net_heat_input
-    mass_chg = mass_tot - CS%mass_prev
-    if (GV%Boussinesq) then
-      mass_anom = mass_chg - CS%fresh_water_input
-    else
-      ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
-      mass_anom = mass_chg - (CS%fresh_water_input + 0.001*CS%net_salt_input)
-    endif
+  if (CS%use_temperature) then
+    Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
+    Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
+    Salt_chg = EFP_to_real(Salt_chg_EFP) ; Salt_anom = EFP_to_real(Salt_anom_EFP)
+    Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
+    Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
+    Heat_chg = EFP_to_real(Heat_chg_EFP) ; Heat_anom = EFP_to_real(Heat_anom_EFP)
   endif
+
+  mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
+  salin_mass_in = 0.0
+  if (GV%Boussinesq) then
+    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
+  else
+    ! net_salt_input needs to be converted from psu m s-1 to kg m-2 s-1.
+    mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
+    if (CS%use_temperature) &
+      salin_mass_in = 0.001*EFP_to_real(CS%net_salt_in_EFP)
+  endif
+  mass_chg = EFP_to_real(mass_chg_EFP)
+  mass_anom = EFP_to_real(mass_anom_EFP) - salin_mass_in
 
   if (CS%use_temperature) then
     salin = Salt / mass_tot ; salin_anom = Salt_anom / mass_tot
@@ -961,21 +897,23 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp)
     CS%salt_prev = Salt ; CS%net_salt_input = 0.0
     CS%heat_prev = Heat ; CS%net_heat_input = 0.0
   endif
-  if (CS%use_repro_sum) then
-    CS%mass_prev_EFP = mass_EFP ; CS%fresh_water_in_EFP = real_to_EFP(0.0)
-    if (CS%use_temperature) then
-      CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
-      CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
-    endif
+
+  CS%mass_prev_EFP = mass_EFP ; CS%fresh_water_in_EFP = real_to_EFP(0.0)
+  if (CS%use_temperature) then
+    CS%salt_prev_EFP = Salt_EFP ; CS%net_salt_in_EFP = real_to_EFP(0.0)
+    CS%heat_prev_EFP = Heat_EFP ; CS%net_heat_in_EFP = real_to_EFP(0.0)
   endif
 end subroutine write_energy
 
+!> This subroutine accumates the net input of volume, and perhaps later salt and
+!! heat, through the ocean surface for use in diagnosing conservation.
 subroutine accumulate_net_input(fluxes, state, dt, G, CS)
-  type(forcing),         intent(in) :: fluxes
+  type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields are unallocated.
   type(surface),         intent(in) :: state
-  real,                  intent(in) :: dt
-  type(ocean_grid_type), intent(in) :: G
-  type(Sum_output_CS),   pointer    :: CS
+  real,                  intent(in) :: dt     !< The amount of time over which to average, in s.
+  type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
+  type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call to MOM_sum_output_init.
+
 ! This subroutine accumates the net input of volume, and perhaps later salt and
 ! heat, through the ocean surface for use in diagnosing conservation.
 ! Arguments: fluxes - A structure containing pointers to any possible
@@ -1078,37 +1016,27 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 
   if ((CS%use_temperature) .or. ASSOCIATED(fluxes%lprec) .or. &
       ASSOCIATED(fluxes%evap)) then
-    if (CS%use_repro_sum) then
-      FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
-      heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
-      salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
-    else
-      FW_input = 0.0 ; heat_input = 0.0 ; salt_input = 0.0
-      do j=js,je ; do i=is,ie
-        FW_input   = FW_input   + FW_in(i,j)
-        heat_input = heat_input + heat_in(i,j)
-        salt_input = salt_input + salt_in(i,j)
-      enddo ; enddo
-      inputs(1) = FW_input ; inputs(2) = heat_input ; inputs(3) = salt_input
-      call sum_across_PEs(inputs,3)
-      FW_input = inputs(1) ; heat_input = inputs(2) ; salt_input = inputs(3)
-    endif
+    FW_input   = reproducing_sum(FW_in,   EFP_sum=FW_in_EFP)
+    heat_input = reproducing_sum(heat_in, EFP_sum=heat_in_EFP)
+    salt_input = reproducing_sum(salt_in, EFP_sum=salt_in_EFP)
 
     CS%fresh_water_input = CS%fresh_water_input + FW_input
     CS%net_salt_input    = CS%net_salt_input    + salt_input
     CS%net_heat_input    = CS%net_heat_input    + heat_input
-    if (CS%use_repro_sum) then
-      CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
-      CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
-      CS%net_heat_in_EFP    = CS%net_heat_in_EFP    + heat_in_EFP
-    endif
+
+    CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
+    CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
+    CS%net_heat_in_EFP    = CS%net_heat_in_EFP    + heat_in_EFP
   endif
 
 end subroutine accumulate_net_input
 
-
+!>  This subroutine sets up an ordered list of depths, along with the
+!! cross sectional areas at each depth and the volume of fluid deeper
+!! than each depth.  This might be read from a previously created file
+!! or it might be created anew.  (For now only new creation occurs.
 subroutine depth_list_setup(G, CS)
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS
 !  This subroutine sets up an ordered list of depths, along with the
 ! cross sectional areas at each depth and the volume of fluid deeper
@@ -1140,7 +1068,7 @@ end subroutine depth_list_setup
 !>  create_depth_list makes an ordered list of depths, along with the cross
 !! sectional areas at each depth and the volume of fluid deeper than each depth.
 subroutine create_depth_list(G, CS)
-  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure
+  type(ocean_grid_type), intent(in) :: G  !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS !< The control structure set up in MOM_sum_output_init,
                                           !! in which the ordered depth list is stored.
 
@@ -1176,6 +1104,7 @@ subroutine create_depth_list(G, CS)
     Arealist(list_pos) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
+  ! These sums reproduce across PEs because the arrays are only nonzero on one PE.
   call sum_across_PEs(Dlist, mls+1)
   call sum_across_PEs(Arealist, mls+1)
 
@@ -1262,8 +1191,9 @@ subroutine create_depth_list(G, CS)
 
 end subroutine create_depth_list
 
+!> This subroutine writes out the depth list to the specified file.
 subroutine write_depth_list(G, CS, filename, list_size)
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS
   character(len=*),      intent(in) :: filename
   integer,               intent(in) :: list_size
@@ -1342,46 +1272,48 @@ subroutine write_depth_list(G, CS, filename, list_size)
 
 end subroutine write_depth_list
 
+!> This subroutine reads in the depth list to the specified file
+!! and allocates and sets up CS%DL and CS%list_size .
 subroutine read_depth_list(G, CS, filename)
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
   type(Sum_output_CS),   pointer    :: CS
   character(len=*),      intent(in) :: filename
 
 ! This subroutine reads in the depth list to the specified file
 ! and allocates and sets up CS%DL and CS%list_size .
-  character(len=32) :: mod
+  character(len=32) :: mdl
   character(len=240) :: var_name, var_msg
   real, allocatable :: tmp(:)
   integer :: ncid, status, varid, list_size, k
   integer :: ndim, len, var_dim_ids(NF90_MAX_VAR_DIMS)
 
-  mod = "MOM_sum_output read_depth_list:"
+  mdl = "MOM_sum_output read_depth_list:"
 
   status = NF90_OPEN(filename, NF90_NOWRITE, ncid);
   if (status /= NF90_NOERR) then
-    call MOM_error(FATAL,mod//" Difficulties opening "//trim(filename)// &
+    call MOM_error(FATAL,mdl//" Difficulties opening "//trim(filename)// &
         " - "//trim(NF90_STRERROR(status)))
   endif
 
   var_name = "depth"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
   status = NF90_INQUIRE_VARIABLE(ncid, varid, ndims=ndim, dimids=var_dim_ids)
   if (status /= NF90_NOERR) then
-    call MOM_ERROR(FATAL,mod//" cannot inquire about "//trim(var_msg)//&
+    call MOM_ERROR(FATAL,mdl//" cannot inquire about "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   elseif (ndim > 1) then
-    call MOM_ERROR(FATAL,mod//" "//trim(var_msg)//&
+    call MOM_ERROR(FATAL,mdl//" "//trim(var_msg)//&
          " has too many or too few dimensions.")
   endif
 
   ! Get the length of the list.
   status = NF90_INQUIRE_DIMENSION(ncid, var_dim_ids(1), len=list_size)
-  if (status /= NF90_NOERR) call MOM_ERROR(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_ERROR(FATAL,mdl// &
         " cannot inquire about dimension(1) of "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1390,7 +1322,7 @@ subroutine read_depth_list(G, CS, filename)
   allocate(tmp(list_size))
 
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1399,11 +1331,11 @@ subroutine read_depth_list(G, CS, filename)
   var_name = "area"
   var_msg = trim(var_name)//" in "//trim(filename)//" - "
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
@@ -1412,18 +1344,18 @@ subroutine read_depth_list(G, CS, filename)
   var_name = "vol_below"
   var_msg = trim(var_name)//" in "//trim(filename)
   status = NF90_INQ_VARID(ncid, var_name, varid)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties finding variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
   status = NF90_GET_VAR(ncid, varid, tmp)
-  if (status /= NF90_NOERR) call MOM_error(FATAL,mod// &
+  if (status /= NF90_NOERR) call MOM_error(FATAL,mdl// &
         " Difficulties reading variable "//trim(var_msg)//&
         trim(NF90_STRERROR(status)))
 
   do k=1,list_size ; CS%DL(k)%vol_below = tmp(k) ; enddo
 
   status = NF90_CLOSE(ncid)
-  if (status /= NF90_NOERR) call MOM_error(WARNING, mod// &
+  if (status /= NF90_NOERR) call MOM_error(WARNING, mdl// &
     " Difficulties closing "//trim(filename)//" - "//trim(NF90_STRERROR(status)))
 
   deallocate(tmp)

@@ -115,6 +115,11 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
   if (present(mono_N2_depth)) l_mono_N2_depth = mono_N2_depth
   calc_modal_structure = l_use_ebt_mode
   if (present(modal_structure)) calc_modal_structure = .true.
+  if (calc_modal_structure) then
+    do k=1,nz; do j=js,je; do i=is,ie
+      modal_structure(i,j,k) = 0.0
+    enddo; enddo; enddo
+  endif
 
   S => tv%S ; T => tv%T
   g_Rho0 = GV%g_Earth/GV%Rho0
@@ -438,7 +443,7 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
             else
               mode_struct(1:kc)=0.
             endif
-            call remapping_core_h(kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:), CS%remapping_CS)
+            call remapping_core_h(CS%remapping_CS, kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:))
           endif
         else
           cg1(i,j) = 0.0
@@ -1086,7 +1091,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                       !! as monotonic for the purposes of calculating vertical modal structure.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_wave_speed"  ! This module's name.
+  character(len=40)  :: mdl = "MOM_wave_speed"  ! This module's name.
 
   if (associated(CS)) then
     call MOM_error(WARNING, "wave_speed_init called with an "// &
@@ -1095,7 +1100,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   else ; allocate(CS) ; endif
 
   ! Write all relevant parameters to the model log.
-  call log_version(mod, version)
+  call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction)
 

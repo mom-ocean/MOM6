@@ -3,6 +3,7 @@ module MOM_lateral_mixing_coeffs
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_debugging,     only : hchksum, uvchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, post_data
 use MOM_diag_mediator, only : diag_ctrl, time_type, query_averaging_enabled
@@ -39,6 +40,20 @@ type, public :: VarMix_CS ;
                                   !! of first baroclinic wave for calculating the resolution fn.
   logical :: khth_use_ebt_struct  !< If true, uses the equivalent barotropic structure
                                   !! as the vertical structure of thickness diffusivity.
+  logical :: use_Visbeck_slope_bug !< If true, then retain a legacy bug in the calculation of weights
+                                   !! applied to isoneutral slopes. There was an erroneous k-indexing
+                                   !! for layer thicknesses. In addition, masking at coastlines was not
+                                   !! used which introduced potential restart issues.  This flag will be
+                                   !! deprecated in a future release.
+  logical :: calculate_cg1        !< If true, calls wave_speed() to calculate the first
+                                  !! baroclinic wave speed and populate CS%cg1.
+                                  !! This parameter is set depending on other parameters.
+  logical :: calculate_Rd_dx      !< If true, calculates Rd/dx and populate CS%Rd_dx_h.
+                                  !! This parameter is set depending on other parameters.
+  logical :: calculate_res_fns    !< If true, calculate all the resolution factors.
+                                  !! This parameter is set depending on other parameters.
+  logical :: calculate_Eady_growth_rate !< If true, calculate all the Eady growth rate.
+                                  !! This parameter is set depending on other parameters.
   real, dimension(:,:), pointer :: &
     SN_u => NULL(), &   !< S*N at u-points (s^-1)
     SN_v => NULL(), &  !< S*N at v-points (s^-1)
@@ -106,7 +121,7 @@ type, public :: VarMix_CS ;
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL() !< Wave speed control structure
   type(group_pass_type) :: pass_cg1 !< For group halo pass
-
+  logical :: debug      !< If true, write out checksums of data for debugging
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
@@ -133,10 +148,48 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_resoln_function:"// &
          "Module must be initialized before it is used.")
-  if (.not. (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. &
-             CS%Resoln_scaled_KhTr)) return
-  if (.not. ASSOCIATED(CS%cg1)) call MOM_error(FATAL, &
-    "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
+  if (CS%calculate_cg1) then
+    if (.not. ASSOCIATED(CS%cg1)) call MOM_error(FATAL, &
+      "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
+    if (CS%khth_use_ebt_struct) then
+      if (.not. ASSOCIATED(CS%ebt_struct)) call MOM_error(FATAL, &
+        "calc_resoln_function: %ebt_struct is not associated with RESOLN_USE_EBT.")
+      if (CS%Resoln_use_ebt) then
+        ! Both resolution fn and vertical structure are using EBT
+        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
+      else
+        ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
+        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
+        call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+      endif
+      call pass_var(CS%ebt_struct, G%Domain)
+    else
+      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
+    endif
+
+    call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
+    call do_group_pass(CS%pass_cg1, G%Domain)
+  endif
+
+  ! Calculate and store the ratio between deformation radius and grid-spacing
+  ! at h-points (non-dimensional).
+  if (CS%calculate_rd_dx) then
+    if (.not. ASSOCIATED(CS%Rd_dx_h)) call MOM_error(FATAL, &
+      "calc_resoln_function: %Rd_dx_h is not associated with calculate_rd_dx.")
+!$OMP parallel default(none) shared(is,ie,js,je,CS)
+!$OMP do
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      CS%Rd_dx_h(i,j) = CS%cg1(i,j) / &
+            (sqrt(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
+    enddo ; enddo
+!$OMP end parallel
+    if (query_averaging_enabled(CS%diag)) then
+      if (CS%id_Rd_dx > 0) call post_data(CS%id_Rd_dx, CS%Rd_dx_h, CS%diag)
+    endif
+  endif
+
+  if (.not. CS%calculate_res_fns) return
+
   if (.not. ASSOCIATED(CS%Res_fn_h)) call MOM_error(FATAL, &
     "calc_resoln_function: %Res_fn_h is not associated with Resoln_scaled_Kh.")
   if (.not. ASSOCIATED(CS%Res_fn_q)) call MOM_error(FATAL, &
@@ -161,23 +214,6 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
     "calc_resoln_function: %beta_dx2_u is not associated with Resoln_scaled_Kh.")
   if (.not. ASSOCIATED(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
-
-  if (CS%khth_use_ebt_struct) then
-    if (CS%Resoln_use_ebt) then
-      ! Both resolution fn and vertical structure are using EBT
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct)
-    else
-      ! Use EBT to get vertical structure first and then re-calculate cg1 using first baroclinic mode
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp, modal_structure=CS%ebt_struct, use_ebt_mode=.true.)
-      call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
-    endif
-    call pass_var(CS%ebt_struct, G%Domain)
-  else
-    call wave_speed(h, tv, G, GV, CS%cg1, CS%wave_speed_CSp)
-  endif
-
-  call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
-  call do_group_pass(CS%pass_cg1, G%Domain)
 
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
@@ -330,19 +366,10 @@ subroutine calc_resoln_function(h, tv, G, GV, CS)
       enddo ; enddo
     endif
   endif
-
-  ! Calculate and store the ratio between deformation radius and grid-spacing
-  ! at h-points (non-dimensional).
-!$OMP do
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%Rd_dx_h(i,j) = CS%cg1(i,j) / &
-          (sqrt(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))
-  enddo ; enddo
 !$OMP end parallel
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_Res_fn > 0) call post_data(CS%id_Res_fn, CS%Res_fn_h, CS%diag)
-    if (CS%id_Rd_dx > 0) call post_data(CS%id_Rd_dx, CS%Rd_dx_h, CS%diag)
   endif
 
 end subroutine calc_resoln_function
@@ -365,8 +392,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
-  if (CS%use_variable_mixing) then
+  if (CS%calculate_Eady_growth_rate) then
+    call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
@@ -383,10 +410,8 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
     if (CS%id_SN_v > 0) call post_data(CS%id_SN_v, CS%SN_v, CS%diag)
     if (CS%id_L2u > 0) call post_data(CS%id_L2u, CS%L2u, CS%diag)
     if (CS%id_L2v > 0) call post_data(CS%id_L2v, CS%L2v, CS%diag)
-    if (CS%use_stored_slopes) then
-      if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
-      if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
-    endif
+    if (CS%id_N2_u > 0) call post_data(CS%id_N2_u, N2_u, CS%diag)
+    if (CS%id_N2_v > 0) call post_data(CS%id_N2_v, N2_v, CS%diag)
   endif
 
 end subroutine calc_slope_functions
@@ -401,7 +426,7 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)+1), intent(in)    :: N2_u    !< Brunt-Vaisala frequency at u-points (1/s2)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: slope_y !< Meridional isoneutral slope
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)+1), intent(in)    :: N2_v    !< Brunt-Vaisala frequency at v-points (1/s2)
-  type(VarMix_CS),                             intent(inout) :: CS !< Variable mixing coefficients
+  type(VarMix_CS),                             pointer       :: CS !< Variable mixing coefficients
   ! Local variables
   real :: E_x(SZIB_(G), SZJ_(G))  ! X-slope of interface at u points (for diagnostics)
   real :: E_y(SZI_(G), SZJB_(G))  ! Y-slope of interface at u points (for diagnostics)
@@ -419,9 +444,9 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   real :: S2_u(SZIB_(G), SZJ_(G))
   real :: S2_v(SZI_(G), SZJB_(G))
 
-  if (LOC(CS)==0) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
-  if (.not. CS%use_variable_mixing) return
+  if (.not. CS%calculate_Eady_growth_rate) return
   if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
   if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
@@ -442,21 +467,9 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     CS%SN_v(i,j) = 0.0
   enddo ; enddo
 
-
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
-
-  ! Set the length scale at u-points.
-!$OMP do
-  do j=js,je ; do I=is-1,ie
-    CS%L2u(I,j) = CS%Visbeck_L_scale**2
-  enddo ; enddo
-  ! Set length scale at v-points
-!$OMP do
-  do J=js-1,je ; do i=is,ie
-    CS%L2v(i,J) = CS%Visbeck_L_scale**2
-  enddo ; enddo
 
 !$OMP do
   do j = js,je
@@ -469,14 +482,25 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
-      wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
-      wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
-      wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
-      S2 =  slope_x(I,j,K)**2  + ( &
-           (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
-          +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
-           ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      if (CS%use_Visbeck_slope_bug) then
+        wSE = h(i+1,j,k)*h(i+1,j-1,k) * h(i+1,j,k)*h(i+1,j-1,k-1)
+        wNW = h(i  ,j,k)*h(i  ,j+1,k) * h(i  ,j,k)*h(i  ,j+1,k-1)
+        wNE = h(i+1,j,k)*h(i+1,j+1,k) * h(i+1,j,k)*h(i+1,j+1,k-1)
+        wSW = h(i  ,j,k)*h(i  ,j-1,k) * h(i  ,j,k)*h(i  ,j-1,k-1)
+        S2 =  slope_x(I,j,K)**2  + ( &
+             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
+             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      else
+        wSE = G%mask2dCv(i+1,J-1) * ( (h(i+1,j,k)*h(i+1,j-1,k)) * (h(i+1,j,k-1)*h(i+1,j-1,k-1)) )
+        wNW = G%mask2dCv(i  ,J  ) * ( (h(i  ,j,k)*h(i  ,j+1,k)) * (h(i  ,j,k-1)*h(i  ,j+1,k-1)) )
+        wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
+        wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
+        S2 =  slope_x(I,j,K)**2  + ( &
+             (wNW*slope_y(i,J,K)**2+wSE*slope_y(i+1,J-1,K)**2)     &
+             +(wNE*slope_y(i+1,J,K)**2+wSW*slope_y(i,J-1,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
+      endif
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
       N2 = max(0., N2_u(I,j,k))
       CS%SN_u(I,j) = CS%SN_u(I,j) + sqrt( S2*N2 )*H_geom
@@ -485,8 +509,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do I=is-1,ie
       if (H_u(I)>0.) then
-        CS%SN_u(I,j) = CS%SN_u(I,j) / H_u(I)
-        S2_u(I,j) = S2_u(I,j) / H_u(I)
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * CS%SN_u(I,j) / H_u(I)
+        S2_u(I,j) =  G%mask2dCu(I,j) * S2_u(I,j) / H_u(I)
       else
         CS%SN_u(I,j) = 0.
       endif
@@ -504,14 +528,25 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
-      wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
-      wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
-      wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
-      S2 =  slope_y(i,J,K)**2  + ( &
-           (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
-          +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
-           ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      if (CS%use_Visbeck_slope_bug) then
+        wSE = h(i,j  ,k)*h(i+1,j  ,k) * h(i,j  ,k)*h(i+1,j  ,k-1)
+        wNW = h(i,j+1,k)*h(i-1,j+1,k) * h(i,j+1,k)*h(i-1,j+1,k-1)
+        wNE = h(i,j+1,k)*h(i+1,j+1,k) * h(i,j+1,k)*h(i+1,j+1,k-1)
+        wSW = h(i,j  ,k)*h(i-1,j  ,k) * h(i,j  ,k)*h(i-1,j  ,k-1)
+        S2 =  slope_y(i,J,K)**2  + ( &
+             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
+             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**2 ) !### This should be **4 for consistent units.
+      else
+        wSE = G%mask2dCu(I,j)     * ( (h(i,j  ,k)*h(i+1,j  ,k)) * (h(i,j  ,k-1)*h(i+1,j  ,k-1)) )
+        wNW = G%mask2dCu(I-1,j+1) * ( (h(i,j+1,k)*h(i-1,j+1,k)) * (h(i,j+1,k-1)*h(i-1,j+1,k-1)) )
+        wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
+        wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
+        S2 =  slope_y(i,J,K)**2  + ( &
+             (wSE*slope_x(I,j,K)**2+wNW*slope_x(I-1,j+1,K)**2)     &
+             +(wNE*slope_x(I,j+1,K)**2+wSW*slope_x(I-1,j,K)**2) ) / &
+             ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 ) !### This should be **4 for consistent units.
+      endif
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
       N2 = max(0., N2_v(i,J,K))
       CS%SN_v(i,J) = CS%SN_v(i,J) + sqrt( S2*N2 )*H_geom
@@ -520,8 +555,8 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
     enddo ; enddo
     do i=is,ie
       if (H_v(i)>0.) then
-        CS%SN_v(i,J) = CS%SN_v(i,J) / H_v(i)
-        S2_v(i,J) = S2_v(i,J) / H_v(i)
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * CS%SN_v(i,J) / H_v(i)
+        S2_v(i,J) = G%mask2dCv(i,J) * S2_v(i,J) / H_v(i)
       else
         CS%SN_v(i,J) = 0.
       endif
@@ -534,6 +569,12 @@ subroutine calc_Visbeck_coeffs(h, e, slope_x, slope_y, N2_u, N2_v, G, GV, CS)
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_S2_u > 0) call post_data(CS%id_S2_u, S2_u, CS%diag)
     if (CS%id_S2_v > 0) call post_data(CS%id_S2_v, S2_v, CS%diag)
+  endif
+
+  if (CS%debug) then
+    call uvchksum("calc_Visbeck_coeffs slope_[xy]", slope_x, slope_y, G%HI, haloshift=1)
+    call uvchksum("calc_Visbeck_coeffs N2_u, N2_v", N2_u, N2_v, G%HI)
+    call uvchksum("calc_Visbeck_coeffs SN_[uv]", CS%SN_u, CS%SN_v, G%HI)
   endif
 
 end subroutine calc_Visbeck_coeffs
@@ -567,7 +608,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "calc_slope_function:"// &
          "Module must be initialized before it is used.")
-  if (.not. CS%use_variable_mixing) return
+  if (.not. CS%calculate_Eady_growth_rate) return
   if (.not. ASSOCIATED(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
          "%SN_u is not associated with use_variable_mixing.")
   if (.not. ASSOCIATED(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
@@ -592,16 +633,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
 
-  ! Set the length scale at u-points.
-!$OMP do
-  do j=js,je ; do I=is-1,ie
-    CS%L2u(I,j) = CS%Visbeck_L_scale**2
-  enddo ; enddo
-  ! Set length scale at v-points
-!$OMP do
-  do J=js-1,je ; do i=is,ie
-    CS%L2v(i,J) = CS%Visbeck_L_scale**2
-  enddo ; enddo
 !$OMP do
   do k=nz,CS%VarMix_Ktop,-1
 
@@ -663,7 +694,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_u(I,j) = sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
+        CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
       else
         CS%SN_u(I,j) = 0.0
       endif
@@ -678,7 +709,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
       if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
-        CS%SN_v(i,J) = sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
+        CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
       else
         CS%SN_v(I,j) = 0.0
       endif
@@ -697,15 +728,15 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(VarMix_CS),               pointer :: CS   !< Variable mixing coefficients
   ! Local variables
   real :: KhTr_Slope_Cff, KhTh_Slope_Cff, oneOrTwo, N2_filter_depth
+  real :: KhTr_passivity_coeff
   real, parameter :: absurdly_small_freq2 = 1e-34  ! A miniscule frequency
              ! squared that is used to avoid division by 0, in s-2.  This
              ! value is roughly (pi / (the age of the universe) )^2.
-  logical :: use_variable_mixing, Gill_equatorial_Ld, use_stored_slopes
-  logical :: Resoln_scaled_Kh, Resoln_scaled_KhTh, Resoln_scaled_KhTr
-  logical :: Resoln_use_ebt, khth_use_ebt_struct
+  logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
+  real :: MLE_front_length
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_lateral_mixing_coeffs" ! This module's name.
+  character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -719,183 +750,189 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     return
   endif
 
+  allocate(CS)
+  in_use = .false. ! Set to true to avoid deallocating
+  CS%diag => diag ! Diagnostics pointer
+  CS%calculate_cg1 = .false.
+  CS%calculate_Rd_dx = .false.
+  CS%calculate_res_fns = .false.
+  CS%calculate_Eady_growth_rate = .false.
+
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  !   This first set of parameters are read into local variables first, in case
-  ! the control structure should not be allocated.
-  call get_param(param_file, mod, "USE_VARIABLE_MIXING", use_variable_mixing,&
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
                  "If true, the variable mixing code will be called.  This \n"//&
                  "allows diagnostics to be created even if the scheme is \n"//&
                  "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, \n"//&
                  "this is set to true regardless of what is in the \n"//&
                  "parameter file.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KH", Resoln_scaled_Kh, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KH", CS%Resoln_scaled_Kh, &
                  "If true, the Laplacian lateral viscosity is scaled away \n"//&
                  "when the first baroclinic deformation radius is well \n"//&
                  "resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KHTH", Resoln_scaled_KhTh, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KHTH", CS%Resoln_scaled_KhTh, &
                  "If true, the interface depth diffusivity is scaled away \n"//&
                  "when the first baroclinic deformation radius is well \n"//&
                  "resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_SCALED_KHTR", Resoln_scaled_KhTr, &
+  call get_param(param_file, mdl, "RESOLN_SCALED_KHTR", CS%Resoln_scaled_KhTr, &
                  "If true, the epipycnal tracer diffusivity is scaled \n"//&
                  "away when the first baroclinic deformation radius is \n"//&
                  "well resolved.", default=.false.)
-  call get_param(param_file, mod, "RESOLN_USE_EBT", Resoln_use_ebt, &
+  call get_param(param_file, mdl, "RESOLN_USE_EBT", CS%Resoln_use_ebt, &
                  "If true, uses the equivalent barotropic wave speed instead\n"//&
                  "of first baroclinic wave for calculating the resolution fn.",&
                  default=.false.)
-  call get_param(param_file, mod, "KHTH_USE_EBT_STRUCT", khth_use_ebt_struct, &
+  call get_param(param_file, mdl, "KHTH_USE_EBT_STRUCT", CS%khth_use_ebt_struct, &
                  "If true, uses the equivalent barotropic structure\n"//&
                  "as the vertical structure of thickness diffusivity.",&
                  default=.false.)
-  call get_param(param_file, mod, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTH_SLOPE_CFF", KhTh_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the interface depth diffusivity", units="nondim", &
                  default=0.0)
-  call get_param(param_file, mod, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
+  call get_param(param_file, mdl, "KHTR_SLOPE_CFF", KhTr_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula \n"//&
                  "for the epipycnal tracer diffusivity", units="nondim", &
                  default=0.0)
-  call get_param(param_file, mod, "USE_STORED_SLOPES", use_stored_slopes,&
+  call get_param(param_file, mdl, "USE_STORED_SLOPES", CS%use_stored_slopes,&
                  "If true, the isopycnal slopes are calculated once and\n"//&
                  "stored for re-use. This uses more memory but avoids calling\n"//&
                  "the equation of state more times than should be necessary.", &
                  default=.false.)
-  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) use_variable_mixing = .true.
+  call get_param(param_file, mdl, "KHTH_USE_FGNV_STREAMFUNCTION", use_FGNV_streamfn, &
+                 default=.false., do_not_log=.true.)
+  CS%calculate_cg1 = CS%calculate_cg1 .or. use_FGNV_streamfn
+  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
+                 default=.false., do_not_log=.true.)
+  CS%calculate_Eady_growth_rate = CS%calculate_Eady_growth_rate .or. use_MEKE
+  call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", KhTr_passivity_coeff, &
+                 default=0., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (KhTr_passivity_coeff>0.)
+  call get_param(param_file, mdl, "MLE_FRONT_LENGTH", MLE_front_length, &
+                 default=0., do_not_log=.true.)
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (MLE_front_length>0.)
 
-  if (use_variable_mixing .or. Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. &
-      Resoln_scaled_KhTr .or. use_stored_slopes .or. khth_use_ebt_struct) then
-    allocate(CS)
-    CS%diag => diag ! Diagnostics pointer
-    CS%Resoln_scaled_Kh = Resoln_scaled_Kh
-    CS%Resoln_scaled_KhTh = Resoln_scaled_KhTh
-    CS%Resoln_scaled_KhTr = Resoln_scaled_KhTr
-    CS%Resoln_use_ebt = Resoln_use_ebt
-    CS%khth_use_ebt_struct = khth_use_ebt_struct
-    CS%use_variable_mixing = use_variable_mixing
-    CS%use_stored_slopes = use_stored_slopes
-  else
-    return
-  endif
-  if (Resoln_use_ebt .or. khth_use_ebt_struct) then
-    call get_param(param_file, mod, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
+  call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
+
+  if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct) then
+    in_use = .true.
+    call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification\n"//&
                  "artifacts from altering the equivalent barotropic mode structure.",&
                  units='m', default=2000.)
+    allocate(CS%ebt_struct(isd:ied,jsd:jed,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
   endif
-  if (khth_use_ebt_struct) then
-    allocate(CS%ebt_struct(isd:ied,JsdB:JedB,G%ke)) ; CS%ebt_struct(:,:,:) = 0.0
-  endif
-  if (use_variable_mixing) then
-    call get_param(param_file, mod, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
+
+  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
+    CS%calculate_Eady_growth_rate = .true.
+    call get_param(param_file, mdl, "VISBECK_MAX_SLOPE", CS%Visbeck_S_max, &
           "If non-zero, is an upper bound on slopes used in the\n"//       &
           "Visbeck formula for diffusivity. This does not affect the\n"//  &
           "isopycnal slope calculation used within thickness diffusion.",  &
           units="nondim", default=0.0)
   endif
 
-! Allocate CS and memory
   if (CS%use_stored_slopes) then
+    in_use = .true.
     allocate(CS%slope_x(IsdB:IedB,jsd:jed,G%ke+1)) ; CS%slope_x(:,:,:) = 0.0
     allocate(CS%slope_y(isd:ied,JsdB:JedB,G%ke+1)) ; CS%slope_y(:,:,:) = 0.0
-    call get_param(param_file, mod, "KD_SMOOTH", CS%kappa_smooth, &
+    call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate \n"//&
                  "more sensible values of T & S into thin layers.", &
                  default=1.0e-6)
   endif
 
-  if (CS%use_variable_mixing) then
+  if (CS%calculate_Eady_growth_rate) then
+    in_use = .true.
     allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
     allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0
-    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = 0.0
-    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = 0.0
-    call MOM_mesg("VarMix_init: memory allocated for use_variable_mixing", 5)
-
-  ! More run-time parameters
-    call get_param(param_file, mod, "VARMIX_KTOP", CS%VarMix_Ktop, &
-                 "The layer number at which to start vertical integration \n"//&
-                 "of S*N for purposes of finding the Eady growth rate.", &
-                 units="nondim", default=2)
-    call get_param(param_file, mod, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
-                 "The fixed length scale in the Visbeck formula.", units="m", &
-                 default=0.0)
-
-  ! Register fields for output from this module.
     CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
        'Inverse eddy time-scale, S*N, at u-points', 's^-1')
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
        'Inverse eddy time-scale, S*N, at v-points', 's^-1')
+    call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
+                 "The layer number at which to start vertical integration \n"//&
+                 "of S*N for purposes of finding the Eady growth rate.", &
+                 units="nondim", default=2)
+  endif
+
+  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
+    in_use = .true.
+    call get_param(param_file, mdl, "VISBECK_L_SCALE", CS%Visbeck_L_scale, &
+                 "The fixed length scale in the Visbeck formula.", units="m", &
+                 default=0.0)
+    allocate(CS%L2u(IsdB:IedB,jsd:jed)) ; CS%L2u(:,:) = CS%Visbeck_L_scale**2
+    allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = CS%Visbeck_L_scale**2
+
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
        'Length scale squared for mixing coefficient, at u-points', 'm^2')
     CS%id_L2v = register_diag_field('ocean_model', 'L2v', diag%axesCv1, Time, &
        'Length scale squared for mixing coefficient, at v-points', 'm^2')
-
-    if (CS%use_stored_slopes) then
-      CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's^-2')
-      CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's^-2')
-      CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's^-2')
-      CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's^-2')
-    endif
   endif
 
-  if (CS%Resoln_scaled_Kh .or. Resoln_scaled_KhTh .or. Resoln_scaled_KhTr) then
-    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+  if (CS%use_stored_slopes) then
+    CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
+         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's^-2')
+    CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
+         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's^-2')
+    CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's^-2')
+    CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's^-2')
+  endif
 
-    ! Allocate and initialize various arrays.
+  if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
+    CS%calculate_Rd_dx = .true.
+    CS%calculate_res_fns = .true.
     allocate(CS%Res_fn_h(isd:ied,jsd:jed))       ; CS%Res_fn_h(:,:) = 0.0
     allocate(CS%Res_fn_q(IsdB:IedB,JsdB:JedB))   ; CS%Res_fn_q(:,:) = 0.0
     allocate(CS%Res_fn_u(IsdB:IedB,jsd:jed))     ; CS%Res_fn_u(:,:) = 0.0
     allocate(CS%Res_fn_v(isd:ied,JsdB:JedB))     ; CS%Res_fn_v(:,:) = 0.0
-    allocate(CS%cg1(isd:ied,jsd:jed))            ; CS%cg1(:,:) = 0.0
-    allocate(CS%beta_dx2_h(isd:ied,jsd:jed))     ; CS%beta_dx2_h(:,:) = 0.0
     allocate(CS%beta_dx2_q(IsdB:IedB,JsdB:JedB)) ; CS%beta_dx2_q(:,:) = 0.0
     allocate(CS%beta_dx2_u(IsdB:IedB,jsd:jed))   ; CS%beta_dx2_u(:,:) = 0.0
     allocate(CS%beta_dx2_v(isd:ied,JsdB:JedB))   ; CS%beta_dx2_v(:,:) = 0.0
-    allocate(CS%f2_dx2_h(isd:ied,jsd:jed))       ; CS%f2_dx2_h(:,:) = 0.0
     allocate(CS%f2_dx2_q(IsdB:IedB,JsdB:JedB))   ; CS%f2_dx2_q(:,:) = 0.0
     allocate(CS%f2_dx2_u(IsdB:IedB,jsd:jed))     ; CS%f2_dx2_u(:,:) = 0.0
     allocate(CS%f2_dx2_v(isd:ied,JsdB:JedB))     ; CS%f2_dx2_v(:,:) = 0.0
-    allocate(CS%Rd_dx_h(isd:ied,jsd:jed))        ; CS%Rd_dx_h(:,:) = 0.0
 
     CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', diag%axesT1, Time, &
        'Resolution function for scaling diffusivities', 'Nondim')
-    CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
-       'Ratio between deformation radius and grid spacing', 'Nondim')
 
-    call get_param(param_file, mod, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
+    call get_param(param_file, mdl, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
                  "A coefficient that determines how KhTh is scaled away if \n"//&
                  "RESOLN_SCALED_... is true, as \n"//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).", &
                  units="nondim", default=1.0)
-    call get_param(param_file, mod, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
+    call get_param(param_file, mdl, "KH_RES_FN_POWER", CS%Res_fn_power_khth, &
                  "The power of dx/Ld in the Kh resolution function.  Any \n"//&
                  "positive integer may be used, although even integers \n"//&
                  "are more efficient to calculate.  Setting this greater \n"//&
                  "than 100 results in a step-function being used.", &
                  units="nondim", default=2)
-    call get_param(param_file, mod, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
+    call get_param(param_file, mdl, "VISC_RES_SCALE_COEF", CS%Res_coef_visc, &
                  "A coefficient that determines how Kh is scaled away if \n"//&
                  "RESOLN_SCALED_... is true, as \n"//&
                  "F = 1 / (1 + (KH_RES_SCALE_COEF*Rd/dx)^KH_RES_FN_POWER).\n"//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_coef_khth)
-    call get_param(param_file, mod, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
+    call get_param(param_file, mdl, "VISC_RES_FN_POWER", CS%Res_fn_power_visc, &
                  "The power of dx/Ld in the Kh resolution function.  Any \n"//&
                  "positive integer may be used, although even integers \n"//&
                  "are more efficient to calculate.  Setting this greater \n"//&
                  "than 100 results in a step-function being used.\n"//&
                  "This function affects lateral viscosity, Kh, and not KhTh.", &
                  units="nondim", default=CS%Res_fn_power_khth)
-    call get_param(param_file, mod, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
+    call get_param(param_file, mdl, "INTERPOLATE_RES_FN", CS%interpolate_Res_fn, &
                  "If true, interpolate the resolution function to the \n"//&
                  "velocity points from the thickness points; otherwise \n"//&
                  "interpolate the wave speed and calculate the resolution \n"//&
                  "function independently at each point.", default=.true.)
+    call get_param(param_file, mdl, "USE_VISBECK_SLOPE_BUG", CS%use_Visbeck_slope_bug, &
+                 "If true, then retain a legacy bug in the calculation of weights \n"//&
+                 "applied to isoneutral slopes. There was an erroneous k-indexing \n"//&
+                 "for layer thicknesses. In addition, masking at coastlines was not \n"//&
+                 "used which introduced potential restart issues.  This flag will be \n"//&
+                 "deprecated in a future release.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc .ne. CS%Res_coef_khth) call MOM_error(FATAL, &
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
@@ -904,28 +941,17 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
            "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
-    call get_param(param_file, mod, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
+    call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
                  "If true, uses Gill's definition of the baroclinic\n"//&
                  "equatorial deformation radius, otherwise, if false, use\n"//&
                  "Pedlosky's definition. These definitions differ by a factor\n"//&
                  "of 2 infront of the beta term in the denominator. Gill's"//&
                  "is the more appropriate definition.\n", default=.false.)
-
-    ! Pre-calculate several static expressions for later use.
-    if (Gill_equatorial_Ld) then; oneOrTwo = 2.0
-      else; oneOrTwo = 1.0; endif
-
-    do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                      (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
-              absurdly_small_freq2)
-      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
-             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
-             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
-    enddo ; enddo
+    if (Gill_equatorial_Ld) then
+      oneOrTwo = 2.0
+    else
+      oneOrTwo = 1.0
+    endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
@@ -959,6 +985,43 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                   ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
     enddo ; enddo
 
+  endif
+
+  ! Resolution %Rd_dx_h
+  CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
+       'Ratio between deformation radius and grid spacing', 'Nondim')
+  CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (CS%id_Rd_dx>0)
+
+  if (CS%calculate_Rd_dx) then
+    CS%calculate_cg1 = .true. ! We will need %cg1
+    allocate(CS%Rd_dx_h(isd:ied,jsd:jed))   ; CS%Rd_dx_h(:,:) = 0.0
+    allocate(CS%beta_dx2_h(isd:ied,jsd:jed)); CS%beta_dx2_h(:,:) = 0.0
+    allocate(CS%f2_dx2_h(isd:ied,jsd:jed))  ; CS%f2_dx2_h(:,:) = 0.0
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
+          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
+                      (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
+              absurdly_small_freq2)
+      CS%beta_dx2_h(i,j) = oneOrTwo * (G%dxT(i,j)**2 + G%dyT(i,j)**2) * (sqrt(0.5 * &
+          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
+             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
+    enddo ; enddo
+  endif
+
+  if (CS%calculate_cg1) then
+    in_use = .true.
+    allocate(CS%cg1(isd:ied,jsd:jed)); CS%cg1(:,:) = 0.0
+    call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+  endif
+
+  ! If nothing is being stored in this class then deallocate
+  if (in_use) then
+    CS%use_variable_mixing = .true.
+  else
+    deallocate(CS)
+    return
   endif
 
 end subroutine VarMix_init

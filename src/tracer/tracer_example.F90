@@ -68,7 +68,7 @@ use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
-use coupler_util, only : set_coupler_values, ind_csurf
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -121,8 +121,8 @@ contains
 
 function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),    intent(in)   :: HI
-  type(verticalGrid_type), intent(in)   :: GV
-  type(param_file_type),   intent(in)   :: param_file
+  type(verticalGrid_type), intent(in)   :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),   intent(in)   :: param_file !< A structure to parse for run-time parameters
   type(USER_tracer_example_CS), pointer :: CS
   type(tracer_registry_type), pointer   :: tr_Reg
   type(MOM_restart_CS),       pointer   :: restart_CS
@@ -140,7 +140,7 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "tracer_example" ! This module's name.
+  character(len=40)  :: mdl = "tracer_example" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: USER_register_tracer_example
@@ -155,18 +155,18 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "TRACER_EXAMPLE_IC_FILE", CS%tracer_IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "TRACER_EXAMPLE_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the DOME tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%tracer_IC_file = trim(slasher(inputdir))//trim(CS%tracer_IC_file)
-    call log_param(param_file, mod, "INPUTDIR/TRACER_EXAMPLE_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/TRACER_EXAMPLE_IC_FILE", &
                    CS%tracer_IC_file)
   endif
-  call get_param(param_file, mod, "SPONGE", CS%use_sponge, &
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
@@ -180,7 +180,7 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
     if (m < 10) then ; write(name,'("tr",I1.1)') m
     else ; write(name,'("tr",I2.2)') m ; endif
     write(longname,'("Concentration of Tracer ",I2.2)') m
-    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
@@ -207,9 +207,10 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(USER_tracer_example_CS),       pointer    :: CS
@@ -383,11 +384,11 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 end subroutine USER_initialize_tracer
 
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
+  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
   type(USER_tracer_example_CS),       pointer    :: CS
 !   This subroutine applies diapycnal diffusion and any other column
 ! tracer physics or chemistry to the tracers from this file.
@@ -516,9 +517,10 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
 end subroutine tracer_column_physics
 
 function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(verticalGrid_type),            intent(in)    :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                      intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
   type(USER_tracer_example_CS),       pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
@@ -568,30 +570,33 @@ function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function USER_tracer_stock
 
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
 subroutine USER_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),              intent(in)    :: G
-  type(surface),                      intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  type(USER_tracer_example_CS),       pointer       :: CS
-!   This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_USER_tracer.
-  integer :: i, j, m, is, ie, js, je
+  type(ocean_grid_type),        intent(in)    :: G     !< The ocean's grid structure
+  type(surface),                intent(inout) :: state !< A structure containing fields that
+                                                       !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                                intent(in)    :: h  !< Layer thicknesses, in H (usually m or kg m-2)
+  type(USER_tracer_example_CS), pointer       :: CS !< The control structure returned by a previous
+                                                    !! call to register_USER_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,1), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

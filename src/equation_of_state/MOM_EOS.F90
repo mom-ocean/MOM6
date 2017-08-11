@@ -19,7 +19,7 @@ use MOM_EOS_TEOS10, only : calculate_density_scalar_teos10, calculate_density_ar
 use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_compress_teos10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero
+use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero, calculate_TFreeze_teos10
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_string_functions, only : uppercase
@@ -87,8 +87,10 @@ character*(10), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING
 
 integer, parameter :: TFREEZE_LINEAR = 1
 integer, parameter :: TFREEZE_MILLERO = 2
+integer, parameter :: TFREEZE_TEOS10 = 3
 character*(10), parameter :: TFREEZE_LINEAR_STRING = "LINEAR"
 character*(10), parameter :: TFREEZE_MILLERO_STRING = "MILLERO_78"
+character*(10), parameter :: TFREEZE_TEOS10_STRING = "TEOS10"
 character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
 
 contains
@@ -146,7 +148,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
       call calculate_density_array_wright(T, S, pressure, rho, start, npts)
     case (EOS_TEOS10)
       call calculate_density_array_teos10(T, S, pressure, rho, start, npts)
-    case (EOS_nemo)
+    case (EOS_NEMO)
       call calculate_density_array_nemo  (T, S, pressure, rho, start, npts)
     case default
       call MOM_error(FATAL, &
@@ -171,6 +173,8 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS)
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
       call calculate_TFreeze_Millero(S, pressure, T_fr)
+    case (TFREEZE_TEOS10)
+      call calculate_TFreeze_teos10(S, pressure, T_fr)
     case default
       call MOM_error(FATAL, &
            "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
@@ -196,6 +200,8 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS)
                                     EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
       call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
+    case (TFREEZE_TEOS10)
+      call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
@@ -454,15 +460,15 @@ subroutine EOS_init(param_file, EOS)
   type(EOS_type),        pointer    :: EOS !< Equation of state structure
   ! Local variables
 #include "version_variable.h"
-  character(len=40)  :: mod = "MOM_EOS" ! This module's name.
+  character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
   character(len=40)  :: tmpstr
 
   if (.not.associated(EOS)) call EOS_allocate(EOS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
+  call log_version(param_file, mdl, version, "")
 
-  call get_param(param_file, mod, "EQN_OF_STATE", tmpstr, &
+  call get_param(param_file, mdl, "EQN_OF_STATE", tmpstr, &
                  "EQN_OF_STATE determines which ocean equation of state \n"//&
                  "should be used.  Currently, the valid choices are \n"//&
                  '"LINEAR", "UNESCO", "WRIGHT", "NEMO" and "TEOS10". \n'//&
@@ -487,54 +493,63 @@ subroutine EOS_init(param_file, EOS)
 
   if (EOS%form_of_EOS == EOS_LINEAR) then
     EOS%Compressible = .false.
-    call get_param(param_file, mod, "RHO_T0_S0", EOS%Rho_T0_S0, &
+    call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
                  "this is the density at T=0, S=0.", units="kg m-3", &
                  default=1000.0)
-    call get_param(param_file, mod, "DRHO_DT", EOS%dRho_dT, &
+    call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
                  "this is the partial derivative of density with \n"//&
                  "temperature.", units="kg m-3 K-1", default=-0.2)
-    call get_param(param_file, mod, "DRHO_DS", EOS%dRho_dS, &
+    call get_param(param_file, mdl, "DRHO_DS", EOS%dRho_dS, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", \n"//&
                  "this is the partial derivative of density with \n"//&
                  "salinity.", units="kg m-3 PSU-1", default=0.8)
   endif
 
-  call get_param(param_file, mod, "EOS_QUADRATURE", EOS%EOS_quadrature, &
+  call get_param(param_file, mdl, "EOS_QUADRATURE", EOS%EOS_quadrature, &
                  "If true, always use the generic (quadrature) code \n"//&
                  "code for the integrals of density.", default=.false.)
 
-  call get_param(param_file, mod, "TFREEZE_FORM", tmpstr, &
+  call get_param(param_file, mdl, "TFREEZE_FORM", tmpstr, &
                  "TFREEZE_FORM determines which expression should be \n"//&
                  "used for the freezing point.  Currently, the valid \n"//&
-                 'choices are "LINEAR", "MILLERO_78".', &
+                 'choices are "LINEAR", "MILLERO_78", "TEOS10"', &
                  default=TFREEZE_DEFAULT)
   select case (uppercase(tmpstr))
     case (TFREEZE_LINEAR_STRING)
       EOS%form_of_TFreeze = TFREEZE_LINEAR
     case (TFREEZE_MILLERO_STRING)
       EOS%form_of_TFreeze = TFREEZE_MILLERO
+    case (TFREEZE_TEOS10_STRING)
+      EOS%form_of_TFreeze = TFREEZE_TEOS10
     case default
       call MOM_error(FATAL, "interpret_eos_selection:  TFREEZE_FORM "//&
                               trim(tmpstr) // "in input file is invalid.")
   end select
+
   if (EOS%form_of_TFreeze == TFREEZE_LINEAR) then
-    call get_param(param_file, mod, "TFREEZE_S0_P0",EOS%TFr_S0_P0, &
+    call get_param(param_file, mdl, "TFREEZE_S0_P0",EOS%TFr_S0_P0, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
                  "this is the freezing potential temperature at \n"//&
                  "S=0, P=0.", units="deg C", default=0.0)
-    call get_param(param_file, mod, "DTFREEZE_DS",EOS%dTFr_dS, &
+    call get_param(param_file, mdl, "DTFREEZE_DS",EOS%dTFr_dS, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
                  "this is the derivative of the freezing potential \n"//&
                  "temperature with salinity.", &
                  units="deg C PSU-1", default=-0.054)
-    call get_param(param_file, mod, "DTFREEZE_DP",EOS%dTFr_dP, &
+    call get_param(param_file, mdl, "DTFREEZE_DP",EOS%dTFr_dP, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", \n"//&
                  "this is the derivative of the freezing potential \n"//&
                  "temperature with pressure.", &
                  units="deg C Pa-1", default=0.0)
   endif
+
+  if (EOS%form_of_EOS == EOS_TEOS10 .OR. EOS%form_of_EOS == EOS_NEMO .AND. EOS%form_of_TFreeze /= TFREEZE_TEOS10) then
+      call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_NEMO \n" //&
+      "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 .")
+  endif
+
 
 end subroutine EOS_init
 
@@ -2113,7 +2128,7 @@ end subroutine int_spec_vol_dp_generic
 subroutine convert_temp_salt_for_TEOS10(T, S, press, G, kd, mask_z, EOS)
   use MOM_grid, only : ocean_grid_type
   !> The horizontal index structure
-  type(ocean_grid_type),                      intent(in)  :: G
+  type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure
 
   !> Potential temperature referenced to the surface (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)),  intent(inout)  :: T

@@ -24,6 +24,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use fms_mod, only : fms_end, MOM_infra_init => fms_init
 use memutils_mod, only : print_memuse_stats
 use mpp_mod, only : PE_here => mpp_pe, root_PE => mpp_root_pe, num_PEs => mpp_npes
+use mpp_mod, only : Set_PElist => mpp_set_current_pelist, Get_PElist => mpp_get_current_pelist
 use mpp_mod, only : broadcast => mpp_broadcast
 use mpp_mod, only : sum_across_PEs => mpp_sum, min_across_PEs => mpp_min
 use mpp_mod, only : max_across_PEs => mpp_max
@@ -36,7 +37,7 @@ public :: reproducing_sum, EFP_list_sum_across_PEs
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
-
+public :: Set_PElist, Get_PElist
 !   This module provides interfaces to the non-domain-oriented communication
 ! subroutines.
 

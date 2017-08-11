@@ -1,0 +1,9 @@
+# Ignore doxygen output
+doxygen
+doxygen.log
+APIs
+# Ignore sphinx-build output
+_build
+api
+src
+xml

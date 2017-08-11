@@ -34,7 +34,8 @@ use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_coms, only : max_across_PEs
-use coupler_util, only : set_coupler_values, ind_csurf
+
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -101,7 +102,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ISOMIP_tracer" ! This module's name.
+  character(len=40)  :: mdl = "ISOMIP_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_ISOMIP_tracer
@@ -116,19 +117,19 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "ISOMIP_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the ISOMIP tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     CS%tracer_IC_file = trim(inputdir)//trim(CS%tracer_IC_file)
-    call log_param(param_file, mod, "INPUTDIR/ISOMIP_TRACER_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/ISOMIP_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
-  call get_param(param_file, mod, "SPONGE", CS%use_sponge, &
+  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
                  "If true, sponges may be applied anywhere in the domain. \n"//&
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
@@ -142,7 +143,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, &
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
     write(longname,'("Concentration of ISOMIP Tracer ",I2.2)') m
-    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mod)
+    CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
@@ -305,14 +306,14 @@ end subroutine initialize_ISOMIP_tracer
 ! This is a simple example of a set of advected passive tracers.
 subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G
-  type(verticalGrid_type),               intent(in) :: GV
+  type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                         intent(in) :: fluxes
-  real,                                  intent(in) :: dt
-  type(ISOMIP_tracer_CS),                  pointer    :: CS
-  real,                             optional,intent(in)  :: evap_CFL_limit
-  real,                             optional,intent(in)  :: minimum_forcing_depth
+  real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
+  type(ISOMIP_tracer_CS),                pointer    :: CS
+  real,                        optional,intent(in)  :: evap_CFL_limit
+  real,                        optional,intent(in)  :: minimum_forcing_depth
 
 ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
 !  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
@@ -409,24 +410,34 @@ subroutine ISOMIP_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, G
 
 end subroutine ISOMIP_tracer_column_physics
 
-!> This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
+!! This particular tracer package does not report anything back to the coupler.
 subroutine ISOMIP_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in)    :: G !< The ocean's grid structure.
-  type(surface),                            intent(inout) :: state !< A structure containing fields that describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h !< Layer thickness, in m or kg m-2.
-  type(ISOMIP_tracer_CS),                     pointer       :: CS !< The control structure returned by a previous call to ISOMIP_register_tracer.
-  integer :: i, j, m, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(ISOMIP_tracer_CS), pointer       :: CS !< The control structure returned by a previous
+                                              !! call to ISOMIP_register_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,1), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

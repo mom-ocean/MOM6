@@ -74,7 +74,7 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
-use coupler_util, only : set_coupler_values, ind_csurf
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -143,8 +143,8 @@ contains
 
 function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI
-  type(verticalGrid_type),    intent(in) :: GV
-  type(param_file_type),      intent(in) :: param_file
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
   type(ideal_age_tracer_CS),  pointer    :: CS
   type(tracer_registry_type), pointer    :: tr_Reg
   type(MOM_restart_CS),       pointer    :: restart_CS
@@ -161,7 +161,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "ideal_age_example" ! This module's name.
+  character(len=40)  :: mdl = "ideal_age_example" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   real, pointer :: tr_ptr(:,:,:) => NULL()
@@ -178,16 +178,16 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS)
 
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mod, version, "")
-  call get_param(param_file, mod, "DO_IDEAL_AGE", do_ideal_age, &
+  call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "DO_IDEAL_AGE", do_ideal_age, &
                  "If true, use an ideal age tracer that is set to 0 age \n"//&
                  "in the mixed layer and ages at unit rate in the interior.", &
                  default=.true.)
-  call get_param(param_file, mod, "DO_IDEAL_VINTAGE", do_vintage, &
+  call get_param(param_file, mdl, "DO_IDEAL_VINTAGE", do_vintage, &
                  "If true, use an ideal vintage tracer that is set to an \n"//&
                  "exponentially increasing value in the mixed layer and \n"//&
                  "is conserved thereafter.", default=.false.)
-  call get_param(param_file, mod, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
+  call get_param(param_file, mdl, "DO_IDEAL_AGE_DATED", do_ideal_age_dated, &
                  "If true, use an ideal age tracer that is everywhere 0 \n"//&
                  "before IDEAL_AGE_DATED_START_YEAR, but the behaves like \n"//&
                  "the standard ideal age tracer - i.e. is set to 0 age in \n"//&
@@ -195,23 +195,23 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  default=.false.)
 
 
-  call get_param(param_file, mod, "AGE_IC_FILE", CS%IC_file, &
+  call get_param(param_file, mdl, "AGE_IC_FILE", CS%IC_file, &
                  "The file in which the age-tracer initial values can be \n"//&
                  "found, or an empty string for internal initialization.", &
                  default=" ")
   if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
     ! Add the directory if CS%IC_file is not already a complete path.
-    call get_param(param_file, mod, "INPUTDIR", inputdir, default=".")
+    call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
-    call log_param(param_file, mod, "INPUTDIR/AGE_IC_FILE", CS%IC_file)
+    call log_param(param_file, mdl, "INPUTDIR/AGE_IC_FILE", CS%IC_file)
   endif
-  call get_param(param_file, mod, "AGE_IC_FILE_IS_Z", CS%Z_IC_file, &
+  call get_param(param_file, mdl, "AGE_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, AGE_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mod, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
+  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
                  "If true, the tracers are masked out in massless layer. \n"//&
                  "This can be a problem with time-averages.", default=.false.)
-  call get_param(param_file, mod, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
+  call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
                  "it is a fatal error if the tracers are not found in the \n"//&
@@ -220,7 +220,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mod)
+    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
@@ -228,10 +228,10 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (do_vintage) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = var_desc("vintage", "years", "Exponential Vintage Tracer", &
-                            caller=mod)
+                            caller=mdl)
     CS%tracer_ages(m) = .false. ; CS%sfc_growth_rate(m) = 1.0/30.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 1e-20 ; CS%tracer_start_year(m) = 0.0
-    call get_param(param_file, mod, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
+    call get_param(param_file, mdl, "IDEAL_VINTAGE_START_YEAR", CS%tracer_start_year(m), &
                  "The date at which the ideal vintage tracer starts.", &
                  units="years", default=0.0)
   endif
@@ -239,10 +239,10 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
     CS%tr_desc(m) = var_desc("age_dated","years","Ideal Age Tracer with a Start Date",&
-                            caller=mod)
+                            caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
-    call get_param(param_file, mod, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &
+    call get_param(param_file, mdl, "IDEAL_AGE_DATED_START_YEAR", CS%tracer_start_year(m), &
                  "The date at which the dated ideal age tracer starts.", &
                  units="years", default=0.0)
   endif
@@ -282,9 +282,9 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                        sponge_CSp, diag_to_Z_CSp)
   logical,                            intent(in) :: restart
   type(time_type), target,            intent(in) :: day
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,            intent(in) :: diag
   type(ocean_OBC_type),               pointer    :: OBC
   type(ideal_age_tracer_CS),          pointer    :: CS
@@ -313,6 +313,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for age tracer fluxes, either
                                 ! years m3 s-1 or years kg s-1.
+  character(len=72) :: cmorname ! The CMOR name of that variable.
   logical :: OK
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
@@ -379,11 +380,15 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   else ; flux_units = "years kg s-1" ; endif
 
   do m=1,CS%ntr
-    ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_ideal_age_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+                       cmor_field_name=cmorname, caller="initialize_ideal_age_tracer")
+    if (len_trim(cmorname)==0) then
+      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
+    else
+      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
+        day, trim(longname) , trim(units), cmor_field_name=cmorname)
+    endif
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
         CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
         trim(flux_units))
@@ -415,11 +420,11 @@ end subroutine initialize_ideal_age_tracer
 
 subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),              intent(in) :: G
-  type(verticalGrid_type),            intent(in) :: GV
+  type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
   type(forcing),                      intent(in) :: fluxes
-  real,                               intent(in) :: dt
+  real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
   type(ideal_age_tracer_CS),          pointer    :: CS
   real,                             optional,intent(in)  :: evap_CFL_limit
   real,                             optional,intent(in)  :: minimum_forcing_depth
@@ -533,10 +538,10 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 end subroutine ideal_age_tracer_column_physics
 
 function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
-  type(ocean_grid_type),              intent(in)    :: G
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
+  type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real, dimension(:),                 intent(out)   :: stocks
-  type(verticalGrid_type),            intent(in)    :: GV
+  type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   type(ideal_age_tracer_CS),          pointer       :: CS
   character(len=*), dimension(:),     intent(out)   :: names
   character(len=*), dimension(:),     intent(out)   :: units
@@ -586,30 +591,34 @@ function ideal_age_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function ideal_age_stock
 
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
+!! This particular tracer package does not report anything back to the coupler.
 subroutine ideal_age_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in)    :: G
-  type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h
-  type(ideal_age_tracer_CS),                pointer       :: CS
-!   This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_ideal_age_tracer.
-  integer :: i, j, m, is, ie, js, je
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(ideal_age_tracer_CS), pointer    :: CS !< The control structure returned by a previous
+                                              !! call to register_ideal_age_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,CS%ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,m), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 

@@ -16,7 +16,7 @@ contains
 
 function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,     &
                               param, flag, ice_restart_file, ocean_restart_file, &
-                              units, caller)  result (coupler_index)
+                              units, caller, verbosity)  result (coupler_index)
 
   character(len=*), intent(in)                          :: name
   character(len=*), intent(in)                          :: flux_type
@@ -28,6 +28,7 @@ function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,    
   character(len=*), intent(in), optional                :: ocean_restart_file
   character(len=*), intent(in), optional                :: units
   character(len=*), intent(in), optional                :: caller
+  integer,          intent(in), optional                :: verbosity
 
   ! None of these arguments are used for anything.
 
