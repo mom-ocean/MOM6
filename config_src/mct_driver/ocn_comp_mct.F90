@@ -26,7 +26,7 @@ use shr_kind_mod,        only: shr_kind_r8
 
 ! MOM6 modules
 use ocean_model_mod,    only: ocean_state_type, ocean_public_type, ocean_model_init_sfc
-use ocean_model_mod,    only: ocean_model_init, get_state_pointers
+use ocean_model_mod,    only: ocean_model_init, get_state_pointers, ocean_model_restart
 use ocean_model_mod,    only: ice_ocean_boundary_type, update_ocean_model
 use MOM_domains,        only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_grid,           only: ocean_grid_type, get_global_grid_size
@@ -37,7 +37,6 @@ use MOM_file_parser,    only: get_param, log_version, param_file_type
 use MOM_get_input,      only: Get_MOM_Input, directories
 use coupler_indices,    only: coupler_indices_init, cpl_indices
 use coupler_indices,    only: ocn_export, fill_ice_ocean_bnd
-
 
 ! By default make data private
 implicit none; private
@@ -362,6 +361,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg
+  character(len=32)  :: timestamp      !< Name of intermediate restart file
 
   ! Compute the time at the start of this coupling interval
   call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
@@ -388,18 +388,13 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   endif
 
   ! Translate the coupling time interval
-    call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
   call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
   coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
 
   ! set (actually, get from mct) the cdata pointers:
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
-
-  ! Check alarms for flag to write restart at end of day
-  write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
-  ! \todo Let MOM6 know to write restart...
-  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
 
   ! fill ice ocean boundary
   call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind, glb%sw_decomp, &
@@ -408,6 +403,18 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
   call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
                           time_start, coupling_timestep)
+
+  !--- write out intermediate restart file when needed.
+  ! Check alarms for flag to write restart at end of day
+  write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
+  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
+
+  if (write_restart_at_eod) then
+    !timestamp = date_to_string(EClock)
+    ! \todo add time stamp to ocean_model_restart
+    !call ocean_model_restart(glb%ocn_state, timestamp)
+    call ocean_model_restart(glb%ocn_state)
+  endif
 
 end subroutine ocn_run_mct
 
