@@ -52,8 +52,8 @@ module coupler_indices
     integer :: x2o_Foxx_taux       ! zonal wind stress (taux)         (W/m2   )
     integer :: x2o_Foxx_tauy       ! meridonal wind stress (tauy)     (W/m2   )
     integer :: x2o_Foxx_swnet      ! net short-wave heat flux         (W/m2   )
-    integer :: x2o_Foxx_sen        ! sensible heat flux               (W/m2   )
-    integer :: x2o_Foxx_lat
+    integer :: x2o_Foxx_sen        ! sensible heat flux (W/m2)
+    integer :: x2o_Foxx_lat        ! latent heat flux  (W/m2)
     integer :: x2o_Foxx_lwup       ! longwave radiation (up)          (W/m2   )
     integer :: x2o_Faxa_lwdn       ! longwave radiation (down)        (W/m2   )
     integer :: x2o_Fioi_melth      ! heat flux from snow & ice melt   (W/m2   )
@@ -336,6 +336,8 @@ slp_R=0.
       do i = grid%isc, grid%iec
         k = k + 1 ! Increment position within gindex
         ig = i + grid%idg_offset
+        ! sea-level pressure (Pa)
+        ice_ocean_boundary%p(ig,jg) = x2o_o(ind%x2o_Sa_pslv,k)
         ! zonal wind stress (taux)
         ice_ocean_boundary%u_flux(ig,jg) = x2o_o(ind%x2o_Foxx_taux,k)
         ! meridional wind stress (tauy)
@@ -343,9 +345,9 @@ slp_R=0.
         ! sensible heat flux (W/m2)
         ice_ocean_boundary%t_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_sen,k)
         ! salt flux
-        ice_ocean_boundary%salt_flux(ig,jg) = x2o_o(ind%x2o_Fioi_salt,k)
-        ! heat flux from snow & ice melt
-        ice_ocean_boundary%calving_hflx(ig,jg) = x2o_o(ind%x2o_Fioi_melth,k)
+        ice_ocean_boundary%salt_flux(ig,jg) = -x2o_o(ind%x2o_Fioi_salt,k)
+        ! heat content from frozen runoff
+        ice_ocean_boundary%calving_hflx(ig,jg) = 0.0
         ! snow melt flux
         !ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Fioi_meltw,k)
         ! river runoff flux
@@ -356,7 +358,7 @@ slp_R=0.
         ice_ocean_boundary%lprec(ig,jg) = x2o_o(ind%x2o_Faxa_rain,k)
         ! frozen precipitation (snow)
         ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Faxa_snow,k)
-        ! evaporation flux (kg/m2/s)
+        ! evaporation flux, MOM6 calls q_flux specific humidity (kg/m2/s)
         ice_ocean_boundary%q_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_evap,k)
         ! longwave radiation, sum up and down (W/m2)
         ice_ocean_boundary%lw_flux(ig,jg) = x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)
