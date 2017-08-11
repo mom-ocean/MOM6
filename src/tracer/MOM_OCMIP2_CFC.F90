@@ -84,15 +84,15 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
-use coupler_util, only : extract_coupler_values, set_coupler_values
-use coupler_util, only : ind_flux, ind_alpha, ind_csurf
+use coupler_types_mod, only : ind_flux, ind_alpha, ind_csurf
+use coupler_types_mod, only : coupler_type_extract_data, coupler_type_set_data
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public register_OCMIP2_CFC, initialize_OCMIP2_CFC
+public register_OCMIP2_CFC, initialize_OCMIP2_CFC, flux_init_OCMIP2_CFC
 public OCMIP2_CFC_column_physics, OCMIP2_CFC_surface_state
 public OCMIP2_CFC_stock, OCMIP2_CFC_end
 
@@ -180,9 +180,6 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_OCMIP2_CFC" ! This module's name.
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  ! These can be overridden later in via the field manager?
-  character(len=128) :: default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
-  character(len=128) :: default_ocean_restart_file = 'ocmip2_cfc.res.nc'
   real, dimension(:,:,:), pointer :: tr_ptr
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
@@ -199,19 +196,9 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   endif
   allocate(CS)
 
-  ! These calls obtain the indices for the CFC11 and CFC12 flux coupling.
-  CS%ind_cfc_11_flux = aof_set_coupler_flux('cfc_11_flux', &
-       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-       param = (/ 9.36e-07, 9.7561e-06 /), &
-       ice_restart_file = default_ice_restart_file, &
-       ocean_restart_file = default_ocean_restart_file, &
-       caller = "register_OCMIP2_CFC")
-  CS%ind_cfc_12_flux = aof_set_coupler_flux('cfc_12_flux', &
-       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
-       param = (/ 9.36e-07, 9.7561e-06 /), &
-       ice_restart_file = default_ice_restart_file, &
-       ocean_restart_file = default_ocean_restart_file, &
-       caller = "register_OCMIP2_CFC")
+  ! This call sets default properties for the air-sea CFC fluxes and obtains the
+  ! indicies for the CFC11 and CFC12 flux coupling.
+  call flux_init_OCMIP2_CFC(CS, verbosity=3)
   if ((CS%ind_cfc_11_flux < 0) .or. (CS%ind_cfc_11_flux < 0)) then
     ! This is most likely to happen with the dummy version of aof_set_coupler_flux
     ! used in ocean-only runs.
@@ -367,6 +354,42 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   register_OCMIP2_CFC = .true.
 end function register_OCMIP2_CFC
+
+!> This subroutine initializes the air-sea CFC fluxes, and optionally returns
+!! the indicies of these fluxes.  It can safely be called multiple times.
+subroutine flux_init_OCMIP2_CFC(CS, verbosity)
+  type(OCMIP2_CFC_CS), optional, pointer :: CS !< An optional pointer to the control structure
+                                               !! for this module; if not present, the flux indicies
+                                               !! are not stored.
+  integer,             optional, intent(in) :: verbosity !< A 0-9 integer indicating a level of verbosity.
+
+  ! These can be overridden later in via the field manager?
+  character(len=128) :: default_ice_restart_file = 'ice_ocmip2_cfc.res.nc'
+  character(len=128) :: default_ocean_restart_file = 'ocmip2_cfc.res.nc'
+  integer :: ind_flux(2) ! Integer indices of the fluxes
+
+  ! These calls obtain the indices for the CFC11 and CFC12 flux coupling.  They
+  ! can safely be called multiple times.
+  ind_flux(1) = aof_set_coupler_flux('cfc_11_flux', &
+       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
+       param = (/ 9.36e-07, 9.7561e-06 /), &
+       ice_restart_file = default_ice_restart_file, &
+       ocean_restart_file = default_ocean_restart_file, &
+       caller = "register_OCMIP2_CFC", verbosity=verbosity)
+  ind_flux(2) = aof_set_coupler_flux('cfc_12_flux', &
+       flux_type = 'air_sea_gas_flux', implementation = 'ocmip2', &
+       param = (/ 9.36e-07, 9.7561e-06 /), &
+       ice_restart_file = default_ice_restart_file, &
+       ocean_restart_file = default_ocean_restart_file, &
+       caller = "register_OCMIP2_CFC", verbosity=verbosity)
+
+  if (present(CS)) then ; if (associated(CS)) then
+    CS%ind_cfc_11_flux = ind_flux(1)
+    CS%ind_cfc_12_flux = ind_flux(2)
+  endif ; endif
+
+end subroutine flux_init_OCMIP2_CFC
+
 !>This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
 subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
@@ -600,9 +623,10 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     CFC12_flux       ! units of CFC concentrations times meters per second.
   real, pointer, dimension(:,:,:) :: CFC11, CFC12
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  integer :: i, j, k, is, ie, js, je, nz, m
+  integer :: i, j, k, m, is, ie, js, je, nz, idim(4), jdim(4)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  idim(:) = (/G%isd, is, ie, G%ied/) ; jdim(:) = (/G%jsd, js, je, G%jed/)
 
   if (.not.associated(CS)) return
 
@@ -611,10 +635,10 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   ! These two calls unpack the fluxes from the input arrays.
   !   The -GV%Rho0 changes the sign convention of the flux and changes the units
   ! of the flux from [Conc. m s-1] to [Conc. kg m-2 s-1].
-  call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
-                              CFC11_flux, is, ie, js, je, -GV%Rho0)
-  call extract_coupler_values(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
-                              CFC12_flux, is, ie, js, je, -GV%Rho0)
+  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, ind_flux, &
+                                 CFC11_flux, -GV%Rho0, idim=idim, jdim=jdim)
+  call coupler_type_extract_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, ind_flux, &
+                                 CFC12_flux, -GV%Rho0, idim=idim, jdim=jdim)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -733,22 +757,16 @@ function OCMIP2_CFC_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function OCMIP2_CFC_stock
 
+!> This subroutine extracts the surface CFC concentrations and other fields that
+!! are shared with the atmosphere to calculate CFC fluxes.
 subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure.
-  type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2).
-  type(OCMIP2_CFC_CS),                      pointer       :: CS   !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! register_OCMIP2_CFC.
-!   This subroutine sets up the fields that the coupler needs to calculate the
-! CFC fluxes between the ocean and atmosphere.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_OCMIP2_CFC.
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(OCMIP2_CFC_CS),    pointer       :: CS !< The control structure returned by a previous
+                                              !! call to register_OCMIP2_CFC.
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     CFC11_Csurf, &  ! The CFC-11 and CFC-12 surface concentrations times the
@@ -762,9 +780,10 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
   real :: alpha_12  ! The solubility of CFC 12 in mol m-3 pptv-1.
   real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
   real :: sc_no_term   ! A term related to the Schmidt number.
-  integer :: i, j, k, is, ie, js, je, m
+  integer :: i, j, m, is, ie, js, je, idim(4), jdim(4)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  idim(:) = (/G%isd, is, ie, G%ied/) ; jdim(:) = (/G%jsd, js, je, G%jed/)
 
   if (.not.associated(CS)) return
 
@@ -799,14 +818,14 @@ subroutine OCMIP2_CFC_surface_state(state, h, G, CS)
 
   !   These calls load these values into the appropriate arrays in the
   ! coupler-type structure.
-  call set_coupler_values(CFC11_alpha, state%tr_fields, CS%ind_cfc_11_flux, &
-                          ind_alpha, is, ie, js, je)
-  call set_coupler_values(CFC11_Csurf, state%tr_fields, CS%ind_cfc_11_flux, &
-                          ind_csurf, is, ie, js, je)
-  call set_coupler_values(CFC12_alpha, state%tr_fields, CS%ind_cfc_12_flux, &
-                          ind_alpha, is, ie, js, je)
-  call set_coupler_values(CFC12_Csurf, state%tr_fields, CS%ind_cfc_12_flux, &
-                          ind_csurf, is, ie, js, je)
+  call coupler_type_set_data(CFC11_alpha, CS%ind_cfc_11_flux, ind_alpha, &
+                             state%tr_fields, idim=idim, jdim=jdim)
+  call coupler_type_set_data(CFC11_Csurf, CS%ind_cfc_11_flux, ind_csurf, &
+                             state%tr_fields, idim=idim, jdim=jdim)
+  call coupler_type_set_data(CFC12_alpha, CS%ind_cfc_12_flux, ind_alpha, &
+                             state%tr_fields, idim=idim, jdim=jdim)
+  call coupler_type_set_data(CFC12_Csurf, CS%ind_cfc_12_flux, ind_csurf, &
+                             state%tr_fields, idim=idim, jdim=jdim)
 
 end subroutine OCMIP2_CFC_surface_state
 

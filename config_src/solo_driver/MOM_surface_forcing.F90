@@ -353,7 +353,6 @@ subroutine set_forcing(state, fluxes, day_start, day_interval, G, CS)
   endif
 
   if (associated(CS%tracer_flow_CSp)) then
-    if (.not.associated(fluxes%tr_fluxes)) allocate(fluxes%tr_fluxes)
     call call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS%tracer_flow_CSp)
   endif
 
