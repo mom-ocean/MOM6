@@ -876,6 +876,7 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   real, dimension(2*nk+1),    intent(inout) :: hEff  !< Effective thickness between two neutral surfaces (Pa)
 
   ! Local variables
+  integer :: ns                     ! Number of neutral surfaces
   integer :: k_surface              ! Index of neutral surface
   integer :: kl                     ! Index of left interface
   integer :: kr                     ! Index of right interface
@@ -888,13 +889,14 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
 
+  ns = 2*nk+2
   ! Initialize variables for the search
   kr = 1 ; lastK_right = 1 ; lastP_right = 0.
   kl = 1 ; lastK_left = 1 ; lastP_left = 0.
   reached_bottom = .false.
 
   ! Loop over each neutral surface, working from top to bottom
-  neutral_surfaces: do k_surface = 1, 2*nk+2
+  neutral_surfaces: do k_surface = 1, ns
     klm1 = max(kl-1, 1)
     if (klm1>nk) stop 'find_neutral_surface_positions(): klm1 went out of bounds!'
     krm1 = max(kr-1, 1)
@@ -1019,8 +1021,8 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
     if (k_surface>1) then
-      hL = absolute_position(nk,Pl,KoL,PoL,k_surface) - absolute_position(nk,Pl,KoL,PoL,k_surface-1)
-      hR = absolute_position(nk,Pr,KoR,PoR,k_surface) - absolute_position(nk,Pr,KoR,PoR,k_surface-1)
+      hL = absolute_position(nk,ns,Pl,KoL,PoL,k_surface) - absolute_position(nk,ns,Pl,KoL,PoL,k_surface-1)
+      hR = absolute_position(nk,ns,Pr,KoR,PoR,k_surface) - absolute_position(nk,ns,Pr,KoR,PoR,k_surface-1)
       if ( hL + hR > 0.) then
         hEff(k_surface-1) = 2. * hL * hR / ( hL + hR ) ! Harmonic mean of layer thicknesses
       else
@@ -1066,13 +1068,13 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
   real,                       optional, intent(in) :: tolerance !< Convergence criterion for refine_position
 
   ! Local variables
+  integer :: ns                     ! Number of neutral surfaces
   integer :: k_surface              ! Index of neutral surface
   integer :: kl_left, kl_right      ! Index of layers on the left/right
   integer :: ki_left, ki_right      ! Index of interfaces on the left/right
   logical :: searching_left_column  ! True if searching for the position of a right interface in the left column
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
-  logical :: same_direction         ! True if searching in the same direction as previous neutral surface
   logical :: refine_pos             ! Use rootfinding to find the true neutral surface position
   real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
   integer :: lastK_left, lastK_right, maxK_left, maxK_right
@@ -1080,8 +1082,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
   real    :: min_bound
   logical, dimension(nk) :: top_connected_l, top_connected_r
   logical, dimension(nk) :: bot_connected_l, bot_connected_r
-  real, dimension(nk,2) :: Pl, Pr
 
+  ns = 4*nk
   top_connected_l(:) = .false. ; top_connected_r(:) = .false.
   bot_connected_l(:) = .false. ; bot_connected_r(:) = .false.
   maxK_left = -1 ; maxK_right = -1
@@ -1100,23 +1102,11 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
                               "coefficients not available for T and S")
   endif
 
-  ! Create vectors for left column reconstructions
-  do kl_left = 1, nk
-    Pl(kl_left,1) = Pres_l(kl_left)
-    Pl(kl_left,2) = Pres_l(kl_left+1)
-  enddo
-  ! Create vectors for right column reconstructions
-  do kl_right = 1, nk
-    Pr(kl_right,1) = Pres_r(kl_right)
-    Pr(kl_right,2) = Pres_r(kl_right+1)
-  enddo
-
   ! Initialize variables for the search
   kl_right = 1 ; ki_right = 1 ; lastK_right = 1 ; lastP_right = -1.
   kl_left = 1  ; ki_left = 1  ; lastK_left = 1  ; lastP_left = -1.
 
   reached_bottom = .false.
-  same_direction = .false.
   searching_left_column = .false.
   searching_right_column = .false.
 
@@ -1131,11 +1121,9 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
-        same_direction = (searching_left_column .eqv. .true.) .and. (searching_right_column .eqv. .false.)
         searching_left_column = .true.
         searching_right_column = .false.
       elseif (dRho > 0.) then
-        same_direction = (searching_left_column .eqv. .false.) .and. (searching_right_column .eqv. .true.)
         searching_right_column = .true.
         searching_left_column = .false.
       else ! dRho == 0.
@@ -1143,13 +1131,10 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
           searching_left_column = .true.
           searching_right_column = .false.
         else ! Not the surface so we simply change direction
-          same_direction = .false.
           searching_left_column = .not. searching_left_column
           searching_right_column = .not. searching_right_column
         endif
       endif
-    else
-      same_direction = .false.
     endif
 
     if (searching_left_column) then
@@ -1184,13 +1169,12 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_l(kl_left), Pres_l(kl_left+1),          &
-              lastP_left, lastK_left, kl_left, ki_left, same_direction, top_connected_l, bot_connected_l,              &
-              PoL(k_surface), KoL(k_surface))
+             lastP_left, lastK_left, kl_left, ki_left, top_connected_l, bot_connected_l, PoL(k_surface), KoL(k_surface))
       if ( refine_pos .and. (PoL(k_surface) > 0.) .and. (PoL(k_surface) < 1.) ) then
         min_bound = 0.
         if ( (k_surface > 1) .and. ( KoL(k_surface) == KoL(k_surface-1) ) ) min_bound = PoL(k_surface-1)
-        PoL(k_surface) = refine_nondim_position(max_iter, tolerance, Tr(kl_right,ki_right), Sr(kl_right,ki_right),   &
-                    dRdT_r(kl_right,ki_right), dRdS_r(kl_right,ki_right), Pl(kl_left,1), Pl(kl_left,2),              &
+        PoL(k_surface) = refine_nondim_position(max_iter, tolerance, Tr(kl_right,ki_right), Sr(kl_right,ki_right),     &
+                    dRdT_r(kl_right,ki_right), dRdS_r(kl_right,ki_right), Pres_l(kl_left), Pres_l(kl_left+1),          &
                     deg, ppoly_T_l(kl_left,:), ppoly_S_l(kl_left,:), EOS, PoL(k_surface), dRhoTop, dRhoBot, min_bound)
       endif
       if (PoL(k_surface) == 0.) top_connected_l(KoL(k_surface)) = .true.
@@ -1228,13 +1212,12 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_r(kl_right), Pres_r(kl_right+1),        &
-            lastP_right, lastK_right, kl_right, ki_right, same_direction, top_connected_r, bot_connected_r,            &
-            PoR(k_surface), KoR(k_surface))
+         lastP_right, lastK_right, kl_right, ki_right, top_connected_r, bot_connected_r, PoR(k_surface), KoR(k_surface))
       if ( refine_pos .and. (PoR(k_surface) > 0. .and. PoR(k_surface) < 1.) ) then
         min_bound = 0.
         if ( (k_surface > 1) .and. ( KoR(k_surface) == KoR(k_surface-1) ) ) min_bound = PoR(k_surface-1)
-        PoR(k_surface) = refine_nondim_position(max_iter, tolerance, Tl(kl_left,ki_left), Sl(kl_left,ki_left),       &
-                  dRdT_l(kl_left,ki_left), dRdS_l(kl_left,ki_left), Pr(kl_right,1), Pr(kl_right,2),                  &
+        PoR(k_surface) = refine_nondim_position(max_iter, tolerance, Tl(kl_left,ki_left), Sl(kl_left,ki_left),         &
+                  dRdT_l(kl_left,ki_left), dRdS_l(kl_left,ki_left), Pres_r(kl_right), Pres_r(kl_right+1),              &
                   deg, ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), EOS, PoR(k_surface), dRhoTop, dRhoBot, min_bound)
       endif
       if (PoR(k_surface) == 0.) top_connected_r(KoR(k_surface)) = .true.
@@ -1245,12 +1228,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
     else
       stop 'Else what?'
     endif
-    ! Store layer indices and positions for next iteration
-
-    ! Make sure that the surfaces are always increasing
-!    if (KoL(k_surface) == KoL(k_surface-1)) PoL(k_surface) = MAX(PoL(k_surface),PoL(k_surface-1))
-!    if (KoR(k_surface) == KoR(k_surface-1)) PoR(k_surface) = MAX(PoR(k_surface),PoR(k_surface-1))
-
     if (debug_this_module)  write(*,'(A,I2,A,F6.2,A,I2,A,F6.2)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
       KoR(k_surface), " PoR:", PoR(k_surface)
     maxK_left= MAX(KoL(k_surface), maxK_left)
@@ -1259,10 +1236,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
     if (k_surface>1) then
-      hL = absolute_position_discontinuous(nk,Pres_l,KoL,PoL,k_surface) - &
-           absolute_position_discontinuous(nk,Pres_l,KoL,PoL,k_surface-1)
-      hR = absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface) - &
-           absolute_position_discontinuous(nk,Pres_r,KoR,PoR,k_surface-1)
+      hL = absolute_position(nk,ns,Pres_l,KoL,PoL,k_surface) - absolute_position(nk,ns,Pres_l,KoL,PoL,k_surface-1)
+      hR = absolute_position(nk,ns,Pres_r,KoR,PoR,k_surface) - absolute_position(nk,ns,Pres_r,KoR,PoR,k_surface-1)
       ! In the case of a layer being unstably stratified, may get a negative thickness. Set the previous position
       ! to the current location
       if (hL < 0.) then
@@ -1290,21 +1265,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, deg,                
   enddo neutral_surfaces
 
 end subroutine find_neutral_surface_positions_discontinuous
-!> Converts non-dimensional position within a layer to absolute position (for debugging)
-real function absolute_position_discontinuous(n,Pint,Karr,NParr,k_surface)
-  integer, intent(in) :: n            !< Number of levels
-  real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
-  integer, intent(in) :: Karr(4*n)    !< Index of interface above position
-  real,    intent(in) :: NParr(4*n)   !< Non-dimensional position within layer Karr(:)
-
-  ! Local variables
-  integer :: k_surface, k
-
-  k = Karr(k_surface)
-  if (k>n) stop 'absolute_position: k>nk is out of bounds!'
-  absolute_position_discontinuous = Pint(k) + NParr(k_surface) * ( Pint(k+1) - Pint(k) )
-
-end function absolute_position_discontinuous
 
 !> Increments the interface which was just connected and also set flags if the bottom is reached
 subroutine increment_interface(nk, kl, ki, reached_bottom, searching_this_column, searching_other_column)
@@ -1333,7 +1293,7 @@ end subroutine increment_interface
 
 !> Searches the "other" (searched) column for the position of the neutral surface
 subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, ki, &
-                                             same_direction, top_connected, bot_connected, out_P, out_K)
+                                             top_connected, bot_connected, out_P, out_K)
   real,                  intent(in   ) :: dRhoTopm1      !< Density difference across previous interface
   real,                  intent(in   ) :: dRhoTop        !< Density difference across top interface
   real,                  intent(in   ) :: dRhoBot        !< Density difference across top interface
@@ -1343,13 +1303,11 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   integer,               intent(in   ) :: lastK          !< Last layer connected in the searched column
   integer,               intent(in   ) :: kl             !< Layer in the searched column
   integer,               intent(in   ) :: ki             !< Interface of the searched column
-  logical,               intent(in   ) :: same_direction !< Searching in the same direction as last time
   logical, dimension(:), intent(inout) :: top_connected  !< True if the top interface was pointed to
   logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
   real,                  intent(  out) :: out_P          !< Position within searched column
   integer,               intent(  out) :: out_K          !< Layer within searched column
-
-  logical :: search_discontinuity
+  ! Local variables
   logical :: search_layer
 
   search_layer = .true.
@@ -1400,11 +1358,12 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
 
 end subroutine search_other_column_discontinuous
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
-real function absolute_position(n,Pint,Karr,NParr,k_surface)
+real function absolute_position(n,ns,Pint,Karr,NParr,k_surface)
   integer, intent(in) :: n            !< Number of levels
+  integer, intent(in) :: ns           !< Number of neutral surfaces
   real,    intent(in) :: Pint(n+1)    !< Position of interfaces (Pa)
-  integer, intent(in) :: Karr(2*n+2)  !< Index of interface above position
-  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional position within layer Karr(:)
+  integer, intent(in) :: Karr(ns)     !< Index of interface above position
+  real,    intent(in) :: NParr(ns)    !< Non-dimensional position within layer Karr(:)
 
   ! Local variables
   integer :: k_surface, k
@@ -1416,19 +1375,20 @@ real function absolute_position(n,Pint,Karr,NParr,k_surface)
 end function absolute_position
 
 !> Converts non-dimensional positions within layers to absolute positions (for debugging)
-function absolute_positions(n,Pint,Karr,NParr)
+function absolute_positions(n,ns,Pint,Karr,NParr)
   integer, intent(in) :: n            !< Number of levels
+  integer, intent(in) :: ns           !< Number of neutral surfaces
   real,    intent(in) :: Pint(n+1)    !< Position of interface (Pa)
-  integer, intent(in) :: Karr(2*n+2)  !< Indexes of interfaces about positions
-  real,    intent(in) :: NParr(2*n+2) !< Non-dimensional positions within layers Karr(:)
+  integer, intent(in) :: Karr(ns)  !< Indexes of interfaces about positions
+  real,    intent(in) :: NParr(ns) !< Non-dimensional positions within layers Karr(:)
 
-  real,  dimension(2*n+2) :: absolute_positions ! Absolute positions (Pa)
+  real,  dimension(ns) :: absolute_positions ! Absolute positions (Pa)
 
   ! Local variables
   integer :: k_surface, k
 
-  do k_surface = 1, 2*n+2
-    absolute_positions(k_surface) = absolute_position(n,Pint,Karr,NParr,k_surface)
+  do k_surface = 1, ns
+    absolute_positions(k_surface) = absolute_position(n,ns,Pint,Karr,NParr,k_surface)
   enddo
 
 end function absolute_positions
@@ -2016,10 +1976,10 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,10.,0.,10.,0.,10.,0./), & ! hEff
                                    'Identical columns')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 8, &
-                                   absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
+                                   absolute_positions(3, 8, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... left positions')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 8, &
-                                   absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
+                                   absolute_positions(3, 8, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
@@ -2047,10 +2007,10 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,5.,5.,5.,5.,5.,0./), & ! hEff
                                    'Right column slightly cooler')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 8, &
-                                   absolute_positions(3, (/0.,10.,20.,30./), KoL, PiLRo), &
+                                   absolute_positions(3, 8, (/0.,10.,20.,30./), KoL, PiLRo), &
                                    (/0.,5.,10.,15.,20.,25.,30.,30./), '... left positions')
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 8, &
-                                   absolute_positions(3, (/0.,10.,20.,30./), KoR, PiRLo), &
+                                   absolute_positions(3, 8, (/0.,10.,20.,30./), KoR, PiRLo), &
                                    (/0.,0.,5.,10.,15.,20.,25.,30./), '... right positions')
 
   ! Right column slightly warmer than left
