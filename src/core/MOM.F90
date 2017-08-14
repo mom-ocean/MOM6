@@ -368,9 +368,6 @@ type, public :: MOM_control_struct
   integer :: id_T_vardec = -1
   integer :: id_S_vardec = -1
 
-  ! fields prior to doing dynamics
-  integer :: id_h_pre_dyn = -1
-
   ! diagnostic for fields prior to applying diapycnal physics
   integer :: id_u_predia = -1
   integer :: id_v_predia = -1
@@ -2563,10 +2560,6 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
     endif
   endif
-
-  ! fields posted prior to dynamics step
-  CS%id_h_pre_dyn = register_diag_field('ocean_model', 'h_pre_dyn', diag%axesTL, Time, &
-      'Layer Thickness before dynamics step', thickness_units)
 
   ! diagnostics for values prior to diabatic and prior to ALE
   CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
