@@ -2469,15 +2469,16 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Sea Surface Salinity Squared', 'ppt**2', CS%missing, cmor_field_name='sossq', &
         cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
         cmor_standard_name='square_of_sea_surface_salinity')
-    CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
-        'Conservative Temperature', 'Celsius')
-    CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
-        long_name='Absolute Salinity', units='g/Kg')
-    CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-        'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
-    CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-        'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
-
+    if (CS%use_conT_absS) then
+      CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
+          'Conservative Temperature', 'Celsius')
+      CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
+          long_name='Absolute Salinity', units='g/Kg')
+      CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
+          'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
+      CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
+          'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
+    endif
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
