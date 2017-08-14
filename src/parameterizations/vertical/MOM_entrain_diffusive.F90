@@ -2255,7 +2255,7 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
 ! CS%Tolerance_Ent = MAX(100.0*GV%Angstrom,1.0e-4*sqrt(dt*Kd)) !
   call get_param(param_file, mod, "TOLERANCE_ENT", CS%Tolerance_Ent, &
                  "The tolerance with which to solve for entrainment values.", &
-                 units="m", default=MAX(100.0*GV%Angstrom,1.0e-4*sqrt(dt*Kd)))
+                 units="m", default=MAX(100.0*GV%Angstrom_Z,1.0e-4*sqrt(dt*Kd)))
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
       'Diapycnal diffusivity as applied', 'meter2 second-1')
