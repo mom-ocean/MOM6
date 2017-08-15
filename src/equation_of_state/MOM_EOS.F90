@@ -3,26 +3,26 @@ module MOM_EOS
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_EOS_linear, only : calculate_density_scalar_linear, calculate_density_array_linear
-use MOM_EOS_linear, only : calculate_density_derivs_linear, calculate_density_derivs_scalar_linear
+use MOM_EOS_linear, only : calculate_density_linear
+use MOM_EOS_linear, only : calculate_density_derivs_linear
 use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linear
-use MOM_EOS_linear, only : calculate_density_second_derivs_scalar_linear
+use MOM_EOS_linear, only : calculate_density_second_derivs_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
-use MOM_EOS_Wright, only : calculate_density_scalar_wright, calculate_density_array_wright
-use MOM_EOS_Wright, only : calculate_density_derivs_wright, calculate_density_derivs_scalar_wright
+use MOM_EOS_Wright, only : calculate_density_wright, calculate_density_wright
+use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
-use MOM_EOS_Wright, only : calculate_density_second_derivs_scalar_wright
-use MOM_EOS_UNESCO, only : calculate_density_scalar_unesco, calculate_density_array_unesco
+use MOM_EOS_Wright, only : calculate_density_second_derivs_wright
+use MOM_EOS_UNESCO, only : calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
-use MOM_EOS_NEMO,   only : calculate_density_scalar_nemo, calculate_density_array_nemo
+use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_compress_nemo
-use MOM_EOS_TEOS10, only : calculate_density_scalar_teos10, calculate_density_array_teos10
-use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10, calculate_density_derivs_scalar_teos10
+use MOM_EOS_TEOS10, only : calculate_density_teos10
+use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_specvol_derivs_teos10
-use MOM_EOS_TEOS10, only : calculate_density_second_derivs_scalar_teos10
+use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_compress_teos10
 use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_TFreeze, only : calculate_TFreeze_linear, calculate_TFreeze_Millero, calculate_TFreeze_teos10
@@ -36,8 +36,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress, calculate_density, query_compressible
-public calculate_density_derivs, calculate_density_derivs_scalar, calculate_specific_vol_derivs
-public calculate_density_second_derivs_scalar
+public calculate_density_derivs, calculate_specific_vol_derivs, calculate_density_second_derivs
 public EOS_init, EOS_manual_init, EOS_end, EOS_allocate
 public EOS_use_linear
 public int_density_dz, int_specific_vol_dp
@@ -53,6 +52,14 @@ public extract_member_EOS
 interface calculate_density
   module procedure calculate_density_scalar, calculate_density_array
 end interface calculate_density
+
+interface calculate_density_derivs
+  module procedure calculate_density_derivs_scalar, calculate_density_derivs_array
+end interface calculate_density_derivs
+
+interface calculate_density_second_derivs
+  module procedure calculate_density_second_derivs_scalar, calculate_density_second_derivs_array
+end interface calculate_density_second_derivs
 
 !> Calculates the freezing point of sea water from T, S and P
 interface calculate_TFreeze
@@ -116,16 +123,16 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_scalar_linear(T, S, pressure, rho, &
+      call calculate_density_linear(T, S, pressure, rho, &
                                       EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_density_scalar_unesco(T, S, pressure, rho)
+      call calculate_density_unesco(T, S, pressure, rho)
     case (EOS_WRIGHT)
-      call calculate_density_scalar_wright(T, S, pressure, rho)
+      call calculate_density_wright(T, S, pressure, rho)
     case (EOS_TEOS10)
-      call calculate_density_scalar_teos10(T, S, pressure, rho)
+      call calculate_density_teos10(T, S, pressure, rho)
     case (EOS_NEMO)
-      call calculate_density_scalar_nemo(T, S, pressure, rho)
+      call calculate_density_nemo(T, S, pressure, rho)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")
@@ -148,16 +155,16 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_array_linear(T, S, pressure, rho, start, npts, &
+      call calculate_density_linear(T, S, pressure, rho, start, npts, &
                                       EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_UNESCO)
-      call calculate_density_array_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts)
     case (EOS_WRIGHT)
-      call calculate_density_array_wright(T, S, pressure, rho, start, npts)
+      call calculate_density_wright(T, S, pressure, rho, start, npts)
     case (EOS_TEOS10)
-      call calculate_density_array_teos10(T, S, pressure, rho, start, npts)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts)
     case (EOS_NEMO)
-      call calculate_density_array_nemo  (T, S, pressure, rho, start, npts)
+      call calculate_density_nemo  (T, S, pressure, rho, start, npts)
     case default
       call MOM_error(FATAL, &
            "calculate_density_array: EOS%form_of_EOS is not valid.")
@@ -218,7 +225,7 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS)
 end subroutine calculate_TFreeze_array
 
 !> Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs.
-subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npts, EOS)
+subroutine calculate_density_derivs_array(T, S, pressure, drho_dT, drho_dS, start, npts, EOS)
   real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
   real, dimension(:), intent(in)  :: S !< Salinity (PSU)
   real, dimension(:), intent(in)  :: pressure !< Pressure (Pa)
@@ -233,8 +240,8 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_derivs_linear(T, S, pressure, drho_dT, drho_dS, start, &
-                                           npts, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+      call calculate_density_derivs_linear(T, S, pressure, drho_dT, drho_dS, EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
+                                           start, npts)
     case (EOS_UNESCO)
       call calculate_density_derivs_unesco(T, S, pressure, drho_dT, drho_dS, start, npts)
     case (EOS_WRIGHT)
@@ -245,12 +252,12 @@ subroutine calculate_density_derivs(T, S, pressure, drho_dT, drho_dS, start, npt
       call calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
     case default
       call MOM_error(FATAL, &
-           "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+           "calculate_density_derivs_array: EOS%form_of_EOS is not valid.")
   end select
 
-end subroutine calculate_density_derivs
+end subroutine calculate_density_derivs_array
 
-!> Calls the appropriate subroutine to calculate density derivatives for 1-D array inputs.
+!> Calls the appropriate subroutines to calculate density derivatives by promoting a scalar to a one-element array
 subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS)
   real,           intent(in)  :: T !< Potential temperature referenced to the surface (degC)
   real,           intent(in)  :: S !< Salinity (PSU)
@@ -258,18 +265,17 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
   real,           intent(out) :: drho_dT !< The partial derivative of density with potential tempetature, in kg m-3 K-1.
   real,           intent(out) :: drho_dS !< The partial derivative of density with salinity, in kg m-3 psu-1.
   type(EOS_type), pointer     :: EOS !< Equation of state structure
-  !!
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_derivs called with an unassociated EOS_type EOS.")
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_derivs_scalar_linear(T, S, pressure, drho_dT, drho_dS, &
+      call calculate_density_derivs_linear(T, S, pressure, drho_dT, drho_dS, &
                                                   EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
     case (EOS_WRIGHT)
-      call calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
+      call calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS)
     case (EOS_TEOS10)
-      call calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_dS)
+      call calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS)
     case default
       call MOM_error(FATAL, &
            "calculate_density_derivs_scalar: EOS%form_of_EOS is not valid.")
@@ -278,6 +284,41 @@ subroutine calculate_density_derivs_scalar(T, S, pressure, drho_dT, drho_dS, EOS
 end subroutine calculate_density_derivs_scalar
 
 !> Calls the appropriate subroutine to calculate density second derivatives for 1-D array inputs.
+subroutine calculate_density_second_derivs_array(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
+                                           start, npts, EOS)
+  real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
+  real, dimension(:), intent(in)  :: S !< Salinity (PSU)
+  real, dimension(:), intent(in)  :: pressure !< Pressure (Pa)
+  real, dimension(:), intent(out) :: drho_dS_dS !< Partial derivative of beta with respect to S
+  real, dimension(:), intent(out) :: drho_dS_dT !< Partial derivative of beta with resepct to T
+  real, dimension(:), intent(out) :: drho_dT_dT !< Partial derivative of alpha with respect to T
+  real, dimension(:), intent(out) :: drho_dS_dP !< Partial derivative of beta with respect to pressure
+  real, dimension(:), intent(out) :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
+  integer,            intent(in)  :: start !< Starting index within the array
+  integer,            intent(in)  :: npts !< The number of values to calculate
+  type(EOS_type),     pointer     :: EOS !< Equation of state structure
+  !!
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_density_derivs called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_density_second_derivs_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                  drho_dT_dP, start, npts)
+    case (EOS_WRIGHT)
+      call calculate_density_second_derivs_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                  drho_dT_dP, start, npts)
+    case (EOS_TEOS10)
+      call calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                  drho_dT_dP, start, npts)
+    case default
+      call MOM_error(FATAL, &
+           "calculate_density_derivs: EOS%form_of_EOS is not valid.")
+  end select
+
+end subroutine calculate_density_second_derivs_array
+
+!> Calls the appropriate subroutine to calculate density second derivatives for scalar nputs.
 subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP, &
                                            EOS)
   real, intent(in)  :: T !< Potential temperature referenced to the surface (degC)
@@ -295,13 +336,13 @@ subroutine calculate_density_second_derivs_scalar(T, S, pressure, drho_dS_dS, dr
 
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
-      call calculate_density_second_derivs_scalar_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+      call calculate_density_second_derivs_linear(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
                                                   drho_dT_dP)
     case (EOS_WRIGHT)
-      call calculate_density_second_derivs_scalar_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+      call calculate_density_second_derivs_wright(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
                                                   drho_dT_dP)
     case (EOS_TEOS10)
-      call calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+      call calculate_density_second_derivs_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
                                                   drho_dT_dP)
     case default
       call MOM_error(FATAL, &
