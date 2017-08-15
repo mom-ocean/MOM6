@@ -1319,12 +1319,14 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
     out_P = 0. ; out_K = kl
     search_layer = .false.
   ! Deal with the case where reconstruction is continuous
-  elseif ( (kl>1) .and. dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
-    out_P = 1 ; out_K = kl-1;
-    search_layer = .false.
-  elseif ( (kl>1) .and. (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
-    out_P = 1. ; out_K = kl-1
-    search_layer = .false.
+  elseif ( kl>1 ) then
+    if (dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
+      out_P = 1 ; out_K = kl-1;
+      search_layer = .false.
+    elseif ( (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
+      out_P = 1. ; out_K = kl-1
+      search_layer = .false.
+    endif
   endif
 
   if (search_layer) then
