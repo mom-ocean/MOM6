@@ -8,7 +8,7 @@ use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, time_type
 use MOM_diag_mediator,    only : post_data, register_diag_field
 use MOM_EOS,              only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
-use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_scalar
+use MOM_EOS,              only : calculate_density_second_derivs
 use MOM_EOS,              only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,      only : get_param, log_version, param_file_type
@@ -1319,16 +1319,9 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
     out_P = 0. ; out_K = kl
     search_layer = .false.
   ! Deal with the case where reconstruction is continuous
-  elseif ( (kl>1) .and. (dRhoTopm1==dRhoTop) ) then
-    if (dRhoTopm1 < dRhoTop) then
-      if (.not. bot_connected(kl-1)) then
-        out_P = 1. ; out_K = kl-1
-        search_layer = .false.
-      endif
-    elseif ( (dRhoTopm1 == 0.) .and. (.not. bot_connected(kl-1))) then
-      out_P = 1 ; out_K = kl-1
-      search_layer = .false.
-    endif
+  elseif ( (kl>1) .and. dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
+    out_P = 1 ; out_K = kl-1;
+    search_layer = .false.
   elseif ( (kl>1) .and. (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
     out_P = 1. ; out_K = kl-1
     search_layer = .false.
@@ -1518,7 +1511,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
         exit
       endif
       ! Evaluate total derivative of delta_rho
-      call calculate_density_second_derivs_scalar( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+      call calculate_density_second_derivs( T, S, P_int, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
       dalpha_dS = dbeta_dT ! Cross derivatives are identicial
       ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
       dT_dP = first_derivative_polynomial( ppoly_T, deg+1, refine_nondim_position ) / delta_P
@@ -1730,7 +1723,7 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   P_int = (1. - x0)*P_top + x0*P_bot
   T = evaluation_polynomial( ppoly_T, deg+1, x0 )
   S = evaluation_polynomial( ppoly_S, deg+1, x0 )
-  call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+  call calculate_density_derivs( T, S, P_int, alpha, beta, EOS )
 
   ! Calculate the f(P) term for Newton's method
   alpha_avg = 0.5*( alpha + alpha_ref )
