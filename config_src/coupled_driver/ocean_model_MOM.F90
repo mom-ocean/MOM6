@@ -68,6 +68,7 @@ use MOM_ice_shelf, only : ice_shelf_end, ice_shelf_save_restart
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_write_chksums
 use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
+use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
 use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
@@ -368,12 +369,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
   if (present(gas_fields_ocn)) then
+    call coupler_type_set_diags(Ocean_sfc%fields, "ocean_sfc", &
+                                Ocean_sfc%axes(1:2), Time_in)
+
     call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
              OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
              OS%grid, OS%GV, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
                                      OS%MOM_CSp%use_conT_absS)
+
   endif
 
   call close_param_file(param_file)
@@ -545,6 +550,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
                                    OS%MOM_CSp%use_conT_absS)
+  call coupler_type_send_data(Ocean_sfc%fields, OS%Time)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
