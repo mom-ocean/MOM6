@@ -462,7 +462,8 @@ program MOM_main
       call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
 
       call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
-                        Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+                        Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp, &
+                        MOM_CSp%OBC)
     endif
 
     ! This call steps the model over a time time_step.

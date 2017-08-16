@@ -1090,6 +1090,18 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vhbt0(i,J) = vhbt(i,J) - Datv(i,J)*vbt(i,J)
       enddo ; enddo
     endif
+    if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
+!GOMP do
+      do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+        uhbt0(I,j) = 0.0
+      endif ; enddo ; enddo
+    endif
+    if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
+!GOMP do
+      do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+        vhbt0(i,J) = 0.0
+      endif ; enddo ; enddo
+    endif
   endif
 
 ! Calculate the initial barotropic velocities from the layer's velocities.
