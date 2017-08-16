@@ -923,7 +923,8 @@ contains
   end subroutine MOM_generic_tracer_surface_state
 
 !ALL PE subroutine on Ocean!  Due to otpm design the fluxes should be initialized like this on ALL PE's!
-  subroutine MOM_generic_flux_init
+  subroutine MOM_generic_flux_init(verbosity)
+    integer, intent(in), optional :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
     integer :: ind
     character(len=fm_string_len)   :: g_tracer_name,longname, package,units,old_package,file_in,file_out
@@ -945,7 +946,7 @@ contains
     g_tracer=>g_tracer_list
     do
 
-       call g_tracer_flux_init(g_tracer)
+       call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
