@@ -8,7 +8,7 @@ use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,    only : diag_ctrl, time_type
 use MOM_diag_mediator,    only : post_data, register_diag_field
 use MOM_EOS,              only : EOS_type, EOS_manual_init, calculate_compress, calculate_density_derivs
-use MOM_EOS,              only : calculate_density_derivs_scalar, calculate_density_second_derivs_scalar
+use MOM_EOS,              only : calculate_density_second_derivs
 use MOM_EOS,              only : extract_member_EOS, EOS_LINEAR, EOS_TEOS10, EOS_WRIGHT
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,      only : get_param, log_version, param_file_type
@@ -1333,19 +1333,14 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
     out_P = 0. ; out_K = kl
     search_layer = .false.
   ! Deal with the case where reconstruction is continuous
-  elseif ( (kl>1) .and. (dRhoTopm1==dRhoTop) ) then
-    if (dRhoTopm1 < dRhoTop) then
-      if (.not. bot_connected(kl-1)) then
-        out_P = 1. ; out_K = kl-1
-        search_layer = .false.
-      endif
-    elseif ( (dRhoTopm1 == 0.) .and. (.not. bot_connected(kl-1))) then
-      out_P = 1 ; out_K = kl-1
+  elseif ( kl>1 ) then
+    if (dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
+      out_P = 1 ; out_K = kl-1;
+      search_layer = .false.
+    elseif ( (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
+      out_P = 1. ; out_K = kl-1
       search_layer = .false.
     endif
-  elseif ( (kl>1) .and. (dRhoTopm1<dRhoTop .and. dRhoTop > 0.) ) then
-    out_P = 1. ; out_K = kl-1
-    search_layer = .false.
   endif
 
   if (search_layer) then
@@ -1536,7 +1531,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       endif
       ! Evaluate total derivative of delta_rho
       if (ref_pres<0.) P_ref = P_int
-      call calculate_density_second_derivs_scalar( T, S, P_ref, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
+      call calculate_density_second_derivs( T, S, P_ref, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
       ! In the case of a constant reference pressure, no dependence on neutral direction with pressure
       if (ref_pres>=0.) then
         dalpha_dP = 0. ; dbeta_dP = 0.
@@ -1749,12 +1744,11 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   S = evaluation_polynomial( ppoly_S, deg+1, x0 )
   ! Interpolated pressure if using locally referenced neutral density
   if (ref_pres<0.) then
-    call calculate_density_derivs_scalar( T, S, P_int, alpha, beta, EOS )
+    call calculate_density_derivs( T, S, P_int, alpha, beta, EOS )
   else
   ! Constant reference pressure (isopycnal)
-    call calculate_density_derivs_scalar( T, S, ref_pres, alpha, beta, EOS )
+    call calculate_density_derivs( T, S, ref_pres, alpha, beta, EOS )
   endif
-
 
   ! Calculate the f(P) term for Newton's method
   alpha_avg = 0.5*( alpha + alpha_ref )
@@ -1819,16 +1813,6 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
     call interface_scalar(nk, hr, Tr, Tir, 2)
     call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
     call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
-
-    do k=1,nk
-      ppoly_r_coeffs_l(k,1) = aL_l(k)
-      ppoly_r_coeffs_l(k,2) = 4.0 * ( Tl(k) - aL_l(k) ) + 2.0 * ( Tl(k) - aR_l(k) )
-      ppoly_r_coeffs_l(k,3) = 3.0 * ( ( aR_l(k) - Tl(k) ) + ( aL_l(k) - Tl(k) ) )
-      ppoly_r_coeffs_r(k,1) = aL_r(k)
-      ppoly_r_coeffs_r(k,2) = 4.0 * ( Tr(k) - aL_r(k) ) + 2.0 * ( Tr(k) - aR_r(k) )
-      ppoly_r_coeffs_r(k,3) = 3.0 * ( ( aR_r(k) - Tr(k) ) + ( aL_r(k) - Tr(k) ) )
-    enddo
-
   else
     ppoly_r_coeffs_l(:,:) = 0.
     ppoly_r_coeffs_r(:,:) = 0.
@@ -1845,14 +1829,16 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
     else
       if (continuous) then
         klb = KoL(k_sublayer+1)
-        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
+        T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
         klt = KoL(k_sublayer)
-        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
+        T_left_top = ( 1. - PiL(k_sublayer) ) * Til(klt) + PiL(k_sublayer) * Til(klt+1)
         T_left_layer = ppm_ave(PiL(k_sublayer), PiL(k_sublayer+1) + real(klb-klt), &
                                aL_l(klt), aR_l(klt), Tl(klt))
+
         krb = KoR(k_sublayer+1)
+        T_right_bottom = ( 1. - PiR(k_sublayer+1) ) * Tir(krb) + PiR(k_sublayer+1) * Tir(krb+1)
         krt = KoR(k_sublayer)
-        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
+        T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
         T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
                                 aL_r(krt), aR_r(krt), Tr(krt))
       else ! Discontinuous reconstruction
@@ -1883,7 +1869,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
       dT_bottom = T_right_bottom - T_left_bottom
       dT_ave = 0.5 * ( dT_top + dT_bottom )
       dT_layer = T_right_layer - T_left_layer
-      if (signum(1.,dT_top) * signum(1.,dT_bottom) < 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
+      if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
       else
         dT_ave = dT_layer
