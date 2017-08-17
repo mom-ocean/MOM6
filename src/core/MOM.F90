@@ -36,7 +36,7 @@ use MOM_diag_mediator,        only : diag_register_area_ids
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
-use MOM_diag_mediator,        only : register_scalar_field
+use MOM_diag_mediator,        only : register_scalar_field, get_diag_time_end
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
@@ -62,6 +62,7 @@ use MOM_time_manager,         only : time_type, set_time, time_type_to_real, ope
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
 use MOM_time_manager,         only : increment_date
 use MOM_unit_tests,           only : unit_tests
+use coupler_types_mod,        only : coupler_type_send_data, coupler_1d_bc_type, coupler_type_spawn
 
 ! MOM core modules
 use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjustGridForIntegrity
@@ -430,6 +431,7 @@ public finish_MOM_initialization
 public step_MOM
 public step_offline
 public MOM_end
+public allocate_surface_state
 public calculate_surface_state
 
 integer :: id_clock_ocean
@@ -1926,7 +1928,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
   if (CS%bulkmixedlayer .or. CS%use_temperature) then
-     allocate(CS%Hml(isd:ied,jsd:jed)) ; CS%Hml(:,:) = 0.0
+    allocate(CS%Hml(isd:ied,jsd:jed)) ; CS%Hml(:,:) = 0.0
   endif
 
   if (CS%bulkmixedlayer) then
@@ -3222,6 +3224,8 @@ subroutine post_surface_diagnostics(CS, G, diag, state)
     call post_data(CS%id_speed, sfc_speed, diag, mask=G%mask2dT)
   endif
 
+  call coupler_type_send_data(state%tr_fields, get_diag_time_end(diag))
+
 end subroutine post_surface_diagnostics
 
 !> Offers the static fields in the ocean grid type
@@ -3428,6 +3432,64 @@ subroutine adjust_ssh_for_p_atm(CS, G, GV, ssh, p_atm)
 
 end subroutine adjust_ssh_for_p_atm
 
+!> This subroutine allocates the fields for the surface (return) properties of
+!! the ocean model.  Unused fields are unallocated.
+subroutine allocate_surface_state(state, G, use_temperature, do_integrals, &
+                                  gas_fields_ocn)
+  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
+  type(surface),         intent(inout) :: state            !< ocean surface state type to be allocated.
+  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically integrated fields.
+  type(coupler_1d_bc_type), &
+               optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes, and can be used to spawn related
+                                              !! internal variables in the ice model.
+
+  logical :: use_temp, alloc_integ
+  integer :: is, ie, js, je, isd, ied, jsd, jed
+  integer :: isdB, iedB, jsdB, jedB
+
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+
+  use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
+  alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
+
+  if (state%arrays_allocated) return
+
+  if (use_temp) then
+    allocate(state%SST(isd:ied,jsd:jed)) ; state%SST(:,:) = 0.0
+    allocate(state%SSS(isd:ied,jsd:jed)) ; state%SSS(:,:) = 0.0
+  else
+    allocate(state%sfc_density(isd:ied,jsd:jed)) ; state%sfc_density(:,:) = 0.0
+  endif
+  allocate(state%sea_lev(isd:ied,jsd:jed)) ; state%sea_lev(:,:) = 0.0
+  allocate(state%Hml(isd:ied,jsd:jed)) ; state%Hml(:,:) = 0.0
+  allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
+  allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
+
+  if (alloc_integ) then
+    ! Allocate structures for the vertically integrated ocean_mass, ocean_heat,
+    ! and ocean_salt.
+    allocate(state%ocean_mass(isd:ied,jsd:jed)) ; state%ocean_mass(:,:) = 0.0
+    if (use_temp) then
+      allocate(state%ocean_heat(isd:ied,jsd:jed)) ; state%ocean_heat(:,:) = 0.0
+      allocate(state%ocean_salt(isd:ied,jsd:jed)) ; state%ocean_salt(:,:) = 0.0
+    endif
+    allocate(state%salt_deficit(isd:ied,jsd:jed)) ; state%salt_deficit(:,:) = 0.0
+  endif
+
+  if (present(gas_fields_ocn)) &
+    call coupler_type_spawn(gas_fields_ocn, state%tr_fields, &
+                            (/isd,is,ie,ied/), (/jsd,js,je,jed/), as_needed=.true.)
+
+  state%arrays_allocated = .true.
+
+end subroutine allocate_surface_state
+
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate fields in state.  Unused fields
 !! are set to NULL or are unallocated.
@@ -3462,28 +3524,9 @@ subroutine calculate_surface_state(state, u, v, h, ssh, G, GV, CS)
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
 
   if (.not.state%arrays_allocated) then
-    if (CS%use_temperature) then
-      allocate(state%SST(isd:ied,jsd:jed)) ; state%SST(:,:) = 0.0
-      allocate(state%SSS(isd:ied,jsd:jed)) ; state%SSS(:,:) = 0.0
-    else
-      allocate(state%sfc_density(isd:ied,jsd:jed)) ; state%sfc_density(:,:) = 0.0
-    endif
-    allocate(state%sea_lev(isd:ied,jsd:jed)) ; state%sea_lev(:,:) = 0.0
-    allocate(state%Hml(isd:ied,jsd:jed)) ; state%Hml(:,:) = 0.0
-    allocate(state%u(IsdB:IedB,jsd:jed)) ; state%u(:,:) = 0.0
-    allocate(state%v(isd:ied,JsdB:JedB)) ; state%v(:,:) = 0.0
-
-  ! Allocate structures for ocean_mass, ocean_heat, and ocean_salt.  This could
-  ! be wrapped in a run-time flag to disable it for economy, since the 3-d
-  ! sums are not negligible.
-    allocate(state%ocean_mass(isd:ied,jsd:jed)) ; state%ocean_mass(:,:) = 0.0
-    if (CS%use_temperature) then
-      allocate(state%ocean_heat(isd:ied,jsd:jed)) ; state%ocean_heat(:,:) = 0.0
-      allocate(state%ocean_salt(isd:ied,jsd:jed)) ; state%ocean_salt(:,:) = 0.0
-    endif
-    allocate(state%salt_deficit(isd:ied,jsd:jed)) ; state%salt_deficit(:,:) = 0.0
-
-    state%arrays_allocated = .true.
+    !  Consider using a run-time flag to determine whether to do the vertical
+    ! integrals, since the 3-d sums are not negligible in cost.
+    call allocate_surface_state(state, G, CS%use_temperature, do_integrals=.true.)
   endif
   state%frazil => CS%tv%frazil
   state%TempxPmE => CS%tv%TempxPmE
