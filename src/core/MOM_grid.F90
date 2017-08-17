@@ -5,6 +5,7 @@ module MOM_grid
 
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_domains, only : MOM_domain_type, get_domain_extent, compute_block_extent
+use MOM_domains, only : get_global_shape
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 
@@ -13,7 +14,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
-public isPointInCell, hor_index_type
+public isPointInCell, hor_index_type, get_global_grid_size
 
 !> Ocean grid type. See mom_grid for details.
 type, public :: ocean_grid_type
@@ -442,6 +443,16 @@ subroutine set_first_direction(G, y_first)
 
   G%first_direction = y_first
 end subroutine set_first_direction
+
+!> Return global shape of horizontal grid
+subroutine get_global_grid_size(G, niglobal, njglobal)
+  type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
+  integer,               intent(out)   :: niglobal !< i-index global size of grid
+  integer,               intent(out)   :: njglobal !< j-index global size of grid
+
+  call get_global_shape(G%domain, niglobal, njglobal)
+
+end subroutine get_global_grid_size
 
 !> Allocate memory used by the ocean_grid_type and related structures.
 subroutine allocate_metrics(G)
