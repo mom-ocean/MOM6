@@ -38,17 +38,24 @@ subroutine get_MOM_input(param_file, dirs, check_params)
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
   character(len=240) :: &
-    parameter_filename(npf) = ' ', & ! List of files containing parameters.
-    output_directory = ' ', &   ! Directory to use to write the model output.
-    restart_input_dir = ' ', &  ! Directory for reading restart and input files.
-    restart_output_dir = ' ', & ! Directory into which to write restart files.
-    input_filename  = ' '       ! A string that indicates the input files or how
-                                ! the run segment should be started.
+    parameter_filename(npf), & ! List of files containing parameters.
+    output_directory,        & ! Directory to use to write the model output.
+    restart_input_dir,       & ! Directory for reading restart and input files.
+    restart_output_dir,      & ! Directory into which to write restart files.
+    input_filename             ! A string that indicates the input files or how
+                               ! the run segment should be started.
   character(len=240) :: output_dir
   integer :: unit, io, ierr, valid_param_files
 
   namelist /MOM_input_nml/ output_directory, input_filename, parameter_filename, &
                            restart_input_dir, restart_output_dir
+
+  ! Default values in case parameter is not set in file input.nml
+  parameter_filename(:) = ' '
+  output_directory = ' '
+  restart_input_dir = ' '
+  restart_output_dir = ' '
+  input_filename  = ' '
 
   ! Open namelist
   if (file_exists('input.nml')) then
