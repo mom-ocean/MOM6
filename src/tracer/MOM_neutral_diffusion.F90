@@ -360,7 +360,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S            ! Reconstruction slopes
   integer :: iMethod
-  real, dimension(SZI_(G)+1) :: ref_pres ! Reference pressure used to calculate alpha/beta
+  real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
 
   ! If doing along isopycnal diffusion (as opposed to neutral diffusion, set the reference pressure)
   if (CS%ref_pres>=0.) ref_pres(:) = CS%ref_pres
