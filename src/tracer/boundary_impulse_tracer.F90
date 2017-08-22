@@ -22,7 +22,8 @@ use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use coupler_util, only : set_coupler_values, ind_csurf
+
+use coupler_types_mod, only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -445,31 +446,34 @@ function boundary_impulse_stock(h, stocks, G, GV, CS, names, units, stock_index)
 
 end function boundary_impulse_stock
 
-!> Called if returned if coupler needs to know about tracer, currently unused
+!> This subroutine extracts the surface fields from this tracer package that
+!! are to be shared with the atmosphere in coupled configurations.
+!! This particular tracer package does not report anything back to the coupler.
 subroutine boundary_impulse_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),                    intent(in   ) :: G    !< The ocean's grid structure
-  type(surface),                            intent(inout) :: state
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in   ) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(boundary_impulse_tracer_CS), pointer,intent(in   ) :: CS
-!   This particular tracer package does not report anything back to the coupler.
-! The code that is here is just a rough guide for packages that would.
-! Arguments: state - A structure containing fields that describe the
-!                    surface state of the ocean.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      G - The ocean's grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_boundary_impulse_tracer.
-  integer :: m, is, ie, js, je
+  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
+  type(surface),          intent(inout) :: state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
+  type(boundary_impulse_tracer_CS), pointer :: CS !< The control structure returned by a previous
+                                              !! call to register_boundary_impulse_tracer.
+
+  ! This particular tracer package does not report anything back to the coupler.
+  ! The code that is here is just a rough guide for packages that would.
+
+  integer :: m, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) return
 
   if (CS%coupled_tracers) then
     do m=1,CS%ntr
-      !   This call loads the surface vlues into the appropriate array in the
+      !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
-      call set_coupler_values(CS%tr(:,:,1,m), state%tr_fields, CS%ind_tr(m), &
-                              ind_csurf, is, ie, js, je)
+      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
+                   state%tr_fields, idim=(/isd, is, ie, ied/), &
+                   jdim=(/jsd, js, je, jed/) )
     enddo
   endif
 
@@ -503,7 +507,7 @@ end subroutine boundary_impulse_tracer_end
 !! mean age.
 !!
 !! A boundary impulse response (BIR) is a passive tracer whose surface boundary condition is a rectangle
-!! function with width $\Delta t$. In the case of unsteady flow, multiple BIRs, initiated at different
+!! function with width \f$\Delta t\f$. In the case of unsteady flow, multiple BIRs, initiated at different
 !! times in the model can be used to infer the transit time distribution or Green's function between
 !! the oceanic surface and interior. In the case of steady or cyclostationary flow, a single BIR is
 !! sufficient.

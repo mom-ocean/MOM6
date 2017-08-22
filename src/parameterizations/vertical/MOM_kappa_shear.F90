@@ -116,21 +116,43 @@ end type Kappa_shear_CS
 
 contains
 
+!> Subroutine for calculating diffusivity and TKE
 subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
-  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: u_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: v_in
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                      intent(in)    :: tv
-  real, dimension(:,:),                       pointer       :: p_surf
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kappa_io
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: tke_io
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(inout) :: kv_io ! really intent(out)
-  real,                                       intent(in)    :: dt
-  type(Kappa_shear_CS),                       pointer       :: CS
-  logical,                          optional, intent(in)    :: initialize_all
+  type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+                           intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
+                                                   !! available thermodynamic fields. Absent fields
+                                                   !! have NULL ptrs.
+  real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
+                                                   !! (or NULL).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
+                                                   !! (not layer!) in m2 s-1.  Initially this is the
+                                                   !! value from the previous timestep, which may
+                                                   !! accelerate the iteration toward convergence.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
+                                                   !! each interface (not layer!) in m2 s-2.
+                                                   !! Initially this is the value from the previous
+                                                   !! timestep, which may accelerate the iteration
+                                                   !! toward convergence.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: kv_io  !< The vertical viscosity at each interface
+                                                   !! (not layer!) in m2 s-1. This discards any
+                                                   !! previous value i.e. intent(out) and simply
+                                                   !! sets Kv = Prandtl * Kd_turb
+  real,                    intent(in)    :: dt     !< Time increment, in s.
+  type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
+                                                   !! call to kappa_shear_init.
+  logical,       optional, intent(in)    :: initialize_all !< If present and false, the previous
+                                                   !! value of kappa is used to start the iterations
 !
 ! ----------------------------------------------
 ! Subroutine for calculating diffusivity and TKE
@@ -786,7 +808,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
             ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
             wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
           enddo
-          ! Use Adcroft's 1/0=0 convention.
+          ! Use the 1/0=0 convention.
           I_wt_tot = 0.0 ; if (wt_tot > 0.0) I_wt_tot = 1.0/wt_tot
 
           do K=1,nzc+1
@@ -906,17 +928,38 @@ end subroutine Calculate_kappa_shear
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
                                      u, v, T, Sal, N2, S2, ks_int, ke_int)
-!   This subroutine calculates the velocities, temperature and salinity that
-! the water column will have after mixing for dt with diffusivities kappa.  It
-! may also calculate the projected buoyancy frequency and shear.
-  integer,               intent(in)  :: nz
-  real, dimension(nz+1), intent(in)  :: kappa
-  real, dimension(nz),   intent(in)  :: u0, v0, T0, S0, dz
-  real, dimension(nz+1), intent(in)  :: I_dz_int, dbuoy_dT, dbuoy_dS
-  real,                  intent(in)  :: dt
-  real, dimension(nz),   intent(inout) :: u, v, T, Sal
-  real, dimension(nz+1), optional, intent(inout) :: N2, S2
-  integer, optional,     intent(in)  :: ks_int, ke_int
+!<   This subroutine calculates the velocities, temperature and salinity that
+!! the water column will have after mixing for dt with diffusivities kappa.  It
+!! may also calculate the projected buoyancy frequency and shear.
+  integer,               intent(in)    :: nz  !< The number of layers (after eliminating massless
+                                              !! layers?).
+  real, dimension(nz+1), intent(in)    :: kappa !< The diapycnal diffusivity at interfaces,
+                                              !! in m2 s-1.
+  real, dimension(nz),   intent(in)    :: u0  !< The initial zonal velocity, in m s-1.
+  real, dimension(nz),   intent(in)    :: v0  !< The initial meridional velocity, in m s-1.
+  real, dimension(nz),   intent(in)    :: T0  !< The initial temperature, in C.
+  real, dimension(nz),   intent(in)    :: S0  !< The initial salinity, in PSU.
+  real, dimension(nz),   intent(in)    :: dz  !< The grid spacing of layers, in m.
+  real, dimension(nz+1), intent(in)    :: I_dz_int !< The inverse of the layer's thicknesses,
+                                              !! in m-1.
+  real, dimension(nz+1), intent(in)    :: dbuoy_dT !< The partial derivative of buoyancy with
+                                              !! temperature, in m s-2 C-1.
+  real, dimension(nz+1), intent(in)    :: dbuoy_dS !< The partial derivative of buoyancy with
+                                              !! salinity, in m s-2 PSU-1.
+  real,                  intent(in)    :: dt  !< The time step in s.
+  real, dimension(nz),   intent(inout) :: u   !< The zonal velocity after dt, in m s-1.
+  real, dimension(nz),   intent(inout) :: v   !< The meridional velocity after dt, in m s-1.
+  real, dimension(nz),   intent(inout) :: T   !< The temperature after dt, in C.
+  real, dimension(nz),   intent(inout) :: Sal !< The salinity after dt, in PSU.
+  real, dimension(nz+1), optional, &
+                         intent(inout) :: N2  !< The buoyancy frequency squared at interfaces,
+                                              !! in s-2.
+  real, dimension(nz+1), optional, &
+                         intent(inout) :: S2  !< The squared shear at interfaces, in s-2.
+  integer, optional,     intent(in)    :: ks_int !< The topmost k-index with a non-zero diffusivity.
+  integer, optional,     intent(in)    :: ke_int !< The bottommost k-index with a non-zero
+                                              !! diffusivity.
+
   ! Arguments: kappa - The diapycnal diffusivity at interfaces, in m2 s-1.
   !  (in)      Sh - The shear at interfaces, in s-1.
   !  (in)      u0 - The initial zonal velocity, in m s-1.
@@ -1031,17 +1074,34 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
 
 end subroutine calculate_projected_state
 
+!> This subroutine calculates new, consistent estimates of TKE and kappa.
 subroutine find_kappa_tke(N2, S2, kappa_in, Idz, dz_Int, I_L2_bdry, f2, &
                           nz, CS, K_Q, tke, kappa, kappa_src, local_src)
-  integer,               intent(in)  :: nz
-  real, dimension(nz+1), intent(in)  :: N2, S2, kappa_in, dz_Int, I_L2_bdry
-  real, dimension(nz),   intent(in)  :: Idz
-  real,                  intent(in)  :: f2
-  type(Kappa_shear_CS),  pointer     :: CS
-  real, dimension(nz+1), intent(inout) :: K_Q
-  real, dimension(nz+1), intent(out) :: tke, kappa
-  real, dimension(nz+1), optional, intent(out) :: kappa_src
-  real, dimension(nz+1), optional, intent(out) :: local_src
+  integer,               intent(in)    :: nz  !< The number of layers to work on.
+  real, dimension(nz+1), intent(in)    :: N2  !< The buoyancy frequency squared at interfaces,
+                                              !! in s-2.
+  real, dimension(nz+1), intent(in)    :: S2  !< The squared shear at interfaces, in s-2.
+  real, dimension(nz+1), intent(in)    :: kappa_in  !< The initial guess at the diffusivity,
+                                              !! in m2 s-1.
+  real, dimension(nz+1), intent(in)    :: dz_Int    !< The thicknesses associated with interfaces,
+                                              !! in m.
+  real, dimension(nz+1), intent(in)    :: I_L2_bdry !< The inverse of the squared distance to
+                                              !! boundaries, m2.
+  real, dimension(nz),   intent(in)    :: Idz !< The inverse grid spacing of layers, in m-1.
+  real,                  intent(in)    :: f2  !< The squared Coriolis parameter, in s-2.
+  type(Kappa_shear_CS),  pointer       :: CS  !< A pointer to this module's control structure.
+  real, dimension(nz+1), intent(inout) :: K_Q !< The shear-driven diapycnal diffusivity divided by
+                                              !! the turbulent kinetic energy per unit mass at
+                                              !! interfaces, in s.
+  real, dimension(nz+1), intent(out)   :: tke !< The turbulent kinetic energy per unit mass at
+                                              !! interfaces, in units of m2 s-2.
+  real, dimension(nz+1), intent(out)   :: kappa     !< The diapycnal diffusivity at interfaces,
+                                              !! in m2 s-1.
+  real, dimension(nz+1), optional, &
+                         intent(out)   :: kappa_src !< The source term for kappa, in s-1.
+  real, dimension(nz+1), optional, &
+                         intent(out)   :: local_src !< The sum of all local sources for kappa,
+                                              !! in s-1.
 !   This subroutine calculates new, consistent estimates of TKE and kappa.
 
 ! Arguments: N2 - The buoyancy frequency squared at interfaces, in s-2.
@@ -1643,12 +1703,15 @@ end subroutine find_kappa_tke
 
 
 logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
-  type(time_type),         intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(Kappa_shear_CS),    pointer       :: CS
+  type(time_type),         intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(Kappa_shear_CS),    pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.

@@ -142,7 +142,7 @@ subroutine verticalGridInit( param_file, GV )
     GV%H_to_kg_m2 = GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
-    GV%Angstrom = GV%Angstrom_z
+    GV%Angstrom = GV%m_to_H * GV%Angstrom_z
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = GV%Rho0 * GV%kg_m2_to_H

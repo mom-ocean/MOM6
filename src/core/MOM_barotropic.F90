@@ -1090,6 +1090,18 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vhbt0(i,J) = vhbt(i,J) - Datv(i,J)*vbt(i,J)
       enddo ; enddo
     endif
+    if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
+!GOMP do
+      do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+        uhbt0(I,j) = 0.0
+      endif ; enddo ; enddo
+    endif
+    if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
+!GOMP do
+      do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+        vhbt0(i,J) = 0.0
+      endif ; enddo ; enddo
+    endif
   endif
 
 ! Calculate the initial barotropic velocities from the layer's velocities.
@@ -1818,8 +1830,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       ! Now update the meridional velocity.
 !GOMP do
       do J=jsv-1,jev ; do i=isv,iev
-        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
-                (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
         PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
                      (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
                     dgeo_de * CS%IdyCv(i,J)
@@ -2404,8 +2416,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
-          grad(I-1,J) = (ubt_old(I-1,j+1) - ubt_old(I-1,j)) * G%mask2dBu(I-1,J)
-          grad(I-1,J-1) = (ubt_old(I-1,j) - ubt_old(I-1,j-1)) * G%mask2dBu(I-1,J-1)
+          grad(I-1,J) = (ubt(I-1,j+1) - ubt(I-1,j)) * G%mask2dBu(I-1,J)
+          grad(I-1,J-1) = (ubt(I-1,j) - ubt(I-1,j-1)) * G%mask2dBu(I-1,J-1)
           dhdt = ubt_old(I-1,j)-ubt(I-1,j) !old-new
           dhdx = ubt(I-1,j)-ubt(I-2,j) !in new time backward sasha for I-1
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
@@ -2418,14 +2430,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdx == 0.0) dhdx=eps  ! avoid segv
-          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+          Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !         Cy = 0
           cff = max(dhdx*dhdx, eps)
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdy==0.) dhdy=eps ! avoid segv
-            Cy = min(cff, max(dhdt/dhdy, -cff))
+            Cy = min(cff, max(dhdt*dhdy, -cff))
 !         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I-1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -2450,8 +2460,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_u(I,j))%oblique) then
           grad(I,J) = (ubt_old(I,j+1) - ubt_old(I,j)) * G%mask2dBu(I,J)
           grad(I,J-1) = (ubt_old(I,j) - ubt_old(I,j-1)) * G%mask2dBu(I,J-1)
-          grad(I+1,J) = (ubt_old(I+1,j+1) - ubt_old(I+1,j)) * G%mask2dBu(I+1,J)
-          grad(I+1,J-1) = (ubt_old(I+1,j) - ubt_old(I+1,j-1)) * G%mask2dBu(I+1,J-1)
+          grad(I+1,J) = (ubt(I+1,j+1) - ubt(I+1,j)) * G%mask2dBu(I+1,J)
+          grad(I+1,J-1) = (ubt(I+1,j) - ubt(I+1,j-1)) * G%mask2dBu(I+1,J-1)
           dhdt = ubt_old(I+1,j)-ubt(I+1,j) !old-new
           dhdx = ubt(I+1,j)-ubt(I+2,j) !in new time backward sasha for I+1
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
@@ -2464,14 +2474,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdx < 0.0) dhdt = 0.0
-          if (dhdx == 0.0) dhdx=eps  ! avoid segv
-          Cx = min(dhdt/dhdx,rx_max) ! default to normal flow only
+          Cx = min(dhdt*dhdx,rx_max) ! default to normal flow only
 !         Cy = 0
           cff = max(dhdx*dhdx, eps)
 !         if (OBC%segment(OBC%segnum_u(I,j))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdy==0.) dhdy=eps ! avoid segv
-            Cy = min(cff,max(dhdt/dhdy,-cff))
+            Cy = min(cff,max(dhdt*dhdy,-cff))
 !         endif
           ubt(I,j) = ((cff*ubt_old(I,j) + Cx*ubt(I+1,j)) - &
               (max(Cy,0.0)*grad(I,J-1) + min(Cy,0.0)*grad(I,J))) / (cff + Cx)
@@ -2517,8 +2525,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
-          grad(I,J-1) = (vbt_old(i+1,J-1) - vbt_old(i,J-1)) * G%mask2dBu(I,J-1)
-          grad(I-1,J-1) = (vbt_old(i,J-1) - vbt_old(i-1,J-1)) * G%mask2dBu(I-1,J-1)
+          grad(I,J-1) = (vbt(i+1,J-1) - vbt(i,J-1)) * G%mask2dBu(I,J-1)
+          grad(I-1,J-1) = (vbt(i,J-1) - vbt(i-1,J-1)) * G%mask2dBu(I-1,J-1)
           dhdt = vbt_old(i,J-1)-vbt(i,J-1) !old-new
           dhdy = vbt(i,J-1)-vbt(i,J-2) !in new time backward sasha for J-1
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
@@ -2531,14 +2539,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdy == 0.0) dhdy=eps  ! avoid segv
-          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+          Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !         Cx = 0
           cff = max(dhdy*dhdy, eps)
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdx==0.) dhdx=eps ! avoid segv
-            Cx = min(cff,max(dhdt/dhdx,-cff))
+            Cx = min(cff,max(dhdt*dhdx,-cff))
 !         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J-1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -2564,8 +2570,8 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         elseif (OBC%segment(OBC%segnum_v(i,J))%oblique) then
           grad(I,J) = (vbt_old(i+1,J) - vbt_old(i,J)) * G%mask2dBu(I,J)
           grad(I-1,J) = (vbt_old(i,J) - vbt_old(i-1,J)) * G%mask2dBu(I-1,J)
-          grad(I,J+1) = (vbt_old(i+1,J+1) - vbt_old(i,J+1)) * G%mask2dBu(I,J+1)
-          grad(I-1,J+1) = (vbt_old(i,J+1) - vbt_old(i-1,J+1)) * G%mask2dBu(I-1,J+1)
+          grad(I,J+1) = (vbt(i+1,J+1) - vbt(i,J+1)) * G%mask2dBu(I,J+1)
+          grad(I-1,J+1) = (vbt(i,J+1) - vbt(i-1,J+1)) * G%mask2dBu(I-1,J+1)
           dhdt = vbt_old(i,J+1)-vbt(i,J+1) !old-new
           dhdy = vbt(i,J+1)-vbt(i,J+2) !in new time backward sasha for J+1
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
@@ -2578,14 +2584,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
             endif
 !         endif
           if (dhdt*dhdy < 0.0) dhdt = 0.0
-          if (dhdy == 0.0) dhdy=eps  ! avoid segv
-          Cy = min(dhdt/dhdy,rx_max) ! default to normal flow only
+          Cy = min(dhdt*dhdy,rx_max) ! default to normal flow only
 !         Cx = 0
           cff = max(dhdy*dhdy, eps)
 !         if (OBC%segment(OBC%segnum_v(i,J))%oblique) then
             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-            if (dhdx==0.) dhdx=eps ! avoid segv
-            Cx = min(cff,max(dhdt/dhdx,-cff))
+            Cx = min(cff,max(dhdt*dhdx,-cff))
 !         endif
           vbt(i,J) = ((cff*vbt_old(i,J) + Cy*vbt(i,J+1)) - &
             (max(Cx,0.0)*grad(I-1,J) + min(Cx,0.0)*grad(I,J))) / (cff + Cy)
@@ -3175,6 +3179,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
   if (CS%debug) then
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, 0, .true., .true.)
+    if (present(h_u) .and. present(h_v)) &
+      call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, 0, .true., .true., scale=GV%H_to_m)
     call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_m)
   endif
 

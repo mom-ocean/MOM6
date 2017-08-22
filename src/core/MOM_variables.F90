@@ -75,8 +75,8 @@ type, public :: surface
     internal_heat => NULL() !< Any internal or geothermal heat sources that
                          !! are applied to the ocean integrated over the call
                          !! to step_MOM, in deg C kg m-2.
-  type(coupler_2d_bc_type), pointer :: &
-    tr_fields  => NULL() !< A structure that may contain an  array of named
+  type(coupler_2d_bc_type) :: &
+    tr_fields            !< A structure that may contain an  array of named
                          !! fields describing tracer-related quantities.
        !!! NOTE: ALL OF THE ARRAYS IN TR_FIELDS USE THE COUPLER'S INDEXING
        !!!       CONVENTION AND HAVE NO HALOS!  THIS IS DONE TO CONFORM TO

@@ -119,11 +119,15 @@ character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP"
 contains
 
 subroutine set_opacity(optics, fluxes, G, GV, CS)
-  type(optics_type),                   intent(inout) :: optics
-  type(forcing),                       intent(in)    :: fluxes
-  type(ocean_grid_type),               intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),             intent(in)    :: GV   !< The ocean's vertical grid structure
-  type(opacity_CS),                    pointer       :: CS
+  type(optics_type),         intent(inout) :: optics
+  type(forcing),             intent(in)    :: fluxes !< A structure containing pointers to any
+                                                     !! possible forcing fields. Unused fields
+                                                     !! have NULL ptrs.
+  type(ocean_grid_type),     intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),   intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(opacity_CS),          pointer       :: CS     !< The control structure earlier set up by
+                                                     !! opacity_init.
+
 ! Arguments: (inout) opacity - The inverse of the vertical absorption decay
 !                     scale for penetrating shortwave radiation, in m-1.
 !            (inout) fluxes - A structure containing pointers to any possible
@@ -245,10 +249,14 @@ end subroutine set_opacity
 
 subroutine opacity_from_chl(optics, fluxes, G, CS, chl_in)
   type(optics_type),              intent(inout)  :: optics
-  type(forcing),                  intent(in)     :: fluxes
-  type(ocean_grid_type),          intent(in)     :: G    !< The ocean's grid structure
-  type(opacity_CS),               pointer        :: CS
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in), optional :: chl_in
+  type(forcing),                  intent(in)     :: fluxes !< A structure containing pointers to any
+                                                           !! possible forcing fields. Unused fields
+                                                           !! have NULL ptrs.
+  type(ocean_grid_type),          intent(in)     :: G      !< The ocean's grid structure.
+  type(opacity_CS),               pointer        :: CS     !< The control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                      intent(in), optional       :: chl_in !< A 3-d field of chlorophyll A,
+                                                           !! in mg m-3.
 ! Arguments: fluxes - A structure containing pointers to any possible
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (out)     opacity - The inverse of the vertical absorption decay
@@ -477,12 +485,16 @@ function opacity_manizza(chl_data)
 end function
 
 subroutine opacity_init(Time, G, param_file, diag, tracer_flow, CS, optics)
-  type(time_type), target, intent(in)    :: Time
-  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-  type(diag_ctrl), target, intent(inout) :: diag
-  type(tracer_flow_control_CS), target, intent(in) :: tracer_flow
-  type(opacity_CS),        pointer       :: CS
+  type(time_type), target, intent(in)    :: Time !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
+                                                 !! parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(tracer_flow_control_CS), &
+                  target, intent(in)     :: tracer_flow
+  type(opacity_CS),        pointer       :: CS   !< A pointer that is set to point to the control
+                                                 !! structure for this module.
   type(optics_type),       pointer       :: optics
 ! Arguments: Time - The current model time.
 !  (in)      G - The ocean's grid structure.

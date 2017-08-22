@@ -15,7 +15,6 @@ Contents:
   equations/overview
   parameterizations
   working_with_MOM6
-  tutorials
   apiref
 
 
