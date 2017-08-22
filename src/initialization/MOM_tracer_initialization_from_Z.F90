@@ -66,17 +66,18 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
 !  (in)      G  - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
 
-  type(ocean_grid_type),                 intent(inout) :: G   !< Ocean grid structure
-  type(verticalGrid_type),               intent(in)    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h
-  real, dimension(:,:,:),                pointer       :: tr
-  type(param_file_type),                 intent(in)    :: PF
-  character(len=*),                      intent(in)    :: src_file, src_var_nam
-  real, optional,                        intent(in)    :: src_var_unit_conversion
-  integer, optional,                     intent(in)    :: src_var_record
-  logical, optional,                     intent(in)    :: homogenize, useALEremapping
-  character(len=*),  optional,           intent(in)    :: remappingScheme
-  character(len=*),  optional,           intent(in)    :: src_var_gridspec ! Not implemented yet.
+  type(ocean_grid_type),       intent(inout) :: G   !< Ocean grid structure.
+  type(verticalGrid_type),     intent(in)    :: GV  !< Ocean vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                               intent(in)    :: h   !< Layer thickness, in m.
+  real, dimension(:,:,:),      pointer       :: tr
+  type(param_file_type),       intent(in)    :: PF
+  character(len=*),            intent(in)    :: src_file, src_var_nam
+  real, optional,              intent(in)    :: src_var_unit_conversion
+  integer, optional,           intent(in)    :: src_var_record
+  logical, optional,           intent(in)    :: homogenize, useALEremapping
+  character(len=*),  optional, intent(in)    :: remappingScheme
+  character(len=*),  optional, intent(in)    :: src_var_gridspec ! Not implemented yet.
 
   real :: land_fill = 0.0
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
@@ -280,14 +281,19 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type), intent(inout)  :: G    !< The ocean's grid structure
+  type(ocean_grid_type),            intent(inout) :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
-  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: good, fill
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: prev
-  logical, intent(in), optional :: smooth
-  integer, intent(in), optional :: num_pass
-  real, intent(in), optional    :: relc,crit
-  logical, intent(in), optional :: keep_bug, debug
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: good !< Valid data mask for incoming array
+                                                          !! (1==good data; 0==missing data).
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: fill !< Same shape array of points which need
+                                                          !! filling (1==please fill;0==leave
+                                                          !! it alone).
+  real, dimension(SZI_(G),SZJ_(G)), optional, &
+                                    intent(in)    :: prev !< First guess where isolated holes exist.
+  logical, intent(in),              optional      :: smooth
+  integer, intent(in),              optional      :: num_pass
+  real,                 intent(in), optional      :: relc,crit
+  logical,              intent(in), optional      :: keep_bug, debug
 
 
   real, dimension(SZI_(G),SZJ_(G)) :: b,r
@@ -430,24 +436,26 @@ end subroutine fill_miss_2d
 
 subroutine horiz_interp_and_extrap_tracer(filename, varnam,  conversion, recnum, G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, homogenize )
 
-  character(len=*), intent(in) :: filename   ! Path to file containing tracer to be interpolated
-  character(len=*), intent(in) :: varnam     ! name of tracer in filee
-  real,             intent(in) :: conversion ! conversion factor for tracer
-  integer,          intent(in) :: recnum     ! record number of tracer to be read
-  type(ocean_grid_type), intent(inout) :: G     ! Grid object
-  real, allocatable, dimension(:,:,:) :: tr_z    ! pointer to allocatable tracer array on local model grid
-                                              ! and native vertical levels
-  real, allocatable, dimension(:,:,:) :: mask_z   ! pointer to allocatable tracer mask array on local model grid
-                                              ! and native vertical levels
-  real, allocatable, dimension(:)     :: z_in  ! Cell grid values for input data
-  real, allocatable, dimension(:)     :: z_edges_in  ! Cell grid edge values for input data
-  real,                intent(out)  :: missing_value
-  logical,          intent(in) :: reentrant_x, tripolar_n
-  logical, intent(in), optional     :: homogenize
+  character(len=*),      intent(in)    :: filename   !< Path to file containing tracer to be
+                                                     !! interpolated.
+  character(len=*),      intent(in)    :: varnam     !< Name of tracer in filee.
+  real,                  intent(in)    :: conversion !< Conversion factor for tracer.
+  integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
+  type(ocean_grid_type), intent(inout) :: G          !< Grid object
+  real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
+                                                     !! model grid and native vertical levels.
+  real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
+                                                     !! local model grid and native vertical levels.
+  real, allocatable,     dimension(:)  :: z_in       !< Cell grid values for input data.
+  real, allocatable,     dimension(:)  :: z_edges_in !< Cell grid edge values for input data.
+  real,                  intent(out)   :: missing_value
+  logical,               intent(in)    :: reentrant_x, tripolar_n
+  logical, intent(in),   optional      :: homogenize
 
-  real, dimension(:,:), allocatable :: tr_in,tr_inp ! A 2-d array for holding input data on native horizontal
-                                                    ! grid and extended grid with poles
-  real, dimension(:,:), allocatable :: mask_in      ! A 2-d mask for extended input grid
+  real, dimension(:,:),  allocatable   :: tr_in,tr_inp !< A 2-d array for holding input data on
+                                                     !! native horizontal grid and extended grid
+                                                     !! with poles.
+  real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
 
   real :: PI_180
   integer :: rcode, ncid, varid, ndims, id, jd, kd, jdp
@@ -764,16 +772,23 @@ function tracer_z_init(tr_in,z_edges,e,nkml,nkbl,land_fill,wet,nlay,nlevs,debug,
 !               center and normalized by the cell thickness, nondim.
 !               Note that -1/2 <= z1 <= z2 <= 1/2.
 !
-real, dimension(:,:,:), intent(in)           :: tr_in
-real, dimension(size(tr_in,3)+1), intent(in) :: z_edges
-integer, intent(in)                          :: nlay
-real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), intent(in) :: e
-integer, intent(in)                          :: nkml,nkbl
-real, intent(in)                             :: land_fill
-real, dimension(size(tr_in,1),size(tr_in,2)), intent(in) :: wet
-real, dimension(size(tr_in,1),size(tr_in,2)), optional, intent(in) ::nlevs
-logical, intent(in), optional                :: debug
-integer, intent(in), optional                :: i_debug, j_debug
+real, dimension(:,:,:),           intent(in) :: tr_in   !< The z-space array of tracer
+                                                        !! concentrations that is read in.
+real, dimension(size(tr_in,3)+1), intent(in) :: z_edges !< The depths of the cell edges in the input
+                                                        !! z* data (m).
+integer,                          intent(in) :: nlay    !< Number of layers.
+real, dimension(size(tr_in,1),size(tr_in,2),nlay+1), &
+                                  intent(in) :: e       !< The depths of the layer interfaces (m).
+integer,                          intent(in) :: nkml    !< Number of mixed layer pieces.
+integer,                          intent(in) :: nkbl    !< Number of buffer layer pieces.
+real,                             intent(in) :: land_fill !< Fill in data over land.
+real, dimension(size(tr_in,1),size(tr_in,2)), &
+                                  intent(in) :: wet     !< Wet mask (1=ocean)
+real, dimension(size(tr_in,1),size(tr_in,2)), &
+                        optional, intent(in) :: nlevs   !< Number of levels
+logical,              intent(in), optional   :: debug
+integer,              intent(in), optional   :: i_debug
+integer,              intent(in), optional   :: j_debug
 
 real, dimension(size(tr_in,1),size(tr_in,2),nlay) :: tr
 real, dimension(size(tr_in,3)) :: tr_1d
@@ -940,10 +955,11 @@ function bisect_fast(a, x, lo, hi) result(bi_r)
 !  (in)  x - item to be inserted
 !  (in)  lo, hi - optional range to search
 
-real, dimension(:,:), intent(in) :: a
-real, dimension(:), intent(in) :: x
-integer, dimension(size(a,1)), intent(in), optional  :: lo,hi
-integer, dimension(size(a,1),size(x,1))  :: bi_r
+real,    dimension(:,:),       intent(in) :: a     !< Sorted list.
+real,    dimension(:),         intent(in) :: x     !< Item to be inserted.
+integer, dimension(size(a,1)), &
+                   intent(in), optional   :: lo,hi !< Optional range to search.
+integer, dimension(size(a,1),size(x,1))   :: bi_r
 
 integer :: mid,num_x,num_a,i
 integer, dimension(size(a,1))  :: lo_,hi_,lo0,hi0
@@ -983,10 +999,9 @@ end function bisect_fast
 
 #ifdef PY_SOLO
 subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
-
-! # This subroutine determines the potential temperature and
-! # salinity that is consistent with the target density
-! # using provided initial guess
+!< This subroutine determines the potential temperature and
+!! salinity that is consistent with the target density
+!! using provided initial guess
 ! #   (inout)     temp - potential temperature (degC)
 ! #   (inout)     salt - salinity (PSU)
 ! #   (in)           R - Desired potential density, in kg m-3.
@@ -996,17 +1011,21 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start)
 ! #   (in)     k_start - starting index (i.e. below the buffer layer)
 ! #   (in)   land_fill - land fill value
 
-real(kind=8), dimension(:,:,:), intent(inout) :: temp,salt
-real(kind=8), dimension(size(temp,3)), intent(in) :: R
-real, intent(in) :: p_ref
-integer, intent(in) :: niter
-integer, intent(in) :: k_start
-real, intent(in) :: land_fill
-real(kind=8), dimension(:,:,:), intent(in) :: h
+real(kind=8), dimension(:,:,:),        intent(inout) :: temp  !< Potential temperature (degC).
+real(kind=8), dimension(:,:,:),        intent(inout) :: salt  !< Salinity (PSU).
+real(kind=8), dimension(size(temp,3)), intent(in)    :: R     !< Desired potential density,
+                                                              !! in kg m-3.
+real,                                  intent(in)    :: p_ref !< Reference pressure, in Pa.
+integer,                               intent(in)    :: niter !< Maximum number of iterations.
+integer,                               intent(in)    :: k_start !< Starting index (i.e. below the
+                                                              !! buffer layer).
+real,                                  intent(in)    :: land_fill !< Land fill value.
+real(kind=8), dimension(:,:,:),        intent(in)    :: h     !< Layer thickness. Do not iterate
+                                                              !! for massless layers.
 
-real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
-real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
-real(kind=8), dimension(size(temp,1)) :: press
+real(kind=8), dimension(size(temp,1),size(temp,3))   :: T,S,dT,dS,rho,hin
+real(kind=8), dimension(size(temp,1),size(temp,3))   :: drho_dT,drho_dS
+real(kind=8), dimension(size(temp,1))                :: press
 
 integer :: nx,ny,nz,nt,i,j,k,n,itt
 logical :: adjust_salt , old_fit
@@ -1019,9 +1038,9 @@ real, parameter :: tol=1.e-4, max_t_adj=1.0, max_s_adj = 0.5
 
 subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos)
 
-! # This subroutine determines the potential temperature and
-! # salinity that is consistent with the target density
-! # using provided initial guess
+!< This subroutine determines the potential temperature and
+!! salinity that is consistent with the target density
+!! using provided initial guess
 ! #   (inout)     temp - potential temperature (degC)
 ! #   (inout)     salt - salinity (PSU)
 ! #   (in)           R - Desired potential density, in kg m-3.
@@ -1032,14 +1051,17 @@ subroutine determine_temperature(temp,salt,R,p_ref,niter,land_fill,h,k_start,eos
 ! #   (in)   land_fill - land fill value
 ! #   (in)        eos  - seawater equation of state
 
-real, dimension(:,:,:), intent(inout) :: temp,salt
-real, dimension(size(temp,3)), intent(in) :: R
-real, intent(in) :: p_ref
-integer, intent(in) :: niter
-integer, intent(in) :: k_start
-real, intent(in) :: land_fill
-real, dimension(:,:,:), intent(in) :: h
-type(eos_type), pointer, intent(in) :: eos
+real, dimension(:,:,:),        intent(inout) :: temp  !< Potential temperature (degC).
+real, dimension(:,:,:),        intent(inout) :: salt  !< Salinity (PSU).
+real, dimension(size(temp,3)), intent(in)    :: R     !< Desired potential density, in kg m-3.
+real,                          intent(in)    :: p_ref !< Reference pressure, in Pa.
+integer,                       intent(in)    :: niter !< Maximum number of iterations.
+integer,                       intent(in)    :: k_start !< Starting index (i.e. below the buffer
+                                                      !! layer).
+real,                          intent(in)    :: land_fill !< Land fill value.
+real, dimension(:,:,:),        intent(in)    :: h     !< Layer thickness . Do not iterate for
+                                                      !! massless layers.
+type(eos_type), pointer,       intent(in)    :: eos   !< Seawater equation of state
 
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: T,S,dT,dS,rho,hin
 real(kind=8), dimension(size(temp,1),size(temp,3)) :: drho_dT,drho_dS
@@ -1151,11 +1173,11 @@ end subroutine determine_temperature
 
 subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z2)
 
-!   This subroutine determines the layers bounded by interfaces e that overlap
-! with the depth range between Z_top and Z_bot, and also the fractional weights
-! of each layer. It also calculates the normalized relative depths of the range
-! of each layer that overlaps that depth range.
-!   Note that by convention, e decreases with increasing k and Z_top > Z_bot.
+!<   This subroutine determines the layers bounded by interfaces e that overlap
+!! with the depth range between Z_top and Z_bot, and also the fractional weights
+!! of each layer. It also calculates the normalized relative depths of the range
+!! of each layer that overlaps that depth range.
+!!   Note that by convention, e decreases with increasing k and Z_top > Z_bot.
 !
 ! Arguments: e - A column's interface heights, in m.
 !  (in)      Z_top - The top of the range being mapped to, in m.
@@ -1170,11 +1192,19 @@ subroutine find_overlap(e, Z_top, Z_bot, k_max, k_start, k_top, k_bot, wt, z1, z
 !                     relative to the cell center and normalized by the cell
 !                     thickness, nondim.  Note that -1/2 <= z1 < z2 <= 1/2.
 
-real, dimension(:), intent(in) :: e
-real, intent(in)   :: Z_top, Z_bot
-integer, intent(in) :: k_max, k_start
-integer, intent(out) :: k_top, k_bot
-real, dimension(:), intent(out) :: wt, z1, z2
+real, dimension(:), intent(in)  :: e      !< A column's interface heights, in m.
+real,               intent(in)  :: Z_top  !< The top of the range being mapped to, in m.
+real,               intent(in)  :: Z_bot  !< The bottom of the range being mapped to, in m.
+integer,            intent(in)  :: k_max  !< The number of valid layers.
+integer,            intent(in)  :: k_start !< The layer at which to start searching.
+integer,            intent(out) :: k_top, k_bot !< The indices of the top and bottom layers that
+                                          !! overlap with the depth range.
+real, dimension(:), intent(out) :: wt     !< The relative weights of each layer from k_top to k_bot.
+real, dimension(:), intent(out) :: z1, z2 !< z1 and z2 are the depths of the top and bottom limits
+                                          !! of the part of a layer that contributes to a depth
+                                          !! level, relative to the cell center and normalized by
+                                          !! the cell thickness, nondim.  Note that -1/2 <= z1
+                                          !! < z2 <= 1/2.
 
 real :: Ih, e_c, tot_wt, I_totwt
 integer :: k
@@ -1222,8 +1252,8 @@ end subroutine find_overlap
 
 function find_limited_slope(val, e, k) result(slope)
 
-!   This subroutine determines a limited slope for val to be advected with
-! a piecewise limited scheme.
+!<   This subroutine determines a limited slope for val to be advected with
+!! a piecewise limited scheme.
 
 ! Arguments: val - An column the values that are being interpolated.
 !  (in)      e - A column's interface heights, in m.
@@ -1231,9 +1261,9 @@ function find_limited_slope(val, e, k) result(slope)
 !  (in)      k - The layer whose slope is being determined.
 
 
-real, dimension(:), intent(in) :: val
-real, dimension(:), intent(in) :: e
-integer, intent(in) :: k
+real, dimension(:), intent(in) :: val !< An column the values that are being interpolated.
+real, dimension(:), intent(in) :: e   !< A column's interface heights, in m.
+integer,            intent(in) :: k   !< The layer whose slope is being determined.
 real :: slope,amx,bmx,amn,bmn,cmn,dmn
 
 real :: d1, d2
@@ -1276,15 +1306,18 @@ function find_interfaces(rho,zin,Rb,depth,nlevs,nkml,nkbl,hml,debug) result(zi)
 !  (in)     nkbl : number of buffer layer pieces
 !  (in)      hml : mixed layer depth
 
-real, dimension(:,:,:), intent(in) :: rho
-real, dimension(size(rho,3)), intent(in) :: zin
-real, dimension(:), intent(in) :: Rb
-real, dimension(size(rho,1),size(rho,2)), intent(in) :: depth
-real, dimension(size(rho,1),size(rho,2)), optional, intent(in) ::nlevs
-logical, optional, intent(in) :: debug
+real, dimension(:,:,:),       intent(in) :: rho   !< Potential density in z-space (kg m-3)
+real, dimension(size(rho,3)), intent(in) :: zin   !< LKevels (m)
+real, dimension(:),           intent(in) :: Rb    !< Target interface densities (kg m-3)
+real, dimension(size(rho,1),size(rho,2)), &
+                              intent(in) :: depth !< Ocean depth (m)
+real, dimension(size(rho,1),size(rho,2)), &
+                    optional, intent(in) :: nlevs !< Number of valid points in each column
+logical,            optional, intent(in) :: debug
 real, dimension(size(rho,1),size(rho,2),size(Rb,1)) :: zi
-integer, intent(in), optional :: nkml, nkbl
-real, intent(in), optional    :: hml
+integer,          intent(in), optional   :: nkml  !< Number of mixed layer pieces
+integer,          intent(in), optional   :: nkbl  !< Number of buffer layer pieces
+real,             intent(in), optional   :: hml   !< Mixed layer depth
 
 real, dimension(size(rho,1),size(rho,3)) :: rho_
 real, dimension(size(rho,1)) :: depth_
@@ -1405,10 +1438,10 @@ end function find_interfaces
 
 subroutine meshgrid(x,y,x_T,y_T)
 
-!  create a 2d-mesh of grid coordinates
-!  from 1-d arrays.
+!<  create a 2d-mesh of grid coordinates
+!! from 1-d arrays.
 
-real, dimension(:), intent(in) :: x,y
+real, dimension(:),                   intent(in)    :: x,y
 real, dimension(size(x,1),size(y,1)), intent(inout) :: x_T,y_T
 
 integer :: ni,nj,i,j
@@ -1428,21 +1461,19 @@ return
 end subroutine meshgrid
 
 subroutine smooth_heights(zi,fill,bad,sor,niter,cyclic_x, tripolar_n)
-!
-! Solve del2 (zi) = 0 using successive iterations
-! with a 5 point stencil. Only points fill==1 are
-! modified. Except where bad==1, information propagates
-! isotropically in index space.  The resulting solution
-! in each region is an approximation to del2(zi)=0 subject to
-! boundary conditions along the valid points curve bounding this region.
+!< Solve del2 (zi) = 0 using successive iterations
+!! with a 5 point stencil. Only points fill==1 are
+!! modified. Except where bad==1, information propagates
+!! isotropically in index space.  The resulting solution
+!! in each region is an approximation to del2(zi)=0 subject to
+!! boundary conditions along the valid points curve bounding this region.
 
-
-real, dimension(:,:), intent(inout) :: zi
+real,    dimension(:,:),                   intent(inout) :: zi
 integer, dimension(size(zi,1),size(zi,2)), intent(in) :: fill
 integer, dimension(size(zi,1),size(zi,2)), intent(in) :: bad
-real, intent(in)  :: sor
-integer, intent(in) :: niter
-logical, intent(in) :: cyclic_x, tripolar_n
+real,                                      intent(in)  :: sor
+integer,                                   intent(in) :: niter
+logical,                                   intent(in) :: cyclic_x, tripolar_n
 
 integer :: i,j,k,n
 integer :: ni,nj
@@ -1504,10 +1535,10 @@ function fill_boundaries_int(m,cyclic_x,tripolar_n) result(mp)
 !
 ! fill grid edges
 !
-integer, dimension(:,:), intent(in) :: m
-logical, intent(in) :: cyclic_x, tripolar_n
-real, dimension(size(m,1),size(m,2)) :: m_real
-real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
+integer, dimension(:,:), intent(in)             :: m
+logical,                 intent(in)             :: cyclic_x, tripolar_n
+real,    dimension(size(m,1),size(m,2))         :: m_real
+real,    dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp_real
 integer, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
 m_real = real(m)
@@ -1521,11 +1552,10 @@ return
 end function fill_boundaries_int
 
 function fill_boundaries_real(m,cyclic_x,tripolar_n) result(mp)
-!
-! fill grid edges
-!
-real, dimension(:,:), intent(in) :: m
-logical, intent(in) :: cyclic_x, tripolar_n
+!< fill grid edges
+
+real, dimension(:,:),             intent(in) :: m
+logical,                          intent(in) :: cyclic_x, tripolar_n
 real, dimension(0:size(m,1)+1,0:size(m,2)+1) :: mp
 
 integer :: ni,nj,i,j

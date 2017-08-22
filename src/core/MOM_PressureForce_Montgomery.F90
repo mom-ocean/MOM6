@@ -67,7 +67,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, 
                                                                 !! atmosphere-ocean in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
-                                                                !! in m s-2.
+                                                                !! in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
@@ -378,7 +378,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta
                                                                 !! atmosphere-ocean in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), optional, intent(out) :: pbce !< The baroclinic pressure anomaly in
                                                                 !! each layer due to free surface height anomalies,
-                                                                !! in m s-2.
+                                                                !! in m2 s-2 H-1.
   real, dimension(SZI_(G),SZJ_(G)),         optional, intent(out) :: eta !< Free surface height, in m.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &

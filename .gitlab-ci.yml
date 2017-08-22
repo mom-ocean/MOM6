@@ -1,41 +1,44 @@
 stages:
-  - merge
-  - setup
+  - merge+setup
   - builds
   - run
   - tests
+  - cleanup
 
-# Moves to re-used workspace
+# Merges MOM6 with dev/gfdl. Changes directory to test directory, if it exists.
 before_script:
   - MOM6_SRC=$CI_PROJECT_DIR
-  - WORKSPACE=`pwd | sed 's:/[0-9]/:/:'`
-  - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
-  - test -d $WORKSPACE/tests && cd $WORKSPACE/tests
+  - CACHE_DIR=/lustre/f1/oar.gfdl.ogrp-account/runner/cache/
+  - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl && git submodule init && git submodule update
+  - pwd ; ls
 
-# Merge
+# Tests that merge with dev/gfdl works.
 merge:
-  stage: merge
+  stage: merge+setup
   tags:
     - ncrc3
   script:
-    - cd $CI_PROJECT_DIR
+    - pwd ; ls
     - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
 
 # Clones regression repo, if necessary, pulls latest of everything, and sets up working space
 setup:
-  stage: setup
+  stage: merge+setup
   tags:
     - ncrc3
   script:
-    - mkdir -p $WORKSPACE && cd $WORKSPACE
-    - ln -sf $MOM6_SRC/{config_src,src,pkg} .
-    - test -d tests || (git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests)
-    - cd tests
-    - git checkout . && git checkout dev/gfdl
-    - git pull
-    - git status
-    - bash Gitlab/before_script.sh
-    - (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
+    - pwd ; ls
+    # Clone regressions directory
+    - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests && cd tests
+    # Install / update testing scripts
+    - git clone https://github.com/adcroft/MRS.git MRS
+    # Update MOM6-examples and submodules
+    - (cd MOM6-examples && git checkout . && git checkout dev/gfdl && git pull && git submodule init && git submodule update)
+    - test -d MOM6-examples/src/LM3 || make -f MRS/Makefile.clone clone_gfdl -s
+    - make -f MRS/Makefile.clone MOM6-examples/.datasets -s
+    #- (cd MOM6-examples/src/mkmf && git pull https://github.com/adcroft/mkmf.git add_coverage_mode)
+    - env > gitlab_session.log
+    - cd ../ ; time tar zcf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz tests
 
 # Compiles
 gnu:repro:
@@ -43,29 +46,37 @@ gnu:repro:
   tags:
     - ncrc3
   script:
-    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_gnu -s -j
-    - make -f Gitlab/Makefile.build MOM6_SRC=../ static_gnu -s -j #coverage_gnu
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time make -f MRS/Makefile.build MOM6_SRC=../ build_gnu -s -j
+    - time make -f MRS/Makefile.build MOM6_SRC=../ static_gnu -s -j
+    - time tar zvcf $CACHE_DIR/build-gnu-repro-$CI_PIPELINE_ID.tgz `find build/gnu -name MOM6`
 
 intel:repro:
   stage: builds
   tags:
     - ncrc3
   script:
-    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_intel -s -j
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - make -f MRS/Makefile.build MOM6_SRC=../ build_intel -s -j
+    - time tar zvcf $CACHE_DIR/build-intel-repro-$CI_PIPELINE_ID.tgz `find build/intel -name MOM6`
 
 pgi:repro:
   stage: builds
   tags:
     - ncrc3
   script:
-    - make -f Gitlab/Makefile.build MOM6_SRC=../ build_pgi -s -j
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - make -f MRS/Makefile.build MOM6_SRC=../ build_pgi -s -j
+    - time tar zvcf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz `find build/pgi -name MOM6`
 
 gnu:debug:
   stage: builds
   tags:
     - ncrc3
   script:
-    - make -f Gitlab/Makefile.build MOM6_SRC=../ debug_gnu -s -j
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - make -f MRS/Makefile.build MOM6_SRC=../ debug_gnu -s -j
+    - time tar zvcf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz `find build/gnu -name MOM6`
 
 # Runs
 run:
@@ -73,66 +84,119 @@ run:
   tags:
     - ncrc3
   script:
-    - rm -f MOM6-examples/*.tar
-    - bash Gitlab/run_stage.sh
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/build-gnu-repro-$CI_PIPELINE_ID.tgz
+    - time tar zxf $CACHE_DIR/build-intel-repro-$CI_PIPELINE_ID.tgz
+    - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
+    # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
+    - echo "make -f MRS/Makefile.tests all -B" > job.sh
+    - msub -l partition=c3,nodes=29,walltime=00:24:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - cat log.$CI_PIPELINE_ID
+    - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
 
 # Tests
-gnu:regressions:
+gnu:non-symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - cd regressions && git checkout .
-    - md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
-    - echo "Regression results for non-symmetric gnu executables"
-    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum -c all_gnu.md5 && rm all_gnu.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests gnu_non_symmetric
 
-intel:regressions:
+intel:non-symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - cd regressions && git checkout .
-    - md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
-    - echo "Regression results for non-symmetric intel executables"
-    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum -c all_intel.md5 && rm all_intel.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests intel_non_symmetric
 
-pgi:regressions:
+pgi:non-symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - cd regressions && git checkout .
-    - md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
-    - echo "Regression results for non-symmetric pgi executables"
-    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum -c all_pgi.md5 && rm all_pgi.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests pgi_non_symmetric
 
 gnu:symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - mkdir -p _gnu && cd _gnu
-    - tar xf ../MOM6-examples/non_symmetric_gnu.tar && md5sum `find . -name ocean.stats.gnu` > all_gnu.md5 && find . -name ocean.stats.gnu -exec rm {} \;
-    - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_gnu.tar && md5sum -c all_gnu.md5 && rm all_gnu.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests gnu_symmetric
 
 intel:symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - mkdir -p _intel && cd _intel
-    - tar xf ../MOM6-examples/non_symmetric_intel.tar && md5sum `find . -name ocean.stats.intel` > all_intel.md5 && find . -name ocean.stats.intel -exec rm {} \;
-    - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_intel.tar && md5sum -c all_intel.md5 && rm all_intel.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests intel_symmetric
 
 pgi:symmetric:
   stage: tests
   tags:
     - ncrc3
   script:
-    - mkdir -p _pgi && cd _pgi
-    - tar xf ../MOM6-examples/non_symmetric_pgi.tar && md5sum `find . -name ocean.stats.pgi` > all_pgi.md5 && find . -name ocean.stats.pgi -exec rm {} \;
-    - echo "Regression results for symmetric executables"
-    - tar xf ../MOM6-examples/symmetric_pgi.tar && md5sum -c all_pgi.md5 && rm all_pgi.md5
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests pgi_symmetric
+
+gnu:layout:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests gnu_layout
+
+intel:layout:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests intel_layout
+
+pgi:layout:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests pgi_layout
+
+gnu:static:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests gnu_static
+
+gnu:restart:
+  stage: tests
+  tags:
+    - ncrc3
+  script:
+    - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
+    - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
+    - make -f MRS/Makefile.tests gnu_check_restarts
+
+cleanup:
+  stage: cleanup
+  tags:
+    - ncrc3
+  script:
+    - rm $CACHE_DIR/*$CI_PIPELINE_ID.tgz
