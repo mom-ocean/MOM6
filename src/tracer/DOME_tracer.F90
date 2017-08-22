@@ -123,22 +123,18 @@ end type DOME_tracer_CS
 
 contains
 
+!> This subroutine is used to register tracer fields and subroutines
+!! to be used with MOM.
 function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI
+  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(DOME_tracer_CS),       pointer    :: CS
-  type(tracer_registry_type), pointer    :: tr_Reg
-  type(MOM_restart_CS),       pointer    :: restart_CS
-! This subroutine is used to register tracer fields and subroutines
-! to be used with MOM.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer to the tracer registry.
-!  (in)      restart_CS - A pointer to the restart control structure.
+  type(DOME_tracer_CS),       pointer    :: CS   !< A pointer that is set to point to the
+                                                 !! control structure for this module
+  type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
+  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+
+! Local variables
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -206,36 +202,26 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   register_DOME_tracer = .true.
 end function register_DOME_tracer
 
+!> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
+!! and it sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  logical,                               intent(in) :: restart
-  type(time_type), target,               intent(in) :: day
+  logical,                               intent(in) :: restart !< .true. if the fields have already
+                                                               !! been read from a restart file.
+  type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,               intent(in) :: diag
-  type(ocean_OBC_type),                  pointer    :: OBC
-  type(DOME_tracer_CS),                  pointer    :: CS
-  type(sponge_CS),                       pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp
-!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output.
+  type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
+  type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
+  type(DOME_tracer_CS),                  pointer    :: CS      !< The control structure returned by a previous
+                                                               !! call to DOME_register_tracer.
+  type(sponge_CS),                       pointer    :: sponge_CSp    !< A pointer to the control structure
+                                                                     !! for the sponges, if they are in use.
+  type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                                     !! for diagnostics in depth space.
 
-! Arguments: restart - .true. if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 DOME_register_tracer.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
+! Local variables
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
     OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
@@ -415,39 +401,34 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
 end subroutine initialize_DOME_tracer
 
+!> This subroutine applies diapycnal diffusion and any other column
+!! tracer physics or chemistry to the tracers from this file.
+!! This is a simple example of a set of advected passive tracers.
+!! The arguments to this subroutine are redundant in that
+!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                         intent(in) :: fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
+                                                                !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
+                                                                !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
+                                              !! fluid entrained from the layer above during this
+                                              !! call will be added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
+                                              !! fluid entrained from the layer below during this
+                                              !! call will be added, in m or kg m-2.
+  type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
+                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
   real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(DOME_tracer_CS),                  pointer    :: CS
+  type(DOME_tracer_CS),                  pointer    :: CS   !< The control structure returned by a previous
+                                                            !! call to DOME_register_tracer.
   real,                        optional,intent(in)  :: evap_CFL_limit
   real,                        optional,intent(in)  :: minimum_forcing_depth
-!   This subroutine applies diapycnal diffusion and any other column
-! tracer physics or chemistry to the tracers from this file.
-! This is a simple example of a set of advected passive tracers.
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 DOME_register_tracer.
-!
-! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
-
+! Local variables
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
   real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -536,6 +517,7 @@ subroutine DOME_tracer_surface_state(state, h, G, CS)
 
 end subroutine DOME_tracer_surface_state
 
+!> Clean up memory allocations, if any.
 subroutine DOME_tracer_end(CS)
   type(DOME_tracer_CS), pointer :: CS
   integer :: m
