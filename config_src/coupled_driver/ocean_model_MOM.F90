@@ -35,7 +35,7 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM, only : calculate_surface_state, finish_MOM_initialization
+use MOM, only : calculate_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
@@ -92,7 +92,9 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
-public    ocean_model_data_get
+public ocean_model_data_get
+public get_state_pointers
+
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get
@@ -240,7 +242,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
-  integer :: is, ie, js, je
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
   logical :: offline_tracer_mode
 
@@ -261,16 +262,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
-
-  is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
-  if (present(gas_fields_ocn)) then
-    call coupler_type_spawn(gas_fields_ocn, OS%state%tr_fields, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-  elseif (coupler_type_initialized(Ocean_sfc%fields)) then
-    !### I think that this is never used.
-    call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-  endif
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -327,23 +318,28 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call get_param(param_file, mdl, "KV_ICEBERG",  OS%kv_iceberg, &
                  "The viscosity of the icebergs",  units="m2 s-1",default=1.0e10)
     call get_param(param_file, mdl, "DENSITY_ICEBERGS",  OS%density_iceberg, &
-                  "A typical density of icebergs.", units="kg m-3", default=917.0)
+                 "A typical density of icebergs.", units="kg m-3", default=917.0)
     call get_param(param_file, mdl, "LATENT_HEAT_FUSION", OS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf)
     call get_param(param_file, mdl, "BERG_AREA_THRESHOLD", OS%berg_area_threshold, &
                  "Fraction of grid cell which iceberg must occupy, so that fluxes \n"//&
-                  "below berg are set to zero. Not applied for negative \n"//&
+                 "below berg are set to zero. Not applied for negative \n"//&
                  " values.", units="non-dim", default=-1.0)
   endif
 
   OS%press_to_z = 1.0/(Rho0*G_Earth)
 
+  !   Consider using a run-time flag to determine whether to do the diagnostic
+  ! vertical integrals, since the related 3-d sums are not negligible in cost.
+  call allocate_surface_state(OS%state, OS%grid, OS%MOM_CSp%use_temperature, &
+                              do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
+
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
-     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                               OS%MOM_CSp%diag, OS%fluxes)
+    call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
+                              OS%MOM_CSp%diag, OS%fluxes)
   endif
   if (OS%icebergs_apply_rigid_boundary)  then
     !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
@@ -891,9 +887,6 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
     if (.not.coupler_type_initialized(Ocean_sfc%fields)) then
       call MOM_error(FATAL, "convert_state_to_ocean_type: "//&
                "Ocean_sfc%fields has not been initialized.")
-!      call coupler_type_spawn(state%tr_fields, Ocean_sfc%fields, &
-!                              (/isc_bnd,isc_bnd,iec_bnd,iec_bnd/), &
-!                              (/jsc_bnd,jsc_bnd,jec_bnd,jec_bnd/) )
     endif
     call coupler_type_copy_data(state%tr_fields, Ocean_sfc%fields)
   endif
@@ -1102,5 +1095,16 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
+
+!> Returns pointers to objects within ocean_state_type
+subroutine get_state_pointers(OS, grid, surf)
+  type(ocean_state_type),          pointer :: OS !< Ocean state type
+  type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
+  type(surface), optional, pointer         :: surf !< Ocean surface state
+
+  if (present(grid)) grid => OS%grid
+  if (present(surf)) surf=> OS%state
+
+end subroutine get_state_pointers
 
 end module ocean_model_mod

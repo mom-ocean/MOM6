@@ -17,7 +17,7 @@ addons:
 cache:
   directories:
     - MOM6-examples
-    - build
+#   - build # Uncomment this line to save time building. Less robust when FMS changes version!
 
 # Install tools and clone the configurations repository
 before_install:
