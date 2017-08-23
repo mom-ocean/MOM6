@@ -1,4 +1,4 @@
-module DOME_tracer
+module dyed_obc_tracer
 !***********************************************************************
 !*                   GNU General Public License                        *
 !* This file is a part of MOM.                                         *
@@ -30,7 +30,6 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
@@ -45,17 +44,17 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public register_DOME_tracer, initialize_DOME_tracer
-public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
+public register_dyed_obc_tracer, initialize_dyed_obc_tracer
+public dyed_obc_tracer_column_physics, dyed_obc_tracer_end
 
 ! ntr is the number of tracers in this module.
-integer, parameter :: ntr = 11
+integer, parameter :: ntr = 4
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
 end type p3d
 
-type, public :: DOME_tracer_CS ; private
+type, public :: dyed_obc_tracer_CS ; private
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
@@ -73,7 +72,6 @@ type, public :: DOME_tracer_CS ; private
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
   logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
-  logical :: use_sponge
 
   integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
              ! if it is used and the surface tracer concentrations are to be
@@ -85,17 +83,17 @@ type, public :: DOME_tracer_CS ; private
   integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
   type(vardesc) :: tr_desc(NTR)
-end type DOME_tracer_CS
+end type dyed_obc_tracer_CS
 
 contains
 
 !> This subroutine is used to register tracer fields and subroutines
 !! to be used with MOM.
-function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
+function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(param_file_type),      intent(in) :: param_file !< A structure to parse for run-time parameters
-  type(DOME_tracer_CS),       pointer    :: CS   !< A pointer that is set to point to the
+  type(dyed_obc_tracer_CS),   pointer    :: CS   !< A pointer that is set to point to the
                                                  !! control structure for this module
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
   type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
@@ -104,15 +102,15 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "DOME_tracer" ! This module's name.
+  character(len=40)  :: mdl = "dyed_obc_tracer" ! This module's name.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  logical :: register_DOME_tracer
+  logical :: register_dyed_obc_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "DOME_register_tracer called with an "// &
+    call MOM_error(WARNING, "dyed_obc_register_tracer called with an "// &
                             "associated control structure.")
     return
   endif
@@ -120,21 +118,17 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "DOME_TRACER_IC_FILE", CS%tracer_IC_file, &
+  call get_param(param_file, mdl, "dyed_obc_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
-                 "conditions for the DOME tracers, or blank to initialize \n"//&
+                 "conditions for the dyed_obc tracers, or blank to initialize \n"//&
                  "them internally.", default=" ")
   if (len_trim(CS%tracer_IC_file) >= 1) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     CS%tracer_IC_file = trim(inputdir)//trim(CS%tracer_IC_file)
-    call log_param(param_file, mdl, "INPUTDIR/DOME_TRACER_IC_FILE", &
+    call log_param(param_file, mdl, "INPUTDIR/dyed_obc_TRACER_IC_FILE", &
                    CS%tracer_IC_file)
   endif
-  call get_param(param_file, mdl, "SPONGE", CS%use_sponge, &
-                 "If true, sponges may be applied anywhere in the domain. \n"//&
-                 "The exact location and properties of those sponges are \n"//&
-                 "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
   if (CS%mask_tracers) then
@@ -142,9 +136,8 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   endif
 
   do m=1,NTR
-    if (m < 10) then ; write(name,'("tr_D",I1.1)') m
-    else ; write(name,'("tr_D",I2.2)') m ; endif
-    write(longname,'("Concentration of DOME Tracer ",I2.2)') m
+    write(name,'("dye_",I1.1)') m
+    write(longname,'("Concentration of dyed_obc Tracer ",I1.1)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
@@ -161,17 +154,17 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
       CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
-          flux_type=' ', implementation=' ', caller="register_DOME_tracer")
+          flux_type=' ', implementation=' ', caller="register_dyed_obc_tracer")
   enddo
 
   CS%tr_Reg => tr_Reg
-  register_DOME_tracer = .true.
-end function register_DOME_tracer
+  register_dyed_obc_tracer = .true.
+end function register_dyed_obc_tracer
 
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp)
+subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
+                                  diag_to_Z_CSp)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart !< .true. if the fields have already
@@ -180,10 +173,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
-  type(DOME_tracer_CS),                  pointer    :: CS      !< The control structure returned by a previous
-                                                               !! call to DOME_register_tracer.
-  type(sponge_CS),                       pointer    :: sponge_CSp    !< A pointer to the control structure
-                                                                     !! for the sponges, if they are in use.
+  type(dyed_obc_tracer_CS),              pointer    :: CS      !< The control structure returned by a previous
+                                                               !! call to dyed_obc_register_tracer.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
                                                                      !! for diagnostics in depth space.
 
@@ -200,9 +191,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected, in m.
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
@@ -222,111 +210,44 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     if (len_trim(CS%tracer_IC_file) >= 1) then
       !  Read the tracer concentrations from a netcdf file.
       if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
-        call MOM_error(FATAL, "DOME_initialize_tracer: Unable to open "// &
+        call MOM_error(FATAL, "dyed_obc_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
       do m=1,NTR
-        call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
+        call query_vardesc(CS%tr_desc(m), name, caller="initialize_dyed_obc_tracer")
         call read_data(CS%tracer_IC_file, trim(name), &
                        CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
       enddo
     else
       do m=1,NTR
         do k=1,nz ; do j=js,je ; do i=is,ie
-          CS%tr(i,j,k,m) = 1.0e-20 ! This could just as well be 0.
+          CS%tr(i,j,k,m) = 0.0
         enddo ; enddo ; enddo
       enddo
-
-!    This sets a stripe of tracer across the basin.
-      do m=2,NTR ; do j=js,je ; do i=is,ie
-        tr_y = 0.0
-        if ((m <= 6) .and. (G%geoLatT(i,j) > (300.0+50.0*real(m-1))) .and. &
-            (G%geoLatT(i,j) < (350.0+50.0*real(m-1)))) tr_y = 1.0
-        do k=1,nz
-!      This adds the stripes of tracer to every layer.
-            CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + tr_y
-        enddo
-      enddo; enddo; enddo
-
-      if (NTR > 7) then
-        do j=js,je ; do i=is,ie
-          e(nz+1) = -G%bathyT(i,j)
-          do k=nz,1,-1
-            e(K) = e(K+1) + h(i,j,k)*GV%H_to_m
-            do m=7,NTR
-              e_top = -600.0*real(m-1) + 3000.0
-              e_bot = -600.0*real(m-1) + 2700.0
-              if (e_top < e(K)) then
-                if (e_top < e(K+1)) then ; d_tr = 0.0
-                elseif (e_bot < e(K+1)) then
-                  d_tr = (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
-                else ; d_tr = (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
-                endif
-              elseif (e_bot < e(K)) then
-                if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_m)
-                endif
-              else
-                d_tr = 0.0
-              endif
-              if (h(i,j,k) < 2.0*GV%Angstrom) d_tr=0.0
-              CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + d_tr
-            enddo
-          enddo
-        enddo ; enddo
-      endif
-
     endif
   endif ! restart
 
-  if ( CS%use_sponge ) then
-!   If sponges are used, this example damps tracers in sponges in the
-! northern half of the domain to 1 and tracers in the southern half
-! to 0.  For any tracers that are not damped in the sponge, the call
-! to set_up_sponge_field can simply be omitted.
-    if (.not.associated(sponge_CSp)) &
-      call MOM_error(FATAL, "DOME_initialize_tracer: "// &
-        "The pointer to sponge_CSp must be associated if SPONGE is defined.")
-
-    allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      if (G%geoLatT(i,j) > 700.0 .and. (k > nz/2)) then
-        temp(i,j,k) = 1.0
-      else
-        temp(i,j,k) = 0.0
-      endif
-    enddo ; enddo ; enddo
-
-!   do m=1,NTR
-    do m=1,1
-      ! This is needed to force the compiler not to do a copy in the sponge
-      ! calls.  Curses on the designers and implementers of Fortran90.
-      tr_ptr => CS%tr(:,:,:,m)
-      call set_up_sponge_field(temp, tr_ptr, G, nz, sponge_CSp)
-    enddo
-    deallocate(temp)
-  endif
-
-  if (associated(OBC)) then
-    call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
-    if (OBC%specified_v_BCs_exist_globally) then
-      allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-        else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
-      enddo ; enddo ; enddo
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
-                                 0.0, OBC_in_v=OBC_tr1_v)
-    else
-      ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
-    endif
-    ! All tracers but the first have 0 concentration in their inflows. As this
-    ! is the default value, the following calls are unnecessary.
-    do m=2,NTR
-      call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
-    enddo
-  endif
+! Doing this elsewhere, right?
+! if (associated(OBC)) then
+!   call query_vardesc(CS%tr_desc(1), name, caller="initialize_dyed_obc_tracer")
+!   if (OBC%specified_v_BCs_exist_globally) then
+!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
+!     do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
+!       if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
+!       else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
+!     enddo ; enddo ; enddo
+!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
+!                                0.0, OBC_in_v=OBC_tr1_v)
+!   else
+!     ! This is not expected in the dyed_obc example.
+!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+!   endif
+!   ! All tracers but the first have 0 concentration in their inflows. As this
+!   ! is the default value, the following calls are unnecessary.
+!   do m=2,NTR
+!     call query_vardesc(CS%tr_desc(m), name, caller="initialize_dyed_obc_tracer")
+!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+!   enddo
+! endif
 
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
@@ -335,7 +256,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   do m=1,NTR
     ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_DOME_tracer")
+                       caller="initialize_dyed_obc_tracer")
     CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
         day, trim(longname) , trim(units))
     CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
@@ -365,7 +286,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                            day, G, diag_to_Z_CSp)
   enddo
 
-end subroutine initialize_DOME_tracer
+end subroutine initialize_dyed_obc_tracer
 
 !> This subroutine applies diapycnal diffusion and any other column
 !! tracer physics or chemistry to the tracers from this file.
@@ -373,7 +294,7 @@ end subroutine initialize_DOME_tracer
 !!
 !! The arguments to this subroutine are redundant in that
 !!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
-subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
@@ -390,8 +311,8 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
   type(forcing),                         intent(in) :: fluxes !< A structure containing pointers to
                                               !! any possible forcing fields.  Unused fields have NULL ptrs.
   real,                                  intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(DOME_tracer_CS),                  pointer    :: CS   !< The control structure returned by a previous
-                                                            !! call to DOME_register_tracer.
+  type(dyed_obc_tracer_CS),                  pointer    :: CS   !< The control structure returned by a previous
+                                                            !! call to dyed_obc_register_tracer.
   real,                        optional,intent(in)  :: evap_CFL_limit
   real,                        optional,intent(in)  :: minimum_forcing_depth
 
@@ -449,44 +370,11 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
       call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
   enddo
 
-end subroutine DOME_tracer_column_physics
-
-!> This subroutine extracts the surface fields from this tracer package that
-!! are to be shared with the atmosphere in coupled configurations.
-!! This particular tracer package does not report anything back to the coupler.
-subroutine DOME_tracer_surface_state(state, h, G, CS)
-  type(ocean_grid_type),  intent(in)    :: G  !< The ocean's grid structure.
-  type(surface),          intent(inout) :: state !< A structure containing fields that
-                                              !! describe the surface state of the ocean.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                          intent(in)    :: h  !< Layer thickness, in m or kg m-2.
-  type(DOME_tracer_CS),   pointer       :: CS !< The control structure returned by a previous
-                                              !! call to DOME_register_tracer.
-
-  ! This particular tracer package does not report anything back to the coupler.
-  ! The code that is here is just a rough guide for packages that would.
-
-  integer :: m, is, ie, js, je, isd, ied, jsd, jed
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  if (.not.associated(CS)) return
-
-  if (CS%coupled_tracers) then
-    do m=1,NTR
-      !   This call loads the surface values into the appropriate array in the
-      ! coupler-type structure.
-      call coupler_type_set_data(CS%tr(:,:,1,m), CS%ind_tr(m), ind_csurf, &
-                   state%tr_fields, idim=(/isd, is, ie, ied/), &
-                   jdim=(/jsd, js, je, jed/) )
-    enddo
-  endif
-
-end subroutine DOME_tracer_surface_state
+end subroutine dyed_obc_tracer_column_physics
 
 !> Clean up memory allocations, if any.
-subroutine DOME_tracer_end(CS)
-  type(DOME_tracer_CS), pointer :: CS
+subroutine dyed_obc_tracer_end(CS)
+  type(dyed_obc_tracer_CS), pointer :: CS
   integer :: m
 
   if (associated(CS)) then
@@ -501,9 +389,9 @@ subroutine DOME_tracer_end(CS)
 
     deallocate(CS)
   endif
-end subroutine DOME_tracer_end
+end subroutine dyed_obc_tracer_end
 
-!> \namespace DOME_tracer
+!> \namespace dyed_obc_tracer
 !!                                                                     *
 !!  By Robert Hallberg, 2002                                           *
 !!                                                                     *
@@ -537,4 +425,4 @@ end subroutine DOME_tracer_end
 !!                                                                     *
 !!*******+*********+*********+*********+*********+*********+*********+**
 
-end module DOME_tracer
+end module dyed_obc_tracer
