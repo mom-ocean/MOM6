@@ -50,14 +50,10 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
   real, pointer, dimension(:,:,:) :: &
-    OBC_dye_1_u => NULL(), &    ! Specify the dye concentrations at the boundaries,
-    OBC_dye_1_v => NULL(), &    ! at both u and v points.
-    OBC_dye_2_u => NULL(), &
-    OBC_dye_2_v => NULL(), &
+    OBC_dye_1_v => NULL(), &    ! Specify the dye concentrations at the boundaries,
+    OBC_dye_2_v => NULL(), &    ! at both u and v points.
     OBC_dye_3_u => NULL(), &
-    OBC_dye_3_v => NULL(), &
-    OBC_dye_4_u => NULL(), &
-    OBC_dye_4_v => NULL()
+    OBC_dye_4_u => NULL()
 
   character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -75,14 +71,10 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
 
-  allocate(OBC_dye_1_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_1_u(:,:,:) = 0.0
   allocate(OBC_dye_1_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_1_v(:,:,:) = 0.0
-  allocate(OBC_dye_2_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_2_u(:,:,:) = 0.0
   allocate(OBC_dye_2_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_2_v(:,:,:) = 0.0
   allocate(OBC_dye_3_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_3_u(:,:,:) = 0.0
-  allocate(OBC_dye_3_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_3_v(:,:,:) = 0.0
   allocate(OBC_dye_4_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_4_u(:,:,:) = 0.0
-  allocate(OBC_dye_4_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_4_v(:,:,:) = 0.0
 
 ! do n=1,OBC%number_of_segments
 !   segment => OBC%segment(n)
@@ -134,14 +126,10 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
     enddo ; enddo
   enddo
 
-  call add_tracer_OBC_values("dye_1", tr_Reg, OBC_in_u=OBC_dye_1_u, &
-                             OBC_in_v=OBC_dye_1_v)
-  call add_tracer_OBC_values("dye_2", tr_Reg, OBC_in_u=OBC_dye_2_u, &
-                             OBC_in_v=OBC_dye_2_v)
-  call add_tracer_OBC_values("dye_3", tr_Reg, OBC_in_u=OBC_dye_3_u, &
-                             OBC_in_v=OBC_dye_3_v)
-  call add_tracer_OBC_values("dye_4", tr_Reg, OBC_in_u=OBC_dye_4_u, &
-                             OBC_in_v=OBC_dye_4_v)
+  call add_tracer_OBC_values("dye_1", tr_Reg, OBC_in_v=OBC_dye_1_v)
+  call add_tracer_OBC_values("dye_2", tr_Reg, OBC_in_v=OBC_dye_2_v)
+  call add_tracer_OBC_values("dye_3", tr_Reg, OBC_in_u=OBC_dye_3_u)
+  call add_tracer_OBC_values("dye_4", tr_Reg, OBC_in_u=OBC_dye_4_u)
 
 end subroutine dyed_obcs_set_OBC_data
 
