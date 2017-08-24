@@ -1,7 +1,7 @@
 module MOM_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
- 
+
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
 !*  By Robert Hallberg, November 1998 - May 2002                       *
