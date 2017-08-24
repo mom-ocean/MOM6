@@ -4,6 +4,9 @@
 !! Set up and use passive tracers requires the following:
 !! (1) register_ISOMIP_tracer
 !! (2)
+module ISOMIP_tracer
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
@@ -11,9 +14,6 @@
 !*  Adapted to the ISOMIP test case by Gustavo Marques, May 2016       *            !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-module ISOMIP_tracer
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
