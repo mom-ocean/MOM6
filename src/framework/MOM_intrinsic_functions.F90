@@ -1,8 +1,8 @@
 module MOM_intrinsic_functions
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*   This file is a part of MOM.  See MOM.F90 for licensing.           *
 !*                                                                     *
 !*   This module holds intrinsic functions which are used by MOM but   *
 !* are not supported  by some compilers.                               *

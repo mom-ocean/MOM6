@@ -1,13 +1,7 @@
+!> Wraps the MPP cpu clock functions
 module MOM_cpu_clock
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    This file is a part of MOM.  See MOM.F90 for licensing.          *
-!*                                                                     *
-!*  By R. Hallberg, November 2005                                      *
-!*                                                                     *
-!*    This module wraps the mpp_mod cpu clock code.                    *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use mpp_mod, only : cpu_clock_begin => mpp_clock_begin
 use mpp_mod, only : cpu_clock_end => mpp_clock_end, cpu_clock_id => mpp_clock_id

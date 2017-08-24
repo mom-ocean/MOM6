@@ -1,7 +1,6 @@
 module coupler_types_mod
-!-----------------------------------------------------------------------
+
 ! This file is part of MOM6. See LICENSE.md for the license.
-!-----------------------------------------------------------------------
 
 !   This module contains the coupler-type declarations and methods for use in
 ! ocean-only configurations of MOM6.  It is intended that the version of
