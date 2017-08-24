@@ -28,7 +28,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing, forcing_diagnostics, mech_forcing_diags, forcing_accumulate
-use MOM_get_input, only : Get_MOM_Input, directories
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : save_restart
@@ -189,7 +189,7 @@ contains
 
 !> ocean_model_init initializes the ocean model, including registering fields
 !! for restarts and reading restart files if appropriate.
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, input_restart_file)
   type(ocean_public_type), target, &
                        intent(inout) :: Ocean_sfc !< A structure containing various
                                 !! publicly visible ocean surface properties after initialization,
@@ -205,6 +205,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
+  character(len=*), optional, intent(in) :: input_restart_file !< If present, name of restart file to read
 
 !   This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
@@ -241,7 +242,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
-      offline_tracer_mode=offline_tracer_mode)
+      offline_tracer_mode=offline_tracer_mode, input_restart_file=input_restart_file)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
