@@ -1,5 +1,7 @@
 module regrid_interp
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
 

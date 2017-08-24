@@ -1,6 +1,8 @@
 !> Regrid columns for the continuous isopycnal (rho) coordinate
 module coord_rho
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_remapping,     only : remapping_CS, remapping_core_h
 use MOM_EOS,           only : EOS_type, calculate_density

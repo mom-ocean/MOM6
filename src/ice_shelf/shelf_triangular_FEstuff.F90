@@ -1,5 +1,7 @@
 module shelf_triangular_FEstuff
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_diag_mediator, only : diag_ctrl, time_type, enable_averaging, disable_averaging
 use MOM_grid, only :  ocean_grid_type
 use MOM_time_manager, only : time_type, set_time, time_type_to_real

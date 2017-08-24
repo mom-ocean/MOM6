@@ -1,7 +1,7 @@
 !> Provides the K-Profile Parameterization (KPP) of Large et al., 1994, via CVMix.
 module MOM_KPP
 
-! License goes here?
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,          only : max_across_PEs
 use MOM_debugging,     only : hchksum, is_NaN

@@ -1,6 +1,8 @@
 !> Regrid columns for the sigma coordinate
 module coord_sigma
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler, only : MOM_error, FATAL
 
 implicit none ; private

@@ -1,7 +1,8 @@
 module P3M_functions
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !==============================================================================
-!
-! This file is part of MOM.
 !
 ! Date of creation: 2008.06.09
 ! L. White
