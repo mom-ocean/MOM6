@@ -30,11 +30,14 @@ contains
 
 !> Get the names of the I/O directories and initialization file.
 !! Also calls the subroutine that opens run-time parameter files.
-subroutine get_MOM_input(param_file, dirs, check_params)
+subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename)
   type(param_file_type), optional, intent(out) :: param_file   !< A structure to parse for run-time parameters.
   type(directories),     optional, intent(out) :: dirs         !< Container for paths and parameter file names.
   logical,               optional, intent(in)  :: check_params !< If present and False will stop error checking for
                                                                !! run-time parameters.
+  character(len=*),      optional, intent(in)  :: default_input_filename !< If present, is the value assumed for
+                                                               !! input_filename if input_filename is not listed
+                                                               !! in the namelist MOM_input_nml.
   ! Local variables
   integer, parameter :: npf = 5 ! Maximum number of parameter files
   character(len=240) :: &
@@ -56,6 +59,7 @@ subroutine get_MOM_input(param_file, dirs, check_params)
   restart_input_dir = ' '
   restart_output_dir = ' '
   input_filename  = ' '
+  if (present(default_input_filename)) input_filename = trim(default_input_filename)
 
   ! Open namelist
   if (file_exists('input.nml')) then
