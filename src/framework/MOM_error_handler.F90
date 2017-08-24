@@ -1,7 +1,8 @@
 module MOM_error_handler
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    This file is a part of MOM.  See MOM.F90 for licensing.          *
 !*                                                                     *
 !*  By R. Hallberg, 2005-2012.                                         *
 !*                                                                     *
