@@ -1,12 +1,8 @@
+!> A dummy version of atmos_ocean_fluxes_mod module for
+!! use when the vastly larger FMS package is not needed.
 module atmos_ocean_fluxes_mod
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*    This file is a part of MOM.  See MOM.F90 for licensing.          *
-!*                                                                     *
-!*    This module is the dummy version of atmos_ocean_fluxes_mod for   *
-!*    use when the GFDL-FMS package is not needed.                     *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 implicit none ; private
 

@@ -18,7 +18,7 @@ The top level directory structure groups source code and input files as follow:
 
 | File/directory    | Purpose |
 | --------------    | ------- |
-| ```LICENSE.md```  | A copy of the Gnu general public license, version 3. |
+| ```LICENSE.md```  | A copy of the Gnu lesser general public license, version 3. |
 | ```README.md```   | This file with basic pointers to more information. |
 | ```src/```        | Contains the source code for MOM6 that is always compiled. |
 | ```config_src/``` | Contains optional source code depending on mode and configuration such as dynamic-memory versus static, ocean-only versus coupled. |
