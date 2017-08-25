@@ -2,6 +2,8 @@
 !! Some routines called here can be found in the MOM_offline_aux module.
 module MOM_offline_main
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use mpp_domains_mod,          only : CENTER, CORNER, NORTH, EAST
 use MOM_ALE,                  only : ALE_CS, ALE_main_offline, ALE_offline_inputs, ALE_offline_tracer_final
 use MOM_checksums,            only : hchksum, uvchksum

@@ -1,6 +1,8 @@
 !> Regrid columns for the SLight coordinate
 module coord_slight
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_EOS,           only : EOS_type, calculate_compress
 use MOM_EOS,           only : calculate_density, calculate_density_derivs

@@ -199,4 +199,4 @@ cleanup:
   tags:
     - ncrc3
   script:
-    - rm $CACHE_DIR/*_$CI_PIPELINE_ID.tgz
+    - rm $CACHE_DIR/*$CI_PIPELINE_ID.tgz

@@ -1,23 +1,6 @@
 module ocean_model_mod
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !-----------------------------------------------------------------------
 !
@@ -93,7 +76,9 @@ public ocean_model_init_sfc, ocean_model_flux_init
 public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
-public    ocean_model_data_get
+public ocean_model_data_get
+public get_state_pointers
+
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
   module procedure ocean_model_data2D_get
@@ -1099,5 +1084,16 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
+
+!> Returns pointers to objects within ocean_state_type
+subroutine get_state_pointers(OS, grid, surf)
+  type(ocean_state_type),          pointer :: OS !< Ocean state type
+  type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
+  type(surface), optional, pointer         :: surf !< Ocean surface state
+
+  if (present(grid)) grid => OS%grid
+  if (present(surf)) surf=> OS%state
+
+end subroutine get_state_pointers
 
 end module ocean_model_mod
