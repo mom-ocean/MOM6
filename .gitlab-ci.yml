@@ -29,7 +29,7 @@ setup:
   script:
     - pwd ; ls
     # Clone regressions directory
-    - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests && cd tests
+    - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
     - git clone https://github.com/adcroft/MRS.git MRS
     # Update MOM6-examples and submodules
@@ -90,7 +90,7 @@ run:
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
     - echo "make -f MRS/Makefile.tests all -B" > job.sh
-    - msub -l partition=c3,nodes=29,walltime=00:24:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - msub -l partition=c4,nodes=29,walltime=00:24:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
     - cat log.$CI_PIPELINE_ID
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
 
