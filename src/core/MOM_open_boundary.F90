@@ -3,26 +3,26 @@ module MOM_open_boundary
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
-use MOM_diag_mediator,    only : diag_ctrl, time_type
-use MOM_domains,          only : pass_var, pass_vector
-use MOM_domains,          only : To_All, SCALAR_PAIR, CGRID_NE
-use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser,      only : get_param, log_version, param_file_type, log_param
-use MOM_grid,             only : ocean_grid_type, hor_index_type
-use MOM_dyn_horgrid,      only : dyn_horgrid_type
-use MOM_io,               only : EAST_FACE, NORTH_FACE
-use MOM_io,               only : slasher, read_data, field_size, SINGLE_FILE
-use MOM_io,               only : vardesc, query_vardesc
-use MOM_obsolete_params,  only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
-use MOM_string_functions, only : extract_word, remove_spaces
-use MOM_tracer_registry,  only : add_tracer_OBC_values, tracer_registry_type
-use MOM_variables,        only : thermo_var_ptrs
+use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_diag_mediator,        only : diag_ctrl, time_type
+use MOM_domains,              only : pass_var, pass_vector
+use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE
+use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
+use MOM_grid,                 only : ocean_grid_type, hor_index_type
+use MOM_dyn_horgrid,          only : dyn_horgrid_type
+use MOM_io,                   only : EAST_FACE, NORTH_FACE
+use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
+use MOM_io,                   only : vardesc, query_vardesc
+use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
+use MOM_string_functions,     only : extract_word, remove_spaces
+use MOM_tracer_registry,      only : add_tracer_OBC_values, tracer_registry_type
+use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
-use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
-use MOM_remapping,        only : initialize_remapping, remapping_core_h, end_remapping
-use MOM_regridding,       only : regridding_CS
-use MOM_verticalGrid,     only : verticalGrid_type
+use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
+use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
+use MOM_regridding,           only : regridding_CS
+use MOM_verticalGrid,         only : verticalGrid_type
 
 implicit none ; private
 
@@ -43,8 +43,8 @@ public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
-public register_segment_tracer
 public segment_tracer_registry_init
+public register_segment_tracer
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -71,10 +71,10 @@ end type OBC_segment_data_type
 
 !> Tracer on OBC segment data structure, for putting into a segment tracer registry.
 type, public :: OBC_segment_tracer_type
-  real, dimension(:,:,:), pointer :: t          => NULL() !< tracer concentration array
-  real                            :: OBC_scalar =  0.0    !< tracer concentration for generic inflows
-  character(len=32)               :: name                 !< tracer name used for error messages
-  type(vardesc), pointer          :: vd         => NULL() !< metadata describing the tracer
+  real, dimension(:,:,:), pointer :: t          => NULL()  !< tracer concentration array
+  real                            :: OBC_inflow_conc = 0.0 !< tracer concentration for generic inflows
+  character(len=32)               :: name                  !< tracer name used for error messages
+  type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
 end type OBC_segment_tracer_type
 
 !> Type to carry tracers on segments
@@ -132,7 +132,7 @@ type, public :: OBC_segment_type
                                                             !! velocity points (C).
   real, pointer, dimension(:,:,:) :: S=>NULL()              !< The salinity on the OB segment
                                                             !! velocity points ().
-  type(segment_tracer_registry_type), pointer :: Reg        !< pointer to the tracer registry
+  type(segment_tracer_registry_type), pointer :: Reg=>NULL()!< pointer to the tracer registry
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
@@ -2088,10 +2088,11 @@ subroutine segment_tracer_registry_init(param_file, Reg, segment)
   if (.not.associated(Reg)) then ; allocate(Reg)
   else ; return ; endif
 
-  ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
-
   init_calls = init_calls + 1
+
+  ! Read all relevant parameters and write them to the model log.
+  if (init_calls == 1) call log_version(param_file, mdl, version, "")
+
 ! Need to call once per segment with tracers...
 ! if (init_calls > 1) then
 !   write(mesg,'("segment_tracer_registry_init called ",I3, &
@@ -2147,7 +2148,7 @@ subroutine register_segment_tracer(tr_desc, param_file, HI, GV, Reg, segment, tr
       "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
       " with a locked tracer registry.")
 
-  if (present(OBC_scalar)) Reg%Tr(ntr)%OBC_scalar = OBC_scalar
+  if (present(OBC_scalar)) Reg%Tr(ntr)%OBC_inflow_conc = OBC_scalar
   if (present(OBC_array)) then ; if (associated(OBC_array)) &
                                     Reg%Tr(ntr)%t => OBC_array ; endif
 end subroutine register_segment_tracer
