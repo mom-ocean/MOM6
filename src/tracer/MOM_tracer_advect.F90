@@ -532,9 +532,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         if (OBC%segment(n)%is_E_or_W) then
           I = OBC%segment(n)%HI%IsdB
           if (j >= OBC%segment(n)%HI%jsd .and. j<= OBC%segment(n)%HI%jed) then
+            uhh(I) = uhr(I,j,k)
             do m=1,ntr
               if (associated(OBC%segment(n)%Reg%Tr(m)%t)) then
-                uhh(I) = uhr(I,j,k)
                 flux_x(I,m) = uhh(I)*OBC%segment(n)%Reg%Tr(m)%t(I,j,k)
               else ; flux_x(I,m) = uhh(I)*OBC%segment(n)%Reg%Tr(m)%OBC_inflow_conc ; endif
             enddo
@@ -827,9 +827,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         if (OBC%segment(n)%is_N_or_S) then
           if (J >= OBC%segment(n)%HI%JsdB .and. J<= OBC%segment(n)%HI%JedB) then
             do i = OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
+              vhh(i,J) = vhr(i,J,k)
               do m=1,ntr
                 if (associated(OBC%segment(n)%Reg%Tr(m)%t)) then
-                  vhh(i,J) = vhr(i,J,k)
                   flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%Reg%Tr(m)%t(i,J,k)
                 else ; flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%Reg%Tr(m)%OBC_inflow_conc ; endif
               enddo

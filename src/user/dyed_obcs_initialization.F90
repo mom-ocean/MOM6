@@ -36,17 +36,11 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
 ! Local variables
-! Don't even need these any more for this problem...
-! real, pointer, dimension(:,:,:) :: &
-!   OBC_dye_1_v => NULL(), &    ! Specify the dye concentrations at the boundaries,
-!   OBC_dye_2_v => NULL(), &    ! at both u and v points.
-!   OBC_dye_3_u => NULL(), &
-!   OBC_dye_4_u => NULL()
-
   character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
   character(len=80)  :: name, longname
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, n, nz
   integer :: IsdB, IedB, JsdB, JedB
+  real :: dye
   type(OBC_segment_type), pointer :: segment
   type(vardesc) :: tr_desc(NTR)
 
@@ -61,11 +55,6 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
     return   !!! Need a better error message here
   endif
 
-! allocate(OBC_dye_1_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_1_v(:,:,:) = 0.0
-! allocate(OBC_dye_2_v(isd:ied,JsdB:JedB,nz)) ; OBC_dye_2_v(:,:,:) = 0.0
-! allocate(OBC_dye_3_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_3_u(:,:,:) = 0.0
-! allocate(OBC_dye_4_u(IsdB:IedB,jsd:jed,nz)) ; OBC_dye_4_u(:,:,:) = 0.0
-
 ! ! Set the inflow values of the dyes, one per segment.
 ! ! We know the order: north, south, east, west
   do m=1,NTR
@@ -73,13 +62,16 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
     write(longname,'("Concentration of dyed_obc Tracer ",I1.1, " on segment ",I1.1)') m, m
     tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
-    call register_segment_tracer(tr_desc(m), param_file, OBC%segment(m)%HI, GV, &
-                                 OBC%segment(m)%Reg, m, OBC_scalar=1.0)
+    do n=1,NTR
+      if (n == m) then
+        dye = 1.0
+      else
+        dye = 0.0
+      endif
+      call register_segment_tracer(tr_desc(m), param_file, OBC%segment(n)%HI, GV, &
+                                   OBC%segment(n)%Reg, n, OBC_scalar=dye)
+    enddo
   enddo
-! call add_tracer_OBC_values("dye_1", tr_Reg, OBC_in_v=OBC_dye_1_v)
-! call add_tracer_OBC_values("dye_2", tr_Reg, OBC_in_v=OBC_dye_2_v)
-! call add_tracer_OBC_values("dye_3", tr_Reg, OBC_in_u=OBC_dye_3_u)
-! call add_tracer_OBC_values("dye_4", tr_Reg, OBC_in_u=OBC_dye_4_u)
 
 end subroutine dyed_obcs_set_OBC_data
 
