@@ -16,7 +16,7 @@ before_script:
 merge:
   stage: merge+setup
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - pwd ; ls
     - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
@@ -25,11 +25,11 @@ merge:
 setup:
   stage: merge+setup
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - pwd ; ls
     # Clone regressions directory
-    - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea_c3-stats-MOM6-examples.git tests && cd tests
+    - git clone --recursive http://gitlab.gfdl.noaa.gov/ogrp/Gaea-stats-MOM6-examples.git tests && cd tests
     # Install / update testing scripts
     - git clone https://github.com/adcroft/MRS.git MRS
     # Update MOM6-examples and submodules
@@ -44,7 +44,7 @@ setup:
 gnu:repro:
   stage: builds
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time make -f MRS/Makefile.build MOM6_SRC=../ build_gnu -s -j
@@ -54,7 +54,7 @@ gnu:repro:
 intel:repro:
   stage: builds
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build MOM6_SRC=../ build_intel -s -j
@@ -63,7 +63,7 @@ intel:repro:
 pgi:repro:
   stage: builds
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build MOM6_SRC=../ build_pgi -s -j
@@ -72,7 +72,7 @@ pgi:repro:
 gnu:debug:
   stage: builds
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - make -f MRS/Makefile.build MOM6_SRC=../ debug_gnu -s -j
@@ -82,7 +82,7 @@ gnu:debug:
 run:
   stage: run
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/build-gnu-repro-$CI_PIPELINE_ID.tgz
@@ -90,7 +90,7 @@ run:
     - time tar zxf $CACHE_DIR/build-pgi-repro-$CI_PIPELINE_ID.tgz
     # time tar zxf $CACHE_DIR/build-gnu-debug-$CI_PIPELINE_ID.tgz
     - echo "make -f MRS/Makefile.tests all -B" > job.sh
-    - msub -l partition=c3,nodes=29,walltime=00:24:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
+    - msub -l partition=c4,nodes=29,walltime=00:24:00,qos=norm -q debug -S /bin/tcsh -j oe -A gfdl_o -z -o log.$CI_PIPELINE_ID -N mom6_regression -K job.sh
     - cat log.$CI_PIPELINE_ID
     - time tar zvcf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz *.tar.gz
 
@@ -98,7 +98,7 @@ run:
 gnu:non-symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -107,7 +107,7 @@ gnu:non-symmetric:
 intel:non-symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -116,7 +116,7 @@ intel:non-symmetric:
 pgi:non-symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -125,7 +125,7 @@ pgi:non-symmetric:
 gnu:symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -134,7 +134,7 @@ gnu:symmetric:
 intel:symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -143,7 +143,7 @@ intel:symmetric:
 pgi:symmetric:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -152,7 +152,7 @@ pgi:symmetric:
 gnu:layout:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -161,7 +161,7 @@ gnu:layout:
 intel:layout:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -170,7 +170,7 @@ intel:layout:
 pgi:layout:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -179,7 +179,7 @@ pgi:layout:
 gnu:static:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -188,7 +188,7 @@ gnu:static:
 gnu:restart:
   stage: tests
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - time tar zxf $CACHE_DIR/tests_$CI_PIPELINE_ID.tgz && cd tests
     - time tar zxf $CACHE_DIR/results-$CI_PIPELINE_ID.tgz
@@ -197,6 +197,6 @@ gnu:restart:
 cleanup:
   stage: cleanup
   tags:
-    - ncrc3
+    - ncrc4
   script:
     - rm $CACHE_DIR/*$CI_PIPELINE_ID.tgz
