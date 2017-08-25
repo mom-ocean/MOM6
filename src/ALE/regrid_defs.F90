@@ -1,7 +1,8 @@
 module regrid_defs
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !==============================================================================
-!
-! This file is part of MOM.
 !
 ! Date of creation: 2008.12.15
 ! L. White
