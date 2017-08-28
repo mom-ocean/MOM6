@@ -325,6 +325,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   logical, dimension(SZIB_(G)) :: do_I
   real, dimension(SZIB_(G),SZK_(G)) :: &
     visc_rem      ! A 2-D copy of visc_rem_u or an array of 1's.
+  real, dimension(SZIB_(G)) :: FAuI  ! A list of sums of zonal face areas, in H m.
+  real :: FA_u    ! A sum of zonal face areas, in H m.
   real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
                   ! the time step, in s-1.
@@ -374,8 +376,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
 !$OMP                                  uh,dt,G,GV,CS,local_specified_BC,OBC,uhbt,do_aux,set_BT_cont,    &
 !$OMP                                  CFL_dt,I_dt,u_cor,uhbt_aux,u_cor_aux,BT_cont, local_Flather_OBC) &
 !$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
-!$OMP                                  is_simple, &
-!$OMP                                  visc_rem_max, I_vrm, du_lim, dx_E, dx_W, any_simple_OBC ) &
+!$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W,any_simple_OBC ) &
 !$OMP      firstprivate(visc_rem)
   do j=jsh,jeh
     do I=ish-1,ieh ; do_I(I) = .true. ; visc_rem_max(I) = 0.0 ; enddo
@@ -527,18 +528,17 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         if (any_simple_OBC) then
           do I=ish-1,ieh
             do_I(I) = OBC%segment(OBC%segnum_u(I,j))%specified
-            if (do_I(I)) BT_cont%Fa_u_W0(I,j) = GV%H_subroundoff*G%dy_Cu(I,j)
+            if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
             if (abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) &
-              BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + &
-                   OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
-                   OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+              FAuI(I) = FAuI(I) + OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
+                                  OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (do_I(I)) then
-            BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_WW(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
+            BT_cont%Fa_u_W0(I,j) = FAuI(I) ; BT_cont%Fa_u_E0(I,j) = FAuI(I)
+            BT_cont%Fa_u_WW(I,j) = FAuI(I) ; BT_cont%Fa_u_EE(I,j) = FAuI(I)
+            BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           endif ; enddo
         endif
       endif ! set_BT_cont
@@ -551,23 +551,19 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
-            BT_cont%Fa_u_W0(I,j) = 0.0
-            do k=1,nz
-              BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i,j,k)*G%dy_Cu(I,j)
-            enddo
-            BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_WW(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
+            FA_u = 0.0
+            do k=1,nz ; FA_u = FA_u + h_in(i,j,k)*G%dy_Cu(I,j) ; enddo
+            BT_cont%Fa_u_W0(I,j) = FA_u ; BT_cont%Fa_u_E0(I,j) = FA_u
+            BT_cont%Fa_u_WW(I,j) = FA_u ; BT_cont%Fa_u_EE(I,j) = FA_u
+            BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         else
           do J = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
-            BT_cont%Fa_u_W0(I,j) = 0.0
-            do k=1,nz
-              BT_cont%Fa_u_W0(I,j) = BT_cont%Fa_u_W0(I,j) + h_in(i+1,j,k)*G%dy_Cu(I,j)
-            enddo
-            BT_cont%Fa_u_E0(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_WW(I,j) = BT_cont%Fa_u_W0(I,j)
-            BT_cont%Fa_u_EE(I,j) = BT_cont%Fa_u_W0(I,j)
+            FA_u = 0.0
+            do k=1,nz ; FA_u = FA_u + h_in(i+1,j,k)*G%dy_Cu(I,j) ; enddo
+            BT_cont%Fa_u_W0(I,j) = FA_u ; BT_cont%Fa_u_E0(I,j) = FA_u
+            BT_cont%Fa_u_WW(I,j) = FA_u ; BT_cont%Fa_u_EE(I,j) = FA_u
+            BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         endif
       endif
@@ -578,10 +574,10 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
   if  (set_BT_cont) then ; if (associated(BT_cont%h_u)) then
     if (present(u_cor)) then
       call zonal_face_thickness(u_cor, h_in, h_L, h_R, BT_cont%h_u, dt, G, LB, &
-                                CS%vol_CFL, CS%marginal_faces, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_u, OBC)
     else
       call zonal_face_thickness(u, h_in, h_L, h_R, BT_cont%h_u, dt, G, LB, &
-                                CS%vol_CFL, CS%marginal_faces, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_u, OBC)
     endif
   endif ; endif
 
@@ -665,7 +661,7 @@ end subroutine zonal_flux_layer
 
 !> Sets the effective interface thickness at each zonal velocity point.
 subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
-                                marginal, visc_rem_u)
+                                marginal, visc_rem_u, OBC)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< Zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thickness used to
@@ -691,19 +687,19 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
                           !! barotropic acceleration that a layer experiences
                           !! after viscosity is applied. Non-dimensional between
                           !! 0 (at the bottom) and 1 (far above the bottom).
+  type(ocean_OBC_type),                      pointer,     optional :: OBC !< Open boundaries control structure.
+
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   real :: h_avg  ! The average thickness of a flux, in H.
   real :: h_marg ! The marginal thickness of a flux, in H.
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  logical :: local_open_BC
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz, n
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
-!$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,u,vol_CFL,dt,G, &
-!$OMP                               h_L,h_R,h,h_u,visc_rem_u,marginal) &
-!$OMP                       private(CFL,curv_3,h_marg,h_avg)
-!$OMP do
+  !$OMP parallel do default(shared) private(CFL,curv_3,h_marg,h_avg)
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
@@ -731,12 +727,44 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, LB, vol_CFL, &
     else ; h_u(I,j,k) = h_avg ; endif
   enddo; enddo ; enddo
   if (present(visc_rem_u)) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
       h_u(I,j,k) = h_u(I,j,k) * visc_rem_u(I,j,k)
     enddo ; enddo ; enddo
   endif
-!$OMP end parallel
+
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
+  if (local_open_BC) then
+    do n = 1, OBC%number_of_segments
+      if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
+        I = OBC%segment(n)%HI%IsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          if (present(visc_rem_u)) then ; do k=1,nz
+            do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+              h_u(I,j,k) = h(i,j,k) * visc_rem_u(I,j,k)
+            enddo
+          enddo ; else ; do k=1,nz
+            do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+              h_u(I,j,k) = h(i,j,k)
+            enddo
+          enddo ; endif
+        else
+          if (present(visc_rem_u)) then ; do k=1,nz
+            do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+              h_u(I,j,k) = h(i+1,j,k) * visc_rem_u(I,j,k)
+            enddo
+          enddo ; else ; do k=1,nz
+            do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+              h_u(I,j,k) = h(i+1,j,k)
+            enddo
+          enddo ; endif
+        endif
+      endif
+    enddo
+  endif
 
 end subroutine zonal_face_thickness
 
@@ -1002,9 +1030,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
   if (.not.domore) then
     do k=1,nz ; do I=ish-1,ieh
       BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
-      BT_cont%uBT_WW(I,j) = 0.0
       BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
-      BT_cont%uBT_EE(I,j) = 0.0
+      BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
     enddo ; enddo
     return
   endif
@@ -1068,9 +1095,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
     endif
   else
     BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
-    BT_cont%uBT_WW(I,j) = 0.0
     BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
-    BT_cont%uBT_EE(I,j) = 0.0
+    BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
   endif ; enddo
 
 end subroutine set_zonal_BT_cont
@@ -1124,6 +1150,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
     vh_tot_0, &   ! Summed transport with no barotropic correction in H m2 s-1.
     visc_rem_max  ! The column maximum of visc_rem.
   logical, dimension(SZI_(G)) :: do_I
+  real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas, in H m.
+  real :: FA_v    ! A sum of meridional face areas, in H m.
   real, dimension(SZI_(G),SZK_(G)) :: &
     visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's.
   real :: I_vrm   ! 1.0 / visc_rem_max, nondim.
@@ -1177,8 +1205,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
 !$OMP                                  v_cor_aux,BT_cont, local_Flather_OBC )           &
 !$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
 !$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
-!$OMP                                  is_simple, &
-!$OMP                                  dy_S,any_simple_OBC ) &
+!$OMP                                  is_simple,FAvi,dy_S,any_simple_OBC ) &
 !$OMP                     firstprivate(visc_rem)
   do J=jsh-1,jeh
     do i=ish,ieh ; do_I(i) = .true. ; visc_rem_max(I) = 0.0 ; enddo
@@ -1325,18 +1352,18 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
         if (any_simple_OBC) then
           do i=ish,ieh
             do_I(i) = (OBC%segment(OBC%segnum_v(i,J))%specified)
-            if (do_I(i)) BT_cont%Fa_v_S0(i,J) = GV%H_subroundoff*G%dx_Cv(i,J)
+            if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
             if (abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) &
-              BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + &
+              FAvi(i) = FAvi(i) + &
                    OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
                    OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (do_I(i)) then
-            BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_SS(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
+            BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
+            BT_cont%FA_v_SS(i,J) = FAvi(i) ; BT_cont%FA_v_NN(i,J) = FAvi(i)
+            BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           endif ; enddo
         endif
       endif ! set_BT_cont
@@ -1349,24 +1376,20 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_N_or_S) then
         J = OBC%segment(n)%HI%JsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-          do I = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
-            BT_cont%Fa_v_S0(i,J) = 0.0
-            do k=1,nz
-              BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j,k)*G%dx_Cv(i,J)
-            enddo
-            BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_SS(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
+          do i = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
+            FA_v = 0.0
+            do k=1,nz ; FA_v = FA_v + h_in(i,j,k)*G%dx_Cv(i,J) ; enddo
+            BT_cont%Fa_v_S0(i,J) = FA_v ; BT_cont%Fa_v_N0(i,J) = FA_v
+            BT_cont%Fa_v_SS(i,J) = FA_v ; BT_cont%Fa_v_NN(i,J) = FA_v
+            BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           enddo
         else
-          do I = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
-            BT_cont%Fa_v_S0(i,J) = 0.0
-            do k=1,nz
-              BT_cont%Fa_v_S0(i,J) = BT_cont%Fa_v_S0(i,J) + h_in(i,j+1,k)*G%dx_Cv(i,J)
-            enddo
-            BT_cont%Fa_v_N0(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_SS(i,J) = BT_cont%Fa_v_S0(i,J)
-            BT_cont%Fa_v_NN(i,J) = BT_cont%Fa_v_S0(i,J)
+          do i = OBC%segment(n)%HI%Isd, OBC%segment(n)%HI%Ied
+            FA_v = 0.0
+            do k=1,nz ; FA_v = FA_v + h_in(i,j+1,k)*G%dx_Cv(i,J) ; enddo
+            BT_cont%Fa_v_S0(i,J) = FA_v ; BT_cont%Fa_v_N0(i,J) = FA_v
+            BT_cont%Fa_v_SS(i,J) = FA_v ; BT_cont%Fa_v_NN(i,J) = FA_v
+            BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
           enddo
         endif
       endif
@@ -1377,10 +1400,10 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
   if (set_BT_cont) then ; if (associated(BT_cont%h_v)) then
     if (present(v_cor)) then
       call merid_face_thickness(v_cor, h_in, h_L, h_R, BT_cont%h_v, dt, G, LB, &
-                                CS%vol_CFL, CS%marginal_faces, visc_rem_v)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_v, OBC)
     else
       call merid_face_thickness(v, h_in, h_L, h_R, BT_cont%h_v, dt, G, LB, &
-                                CS%vol_CFL, CS%marginal_faces, visc_rem_v)
+                                CS%vol_CFL, CS%marginal_faces, visc_rem_v, OBC)
     endif
   endif ; endif
 
@@ -1468,7 +1491,7 @@ end subroutine merid_flux_layer
 
 !> Sets the effective interface thickness at each meridional velocity point.
 subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
-                                marginal, visc_rem_v)
+                                marginal, visc_rem_v, OBC)
   type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< Meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thickness used to
@@ -1494,19 +1517,19 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
                           !! barotropic acceleration that a layer experiences
                           !! after viscosity is applied. Non-dimensional between
                           !! 0 (at the bottom) and 1 (far above the bottom).
+  type(ocean_OBC_type),                      pointer,     optional :: OBC !< Open boundaries control structure.
+
   ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing, ND.
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
                  ! with the same units as h_in.
   real :: h_avg  ! The average thickness of a flux, in H.
   real :: h_marg ! The marginal thickness of a flux, in H.
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  logical :: local_open_BC
+  integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = G%ke
 
-!$OMP parallel default(none) shared(ish,ieh,jsh,jeh,nz,v,vol_CFL,dt,G, &
-!$OMP                               h_L,h_R,h,h_v,visc_rem_v,marginal) &
-!$OMP                       private(CFL,curv_3,h_marg,h_avg)
-!$OMP do
+  !$OMP parallel do default(shared) private(CFL,curv_3,h_marg,h_avg)
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
@@ -1536,12 +1559,44 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, LB, vol_CFL, &
   enddo ; enddo ; enddo
 
   if (present(visc_rem_v)) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
       h_v(i,J,k) = h_v(i,J,k) * visc_rem_v(i,J,k)
     enddo ; enddo ; enddo
   endif
-!$OMP end parallel
+
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
+  if (local_open_BC) then
+    do n = 1, OBC%number_of_segments
+      if (OBC%segment(n)%open .and. OBC%segment(n)%is_N_or_S) then
+        J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+          if (present(visc_rem_v)) then ; do k=1,nz
+            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+              h_v(i,J,k) = h(i,j,k) * visc_rem_v(i,J,k)
+            enddo
+          enddo ; else ; do k=1,nz
+            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+              h_v(i,J,k) = h(i,j,k)
+            enddo
+          enddo ; endif
+        else
+          if (present(visc_rem_v)) then ; do k=1,nz
+            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+              h_v(i,J,k) = h(i,j+1,k) * visc_rem_v(i,J,k)
+            enddo
+          enddo ; else ; do k=1,nz
+            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+              h_v(i,J,k) = h(i,j+1,k)
+            enddo
+          enddo ; endif
+        endif
+      endif
+    enddo
+  endif
 
 end subroutine merid_face_thickness
 
@@ -1869,9 +1924,8 @@ subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, 
     endif
   else
     BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
-    BT_cont%vBT_SS(i,J) = 0.0
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
-    BT_cont%vBT_NN(i,J) = 0.0
+    BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
   endif ; enddo
 
 end subroutine set_merid_BT_cont
