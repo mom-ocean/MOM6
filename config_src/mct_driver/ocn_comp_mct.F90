@@ -29,10 +29,11 @@ use shr_kind_mod,        only: shr_kind_r8
 use MOM,                 only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM,                 only: calculate_surface_state, allocate_surface_state
 use MOM,                 only: finish_MOM_initialization, step_offline
-use MOM_surface_forcing, only: ice_ocean_boundary_type, surface_forcing_CS
 use MOM_forcing_type,    only: forcing, forcing_diagnostics, mech_forcing_diags, forcing_accumulate
 use MOM_forcing_type,    only: allocate_forcing_type
 use MOM_surface_forcing, only: surface_forcing_init, convert_IOB_to_fluxes
+use MOM_surface_forcing, only: ice_ocean_boundary_type, surface_forcing_CS
+use MOM_surface_forcing, only: forcing_save_restart
 use MOM_restart,         only: save_restart
 use MOM_domains,         only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_domains,         only: pass_vector, BGRID_NE, CGRID_NE
@@ -43,18 +44,19 @@ use MOM_variables,       only: surface
 use MOM_error_handler,   only: MOM_error, FATAL, is_root_pe, WARNING
 use MOM_error_handler,   only: callTree_enter, callTree_leave
 use MOM_time_manager,    only: time_type, set_date, set_time, set_calendar_type, NOLEAP, get_date
-use MOM_time_manager,    only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,    only : operator(/=), operator(>), get_time
+use MOM_time_manager,    only: operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager,    only: operator(/=), operator(>), get_time
 use MOM_file_parser,     only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,       only: Get_MOM_Input, directories
-use MOM_diag_mediator,   only : diag_ctrl, enable_averaging, disable_averaging
-use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
+use MOM_diag_mediator,   only: diag_ctrl, enable_averaging, disable_averaging
+use MOM_diag_mediator,   only: diag_mediator_close_registration, diag_mediator_end
 use MOM_ice_shelf,       only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
+use MOM_ice_shelf,       only: ice_shelf_end, ice_shelf_save_restart
 use MOM_sum_output,      only: MOM_sum_output_init, sum_output_CS
 use MOM_sum_output,      only: write_energy, accumulate_net_input
-use MOM_string_functions, only : uppercase
-use MOM_constants,        only : CELSIUS_KELVIN_OFFSET, hlf
-use MOM_EOS,              only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_string_functions, only: uppercase
+use MOM_constants,        only: CELSIUS_KELVIN_OFFSET, hlf
+use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
 
 ! FMS
 use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
@@ -1237,7 +1239,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg        !< Error message
   character(len=32)  :: timestamp      !< Name of intermediate restart file
-  character(len=80)  :: restartname    !< The restart file name (no dir)
+  character(len=384) :: restartname    !< The restart file name (no dir)
   character(len=384) :: runid          !< Run ID
   ! Compute the time at the start of this coupling interval
   call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
@@ -1284,30 +1286,27 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
   if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
 
-  !!if (write_restart_at_eod) then
+  if (write_restart_at_eod) then
     ! case name
-    !!call seq_infodata_GetData( glb%infodata, case_name=runid )
-    ! add time stamp to restart filename
-    ! \todo use MCT call to get year, month etc
-    !!call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    !call get_date(glb%ocn_state%Time,year,month,days,hour,minute,seconds)
-    !!seconds = seconds + hour*3600 + minute*60
-    !!write(restartname,'(A,".mom6.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') runid, year, month, day, seconds
-    !call ocean_model_restart(glb%ocn_state, timestamp)
-    !!call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-    !!                 glb%ocn_state%MOM_CSp%restart_CSp, filename=restartname,GV=glb%ocn_state%GV)
+    call seq_infodata_GetData( glb%infodata, case_name=runid )
+    ! add time stamp to the restart filename
+    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
+    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    seconds = seconds + hour*3600 + minute*60
+    write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
-    !! GM call via ocean_model_MOM.F90 call ocean_model_restart(glb%ocn_state)
+    call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
+                     glb%ocn_state%MOM_CSp%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
 
     ! Is this needed?
-    !call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
-    !                          OS%dirs%restart_output_dir, .true.)
+    call forcing_save_restart(glb%ocn_state%forcing_CSp, glb%grid, glb%ocn_state%Time, &
+                              glb%ocn_state%dirs%restart_output_dir, .true.)
     ! Once we start using the ice shelf module, the following will be needed
-    !if (glb%ocn_state%use_ice_shelf) then
-    !  call ice_shelf_save_restart(OS%Ice_shelf_CSp, OS%Time, OS%dirs%restart_output_dir, .true.)
-    !endif
+    if (glb%ocn_state%use_ice_shelf) then
+      call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, glb%ocn_state%dirs%restart_output_dir, .true.)
+    endif
 
-  !!endif
+  endif
 
 end subroutine ocn_run_mct
 
