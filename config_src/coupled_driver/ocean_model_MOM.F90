@@ -76,7 +76,6 @@ public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
-public get_state_pointers
 
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
