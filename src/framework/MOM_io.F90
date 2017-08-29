@@ -21,7 +21,7 @@ use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, mpp_get_axis_data, axistype
+use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, mpp_get_axis_data=>get_axis_data, axistype
 use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
@@ -46,6 +46,7 @@ public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc
+publiv :: get_axis_data
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -446,7 +447,7 @@ subroutine read_axis_data(filename, axis_name, var)
     call mpp_get_atts(axes(i), name=name,len=len,units=units)
     if (name == axis_name) then
       axis_found = .true.
-      call mpp_get_axis_data(axes(i),var)
+      call get_axis_data(axes(i),var)
       exit
     endif
   enddo
