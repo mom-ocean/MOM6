@@ -24,6 +24,7 @@ use seq_comm_mct,        only: seq_comm_name, seq_comm_inst, seq_comm_suffix
 use seq_timemgr_mod,     only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
 use perf_mod,            only: t_startf, t_stopf
 use shr_kind_mod,        only: shr_kind_r8
+use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit
 
 ! MOM6 modules
 use MOM,                 only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
@@ -252,8 +253,9 @@ implicit none; private
     type(cpl_indices), public        :: ind                   !< Variable IDs
     ! runtime params
     logical :: sw_decomp   !< Controls whether shortwave is decomposed into four components
-    real :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-
+    real    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+    character(len=384) :: pointer_filename !< Name of the ascii file that contains the path
+                                           !! and filename of the latest restart file.
   end type MCT_MOM_Data
 
   type(MCT_MOM_Data) :: glb                                   !< global structure
@@ -402,6 +404,9 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! read useful runtime params
   call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
   !call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "POINTER_FILENAME", glb%pointer_filename, &
+                 "Name of the ascii file that contains the path and filename of" // &
+                 " the latest restart file.", default='rpointer.ocn')
   call get_param(param_file, mdl, "SW_DECOMP", glb%sw_decomp, &
                  "If True, read coeffs c1, c2, c3 and c4 and decompose" // &
                  "the net shortwave radiation (SW) into four components:\n" // &
@@ -426,13 +431,18 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
   endif
 
-  restartfile = '/glade/scratch/gmarques/mom_test/run/RESTART/MOM.res_Y0001_D002_S00000.nc'
   ! Initialize the MOM6 model
   if (runtype == "initial") then ! startup (new run) - 'n' is needed below since we don't
                                  ! specify input_filename in input.nml
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = 'n')
   else                           ! hybrid or branch or continuos runs
-    !call seq_infodata_GetData(glb%infodata, restart_file=restartfile)
+    ! read pointer_filename
+    !call seq_infodata_GetData( glb%infodata, case_name=runid )
+    !call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
+    !call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    !seconds = seconds + hour*3600 + minute*60
+    !write(restartfile,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') trim(runid), year, month, day, seconds
+
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = restartfile)
   endif
 
@@ -1240,7 +1250,9 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   character(len=128) :: err_msg        !< Error message
   character(len=32)  :: timestamp      !< Name of intermediate restart file
   character(len=384) :: restartname    !< The restart file name (no dir)
-  character(len=384) :: runid          !< Run ID
+  character(len=384) :: restart_pointer_file !< File name for restart pointer file
+  character(len=384) :: runid                !< Run ID
+  integer            :: nu                   !< i/o unit to write pointer file
   ! Compute the time at the start of this coupling interval
   call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
   call ESMF_TimeGet(time_start_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
@@ -1297,6 +1309,17 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
                      glb%ocn_state%MOM_CSp%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
+
+    ! write name of restart file in the rpointer file
+    nu = shr_file_getUnit()
+    if (is_root_pe()) then
+      restart_pointer_file = trim(glb%pointer_filename)
+      open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+      write(nu,'(a)') trim(restartname)
+      close(nu)
+      write(6,*) 'ocn restart pointer file written: ',trim(restartname)
+    endif
+    call shr_file_freeUnit(nu)
 
     ! Is this needed?
     call forcing_save_restart(glb%ocn_state%forcing_CSp, glb%grid, glb%ocn_state%Time, &
@@ -1478,8 +1501,27 @@ subroutine ocn_final_mct( EClock, cdata_o, x2o_o, o2x_o)
     type(mct_aVect)             , intent(inout) :: x2o_o  !< Fluxes from coupler to ocean, computed by ocean
     type(mct_aVect)             , intent(inout) :: o2x_o  !< Fluxes from ocean to coupler, computed by ocean
 
+    call ocean_model_end(glb%ocn_public, glb%ocn_state, glb%ocn_state%Time)
+
 end subroutine ocn_final_mct
 
+!> Terminates the model run, saving the ocean state in a
+!! restart file and deallocating any data associated with the ocean.
+subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
+  type(ocean_public_type),     intent(inout) :: Ocean_sfc !< An ocean_public_type structure that is to be
+                                                          !! deallocated upon termination.
+  type(ocean_state_type),      pointer       :: Ocean_state!<  pointer to the structure containing the internal
+                                 !                        !! ocean state to be deallocated upon termination.
+  type(time_type),             intent(in)    :: Time      !< The model time, used for writing restarts.
+
+  if (debug .and. is_root_pe()) write(6,*)'Here 1'
+  !GMM call save_restart(Ocean_state, Time)
+  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
+  call MOM_end(Ocean_state%MOM_CSp)
+  if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
+  if (debug .and. is_root_pe()) write(6,*)'Here 2'
+
+end subroutine ocean_model_end
 
 !> Sets mct global segment maps for the MOM decomposition.
 !!
