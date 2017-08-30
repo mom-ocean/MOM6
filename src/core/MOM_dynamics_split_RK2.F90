@@ -583,7 +583,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call do_group_pass(CS%pass_hp_uv, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
+    if (CS%debug) &
+      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, dt_pred)
+
+    if (CS%debug) &
+      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
   endif
 
   call cpu_clock_begin(id_clock_pass)
