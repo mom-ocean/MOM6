@@ -76,7 +76,6 @@ public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
-public get_state_pointers
 
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
@@ -1079,16 +1078,5 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
-
-!> Returns pointers to objects within ocean_state_type
-subroutine get_state_pointers(OS, grid, surf)
-  type(ocean_state_type),          pointer :: OS !< Ocean state type
-  type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
-  type(surface), optional, pointer         :: surf !< Ocean surface state
-
-  if (present(grid)) grid => OS%grid
-  if (present(surf)) surf=> OS%state
-
-end subroutine get_state_pointers
 
 end module ocean_model_mod
