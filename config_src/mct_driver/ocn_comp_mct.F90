@@ -278,9 +278,12 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(ESMF_time)     :: time_in_ESMF      !< Time after first ocean coupling interval (of type ESMF_time)
   type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
-  character(len=384)  :: runid             !< Run ID
-  character(len=384)  :: runtype           !< Run type
-  character(len=384)  :: restartfile       !< Path/Name of restart file
+  character(len=240)  :: runid             !< Run ID
+  character(len=240)  :: runtype           !< Run type
+  character(len=240)  :: restartfile       !< Path/Name of restart file
+  integer             :: nu                !< i/o unit to read pointer file
+  character(len=240)  :: restart_pointer_file !< File name for restart pointer file
+  character(len=240)  :: restartpath       !< Path of the restart file
   character(len=32)   :: starttype         !< infodata start type
   integer             :: mpicom_ocn        !< MPI ocn communicator
   integer             :: npes, pe0         !< # of processors and current processor
@@ -436,19 +439,36 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
                                  ! specify input_filename in input.nml
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = 'n')
   else                           ! hybrid or branch or continuos runs
+    ! output path root
+    call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
     ! read pointer_filename
+    ! write name of restart file in the rpointer file
+    nu = shr_file_getUnit()
+    !if (is_root_pe()) then
+      restart_pointer_file = trim(glb%pointer_filename)
+      write(6,*) 'Reading ocn pointer file: ',restart_pointer_file
+      open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+      read(nu,'(a)') restartfile
+      close(nu)
+      !restartfile = trim(restartpath) // trim(restartfile)
+      write(6,*) 'Reading ocn pointer file: ',trim(restartfile)
+    !endif
+    call shr_file_freeUnit(nu)
+    !restartfile = '/glade/scratch/gmarques/mom_test/run/mom_test.mom6.r.0001-01-01-21600.nc'
     !call seq_infodata_GetData( glb%infodata, case_name=runid )
     !call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
     !call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     !seconds = seconds + hour*3600 + minute*60
     !write(restartfile,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') trim(runid), year, month, day, seconds
-
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = restartfile)
+    if (debug .and. root_pe().eq.pe_here()) then
+      write(6,*)'runtype, restartfile,time_init,time_in',runtype, restartfile !, time_init, time_in
+    endif
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
   endif
 
-  if (debug .and. root_pe().eq.pe_here()) then
-    write(6,*)'runtype, restartfile',runtype, restartfile
-  endif
+  !if (debug .and. root_pe().eq.pe_here()) then
+  !  write(6,*)'runtype, restartfile,time_init,time_in',runtype, restartfile,time_init,time_in
+  !endif
 
   ! Initialize the MOM6 model
   !call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in)
@@ -1315,7 +1335,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     if (is_root_pe()) then
       restart_pointer_file = trim(glb%pointer_filename)
       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-      write(nu,'(a)') trim(restartname)
+      write(nu,'(a)') trim(restartname) //'.nc'
       close(nu)
       write(6,*) 'ocn restart pointer file written: ',trim(restartname)
     endif
