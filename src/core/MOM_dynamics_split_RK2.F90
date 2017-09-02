@@ -132,6 +132,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! is forward-backward (0) or simulated backward
                      !! Euler (1).  0 is almost always used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
+  logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
 
   logical :: module_is_initialized = .false.
 
@@ -322,7 +323,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   endif
 
   if (associated(CS%OBC)) then
-!   call open_boundary_test_extern_h(G, CS%OBC, h)
+    if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
+
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
@@ -382,6 +384,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
     call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC) .and. CS%debug_OBC) &
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
 
   if (G%nonblocking_updates) then
     call cpu_clock_begin(id_clock_pass)
@@ -579,7 +583,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call do_group_pass(CS%pass_hp_uv, G%Domain)
     call cpu_clock_end(id_clock_pass)
 
+    if (CS%debug) &
+      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, dt_pred)
+
+    if (CS%debug) &
+      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
   endif
 
   call cpu_clock_begin(id_clock_pass)
@@ -1005,6 +1015,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 
