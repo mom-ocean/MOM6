@@ -558,6 +558,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%q_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%q_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%latent(isc:iec,jsc:jec));          glb%ice_ocean_boundary%latent(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%salt_flux(isc:iec,jsc:jec));       glb%ice_ocean_boundary%salt_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%lw_flux(isc:iec,jsc:jec));         glb%ice_ocean_boundary%lw_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%sw_flux_vis_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dir(:,:) = 0.0
@@ -1214,6 +1215,8 @@ subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind, &
       ice_ocean_boundary%v_flux(ig,jg) = x2o_o(ind%x2o_Foxx_tauy,k)
       ! sensible heat flux (W/m2)
       ice_ocean_boundary%t_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_sen,k)
+      ! latent heat flux (W/m^2)
+      ice_ocean_boundary%latent(ig,jg) = x2o_o(ind%x2o_Foxx_lat,k)
       ! salt flux
       ice_ocean_boundary%salt_flux(ig,jg) = -x2o_o(ind%x2o_Fioi_salt,k)
       ! heat content from frozen runoff

@@ -152,6 +152,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: sw_flux_vis_dif      =>NULL() ! diffuse visible sw radiation (W/m2)
   real, pointer, dimension(:,:) :: sw_flux_nir_dir      =>NULL() ! direct Near InfraRed sw radiation (W/m2)
   real, pointer, dimension(:,:) :: sw_flux_nir_dif      =>NULL() ! diffuse Near InfraRed sw radiation (W/m2)
+  real, pointer, dimension(:,:) :: latent               =>NULL() ! latent heat flux (W/m2)
   real, pointer, dimension(:,:) :: lprec                =>NULL() ! mass flux of liquid precip (kg/m2/s)
   real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
   real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
@@ -480,17 +481,21 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
     fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%fprec)) then
-      fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-    endif
-    if (ASSOCIATED(IOB%calving)) then
-      fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-      fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-    endif
-    if (ASSOCIATED(IOB%q_flux)) then
-      fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-      fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+    if (ASSOCIATED(IOB%latent)) then
+      fluxes%latent(i,j) = IOB%latent(i-i0,j-j0)
+    else
+      if (ASSOCIATED(IOB%fprec)) then
+        fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+        fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
+      endif
+      if (ASSOCIATED(IOB%calving)) then
+        fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+        fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
+      endif
+      if (ASSOCIATED(IOB%q_flux)) then
+        fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+        fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
+      endif
     endif
 
     fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
