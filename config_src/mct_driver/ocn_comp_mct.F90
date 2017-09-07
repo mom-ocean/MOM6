@@ -24,7 +24,9 @@ use seq_comm_mct,        only: seq_comm_name, seq_comm_inst, seq_comm_suffix
 use seq_timemgr_mod,     only: seq_timemgr_EClockGetData, seq_timemgr_RestartAlarmIsOn
 use perf_mod,            only: t_startf, t_stopf
 use shr_kind_mod,        only: shr_kind_r8
-use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit
+use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_setIO, &
+                               shr_file_getLogUnit, shr_file_getLogLevel, &
+                               shr_file_setLogUnit, shr_file_setLogLevel
 
 ! MOM6 modules
 use MOM,                 only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
@@ -254,8 +256,10 @@ implicit none; private
     ! runtime params
     logical :: sw_decomp   !< Controls whether shortwave is decomposed into four components
     real    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+    ! i/o
     character(len=384) :: pointer_filename !< Name of the ascii file that contains the path
                                            !! and filename of the latest restart file.
+    integer :: stdout !< standard output unit. (by default, it should point to ocn.log.* file)
   end type MCT_MOM_Data
 
   type(MCT_MOM_Data) :: glb                                   !< global structure
@@ -275,7 +279,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(time_type)     :: time_init         !< Start time of coupled model's calendar
   type(time_type)     :: time_in           !< Time at the beginning of the first ocn coupling interval
   type(ESMF_time)     :: current_time      !< Current time
-  type(ESMF_time)     :: time_in_ESMF      !< Time after first ocean coupling interval (of type ESMF_time)
+  type(ESMF_time)     :: time_in_ESMF      !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=240)  :: runid             !< Run ID
@@ -313,6 +317,10 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
       seconds_in_day    = 86400.0d0, &
       minutes_in_hour   =    60.0d0
 
+  ! ocn model input namelist filename
+  character(len=99) :: ocn_modelio_name
+  integer           :: shrlogunit ! original log file unit
+  integer           :: shrloglev  ! original log level
 
   ! instance control vars (these are local for now)
   integer(kind=4)     :: inst_index
@@ -346,7 +354,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
      runtype = "branch"
   else
-     write(*,*) 'ocn_comp_mct ERROR: unknown starttype'
+     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
      call exit(0)
   end if
 
@@ -360,6 +368,32 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Initialize MOM6 comm
   call MOM_infra_init(mpicom_ocn)
 
+  ! initialize ocn log file
+  if (is_root_pe()) then
+
+    ! get original log file properties
+    call shr_file_getLogUnit (shrlogunit)
+    call shr_file_getLogLevel(shrloglev)
+
+    glb%stdout = shr_file_getUnit() ! get an unused unit number
+
+    ! open the ocn_modelio.nml file and then open a log file associated with stdout
+    ocn_modelio_name = 'ocn_modelio.nml' // trim(inst_suffix)
+    call shr_file_setIO(ocn_modelio_name,glb%stdout)
+
+    !if (debug) write(*,*) "stdout-1"
+    !if (debug) write(6,*) "stdout-2"
+    !if (debug) write(glb%stdout,*) "stdout-3"
+
+    !  set the shr log io unit number
+    call shr_file_setLogUnit(glb%stdout)
+
+    !if (debug) write(*,*) "stdout-4"
+    !if (debug) write(6,*) "stdout-5"
+    !if (debug) write(glb%stdout,*) "stdout-6"
+
+  end if
+
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
   ! Get the ESMF clock instance (assigned by CESM for MOM6)
@@ -370,28 +404,32 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Compute time_in: time at the beginning of the first ocn coupling interval
-  !   (In CESM, ocean component is lagged by one ocean coupling interval, so:
-  !   time_in = time_init + ocn_cpl_interval )
   call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
+  if (runtype /= "continue") then
+    ! In startup runs, take the one ocn coupling interval lag into account to
+    ! compute the initial ocn time.  (time_in = time_init + ocn_cpl_interval)
+    time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
+  else
+    time_in_ESMF = current_time
+  endif
   call ESMF_TimeGet(time_in_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
-    write(6,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-    write(6,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+    write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
   npes = num_pes()
@@ -446,12 +484,12 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     nu = shr_file_getUnit()
     !if (is_root_pe()) then
       restart_pointer_file = trim(glb%pointer_filename)
-      write(6,*) 'Reading ocn pointer file: ',restart_pointer_file
+      write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
       read(nu,'(a)') restartfile
       close(nu)
       !restartfile = trim(restartpath) // trim(restartfile)
-      write(6,*) 'Reading ocn pointer file: ',trim(restartfile)
+      write(glb%stdout,*) 'Reading ocn pointer file: ',trim(restartfile)
     !endif
     call shr_file_freeUnit(nu)
     !restartfile = '/glade/scratch/gmarques/mom_test/run/mom_test.mom6.r.0001-01-01-21600.nc'
@@ -461,13 +499,13 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     !seconds = seconds + hour*3600 + minute*60
     !write(restartfile,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') trim(runid), year, month, day, seconds
     if (debug .and. root_pe().eq.pe_here()) then
-      write(6,*)'runtype, restartfile,time_init,time_in',runtype, restartfile !, time_init, time_in
+      write(glb%stdout,*)'runtype, restartfile,time_init,time_in',runtype, restartfile !, time_init, time_in
     endif
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
   endif
 
   !if (debug .and. root_pe().eq.pe_here()) then
-  !  write(6,*)'runtype, restartfile,time_init,time_in',runtype, restartfile,time_init,time_in
+  !  write(glb%stdout,*)'runtype, restartfile,time_init,time_in',runtype, restartfile,time_init,time_in
   !endif
 
   ! Initialize the MOM6 model
@@ -527,7 +565,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ncouple_per_day = seconds_in_day / ocn_cpl_dt
   mom_cpl_dt = seconds_in_day / ncouple_per_day
   if (mom_cpl_dt /= ocn_cpl_dt) then
-     write(*,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
+     write(glb%stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
      call exit(0)
   end if
 
@@ -583,6 +621,12 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
 
   if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
+
+  ! Reset shr logging to original values
+  if (is_root_pe()) then
+    call shr_file_setLogUnit (shrlogunit)
+    call shr_file_setLogLevel(shrloglev)
+  end if
 
 end subroutine ocn_init_mct
 
@@ -874,7 +918,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call diag_mediator_close_registration(OS%MOM_CSp%diag)
 
   if (is_root_pe()) &
-    write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
+    write(glb%stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
 
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
@@ -1273,6 +1317,16 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   character(len=384) :: restart_pointer_file !< File name for restart pointer file
   character(len=384) :: runid                !< Run ID
   integer            :: nu                   !< i/o unit to write pointer file
+  integer            :: shrlogunit ! original log file unit
+  integer            :: shrloglev  ! original log level
+
+  ! reset shr logging to ocn log file:
+  if (is_root_pe()) then
+    call shr_file_getLogUnit(shrlogunit)
+    call shr_file_getLogLevel(shrloglev)
+    call shr_file_setLogUnit(glb%stdout)
+  endif
+
   ! Compute the time at the start of this coupling interval
   call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
   call ESMF_TimeGet(time_start_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
@@ -1282,19 +1336,19 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   if (debug .and. is_root_pe()) then
     call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
     call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    write(6,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
+    write(glb%stdout,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-    write(6,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
+    write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
   ! Translate the coupling time interval
@@ -1316,7 +1370,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   !--- write out intermediate restart file when needed.
   ! Check alarms for flag to write restart at end of day
   write_restart_at_eod = seq_timemgr_RestartAlarmIsOn(EClock)
-  if (debug .and. is_root_pe()) write(6,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
+  if (debug .and. is_root_pe()) write(glb%stdout,*) 'ocn_run_mct, write_restart_at_eod=', write_restart_at_eod
 
   if (write_restart_at_eod) then
     ! case name
@@ -1337,7 +1391,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       open(nu, file=restart_pointer_file, form='formatted', status='unknown')
       write(nu,'(a)') trim(restartname) //'.nc'
       close(nu)
-      write(6,*) 'ocn restart pointer file written: ',trim(restartname)
+      write(glb%stdout,*) 'ocn restart pointer file written: ',trim(restartname)
     endif
     call shr_file_freeUnit(nu)
 
@@ -1349,6 +1403,12 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       call ice_shelf_save_restart(glb%ocn_state%Ice_shelf_CSp, glb%ocn_state%Time, glb%ocn_state%dirs%restart_output_dir, .true.)
     endif
 
+  endif
+
+  ! reset shr logging to original values
+  if (is_root_pe()) then
+    call shr_file_setLogUnit(shrlogunit)
+    call shr_file_setLogLevel(shrloglev)
   endif
 
 end subroutine ocn_run_mct
@@ -1534,12 +1594,12 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                  !                        !! ocean state to be deallocated upon termination.
   type(time_type),             intent(in)    :: Time      !< The model time, used for writing restarts.
 
-  if (debug .and. is_root_pe()) write(6,*)'Here 1'
+  if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
   !GMM call save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
-  if (debug .and. is_root_pe()) write(6,*)'Here 2'
+  if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
 
 end subroutine ocean_model_end
 
