@@ -1895,11 +1895,16 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call tracer_registry_init(param_file, CS%tracer_Reg)
 
+  ! Allocate initialize time-invariant MOM variables.
+  call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
+  call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
+  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
+
+
+  ! Allocate and initialize space for the primary time-varying MOM variables.
   is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
   isd  = dG%isd   ; ied  = dG%ied  ; jsd  = dG%jsd  ; jed  = dG%jed
   IsdB = dG%IsdB  ; IedB = dG%IedB ; JsdB = dG%JsdB ; JedB = dG%JedB
-
-  ! Allocate and initialize space for primary MOM variables.
   ALLOC_(CS%u(IsdB:IedB,jsd:jed,nz))   ; CS%u(:,:,:) = 0.0
   ALLOC_(CS%v(isd:ied,JsdB:JedB,nz))   ; CS%v(:,:,:) = 0.0
   ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = GV%Angstrom
@@ -2009,15 +2014,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
-  ! Initialize fields
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
+  ! Initialize dynamically evolving fields, perhaps from restart files.
   call cpu_clock_begin(id_clock_MOM_init)
-  call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
-  call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
-
-  if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
-
   call MOM_initialize_coord(GV, param_file, write_geom_files, &
                             dirs%output_directory, CS%tv, dG%max_depth)
   call callTree_waypoint("returned from MOM_initialize_coord() (initialize_MOM)")

@@ -336,6 +336,28 @@ subroutine open_boundary_config(G, param_file, OBC)
 
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
     call initialize_segment_data(G, OBC, param_file)
+
+    if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
+      call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
+                   "The maximum magnitude of the baroclinic radiation \n"//&
+                   "velocity (or speed of characteristics).  This is only \n"//&
+                   "used if one of the open boundary segments is using Orlanski.", &
+                   units="m s-1", default=10.0)
+      call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for velocities. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the open boundary segments is using Orlanski.", &
+                   units="nondim",  default=0.3)
+      call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for thicknesses. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the open boundary segments is using Orlanski.", &
+                   units="nondim",  default=0.2)
+    endif
   endif
 
     ! Safety check
@@ -975,28 +997,6 @@ subroutine open_boundary_init(G, param_file, OBC)
   ! Local variables
 
   if (.not.associated(OBC)) return
-
-  if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
-    call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
-                   "The maximum magnitude of the baroclinic radiation \n"//&
-                   "velocity (or speed of characteristics).  This is only \n"//&
-                   "used if one of the open boundary segments is using Orlanski.", &
-                   units="m s-1", default=10.0)
-    call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for velocities. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the open boundary segments is using Orlanski.", &
-                   units="nondim",  default=0.3)
-    call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for thicknesses. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the open boundary segments is using Orlanski.", &
-                   units="nondim",  default=0.2)
-  endif
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
 
