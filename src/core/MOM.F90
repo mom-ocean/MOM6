@@ -49,7 +49,7 @@ use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_fixed_initialization, only : MOM_initialize_fixed
-use MOM_forcing_type,         only : MOM_forcing_chksum, set_derived_forcing_fields
+use MOM_forcing_type,         only : MOM_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, read_data
@@ -570,9 +570,9 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
   if (ASSOCIATED(forces%ustar)) &
-    call create_group_pass(CS%pass_tau_ustar_psurf, forces%ustar(:,:), G%Domain)
+    call create_group_pass(CS%pass_tau_ustar_psurf, forces%ustar, G%Domain)
   if (ASSOCIATED(forces%p_surf)) &
-    call create_group_pass(CS%pass_tau_ustar_psurf, forces%p_surf(:,:), G%Domain)
+    call create_group_pass(CS%pass_tau_ustar_psurf, forces%p_surf, G%Domain)
 
   do_pass_Ray = .FALSE.
   if ((.not.G%Domain%symmetric) .and. &
@@ -728,7 +728,6 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call set_derived_forcing_fields(forces, fluxes, G, GV%Rho0)
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -1022,7 +1021,6 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
         endif
 
         ! Apply diabatic forcing, do mixing, and regrid.
-        call set_derived_forcing_fields(forces, fluxes, G, GV%Rho0)
         call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
 
         call disable_averaging(CS%diag)

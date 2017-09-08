@@ -61,6 +61,7 @@ use MOM_string_functions,    only : uppercase
 use MOM_forcing_type,        only : forcing, mech_forcing
 use MOM_forcing_type,        only : forcing_diags, mech_forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,        only : set_net_mass_forcing, copy_common_forcing_fields
+use MOM_forcing_type,        only : set_derived_forcing_fields
 use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,           only : Get_MOM_Input, directories
@@ -279,6 +280,7 @@ subroutine set_forcing(state, forcing, fluxes, day_start, day_interval, G, CS)
   ! Fields that exist in both the forcing and mech_forcing types must be copied.
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
     call copy_common_forcing_fields(forces, fluxes, G)
+    call set_derived_forcing_fields(forces, fluxes, G, CS%Rho0)
   endif
 
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
