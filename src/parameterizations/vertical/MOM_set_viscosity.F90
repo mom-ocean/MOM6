@@ -539,11 +539,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           hwtot = hwtot + hweight
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
-            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
+            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
             hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
@@ -876,13 +876,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
           if (m==1) then
             if (Rayleigh > 0.0) then
-              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
               visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
-              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
+              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
               visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
@@ -943,53 +943,79 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 end subroutine set_viscous_BBL
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
-function set_v_at_u(v, h, G, i, j, k, mask2dCv)
+function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer,                                   intent(in) :: i, j, k
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
+  type(ocean_OBC_type),                      pointer    :: OBC
   real                                                  :: set_v_at_u
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
-  real :: hwt(4)           ! Masked weights used to average v onto u, in H.
+  real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  integer :: i0, j0, i1, j1
 
-  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * mask2dCv(i,J-1)
-  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
-  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
-  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * mask2dCv(i+1,J)
+  do j0 = -1,0 ; do i0 = 0,1 ; i1 = i+i0 ; J1 = J+j0
+    hwt(i0,j0) = (h(i1,j1,k) + h(i1,j1+1,k)) * mask2dCv(i1,J1)
+  enddo ; enddo
 
-  hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
+  if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+    do j0 = -1,0 ; do i0 = 0,1 ; if ((OBC%segnum_v(i+i0,J+j0) /= OBC_NONE)) then
+      i1 = i+i0 ; J1 = J+j0
+      if (OBC%segment(OBC%segnum_v(i1,j1))%direction == OBC_DIRECTION_N) then
+        hwt(i0,j0) = 2.0 * h(i1,j1,k) * mask2dCv(i1,J1)
+      elseif (OBC%segment(OBC%segnum_v(i1,J1))%direction == OBC_DIRECTION_S) then
+        hwt(i0,j0) = 2.0 * h(i1,J1+1,k) * mask2dCv(i1,J1)
+      endif
+    endif ; enddo ; enddo
+  endif ; endif
+
+  hwt_tot = (hwt(0,-1) + hwt(1,0)) + (hwt(1,-1) + hwt(0,0))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
-          ((hwt(3) * v(i,J,k) + hwt(2) * v(i+1,J-1,k)) + &
-           (hwt(4) * v(i+1,J,k) + hwt(1) * v(i,J-1,k))) / hwt_tot
+          ((hwt(0,0) * v(i,J,k) + hwt(1,-1) * v(i+1,J-1,k)) + &
+           (hwt(1,0) * v(i+1,J,k) + hwt(0,-1) * v(i,J-1,k))) / hwt_tot
+
 end function set_v_at_u
 
 !> This subroutine finds a thickness-weighted value of u at the v-points.
-function set_u_at_v(u, h, G, i, j, k, mask2dCu)
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
+function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
-  integer,                                intent(in) :: i, j, k
-  real                                               :: set_u_at_v
+  integer,                                   intent(in) :: i, j, k
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: mask2dCu
+  type(ocean_OBC_type),                      pointer    :: OBC
+  real                                                  :: set_u_at_v
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
-  real :: hwt(4)           ! Masked weights used to average u onto v, in H.
+  real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  integer :: i0, j0, i1, j1
 
-  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * mask2dCu(I-1,j)
-  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * mask2dCu(I,j)
-  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * mask2dCu(I-1,j+1)
-  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * mask2dCu(I,j+1)
+  do j0 = 0,1 ; do i0 = -1,0 ; I1 = I+i0 ; j1 = j+j0
+    hwt(i0,j0) = (h(i1,j1,k) + h(i1+1,j1,k)) * mask2dCu(I1,j1)
+  enddo ; enddo
 
-  hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
+  if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= OBC_NONE)) then
+      I1 = I+i0 ; j1 = j+j0
+      if (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_E) then
+        hwt(i0,j0) = 2.0 * h(I1,j1,k) * mask2dCu(I1,j1)
+      elseif (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_W) then
+        hwt(i0,j0) = 2.0 * h(I1+1,j1,k) * mask2dCu(I1,j1)
+      endif
+    endif ; enddo ; enddo
+  endif ; endif
+
+  hwt_tot = (hwt(-1,0) + hwt(0,1)) + (hwt(0,0) + hwt(-1,1))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
-          ((hwt(2) * u(I,j,k) + hwt(3) * u(I-1,j+1,k)) + &
-           (hwt(1) * u(I-1,j,k) + hwt(4) * u(I,j+1,k))) / hwt_tot
+          ((hwt(0,0) * u(I,j,k) + hwt(-1,1) * u(I-1,j+1,k)) + &
+           (hwt(-1,0) * u(I-1,j,k) + hwt(0,1) * u(I,j+1,k))) / hwt_tot
+
 end function set_u_at_v
 
 !>   The following subroutine calculates the thickness of the surface boundary
@@ -1222,7 +1248,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   enddo ; endif
 
 !$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS, &
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,        &
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,OBC,    &
 !$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,mask_v,      &
 !$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_Star, &
@@ -1365,7 +1391,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
@@ -1464,7 +1490,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   enddo ! j-loop at u-points
 
 !$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS,&
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,       &
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,OBC,   &
 !$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
 !$OMP                                  m_to_H,H_to_m,mask_u) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
@@ -1610,7 +1636,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u)
+            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u, OBC)
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + &
                                            u_at_v**2 + U_bg_sq)
           endif

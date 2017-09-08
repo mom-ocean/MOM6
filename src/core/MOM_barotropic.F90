@@ -2004,8 +2004,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (apply_OBCs) then
     !!! Not safe for wide halos...
     if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
-!GOMP parallel do default(none) shared(is,ie,js,je,ubt_sum_prev,ubt_sum,uhbt_sum_prev,&
-!GOMP                                  uhbt_sum,ubt_wtd_prev,ubt_wtd)
+      !GOMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
           e_anom(i+1,j) = e_anom(i,j)
@@ -2016,8 +2015,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     endif
 
     if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
-!GOMP parallel do default(none) shared(is,ie,js,je,vbt_sum_prev,vbt_sum,vhbt_sum_prev, &
-!GOMP                                  vhbt_sum,vbt_wtd_prev,vbt_wtd)
+      !GOMP parallel do default(shared)
       do J=js-1,je ; do I=is,ie
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
           e_anom(i,j+1) = e_anom(i,j)
@@ -2047,6 +2045,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   do j=js,je ; do I=is-1,ie
     CS%ubtav(I,j) = ubt_sum(I,j) * I_sum_wt_trans
     uhbtav(I,j) = uhbt_sum(I,j) * I_sum_wt_trans
+ ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   u_accel_bt(I,j) = u_accel_bt(I,j) * I_sum_wt_accel
     ubt_wtd(I,j) = ubt_wtd(I,j) * I_sum_wt_vel
   enddo ; enddo
@@ -2054,6 +2053,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   do J=js-1,je ; do i=is,ie
     CS%vbtav(i,J) = vbt_sum(i,J) * I_sum_wt_trans
     vhbtav(i,J) = vhbt_sum(i,J) * I_sum_wt_trans
+ ! The following line would do approximately nothing, as I_sum_wt_accel ~= 1.
  !###   v_accel_bt(i,J) = v_accel_bt(i,J)  * I_sum_wt_accel
     vbt_wtd(i,J) = vbt_wtd(i,J) * I_sum_wt_vel
   enddo ; enddo
@@ -2070,23 +2070,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
-! Now calculate each layer's accelerations.
-  if (apply_OBCs) then
-    !!! Not safe for wide halos...
-    if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
-      if (OBC%segnum_u(I,j) /= OBC_NONE) then
-        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
-      endif
-    enddo ; enddo ; endif
-    if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
-      if (OBC%segnum_v(i,J) /= OBC_NONE) then
-        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt
-      endif
-    enddo ; enddo ; endif
-  endif
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,accel_layer_u,u_accel_bt,pbce,gtot_W, &
-!$OMP                                  e_anom,gtot_E,CS,accel_layer_v,v_accel_bt,      &
-!$OMP                                  gtot_S,gtot_N)
+  ! Now calculate each layer's accelerations.
+  !$OMP parallel do default(shared)
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
@@ -2099,6 +2084,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
             (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
     enddo ; enddo
   enddo
+
+  if (apply_OBCs) then
+    ! Correct the accelerations at OBC velocity points, but only in the
+    ! symmetric-memory computational domain, not in the wide halo regions.
+    if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
+      if (OBC%segnum_u(I,j) /= OBC_NONE) then
+        u_accel_bt(I,j) = (ubt_wtd(I,j) - ubt_first(I,j)) / dt
+        do k=1,nz ; accel_layer_u(I,j,k) = u_accel_bt(I,j) ; enddo
+      endif
+    enddo ; enddo ; endif
+    if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
+      if (OBC%segnum_v(i,J) /= OBC_NONE) then
+        v_accel_bt(i,J) = (vbt_wtd(i,J) - vbt_first(i,J)) / dt
+        do k=1,nz ; accel_layer_v(i,J,k) = v_accel_bt(i,J) ; enddo
+      endif
+    enddo ; enddo ; endif
+  endif
 
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
 
