@@ -8,7 +8,7 @@ use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, OBC_DIRECTION_E
@@ -135,7 +135,7 @@ contains
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
-subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
+subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
@@ -145,7 +145,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
   real, intent(in), &
     dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
-  type(forcing),         intent(in)      :: fluxes !< Structure containing forcing fields
+  type(mech_forcing),    intent(in)      :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),   intent(inout)   :: visc   !< Viscosities and bottom drag
   real,                  intent(in)      :: dt     !< Time increment in s
   type(ocean_OBC_type),  pointer         :: OBC    !< Open boundary condition structure
@@ -215,7 +215,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
-!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
+!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,forces,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
 !$OMP                                  Idt,taux_bot,Rho0)                      &
 !$OMP                     firstprivate(Ray)                                    &
@@ -235,7 +235,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       do I=Isq,Ieq ; if (do_i(I)) then
         surface_stress(I) = 0.0
         zDS = 0.0
-        stress = dt_Rho0 * fluxes%taux(I,j)
+        stress = dt_Rho0 * forces%taux(I,j)
         do k=1,nz
           h_a = 0.5 * (h(I,j,k) + h(I+1,j,k)) + h_neglect
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
@@ -244,7 +244,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
         enddo
       endif ; enddo ! end of i loop
     else ; do I=Isq,Ieq
-      surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*fluxes%taux(I,j))
+      surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*forces%taux(I,j))
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
@@ -314,7 +314,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   enddo ! end u-component j loop
 
   ! Now work on the meridional velocity component.
-!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
+!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,forces,h, &
 !$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
 !$OMP                                  tauy_bot,is,ie)                         &
 !$OMP                     firstprivate(Ray)                                    &
@@ -334,7 +334,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       do i=is,ie ; if (do_i(i)) then
         surface_stress(i) = 0.0
         zDS = 0.0
-        stress = dt_Rho0 * fluxes%tauy(i,J)
+        stress = dt_Rho0 * forces%tauy(i,J)
         do k=1,nz
           h_a = 0.5 * (h(i,J,k) + h(i,J+1,k))
           hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
@@ -343,7 +343,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
         enddo
       endif ; enddo ! end of i loop
     else ; do i=is,ie
-      surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*fluxes%tauy(i,J))
+      surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*forces%tauy(i,J))
     enddo ; endif ! direct_stress
 
     if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
@@ -386,7 +386,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     endif
   enddo ! end of v-component J loop
 
-  call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
+  call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
@@ -530,7 +530,7 @@ end subroutine vertvisc_remnant
 !> Calculate the coupling coefficients (CS%a_u and CS%a_v)
 !! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 !! applying the implicit vertical viscosity via vertvisc().
-subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
+subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   type(ocean_grid_type), intent(in)      :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, intent(in), &
@@ -539,13 +539,13 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
   real, intent(in), &
     dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
-  type(forcing), intent(in)              :: fluxes !< Structure containing forcing fields
+  type(mech_forcing),  intent(in)        :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type), intent(in)        :: visc   !< Viscosities and bottom drag
   real, intent(in)                       :: dt     !< Time increment in s
   type(vertvisc_CS), pointer             :: CS     !< Vertical viscosity control structure
   type(ocean_OBC_type),  pointer         :: OBC    !< Open boundary condition structure
 
-  ! Field from fluxes used in this subroutine:
+  ! Field from forces used in this subroutine:
   !   ustar: the friction velocity in m s-1, used here as the mixing
   !     velocity in the mixed layer if NKML > 1 in a bulk mixed layer.
 
@@ -620,16 +620,16 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     allocate(hML_v(G%isd:G%ied,G%JsdB:G%JedB)) ; hML_v(:,:) = 0.0
   endif
 
-  if ((associated(visc%taux_shelf) .or. associated(fluxes%frac_shelf_u)) .and. &
+  if ((associated(visc%taux_shelf) .or. associated(forces%frac_shelf_u)) .and. &
       .not.associated(CS%a1_shelf_u)) then
     allocate(CS%a1_shelf_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; CS%a1_shelf_u(:,:)=0.0
   endif
-  if ((associated(visc%tauy_shelf) .or. associated(fluxes%frac_shelf_u)) .and. &
+  if ((associated(visc%tauy_shelf) .or. associated(forces%frac_shelf_v)) .and. &
       .not.associated(CS%a1_shelf_v)) then
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB)) ; CS%a1_shelf_v(:,:)=0.0
   endif
 
-!$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,fluxes,hML_u, &
+!$OMP parallel do default(none) shared(G,GV,CS,visc,Isq,ieq,nz,u,h,forces,hML_u, &
 !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                             &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,   &
@@ -716,23 +716,23 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     endif
 
     call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                            dt, j, G, GV, CS, visc, fluxes, work_on_u=.true., OBC=OBC)
+                            dt, j, G, GV, CS, visc, forces, work_on_u=.true., OBC=OBC)
     if (allocated(hML_u)) then
       do i=isq,ieq ; if (do_i(i)) then ; hML_u(I,j) = h_ml(I) ; endif ; enddo
     endif
 
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_u)) then
+    if (associated(forces%frac_shelf_u)) then
       do I=Isq,Ieq
         CS%a1_shelf_u(I,j) = 0.0
-        do_i_shelf(I) = (do_i(I) .and. fluxes%frac_shelf_u(I,j) > 0.0)
+        do_i_shelf(I) = (do_i(I) .and. forces%frac_shelf_u(I,j) > 0.0)
         if (do_i_shelf(I)) do_any_shelf = .true.
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
           call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
                                   kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
-                                  visc, fluxes, work_on_u=.true., OBC=OBC, shelf=.true.)
+                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do I=Isq,Ieq ; if (do_i_shelf(I)) then
@@ -760,7 +760,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
           enddo
           call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
                                   bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
-                                  visc, fluxes, work_on_u=.true., OBC=OBC, shelf=.true.)
+                                  visc, forces, work_on_u=.true., OBC=OBC, shelf=.true.)
         endif
         do I=Isq,Ieq ; if (do_i_shelf(I)) CS%a1_shelf_u(I,j) = a_shelf(I,1) ; enddo
       endif
@@ -768,18 +768,18 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 
     if (do_any_shelf) then
       do K=1,nz+1 ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
-        CS%a_u(I,j,K) = fluxes%frac_shelf_u(I,j)  * a_shelf(I,K) + &
-                   (1.0-fluxes%frac_shelf_u(I,j)) * a(I,K)
+        CS%a_u(I,j,K) = forces%frac_shelf_u(I,j)  * a_shelf(I,K) + &
+                   (1.0-forces%frac_shelf_u(I,j)) * a(I,K)
 ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-!        CS%a_u(I,j,K) = fluxes%frac_shelf_u(I,j)  * max(a_shelf(I,K), a(I,K)) + &
-!                   (1.0-fluxes%frac_shelf_u(I,j)) * a(I,K)
+!        CS%a_u(I,j,K) = forces%frac_shelf_u(I,j)  * max(a_shelf(I,K), a(I,K)) + &
+!                   (1.0-forces%frac_shelf_u(I,j)) * a(I,K)
       elseif (do_i(I)) then
         CS%a_u(I,j,K) = a(I,K)
       endif ; enddo ; enddo
       do k=1,nz ; do I=Isq,Ieq ; if (do_i_shelf(I)) then
         ! Should we instead take the inverse of the average of the inverses?
-        CS%h_u(I,j,k) = fluxes%frac_shelf_u(I,j)  * hvel_shelf(I,k) + &
-                   (1.0-fluxes%frac_shelf_u(I,j)) * hvel(I,k)
+        CS%h_u(I,j,k) = forces%frac_shelf_u(I,j)  * hvel_shelf(I,k) + &
+                   (1.0-forces%frac_shelf_u(I,j)) * hvel(I,k)
       elseif (do_i(I)) then
         CS%h_u(I,j,k) = hvel(I,k)
       endif ; enddo ; enddo
@@ -792,7 +792,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 
 
   ! Now work on v-points.
-!$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,fluxes,hML_v, &
+!$OMP parallel do default(none) shared(G,GV,CS,visc,is,ie,Jsq,Jeq,nz,v,h,forces,hML_v, &
 !$OMP                                  OBC,h_neglect,dt,m_to_H,I_valBL) &
 !$OMP                     firstprivate(i_hbbl)                                                &
 !$OMP                          private(do_i,kv_bbl,bbl_thick,z_i,h_harm,h_arith,h_delta,hvel,z2,zi_dir, &
@@ -881,22 +881,22 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
     endif
 
     call find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                            dt, j, G, GV, CS, visc, fluxes, work_on_u=.false., OBC=OBC)
+                            dt, j, G, GV, CS, visc, forces, work_on_u=.false., OBC=OBC)
     if ( allocated(hML_v)) then
        do i=is,ie ; if (do_i(i)) then ; hML_v(i,J) = h_ml(i) ; endif ; enddo
     endif
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_v)) then
+    if (associated(forces%frac_shelf_v)) then
       do i=is,ie
         CS%a1_shelf_v(i,J) = 0.0
-        do_i_shelf(i) = (do_i(i) .and. fluxes%frac_shelf_v(i,J) > 0.0)
+        do_i_shelf(i) = (do_i(i) .and. forces%frac_shelf_v(i,J) > 0.0)
         if (do_i_shelf(I)) do_any_shelf = .true.
       enddo
       if (do_any_shelf) then
         if (CS%harmonic_visc) then
           call find_coupling_coef(a_shelf, hvel, do_i_shelf, h_harm, bbl_thick, &
                                   kv_bbl, z_i, h_ml, dt, j, G, GV, CS, visc, &
-                                  fluxes, work_on_u=.false., OBC=OBC, shelf=.true.)
+                                  forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         else  ! Find upwind-biased thickness near the surface.
           ! Perhaps this needs to be done more carefully, via find_eta.
           do i=is,ie ; if (do_i_shelf(i)) then
@@ -924,7 +924,7 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
           enddo
           call find_coupling_coef(a_shelf, hvel_shelf, do_i_shelf, h_harm, &
                                   bbl_thick, kv_bbl, z_i, h_ml, dt, j, G, GV, CS, &
-                                  visc, fluxes, work_on_u=.false., OBC=OBC, shelf=.true.)
+                                  visc, forces, work_on_u=.false., OBC=OBC, shelf=.true.)
         endif
         do i=is,ie ; if (do_i_shelf(i)) CS%a1_shelf_v(i,J) = a_shelf(i,1) ; enddo
       endif
@@ -932,18 +932,18 @@ subroutine vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS, OBC)
 
     if (do_any_shelf) then
       do K=1,nz+1 ; do i=is,ie ; if (do_i_shelf(i)) then
-        CS%a_v(i,J,K) = fluxes%frac_shelf_v(i,J)  * a_shelf(i,k) + &
-                   (1.0-fluxes%frac_shelf_v(i,J)) * a(i,K)
+        CS%a_v(i,J,K) = forces%frac_shelf_v(i,J)  * a_shelf(i,k) + &
+                   (1.0-forces%frac_shelf_v(i,J)) * a(i,K)
 ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-!        CS%a_v(i,J,K) = fluxes%frac_shelf_v(i,J)  * max(a_shelf(i,K), a(i,K)) + &
-!                   (1.0-fluxes%frac_shelf_v(i,J)) * a(i,K)
+!        CS%a_v(i,J,K) = forces%frac_shelf_v(i,J)  * max(a_shelf(i,K), a(i,K)) + &
+!                   (1.0-forces%frac_shelf_v(i,J)) * a(i,K)
       elseif (do_i(i)) then
         CS%a_v(i,J,K) = a(i,K)
       endif ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i_shelf(i)) then
         ! Should we instead take the inverse of the average of the inverses?
-        CS%h_v(i,J,k) = fluxes%frac_shelf_v(i,J)  * hvel_shelf(i,k) + &
-                   (1.0-fluxes%frac_shelf_v(i,J)) * hvel(i,k)
+        CS%h_v(i,J,k) = forces%frac_shelf_v(i,J)  * hvel_shelf(i,k) + &
+                   (1.0-forces%frac_shelf_v(i,J)) * hvel(i,k)
       elseif (do_i(i)) then
         CS%h_v(i,J,k) = hvel(i,k)
       endif ; enddo ; enddo
@@ -980,7 +980,7 @@ end subroutine vertvisc_coef
 !! interfaces. If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the
 !! adjacent layer thicknesses are used to calculate a[k] near the bottom.
 subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
-                              dt, j, G, GV, CS, visc, fluxes, work_on_u, OBC, shelf)
+                              dt, j, G, GV, CS, visc, forces, work_on_u, OBC, shelf)
   type(ocean_grid_type), intent(in)                 :: G  !< Ocean grid structure
   type(verticalGrid_type),               intent(in) :: GV !< Ocean vertical grid structure
   !> Coupling coefficient across interfaces, in m s-1
@@ -1008,8 +1008,7 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
   type(vertvisc_CS), pointer                        :: CS
   !> Structure containing viscosities and bottom drag
   type(vertvisc_type), intent(in)                   :: visc
-  !> Structure containing forcing fields
-  type(forcing), intent(in)                         :: fluxes
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   !> If true, u-points are being calculated, otherwise v-points
   logical,                              intent(in)  :: work_on_u
   !> Open boundary condition structure
@@ -1200,11 +1199,11 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     do i=is,ie ; if (do_i(i)) then
       if (GV%nkml>0) nk_visc(i) = real(GV%nkml+1)
       if (work_on_u) then
-        u_star(I) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
+        u_star(I) = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
         absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
         if (CS%dynamic_viscous_ML) nk_visc(I) = visc%nkml_visc_u(I,j) + 1
       else
-        u_star(i) = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
+        u_star(i) = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
         absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
         if (CS%dynamic_viscous_ML) nk_visc(i) = visc%nkml_visc_v(i,J) + 1
       endif
@@ -1215,16 +1214,16 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     if (do_OBCS) then ; if (work_on_u) then
       do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) &
-          u_star(I) = fluxes%ustar(i,j)
+          u_star(I) = forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) &
-          u_star(I) = fluxes%ustar(i+1,j)
+          u_star(I) = forces%ustar(i+1,j)
       endif ; enddo
     else
       do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) &
-          u_star(i) = fluxes%ustar(i,j)
+          u_star(i) = forces%ustar(i,j)
         if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) &
-          u_star(i) = fluxes%ustar(i,j+1)
+          u_star(i) = forces%ustar(i,j+1)
       endif ; enddo
     endif ; endif
 
@@ -1257,21 +1256,21 @@ end subroutine find_coupling_coef
 !> Velocity components which exceed a threshold for physically
 !! reasonable values are truncated. Optionally, any column with excessive
 !! velocities may be sent to a diagnostic reporting subroutine.
-subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
+subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
-  real, intent(inout), &
-    dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u      !< Zonal velocity in m s-1
-  real, intent(inout), &
-    dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v      !< Meridional velocity in m s-1
-  real, intent(in), &
-    dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h      !< Layer thickness in H
-  type(accel_diag_ptrs), intent(in)      :: ADp    !< Acceleration diagnostic pointers
-  type(cont_diag_ptrs),  intent(in)      :: CDp    !< Continuity diagnostic pointers
-  type(forcing),         intent(in)      :: fluxes !< Forcing fields
-  type(vertvisc_type),   intent(in)      :: visc   !< Viscosities and bottom drag
-  real,                  intent(in)      :: dt     !< Time increment in s
-  type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: u      !< Zonal velocity in m s-1
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(inout) :: v      !< Meridional velocity in m s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h      !< Layer thickness in H
+  type(accel_diag_ptrs),   intent(in)    :: ADp    !< Acceleration diagnostic pointers
+  type(cont_diag_ptrs),    intent(in)    :: CDp    !< Continuity diagnostic pointers
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
+  type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
+  real,                    intent(in)    :: dt     !< Time increment in s
+  type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
 
   ! Local variables
 
@@ -1294,9 +1293,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
   dt_Rho0 = dt / GV%Rho0
 
   if (len_trim(CS%u_trunc_file) > 0) then
-!$OMP parallel do default(none) shared(js,je,Isq,Ieq,nz,CS,G,fluxes,u,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                  u_old,vel_report,dowrite,H_report) &
-!$OMP                          private(trunc_any,CFL)
+    !$OMP parallel do default(shared) private(trunc_any,CFL)
     do j=js,je
       trunc_any = .false.
       do I=Isq,Ieq ; dowrite(I,j) = .false. ; enddo
@@ -1368,15 +1365,13 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(I,j), -vel_report(I,j), fluxes%taux(I,j)*dt_Rho0, &
+               vel_report(I,j), -vel_report(I,j), forces%taux(I,j)*dt_Rho0, &
                a=CS%a_u(:,j,:), hv=CS%h_u(:,j,:))
     endif ; enddo; enddo
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
-!$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,nz,CS,G,fluxes,v,h,dt,maxvel,ADp,CDp,truncvel, &
-!$OMP                                  v_old,vel_report,dowrite,H_report)                           &
-!$OMP                          private(trunc_any,CFL)
+    !$OMP parallel do default(shared) private(trunc_any,CFL)
     do J=Jsq,Jeq
       trunc_any = .false.
       do i=is,ie ; dowrite(i,J) = .false. ; enddo
@@ -1448,7 +1443,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
 !   Here the diagnostic reporting subroutines are called if
 ! unphysically large values were found.
       call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, CS%PointAccel_CSp, &
-               vel_report(i,J), -vel_report(i,J), fluxes%tauy(i,J)*dt_Rho0, &
+               vel_report(i,J), -vel_report(i,J), forces%tauy(i,J)*dt_Rho0, &
                a=CS%a_v(:,J,:),hv=CS%h_v(:,J,:))
     endif ; enddo; enddo
   endif

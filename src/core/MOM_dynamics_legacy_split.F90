@@ -51,7 +51,7 @@ module MOM_dynamics_legacy_split
 use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -251,7 +251,7 @@ contains
 ! =============================================================================
 
 subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
-                 Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
+                 Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
@@ -269,9 +269,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   type(time_type),            intent(in)    :: Time_local !< The model time at the end
                                                           !! of the time step.
   real,                       intent(in)    :: dt   !< The baroclinic dynamics time step, in s
-  type(forcing),              intent(in)    :: fluxes !< A structure containing pointers to any
-                                                      !! possible forcing fields.  Unused fields
-                                                      !! have NULL ptrs.
+  type(mech_forcing),         intent(in)    :: forces !< A structure with the driving mechanical forces
   real, dimension(:,:),       pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the
                                                             !! surface pressure at the beginning
                                                             !! of this dynamic step, in Pa.
@@ -421,7 +419,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call safe_alloc_ptr(eta_PF_start,G%isd,G%ied,G%jsd,G%jed)
     eta_PF_start(:,:) = 0.0
   else
-    p_surf => fluxes%p_surf
+    p_surf => forces%p_surf
   endif
 
   if (associated(CS%OBC)) then
@@ -520,11 +518,11 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     vp(i,J,k) = G%mask2dCv(i,J) * (v(i,J,k) + dt * v_bc_accel(i,J,k))
   enddo ; enddo ;  enddo
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, &
+  call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
-  call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
 
@@ -545,7 +543,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
     call legacy_btcalc(h, G, GV, CS%barotropic_CSp)
-  call legacy_bt_mass_source(h, eta, fluxes, .true., dt_therm, dt_since_flux, &
+  call legacy_bt_mass_source(h, eta, forces, .true., dt_therm, dt_since_flux, &
                       G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
@@ -593,7 +591,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_begin(id_clock_btstep)
     if (calc_dtbt) call legacy_set_dtbt(G, GV, CS%barotropic_CSp, eta, CS%pbce, CS%BT_cont)
     call legacy_btstep(.true., uh_in, vh_in, eta, dt, u_bc_accel, v_bc_accel, &
-                fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
+                forces, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
                 CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
                 uhbt_out = uhbt_out, vhbt_out = vhbt_out, OBC = CS%OBC, &
@@ -626,7 +624,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     call cpu_clock_begin(id_clock_btstep)
     if (calc_dtbt) call legacy_set_dtbt(G, GV, CS%barotropic_CSp, eta, CS%pbce)
     call legacy_btstep(.false., u, v, eta, dt, u_bc_accel, v_bc_accel, &
-                fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
+                forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
                 CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, CS%barotropic_CSp,&
                 CS%visc_rem_u, CS%visc_rem_v, OBC=CS%OBC, &
                 BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
@@ -665,9 +663,9 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! up <- up + dt_pred d/dz visc d/dz up
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
+  call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
                      CS%OBC)
-  call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
+  call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
@@ -723,7 +721,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! hp can be changed if CS%begw /= 0.
 ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  call legacy_bt_mass_source(hp, eta_pred, fluxes, .false., dt_therm, &
+  call legacy_bt_mass_source(hp, eta_pred, forces, .false., dt_therm, &
                       dt_since_flux+dt, G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
@@ -814,7 +812,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
   call cpu_clock_begin(id_clock_btstep)
   if (CS%flux_BT_coupling) then
     call legacy_btstep(.true., uh_in, vh_in, eta, dt, u_bc_accel, v_bc_accel, &
-                fluxes, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
+                forces, CS%pbce, CS%eta_PF, uh, vh, CS%u_accel_bt, &
                 CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, etaav=eta_av, &
                 uhbt_out = uhbt_out, vhbt_out = vhbt_out, OBC=CS%OBC, &
@@ -826,7 +824,7 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     endif
 
     call legacy_btstep(.false., u, v, eta, dt, u_bc_accel, v_bc_accel, &
-                fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
+                forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
                 CS%v_accel_bt, eta, CS%uhbt, CS%vhbt, G, GV, &
                 CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
                 etaav=eta_av, OBC=CS%OBC, &
@@ -866,8 +864,8 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
 ! u <- u + dt d/dz visc d/dz u
 ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(u, v, h, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
+  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
@@ -926,13 +924,13 @@ subroutine step_MOM_dyn_legacy_split(u, v, h, tv, visc, &
     enddo ; enddo ; enddo ; endif
 
     call cpu_clock_begin(id_clock_vertvisc)
-    call vertvisc_limit_vel(u, v, h_av, CS%ADp, CS%CDp, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
+    call vertvisc_limit_vel(u, v, h_av, CS%ADp, CS%CDp, forces, visc, dt, G, GV, CS%vertvisc_CSp)
     if (G%nonblocking_updates) then
       call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
       pid_u = pass_vector_start(u, v, G%Domain)
       call cpu_clock_end(id_clock_pass) ; call cpu_clock_begin(id_clock_vertvisc)
     endif
-    call vertvisc_limit_vel(u_av, v_av, h_av, CS%ADp, CS%CDp, fluxes, visc, dt, G, GV, CS%vertvisc_CSp)
+    call vertvisc_limit_vel(u_av, v_av, h_av, CS%ADp, CS%CDp, forces, visc, dt, G, GV, CS%vertvisc_CSp)
     call cpu_clock_end(id_clock_vertvisc)
 
     call cpu_clock_begin(id_clock_pass)
