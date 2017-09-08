@@ -17,9 +17,9 @@ use MOM_io, only : close_file, fieldtype, file_exists
 use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_string_functions, only : uppercase
-use MOM_time_manager, only : time_type, set_time, MOM_external_field_size
-use MOM_time_manager, only : MOM_init_external_field, MOM_time_interp_external
-use MOM_time_manager, only : MOM_external_field_axes, MOM_external_field_missing
+use MOM_time_manager, only : time_type, set_time, get_external_field_size
+use MOM_time_manager, only : init_external_field, time_interp_external
+use MOM_time_manager, only : get_external_field_axes, get_external_field_missing
 use MOM_variables, only : thermo_var_ptrs
 use mpp_io_mod, only : axistype
 use mpp_domains_mod, only  : mpp_global_field, mpp_get_compute_domain
@@ -642,7 +642,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   call cpu_clock_begin(id_clock_read)
 
-  fld_sz = MOM_external_field_size(fms_id)
+  fld_sz = get_external_field_size(fms_id)
 
   if (allocated(lon_in)) deallocate(lon_in)
   if (allocated(lat_in)) deallocate(lat_in)
@@ -651,7 +651,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (allocated(tr_z)) deallocate(tr_z)
   if (allocated(mask_z)) deallocate(mask_z)
 
-  axes_data =  MOM_external_field_axes(fms_id)
+  axes_data =  get_external_field_axes(fms_id)
 
   id = fld_sz(1) ; jd  = fld_sz(2) ; kd = fld_sz(3)
   allocate(lon_in(id),lat_in(jd),z_in(kd),z_edges_in(kd+1))
@@ -663,7 +663,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
   call cpu_clock_end(id_clock_read)
 
-  missing_value=MOM_external_field_missing(fms_id)
+  missing_value=get_external_field_missing(fms_id)
 
 
 ! extrapolate the input data to the north pole using the northerm-most latitude
@@ -713,7 +713,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
   if (is_root_pe()) &
-  call MOM_time_interp_external(fms_id, Time, data_in,verbose=.true.) 
+  call time_interp_external(fms_id, Time, data_in,verbose=.true.) 
 
 ! loop through each data level and interpolate to model grid.
 ! after interpolating, fill in points which will be needed

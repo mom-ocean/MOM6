@@ -18,7 +18,7 @@ use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
-use MOM_time_manager, only : time_type, MOM_init_external_field, MOM_external_field_size
+use MOM_time_manager, only : time_type, init_external_field, get_external_field_size
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 
@@ -558,9 +558,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   ! containing time-interpolated values from an external file corresponding 
   ! to the current model date.
 
-  CS%Ref_val(CS%fldno)%id = MOM_init_external_field(filename, fieldname)
+  CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
   fld_sz(1:4)=-1
-  fld_sz = MOM_external_field_size(CS%Ref_val(CS%fldno)%id)
+  fld_sz = get_external_field_size(CS%Ref_val(CS%fldno)%id)
   nz_data = fld_sz(3)
   CS%Ref_val(CS%fldno)%nz_data = nz_data !< each individual sponge field is assumed to reside on a different grid
   CS%Ref_val(CS%fldno)%num_tlevs = fld_sz(4)
@@ -700,15 +700,15 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   ! containing time-interpolated values from an external file corresponding 
   ! to the current model date.
 
-  CS%Ref_val_u%id = MOM_init_external_field(filename_u, fieldname_u)
+  CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u)
   fld_sz(1:4)=-1
-  fld_sz = MOM_external_field_size(CS%Ref_val_u%id)
+  fld_sz = get_external_field_size(CS%Ref_val_u%id)
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
 
-  CS%Ref_val_v%id = MOM_init_external_field(filename_v, fieldname_v)
+  CS%Ref_val_v%id = init_external_field(filename_v, fieldname_v)
   fld_sz(1:4)=-1
-  fld_sz = MOM_external_field_size(CS%Ref_val_v%id)
+  fld_sz = get_external_field_size(CS%Ref_val_v%id)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
 
