@@ -30,6 +30,7 @@ use MOM_file_parser, only : get_param, log_version, close_param_file, param_file
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : forcing_accumulate, copy_common_forcing_fields
 use MOM_forcing_type, only : copy_back_forcing_fields, set_net_mass_forcing
+use MOM_forcing_type, only : set_derived_forcing_fields
 use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
@@ -508,6 +509,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then

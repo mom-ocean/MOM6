@@ -1951,7 +1951,6 @@ subroutine set_net_mass_forcing(fluxes, forces, G)
     if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
       forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%evap(i,j)
     enddo ; enddo ; endif
-    
   endif
 
 end subroutine set_net_mass_forcing
