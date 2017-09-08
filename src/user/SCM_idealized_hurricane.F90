@@ -6,7 +6,8 @@ module SCM_idealized_hurricane
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, allocate_forcing_type
+use MOM_forcing_type, only : forcing, mech_forcing
+use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
@@ -155,9 +156,9 @@ subroutine SCM_idealized_hurricane_wind_init(Time, G, param_file, CS)
 
 end subroutine SCM_idealized_hurricane_wind_init
 
-subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
+subroutine SCM_idealized_hurricane_wind_forcing(state, forces, day, G, CS)
   type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(forcing),                    intent(inout) :: fluxes !< Surface fluxes structure
+  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),                  intent(in)    :: day    !< Time in days
   type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
   type(SCM_idealized_hurricane_CS), pointer       :: CS     !< Container for SCM parameters
@@ -165,7 +166,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: pie, Deg2Rad
-  real :: U10, A, B, C, r, f,du10,rkm ! For wind profile expression
+  real :: U10, A, B, C, r, f, du10, rkm ! For wind profile expression
   real :: xx, t0 !for location
   real :: dp, rB
   real :: Cd ! Air-sea drag coefficient
@@ -181,7 +182,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
+  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true.)
 
   pie = 4.0*atan(1.0) ; Deg2Rad = pie/180.
 
@@ -295,7 +296,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     else
        Cd = 0.0018
     endif
-    fluxes%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
+    forces%taux(I,j) = CS%rho_a * G%mask2dCu(I,j) * Cd*sqrt(du**2+dV**2)*dU
   enddo ; enddo
   !/BR
   ! See notes above
@@ -313,14 +314,14 @@ subroutine SCM_idealized_hurricane_wind_forcing(state, fluxes, day, G, CS)
     else
        Cd = 0.0018
     endif
-    fluxes%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
+    forces%tauy(I,j) = CS%rho_a * G%mask2dCv(I,j) * Cd*du10*dV
   enddo ; enddo
   ! Set the surface friction velocity, in units of m s-1. ustar is always positive.
   do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo
 
 end subroutine SCM_idealized_hurricane_wind_forcing
