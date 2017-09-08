@@ -87,7 +87,7 @@ use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
-use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
+use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 
 use fms_io_mod, only : field_size
 
