@@ -596,7 +596,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
                                                      !! native horizontal grid and extended grid
                                                      !! with poles.
   real, dimension(:,:,:), allocatable  :: data_in    !< A buffer for storing the full 3-d time-interpolated array
-                                                     !! on the original grid    
+                                                     !! on the original grid
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid.
 
   real :: PI_180
@@ -713,7 +713,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   if (z_edges_in(kd+1)<max_depth) z_edges_in(kd+1)=max_depth
 
   if (is_root_pe()) &
-  call time_interp_external(fms_id, Time, data_in,verbose=.true.) 
+  call time_interp_external(fms_id, Time, data_in,verbose=.true.)
 
 ! loop through each data level and interpolate to model grid.
 ! after interpolating, fill in points which will be needed
@@ -721,7 +721,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
 
 !  roundoff = 3.0*EPSILON(missing_value)
   roundoff = 1.e-4
-  
+
   do k=1,kd
     write(laynum,'(I8)') k ; laynum = adjustl(laynum)
 
