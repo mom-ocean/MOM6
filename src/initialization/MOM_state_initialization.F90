@@ -1673,9 +1673,9 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
-  
+
   logical :: use_ALE ! True if ALE is being used, False if in layered mode
-  logical :: new_sponges ! True if using the newer sponges which do not 
+  logical :: new_sponges ! True if using the newer sponges which do not
                          ! need to reside on the model horizontal grid.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
@@ -1715,7 +1715,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 !                 "If true, then restore the interface positions towards \n"//&
 !                 "target values (in ALE mode)", default = .false.)
 !  endif
-    
+
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
@@ -1764,7 +1764,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     allocate(h(isd:ied,jsd:jed,nz_data))
 
     call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
- 
+
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
@@ -1816,7 +1816,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     call set_up_ALE_sponge_field(filename, salin_var, Time, G, tv%S, ALE_CSp)
   endif
 
-  
+
 
 end subroutine initialize_sponges_file
 ! -----------------------------------------------------------------------------

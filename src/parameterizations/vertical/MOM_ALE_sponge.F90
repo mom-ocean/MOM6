@@ -221,7 +221,7 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, param_file, CS, data_h, nz_
      allocate(data_hv(G%isd:G%ied,G%jsdB:G%jedB,nz_data)); data_hv(:,:,:)=0.0
      allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)); Iresttime_u(:,:)=0.0
      allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)); Iresttime_v(:,:)=0.0
-     
+
      ! u points
      CS%num_col_u = 0 ; !CS%fldno_u = 0
      do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
@@ -400,7 +400,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
 
      allocate(Iresttime_u(G%isdB:G%iedB,G%jsd:G%jed)); Iresttime_u(:,:)=0.0
      allocate(Iresttime_v(G%isd:G%ied,G%jsdB:G%jedB)); Iresttime_v(:,:)=0.0
-     
+
      ! u points
      CS%num_col_u = 0 ; !CS%fldno_u = 0
      do j=CS%jsc,CS%jec; do I=CS%iscB,CS%iecB
@@ -463,7 +463,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, param_file, CS)
      call log_param(param_file, mdl, "!Total sponge columns at v points", total_sponge_cols_v, &
                  "The total number of columns where sponges are applied at v points.")
   endif
-  
+
 end subroutine initialize_ALE_sponge_varying
 
 !> Initialize diagnostics for the ALE_sponge module.
@@ -516,7 +516,7 @@ subroutine set_up_ALE_sponge_field_fixed(sp_val, G, f_ptr, CS)
 end subroutine set_up_ALE_sponge_field_fixed
 
 !> This subroutine stores the reference profile at h points for the variable
-! whose address is given by filename and fieldname.  
+! whose address is given by filename and fieldname.
 subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, CS)
   character(len=*), intent(in) :: filename
   character(len=*),  intent(in) :: fieldname
@@ -531,7 +531,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   real :: missing_value
   integer :: j, k, col
   integer :: isd,ied,jsd,jed
-  integer :: nPoints 
+  integer :: nPoints
   integer, dimension(4) :: fld_sz
   integer :: nz_data !< the number of vertical levels in this input field
   character(len=256) :: mesg ! String for error messages
@@ -555,7 +555,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   endif
 
   ! get a unique id for this field which will allow us to return an array
-  ! containing time-interpolated values from an external file corresponding 
+  ! containing time-interpolated values from an external file corresponding
   ! to the current model date.
 
   CS%Ref_val(CS%fldno)%id = init_external_field(filename, fieldname)
@@ -574,7 +574,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   allocate( CS%Ref_val(CS%fldno)%h(nz_data,CS%num_col) )
   CS%Ref_val(CS%fldno)%h(:,:) = 0.0
 
-  ! Interpolate external file data to the model grid 
+  ! Interpolate external file data to the model grid
   ! I am hard-wiring this call to assume that the input grid is zonally re-entrant
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
@@ -697,7 +697,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   isdB = G%isdB; iedB = G%iedB; jsdB = G%jsdB; jedB = G%jedB
 
   ! get a unique id for this field which will allow us to return an array
-  ! containing time-interpolated values from an external file corresponding 
+  ! containing time-interpolated values from an external file corresponding
   ! to the current model date.
 
   CS%Ref_val_u%id = init_external_field(filename_u, fieldname_u)
@@ -717,7 +717,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   allocate( v_val(isd:ied,jsdB:jedB, fld_sz(3)) )
   allocate( mask_v(isd:ied,jsdB:jedB, fld_sz(3)) )
 
-  ! Interpolate external file data to the model grid 
+  ! Interpolate external file data to the model grid
   ! I am hard-wiring this call to assume that the input grid is zonally re-entrant
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
@@ -728,7 +728,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
 
 !!! TODO: add a velocity interface! (mjh)
 
-  ! Interpolate external file data to the model grid 
+  ! Interpolate external file data to the model grid
   ! I am hard-wiring this call to assume that the input grid is zonally re-entrant
   ! In the future, this should be generalized using an interface to return the
   ! modulo attribute of the zonal axis (mjh).
@@ -736,7 +736,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   call horiz_interp_and_extrap_tracer(CS%Ref_val_v%id,Time, 1.0,G,v_val,mask_v,z_in,z_edges_in,&
                                      missing_value,.true.,&
                                      .false.,.false.)
-  
+
   ! stores the reference profile
   allocate(CS%Ref_val_u%p(fld_sz(3),CS%num_col_u))
   CS%Ref_val_u%p(:,:) = 0.0
@@ -775,7 +775,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
   real, dimension(SZK_(G)) :: tmp_val1                       ! data values remapped to model grid
   real :: hu(SZIB_(G), SZJ_(G), SZK_(G))                     !> A temporary array for h at u pts
   real :: hv(SZI_(G), SZJB_(G), SZK_(G))                     !> A temporary array for h at v pts
-  real, allocatable, dimension(:,:,:) :: sp_val              !> A temporary array for fields 
+  real, allocatable, dimension(:,:,:) :: sp_val              !> A temporary array for fields
   real, allocatable, dimension(:,:,:) :: mask_z              !> A temporary array for field mask at h pts
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in, z_edges_in
@@ -843,10 +843,10 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
         call remapping_core_h(CS%remap_cs, &
            nz_data, CS%Ref_h%p(1:nz_data,c), tmp_val2, &
            CS%nz, h(i,j,:), tmp_val1)
-      endif    
+      endif
       !Backward Euler method
       CS%var(m)%p(i,j,1:CS%nz) = I1pdamp * (CS%var(m)%p(i,j,1:CS%nz) + tmp_val1 * damp)
-       
+
     enddo
   enddo
 
