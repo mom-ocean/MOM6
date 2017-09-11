@@ -574,25 +574,25 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
   if (ASSOCIATED(forces%p_surf)) &
     call create_group_pass(CS%pass_tau_ustar_psurf, forces%p_surf, G%Domain)
 
-  do_pass_Ray = .FALSE.
-  if ((.not.G%Domain%symmetric) .and. &
-      associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) then
-    call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
-                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-    do_pass_Ray = .TRUE.
-  endif
-  do_pass_kv_bbl_thick = .FALSE.
-  if (associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) then
-    call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
-                           CS%visc%bbl_thick_v, G%Domain, &
-                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-    do_pass_kv_bbl_thick = .TRUE.
-  endif
-  if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
-    call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
-                           CS%visc%kv_bbl_v, G%Domain, &
-                           To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
-    do_pass_kv_bbl_thick = .TRUE.
+  do_pass_Ray = .FALSE. ; do_pass_kv_bbl_thick = .FALSE.
+  if (.not.G%Domain%symmetric) then
+    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) then
+      call create_group_pass(CS%pass_ray, CS%visc%Ray_u, CS%visc%Ray_v, G%Domain, &
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_Ray = .TRUE.
+    endif
+    if (associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) then
+      call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%bbl_thick_u, &
+                             CS%visc%bbl_thick_v, G%Domain, &
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_kv_bbl_thick = .TRUE.
+    endif
+    if (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v)) then
+      call create_group_pass(CS%pass_bbl_thick_kv_bbl, CS%visc%kv_bbl_u, &
+                             CS%visc%kv_bbl_v, G%Domain, &
+                             To_North+To_East+SCALAR_PAIR+Omit_corners, CGRID_NE, halo=1)
+      do_pass_kv_bbl_thick = .TRUE.
+    endif
   endif
   do_pass_kv_turb = associated(CS%visc%Kv_turb)
   if (associated(CS%visc%Kv_turb)) &
@@ -607,12 +607,11 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
   endif
 
   if ((CS%adiabatic .OR. CS%diabatic_first) .AND. CS%use_temperature) then
-    call create_group_pass(CS%pass_T_S, CS%tv%T, G%Domain, halo=1) ! Could also omit corners?
-    call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain, halo=1)
+    call create_group_pass(CS%pass_T_S, CS%tv%T, G%Domain, To_All+Omit_Corners, halo=1)
+    call create_group_pass(CS%pass_T_S, CS%tv%S, G%Domain, To_All+Omit_Corners, halo=1)
   endif
 
   !---------- End setup for group halo pass
-
 
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
@@ -732,6 +731,7 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
+      do_pass_kv_turb = associated(CS%visc%Kv_turb)
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
       call disable_averaging(CS%diag)
@@ -791,6 +791,7 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
 
     call cpu_clock_begin(id_clock_pass)
     if (do_pass_kv_turb) call do_group_pass(CS%pass_kv_turb, G%Domain)
+    do_pass_kv_turb = .false.
     call cpu_clock_end(id_clock_pass)
 
     if (do_calc_bbl) then
@@ -1022,6 +1023,7 @@ subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
 
         ! Apply diabatic forcing, do mixing, and regrid.
         call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+        do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
         call disable_averaging(CS%diag)
 
