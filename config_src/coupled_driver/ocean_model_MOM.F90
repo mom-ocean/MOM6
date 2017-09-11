@@ -188,7 +188,7 @@ contains
 
 !> ocean_model_init initializes the ocean model, including registering fields
 !! for restarts and reading restart files if appropriate.
-subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, input_restart_file)
+subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   type(ocean_public_type), target, &
                        intent(inout) :: Ocean_sfc !< A structure containing various
                                 !! publicly visible ocean surface properties after initialization,
@@ -204,7 +204,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
                                               !! internal variables in the ice model.
-  character(len=*), optional, intent(in) :: input_restart_file !< If present, name of restart file to read
 
 !   This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
@@ -241,7 +240,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
-      offline_tracer_mode=offline_tracer_mode, input_restart_file=input_restart_file)
+      offline_tracer_mode=offline_tracer_mode)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
