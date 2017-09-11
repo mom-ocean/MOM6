@@ -398,13 +398,25 @@ end subroutine ocean_model_init
 ! </DESCRIPTION>
 !
 
+!> update_ocean_model uses the forcing in Ice_ocean_boundary to advance the
+!! ocean model's state from the input value of Ocean_state (which must be for
+!! time time_start_update) for a time interval of Ocean_coupling_time_step,
+!! returning the publicly visible ocean surface properties in Ocean_sfc and
+!! storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                               time_start_update, Ocean_coupling_time_step)
-  type(ice_ocean_boundary_type), intent(inout) :: Ice_ocean_boundary
-  type(ocean_state_type),        pointer       :: OS
-  type(ocean_public_type),       intent(inout) :: Ocean_sfc
-  type(time_type), intent(in)                  :: time_start_update
-  type(time_type), intent(in)                  :: Ocean_coupling_time_step
+  type(ice_ocean_boundary_type), &
+                           intent(in)    :: Ice_ocean_boundary !< A structure containing the
+                                                    !! various forcing fields coming from the ice.
+  type(ocean_state_type),  pointer       :: OS      !< A pointer to a private structure containing
+                                                    !! the internal ocean state.
+  type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing all the
+                                                    !! publicly visible ocean surface fields after
+                                                    !! a coupling time step.  The data in this type is
+                                                    !! intent out.
+  type(time_type),         intent(in)    :: time_start_update  !< The time at the beginning of the update step.
+  type(time_type),         intent(in)    :: Ocean_coupling_time_step !< The amount of time over
+                                                    !! which to advance the ocean.
 !   This subroutine uses the forcing in Ice_ocean_boundary to advance the
 ! ocean model's state from the input value of Ocean_state (which must be for
 ! time time_start_update) for a time interval of Ocean_coupling_time_step,
@@ -451,12 +463,12 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   ! This is benign but not necessary if ocean_model_init_sfc was called or if
-  ! OS%state%tr_fields was spawnded in ocean_model_init.  Consider removing it.
+  ! OS%state%tr_fields was spawned in ocean_model_init.  Consider removing it.
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
   call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-!  Translate Ice_ocean_boundary into fluxes.
+  ! Translate Ice_ocean_boundary into fluxes.
   call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
                               index_bnds(3), index_bnds(4))
 
@@ -714,11 +726,16 @@ end subroutine ocean_model_restart
 ! <DESCRIPTION>
 ! Close down the ocean model
 ! </DESCRIPTION>
-!
+
+!> ocean_model_end terminates the model run, saving the ocean state in a restart
+!! and deallocating any data associated with the ocean.
 subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
-  type(ocean_public_type),           intent(inout) :: Ocean_sfc
-  type(ocean_state_type),            pointer       :: Ocean_state
-  type(time_type),                   intent(in)    :: Time
+  type(ocean_public_type), intent(inout) :: Ocean_sfc   !< An ocean_public_type structure that is
+                                                        !! to be deallocated upon termination.
+  type(ocean_state_type),  pointer       :: Ocean_state !< A pointer to the structure containing
+                                                        !! the internal ocean state to be deallocated
+                                                        !! upon termination.
+  type(time_type),         intent(in)    :: Time        !< The model time, used for writing restarts.
 
 !   This subroutine terminates the model run, saving the ocean state in a
 ! restart file and deallocating any data associated with the ocean.
@@ -737,11 +754,16 @@ end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
 
 
+!> ocean_model_save_restart causes restart files associated with the ocean to be
+!! written out.
 subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
-  type(ocean_state_type),     pointer    :: OS
-  type(time_type),            intent(in) :: Time
-  character(len=*), optional, intent(in) :: directory
-  character(len=*), optional, intent(in) :: filename_suffix
+  type(ocean_state_type),     pointer    :: OS  !< A pointer to the structure containing the
+                                                !! internal ocean state (in).
+  type(time_type),            intent(in) :: Time !< The model time at this call, needed for mpp_write calls.
+  character(len=*), optional, intent(in) :: directory  !<  An optional directory into which to
+                                                !! write these restart files.
+  character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
+                                                !! to append to the restart file names.
 ! Arguments: Ocean_state - A structure containing the internal ocean state (in).
 !  (in)      Time - The model time at this call.  This is needed for mpp_write calls.
 !  (in, opt) directory - An optional directory into which to write these restart files.
@@ -828,7 +850,8 @@ end subroutine initialize_ocean_public_type
 subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
                                        patm, press_to_z)
   type(surface),           intent(inout) :: state
-  type(ocean_public_type), target, intent(inout) :: Ocean_sfc
+  type(ocean_public_type), &
+                   target, intent(inout) :: Ocean_sfc
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   logical,                 intent(in)    :: use_conT_absS
   real,          optional, intent(in)    :: patm(:,:)
@@ -968,12 +991,15 @@ end subroutine ocean_model_flux_init
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 ! Ocean_stock_pe - returns stocks of heat, water, etc. for conservation checks.!
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
+!> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
 subroutine Ocean_stock_pe(OS, index, value, time_index)
   use stock_constants_mod, only : ISTOCK_WATER, ISTOCK_HEAT,ISTOCK_SALT
-  type(ocean_state_type), pointer     :: OS
-  integer,                intent(in)  :: index
-  real,                   intent(out) :: value
-  integer,      optional, intent(in)  :: time_index
+  type(ocean_state_type), pointer     :: OS         !< A structure containing the internal ocean state.
+                                                    !! The data in OS is intent(in).
+  integer,                intent(in)  :: index      !< The stock index for the quantity of interest.
+  real,                   intent(out) :: value      !< Sum returned for the conservation quantity of interest.
+  integer,      optional, intent(in)  :: time_index !< An unused optional argument, present only for
+                                                    !! interfacial compatibility with other models.
 ! Arguments: OS - A structure containing the internal ocean state.
 !  (in)      index - Index of conservation quantity of interest.
 !  (in)      value -  Sum returned for the conservation quantity of interest.
