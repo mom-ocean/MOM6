@@ -596,6 +596,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%q_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%q_flux(:,:) = 0.0
+  allocate(glb%ice_ocean_boundary%latent(isc:iec,jsc:jec));          glb%ice_ocean_boundary%latent(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%salt_flux(isc:iec,jsc:jec));       glb%ice_ocean_boundary%salt_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%lw_flux(isc:iec,jsc:jec));         glb%ice_ocean_boundary%lw_flux(:,:) = 0.0
   allocate(glb%ice_ocean_boundary%sw_flux_vis_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dir(:,:) = 0.0
@@ -1130,54 +1131,55 @@ subroutine ocn_export(ind, ocn_public, grid, o2x)
   ! Update halo of ssh so we can calculate gradients
   call pass_var(ssh, grid%domain)
 
-
   ! d/dx ssh
   n = 0
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     n = n+1
     ! This is a simple second-order difference
-    ! o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
-    slp_L = (ssh(i,j) - ssh(i-1,j)) * grid%mask2dCu(I-1,j)
+!    slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
     !if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
-    slp_R = (ssh(i+1,j) - ssh(i,j)) * grid%mask2dCu(I,j)
+!    slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
     !if (grid%mask2dCu(I,j)==0.) slp_R = 0.
-    slp_C = 0.5 * (slp_L + slp_R)
-    if ( (slp_L * slp_R) > 0.0 ) then
+!    slp_C = 0.5 * (slp_L + slp_R)
+!    if ( (slp_L * slp_R) > 0.0 ) then
       ! This limits the slope so that the edge values are bounded by the
       ! two cell averages spanning the edge.
-      u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-      u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-    else
+!      u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+!      u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+!      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+!    else
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
-      slope = 0.0
-    end if
-    o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+!      slope = 0.0
+!    end if
+!    o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
   end do; end do
 
   ! d/dy ssh
+  n = 0
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
+    n = n+1
     ! This is a simple second-order difference
-    ! o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) + ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) + ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
-    slp_L = ssh(i,j) - ssh(i,j-1)
-    slp_R = ssh(i,j+1) - ssh(i,j)
-    slp_L=0.; slp_R=0.
-    slp_C = 0.5 * (slp_L + slp_R)
-    if ((slp_L * slp_R) > 0.0) then
+!    slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
+!    slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
+!    slp_C = 0.5 * (slp_L + slp_R)
+!    write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+!    if ((slp_L * slp_R) > 0.0) then
       ! This limits the slope so that the edge values are bounded by the
       ! two cell averages spanning the edge.
-      u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-      u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-    else
+!      u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+!      u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+!      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+!    else
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
-      slope = 0.0
-    end if
-    o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+!      slope = 0.0
+!    end if
+!    o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
   end do; end do
 
 end subroutine ocn_export
@@ -1258,6 +1260,8 @@ subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind, &
       ice_ocean_boundary%v_flux(ig,jg) = x2o_o(ind%x2o_Foxx_tauy,k)
       ! sensible heat flux (W/m2)
       ice_ocean_boundary%t_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_sen,k)
+      ! latent heat flux (W/m^2)
+      ice_ocean_boundary%latent(ig,jg) = x2o_o(ind%x2o_Foxx_lat,k)
       ! salt flux
       ice_ocean_boundary%salt_flux(ig,jg) = -x2o_o(ind%x2o_Fioi_salt,k)
       ! heat content from frozen runoff
@@ -1309,6 +1313,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod      !< Controls if restart files must be written
+  logical :: debug=.false.
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg        !< Error message
@@ -1366,6 +1371,9 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
   call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
                           time_start, coupling_timestep)
+
+  ! return export state to driver
+  call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
 
   !--- write out intermediate restart file when needed.
   ! Check alarms for flag to write restart at end of day
