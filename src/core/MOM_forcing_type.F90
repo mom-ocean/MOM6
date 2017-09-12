@@ -2016,9 +2016,10 @@ end subroutine mech_forcing_diags
 
 !> Offer buoyancy forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
+subroutine forcing_diagnostics(fluxes, sfc_state, dt, G, diag, handles)
   type(forcing),         intent(in)    :: fluxes    !< flux type
-  type(surface),         intent(in)    :: state     !< ocean state
+  type(surface),         intent(in)    :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   real,                  intent(in)    :: dt        !< time step
   type(ocean_grid_type), intent(in)    :: G         !< grid type
   type(diag_ctrl),       intent(in)    :: diag      !< diagnostic regulator
@@ -2261,9 +2262,9 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
         if (ASSOCIATED(fluxes%latent))               res(i,j) = res(i,j) + fluxes%latent(i,j)
         if (ASSOCIATED(fluxes%sens))                 res(i,j) = res(i,j) + fluxes%sens(i,j)
         if (ASSOCIATED(fluxes%SW))                   res(i,j) = res(i,j) + fluxes%SW(i,j)
-        if (ASSOCIATED(state%frazil))                res(i,j) = res(i,j) + state%frazil(i,j) * I_dt
-      ! if (ASSOCIATED(state%TempXpme)) then
-      !    res(i,j) = res(i,j) + state%TempXpme(i,j) * fluxes%C_p * I_dt
+        if (ASSOCIATED(sfc_state%frazil))            res(i,j) = res(i,j) + sfc_state%frazil(i,j) * I_dt
+      ! if (ASSOCIATED(sfc_state%TempXpme)) then
+      !    res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
       ! else
         if (ASSOCIATED(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
         if (ASSOCIATED(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
@@ -2290,8 +2291,8 @@ subroutine forcing_diagnostics(fluxes, state, dt, G, diag, handles)
     if (handles%id_heat_content_surfwater > 0 .or. handles%id_total_heat_content_surfwater > 0) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
-      ! if (ASSOCIATED(state%TempXpme)) then
-      !   res(i,j) = res(i,j) + state%TempXpme(i,j) * fluxes%C_p * I_dt
+      ! if (ASSOCIATED(sfc_state%TempXpme)) then
+      !   res(i,j) = res(i,j) + sfc_state%TempXpme(i,j) * fluxes%C_p * I_dt
       ! else
           if (ASSOCIATED(fluxes%heat_content_lrunoff)) res(i,j) = res(i,j) + fluxes%heat_content_lrunoff(i,j)
           if (ASSOCIATED(fluxes%heat_content_frunoff)) res(i,j) = res(i,j) + fluxes%heat_content_frunoff(i,j)
