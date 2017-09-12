@@ -801,12 +801,20 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, patm,
 
   do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
     Ocean_sfc%sea_lev(i,j) = state%sea_lev(i+i0,j+j0)
-    if (present(patm)) &
-      Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-      if (associated(state%frazil)) &
-      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
     Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)
   enddo ; enddo
+
+  if (present(patm)) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+       Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
+    enddo ; enddo
+  endif
+
+  if (associated(state%frazil)) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%frazil(i,j) = state%frazil(i+i0,j+j0)
+    enddo ; enddo
+  endif
 
   if (Ocean_sfc%stagger == AGRID) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
