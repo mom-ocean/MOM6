@@ -45,8 +45,9 @@ contains
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
 !! Neverland forcing configuration.
-subroutine Neverland_wind_forcing(state, forces, day, G, CS)
-  type(surface),                 intent(inout) :: state !< Fields describing surface state of ocean
+subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
@@ -131,8 +132,9 @@ end subroutine Neverland_wind_forcing
 
 
 !> Surface fluxes of buoyancy for the Neverland configurations.
-subroutine Neverland_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state !< Fields describing surface state of ocean
+subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   real,                          intent(in)    :: dt !< Forcing time step (s).
@@ -196,7 +198,7 @@ subroutine Neverland_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY

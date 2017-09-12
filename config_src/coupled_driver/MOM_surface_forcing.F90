@@ -181,7 +181,8 @@ integer :: id_clock_forcing
 
 contains
 
-subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS, state, restore_salt, restore_temp)
+subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS, &
+                                 sfc_state, restore_salt, restore_temp)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
                                                    !! the ocean in a coupled model
@@ -195,7 +196,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure
   type(surface_forcing_CS),pointer       :: CS     !< A pointer to the control structure returned by a
                                                    !! previous call to surface_forcing_init.
-  type(surface),           intent(in)    :: state  !< A structure containing fields that describe the
+  type(surface),           intent(in)    :: sfc_state !< A structure containing fields that describe the
                                                    !! surface state of the ocean.
   logical, optional,       intent(in)    :: restore_salt, restore_temp
 
@@ -367,12 +368,12 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
       do j=js,je ; do i=is,ie
-        if (state%SST(i,j) .le. -0.0539*state%SSS(i,j)) open_ocn_mask(i,j)=0.0
+        if (sfc_state%SST(i,j) .le. -0.0539*sfc_state%SSS(i,j)) open_ocn_mask(i,j)=0.0
       enddo; enddo
     endif
     if (CS%salt_restore_as_sflux) then
       do j=js,je ; do i=is,ie
-        delta_sss = data_restore(i,j)- state%SSS(i,j)
+        delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
                   (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
@@ -391,11 +392,11 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0.5) then
-          delta_sss = state%SSS(i,j) - data_restore(i,j)
+          delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
-                      delta_sss / (0.5*(state%SSS(i,j) + data_restore(i,j)))
+                      delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -413,13 +414,11 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     endif
   endif
 
-
-
   ! SST restoring logic
   if (restore_sst) then
     call time_interp_external(CS%id_trestore,Time,data_restore)
     do j=js,je ; do i=is,ie
-       delta_sst = data_restore(i,j)- state%SST(i,j)
+       delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
        delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
        fluxes%heat_added(i,j) = G%mask2dT(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
     enddo; enddo
@@ -533,9 +532,9 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
 
 !### if (associated(CS%ctrl_forcing_CSp)) then
 !###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
+!###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
+!###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
+!###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
 !###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
@@ -725,7 +724,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   endif
 
   ! Allow for user-written code to alter fluxes after all the above
-  call user_alter_forcing(state, fluxes, Time, G, CS%urf_CS)
+  call user_alter_forcing(sfc_state, fluxes, Time, G, CS%urf_CS)
 
   call cpu_clock_end(id_clock_forcing)
 end subroutine convert_IOB_to_fluxes
