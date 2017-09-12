@@ -174,7 +174,8 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
-!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps,pressure)
+!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
+!$OMP                      firstprivate(pressure)    !pressure might be set above, so should be firstprivate
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie
@@ -887,13 +888,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
-!$OMP                                  H_limit_fluxes,IforcingDepthScale,                &
+!$OMP                                  H_limit_fluxes,                                   &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
+!$OMP                                  IforcingDepthScale,                               &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
 !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
 !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
