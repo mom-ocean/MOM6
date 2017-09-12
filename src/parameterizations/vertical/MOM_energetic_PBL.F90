@@ -655,17 +655,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-
       U_Star = fluxes%ustar(i,j)
-      taux2 = 0.
-      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
-      tauy2 = 0.0
-      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
-      U_Star_Mean = sqrt(sqrt(taux2 + tauy2)/GV%rho0)
+      U_Star_Mean = fluxes%ustar_gustless(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -2207,15 +2198,15 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "in the boundary layer, applied when local stratification \n"//    &
                  "is negative.  The default is 0, but should probably be ~1.",      &
                  units="nondim", default=0.0)
-   call get_param(param_file, mdl, "USE_LA_LI2016", CS%USE_LA_Windsea,            &
+  call get_param(param_file, mdl, "USE_LA_LI2016", CS%USE_LA_Windsea,            &
                  "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
                  " determine the Langmuir number.",                               &
                  units="nondim", default=.false.)
-   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
+  call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
                  "The depth (normalized by BLD) to average Stokes drift over in \n"//&
                  " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
                  units="nondim",default=0.04)
-   call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
+  call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
                  "Integer for Langmuir number mode. \n"//                   &
                  " *Requires USE_LA_LI2016 to be set to True. \n"//         &
                  "Options: 0 - No Langmuir \n"//                            &
@@ -2223,35 +2214,34 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "         2 - Multiplied w/ adjusted La. \n"//             &
                  "         3 - Added w/ adjusted La.",                      &
                  units="nondim", default=0)
-   call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
+  call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
                  "Coefficient for Langmuir enhancement if LT_ENHANCE > 1",&
                  units="nondim", default=0.447)
-   call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
+  call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
                  "Exponent for Langmuir enhancement if LT_ENHANCE > 1", &
                  units="nondim", default=-1.33)
-   call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK,             &
+  call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK,             &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching Ekman depth if LT_ENHANCE=2.",            &
                  units="nondim", default=-0.87)
-   call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab,        &
+  call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab,        &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching stable Obukhov depth if LT_ENHANCE=2.",   &
                   units="nondim", default=0.0)
-   call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un,          &
+  call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un,          &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching unstable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.0)
-   call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab,         &
+  call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab,         &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.95)
-   call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un,            &
+  call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un,            &
                  "Coefficient for modification of Langmuir number due to\n"// &
                  " ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.",&
                   units="nondim", default=0.95)
-   if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then
-      call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, then "//&
-                 " LT_ENHANCE must be 0.")
+  if (CS%LT_ENHANCE_FORM>0 .and. (.not.CS%USE_LA_Windsea)) then
+    call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, LT_ENHANCE must be 0.")
   endif
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)

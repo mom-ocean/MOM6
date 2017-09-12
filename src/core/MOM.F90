@@ -8,7 +8,7 @@ use MOM_open_boundary, only : ocean_OBC_type
 
 ! A Structure with pointers to forcing fields to drive MOM;
 ! all fluxes are positive downward.
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, mech_forcing
 
 use MOM_variables, only: accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 
@@ -461,7 +461,8 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
+subroutine step_MOM(forces, fluxes, state, Time_start, time_interval, CS)
+  type(mech_forcing), intent(in)     :: forces        !< A structure with the driving mechanical forces
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
@@ -562,16 +563,16 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     dt_therm = dt*ntstep
   endif
 
-  if (.not.ASSOCIATED(fluxes%p_surf)) CS%interp_p_surf = .false.
+  if (.not.ASSOCIATED(forces%p_surf)) CS%interp_p_surf = .false.
 
   !---------- Begin setup for group halo pass
 
   call cpu_clock_begin(id_clock_pass)
-  call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%taux, fluxes%tauy, G%Domain)
-  if (ASSOCIATED(fluxes%ustar)) &
-    call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%ustar(:,:), G%Domain)
-  if (ASSOCIATED(fluxes%p_surf)) &
-    call create_group_pass(CS%pass_tau_ustar_psurf, fluxes%p_surf(:,:), G%Domain)
+  call create_group_pass(CS%pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
+  if (ASSOCIATED(forces%ustar)) &
+    call create_group_pass(CS%pass_tau_ustar_psurf, forces%ustar, G%Domain)
+  if (ASSOCIATED(forces%p_surf)) &
+    call create_group_pass(CS%pass_tau_ustar_psurf, forces%p_surf, G%Domain)
 
   do_pass_Ray = .FALSE.
   if ((.not.G%Domain%symmetric) .and. &
@@ -648,19 +649,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
     if (.not.CS%p_surf_prev_set) then
       do j=jsd,jed ; do i=isd,ied
-        CS%p_surf_prev(i,j) = fluxes%p_surf(i,j)
+        CS%p_surf_prev(i,j) = forces%p_surf(i,j)
       enddo ; enddo
       CS%p_surf_prev_set = .true.
     endif
   else
-    CS%p_surf_end  => fluxes%p_surf
+    CS%p_surf_end  => forces%p_surf
   endif
 
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     call check_redundant("Before steps ", u, v, G)
-    call check_redundant("Before steps ", fluxes%taux, fluxes%tauy, G)
+    call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
   call cpu_clock_end(id_clock_other)
 
@@ -809,9 +810,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       wt_end = real(n) / real(n_max)
       wt_beg = real(n-1) / real(n_max)
       do j=jsd,jed ; do i=isd,ied
-        CS%p_surf_end(i,j) = wt_end * fluxes%p_surf(i,j) + &
+        CS%p_surf_end(i,j) = wt_end * forces%p_surf(i,j) + &
                         (1.0-wt_end) * CS%p_surf_prev(i,j)
-        CS%p_surf_begin(i,j) = wt_beg * fluxes%p_surf(i,j) + &
+        CS%p_surf_begin(i,j) = wt_beg * forces%p_surf(i,j) + &
                         (1.0-wt_beg) * CS%p_surf_prev(i,j)
       enddo ; enddo
     endif
@@ -852,12 +853,12 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       mass_src_time = CS%t_dyn_rel_thermo
       if (CS%legacy_split) then
         call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
-                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
+                    Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
                     mass_src_time, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, GV, CS%dyn_legacy_split_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       else
         call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
-                    Time_local, dt, fluxes, CS%p_surf_begin, CS%p_surf_end, &
+                    Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
                     mass_src_time, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                     eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       endif
@@ -873,11 +874,11 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       ! useful for debugging purposes.
 
       if (CS%use_RK2) then
-        call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
+        call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                  eta_av, G, GV, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
       else
-        call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, fluxes, &
+        call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                  CS%p_surf_begin, CS%p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                  eta_av, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
       endif
@@ -913,7 +914,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
                       CS%uhtr, CS%vhtr, G%HI, haloshift=0)
       endif
       call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, CS%uhtr ,CS%vhtr, CS%tv, fluxes, dt, CS%visc%MLD, &
+      call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
                               CS%VarMix, G, GV, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
       call cpu_clock_begin(id_clock_pass)
@@ -1106,7 +1107,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
-  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
   call calculate_surface_state(state, u, v, h, CS%ave_ssh, G, GV, CS)
 
   call enable_averaging(dt*n_max, Time_local, CS%diag)
@@ -1114,7 +1115,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
   call disable_averaging(CS%diag)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
-    CS%p_surf_prev(i,j) = fluxes%p_surf(i,j)
+    CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
 
   call cpu_clock_end(id_clock_other)
@@ -1289,7 +1290,8 @@ end subroutine step_MOM_thermo
 !! developed with ALE configurations in mind. Some work has been done in isopycnal configuration, but
 !! the work is very preliminary. Some more detail about this capability along with some of the subroutines
 !! called here can be found in tracers/MOM_offline_control.F90
-subroutine step_offline(fluxes, state, Time_start, time_interval, CS)
+subroutine step_offline(forces, fluxes, state, Time_start, time_interval, CS)
+  type(mech_forcing), intent(in)     :: forces        !< A structure with the driving mechanical forces
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: state         !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
@@ -1460,7 +1462,7 @@ subroutine step_offline(fluxes, state, Time_start, time_interval, CS)
 
   endif
 
-  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, fluxes%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
   call calculate_surface_state(state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
 
   call disable_averaging(CS%diag)
@@ -1893,13 +1895,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call MOM_timing_init(CS)
 
-  call tracer_registry_init(param_file, CS%tracer_Reg)
-
   ! Allocate initialize time-invariant MOM variables.
   call MOM_initialize_fixed(dG, CS%OBC, param_file, write_geom_files, dirs%output_directory)
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
   if (associated(CS%OBC)) call call_OBC_register(param_file, CS%update_OBC_CSp, CS%OBC)
 
+  call tracer_registry_init(param_file, CS%tracer_Reg)
 
   ! Allocate and initialize space for the primary time-varying MOM variables.
   is   = dG%isc   ; ie   = dG%iec  ; js   = dG%jsc  ; je   = dG%jec ; nz = GV%ke
@@ -2854,7 +2855,7 @@ subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
   type(MOM_control_struct), intent(inout) :: CS  !< control structure
   type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
-  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables  type(forcing),                             intent(inout) :: fluxes !< pointers to forcing fields
+  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
   type(diag_ctrl),          intent(in)    :: diag !< regulates diagnostic output
   real,                     intent(in)    :: dt  !< total time step for T,S update
 
@@ -3043,7 +3044,7 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(diag_ctrl),          intent(in)    :: diag  !< regulates diagnostic output
   real,                     intent(in)    :: dt_int  !< total time step associated with these diagnostics, in s.
-  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables  type(forcing),                             intent(inout) :: fluxes !< pointers to forcing fields
+  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(in)    :: fluxes  !< pointers to forcing fields
 
   real, allocatable, dimension(:,:) :: &

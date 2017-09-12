@@ -84,7 +84,7 @@ use MOM_domains, only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains, only : start_group_pass, complete_group_pass
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc
@@ -388,7 +388,7 @@ contains
 !! order 0.2 or greater.  A forwards-backwards treatment of the
 !! Coriolis terms is always used.
 subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
-                  fluxes, pbce, eta_PF_in, U_Cor, V_Cor, &
+                  forces, pbce, eta_PF_in, U_Cor, V_Cor, &
                   accel_layer_u, accel_layer_v, eta_out, uhbtav, vhbtav, G, GV, CS, &
                   visc_rem_u, visc_rem_v, etaav, OBC, &
                   BT_cont, eta_PF_start, &
@@ -403,8 +403,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: bc_accel_u !< The zonal baroclinic accelerations, in m s-2.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: bc_accel_v !< The meridional baroclinic accelerations,
                                                                        !! in m s-2.
-  type(forcing),                             intent(in)  :: fluxes     !< A structure containing pointers to any
-                                                         !! possible forcing fields.  Unused fields have NULL ptrs.
+  type(mech_forcing),                        intent(in)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: pbce       !< The baroclinic pressure anomaly in each layer
                                                          !! due to free surface height anomalies, in m2 H-1 s-2.
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: eta_PF_in  !< The 2-D eta field (either SSH anomaly or
@@ -976,14 +975,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     ! ### IDatu here should be replaced with 1/D+eta(Bous) or 1/eta(non-Bous).
     ! ### although with BT_cont_types IDatu should be replaced by
     ! ###   CS%dy_Cu(I,j) / (d(uhbt)/du) (with appropriate bounds).
-    BT_force_u(I,j) = fluxes%taux(I,j) * I_rho0*CS%IDatu(I,j)*visc_rem_u(I,j,1)
+    BT_force_u(I,j) = forces%taux(I,j) * I_rho0*CS%IDatu(I,j)*visc_rem_u(I,j,1)
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do i=is,ie
     ! ### IDatv here should be replaced with 1/D+eta(Bous) or 1/eta(non-Bous).
     ! ### although with BT_cont_types IDatv should be replaced by
     ! ###   CS%dx_Cv(I,j) / (d(vhbt)/dv) (with appropriate bounds).
-    BT_force_v(i,J) = fluxes%tauy(i,J) * I_rho0*CS%IDatv(i,J)*visc_rem_v(i,J,1)
+    BT_force_v(i,J) = forces%tauy(i,J) * I_rho0*CS%IDatv(i,J)*visc_rem_v(i,J,1)
   enddo ; enddo
   if (present(taux_bot) .and. present(tauy_bot)) then
     if (associated(taux_bot) .and. associated(tauy_bot)) then
@@ -1342,16 +1341,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 !$OMP end parallel
 
   if (CS%dynamic_psurf) then
-    ice_is_rigid = (associated(fluxes%rigidity_ice_u) .and. &
-                    associated(fluxes%rigidity_ice_v))
+    ice_is_rigid = (associated(forces%rigidity_ice_u) .and. &
+                    associated(forces%rigidity_ice_v))
     H_min_dyn = GV%m_to_H * CS%Dmin_dyn_psurf
     if (ice_is_rigid .and. use_BT_cont) &
       call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, MS, 0, .true.)
     if (ice_is_rigid) then
-!$OMP parallel do default(none) shared(is,ie,js,je,dgeo_de,bebt,G,GV,gtot_E,Datu, &
-!$OMP                                  gtot_W,gtot_N,gtot_S,Datv,H_min_dyn,     &
-!$OMP                                  CS,dtbt,fluxes,dyn_coef_eta )            &
-!$OMP                          private(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
+      !$OMP parallel do default(shared) private(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
       do j=js,je ; do i=is,ie
       ! First determine the maximum stable value for dyn_coef_eta.
 
@@ -1373,8 +1369,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                      (dtbt**2 * H_eff_dx2)
 
       ! ice_strength has units of m s-2. rigidity_ice_[uv] has units of m3 s-1.
-      ice_strength = ((fluxes%rigidity_ice_u(I,j) + fluxes%rigidity_ice_u(I-1,j)) + &
-                      (fluxes%rigidity_ice_v(i,J) + fluxes%rigidity_ice_v(i,J-1))) / &
+      ice_strength = ((forces%rigidity_ice_u(I,j) + forces%rigidity_ice_u(I-1,j)) + &
+                      (forces%rigidity_ice_v(i,J) + forces%rigidity_ice_v(i,J-1))) / &
                       (CS%ice_strength_length**2 * dtbt)
 
       ! Units of dyn_coef: m2 s-2 H-1
@@ -3763,14 +3759,13 @@ end subroutine find_face_areas
 !! the barotropic solver, along with a corrective fictitious mass source that
 !! will drive the barotropic estimate of the free surface height toward the
 !! baroclinic estimate.
-subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
+subroutine bt_mass_source(h, eta, forces, set_cor, dt_therm, dt_since_therm, &
                           G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be corrected, in m.
-  type(forcing),                      intent(in) :: fluxes   !< A structure containing pointers to any possible
-                                                             !! forcing fields.  Unused fields have NULL ptrs.
+  type(mech_forcing),                 intent(in) :: forces   !< A structure with the driving mechanical forces
   logical,                            intent(in) :: set_cor  !< A flag to indicate whether to set the corrective
                                                              !! fluxes (and update the slowly varying part of eta_cor)
                                                              !! (.true.) or whether to incrementally update the
@@ -3799,9 +3794,7 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,h,set_cor,CS,dt_therm,  &
-!$OMP                                  fluxes,eta,dt_since_therm)               &
-!$OMP                          private(eta_h,h_tot,limit_dt,d_eta)
+  !$OMP parallel do default(shared) private(eta_h,h_tot,limit_dt,d_eta)
   do j=js,je
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (GV%Boussinesq) then
@@ -3818,23 +3811,8 @@ subroutine bt_mass_source(h, eta, fluxes, set_cor, dt_therm, dt_since_therm, &
       do i=is,ie ; CS%eta_source(i,j) = 0.0 ; enddo
       if (CS%eta_source_limit > 0.0) then
         limit_dt = CS%eta_source_limit/dt_therm
-        if (associated(fluxes%lprec)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%lprec(i,j)
-        enddo ; endif
-        if (associated(fluxes%fprec)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%fprec(i,j)
-        enddo ; endif
-        if (associated(fluxes%vprec)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%vprec(i,j)
-        enddo ; endif
-        if (associated(fluxes%lrunoff)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%lrunoff(i,j)
-        enddo ; endif
-        if (associated(fluxes%frunoff)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%frunoff(i,j)
-        enddo ; endif
-        if (associated(fluxes%evap)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + fluxes%evap(i,j)
+        if (associated(forces%net_mass_src)) then ; do i=is,ie
+          CS%eta_source(i,j) = CS%eta_source(i,j) + forces%net_mass_src(i,j)
         enddo ; endif
         do i=is,ie
           CS%eta_source(i,j) = CS%eta_source(i,j)*GV%kg_m2_to_H
