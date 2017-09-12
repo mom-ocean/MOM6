@@ -24,10 +24,13 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public extractFluxes1d, extractFluxes2d, MOM_forcing_chksum, optics_type
+public extractFluxes1d, extractFluxes2d, optics_type
+public MOM_forcing_chksum, MOM_mech_forcing_chksum
 public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, forcing_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
+public copy_common_forcing_fields, allocate_mech_forcing, deallocate_mech_forcing
+public set_derived_forcing_fields, copy_back_forcing_fields, set_net_mass_forcing
 
 !> Structure that contains pointers to the boundary forcing
 !! used to drive the liquid ocean simulated by MOM.
@@ -42,9 +45,9 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-  taux          => NULL(), & !< zonal wind stress (Pa)
-  tauy          => NULL(), & !< meridional wind stress (Pa)
-  ustar         => NULL()    !< surface friction velocity scale (m/s)
+  ustar         => NULL(), & !< surface friction velocity scale (m/s)
+  ustar_gustless => NULL()   !< surface friction velocity scale without any
+                             !! any augmentation for gustiness (m/s)
 
   ! surface buoyancy force
   real, pointer, dimension(:,:) :: &
@@ -107,14 +110,10 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
   p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
                              !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
-  p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
+  p_surf        => NULL()    !< Pressure at the top ocean interface (Pa) as used
                              !! to drive the ocean model. If p_surf is limited,
                              !! p_surf may be smaller than p_surf_full,
                              !! otherwise they are the same.
-  p_surf_SSH    => NULL()    !< Pressure at the top ocean interface that is used
-                             !! in corrections to the sea surface height field
-                             !! that is passed back to the calling routines.
-                             !! This may point to p_surf or to p_surf_full.
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
@@ -131,13 +130,11 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
   ustar_shelf   => NULL(), &   !< friction velocity under ice-shelves (m/s)
                                !! as computed by the ocean at the previous time step.
-  frac_shelf_h  => NULL(), &   !< Fractional ice shelf coverage of h-, u-, and v-
-  frac_shelf_u  => NULL(), &   !< cells, nondimensional from 0 to 1. These are only
-  frac_shelf_v  => NULL(), &   !< associated if ice shelves are enabled, and are
+  frac_shelf_h  => NULL(), &   !! Fractional ice shelf coverage of h-cells, nondimensional
+                               !! cells, nondimensional from 0 to 1. This is only
+                               !! associated if ice shelves are enabled, and are
                                !! exactly 0 away from shelves or on land.
-  iceshelf_melt   => NULL(), & !< ice shelf melt rate (positive) or freezing (negative) ( m/year )
-  rigidity_ice_u => NULL(),&   !< Depth-integrated lateral viscosity of ice
-  rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+  iceshelf_melt   => NULL()    !< ice shelf melt rate (positive) or freezing (negative) ( m/year )
 
   ! Scalars set by surface forcing modules
   real :: vPrecGlobalAdj     !< adjustment to restoring vprec to zero out global net ( kg/(m^2 s) )
@@ -168,6 +165,41 @@ type, public :: forcing
   integer :: max_msg = 2 !< Maximum number of messages to issue about excessive SW penetration
 
 end type forcing
+
+!> Structure that contains pointers to the mechanical forcing at the surface
+!! used to drive the liquid ocean simulated by MOM.
+!! Data in this type is allocated in the module MOM_surface_forcing.F90,
+!! of which there are three versions:  solo, coupled, and ice-shelf.
+type, public :: mech_forcing
+  ! surface stress components and turbulent velocity scale
+  real, pointer, dimension(:,:) :: &
+    taux  => NULL(), & !< zonal wind stress (Pa)
+    tauy  => NULL(), & !< meridional wind stress (Pa)
+    ustar => NULL(), & !< surface friction velocity scale (m/s)
+
+  ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
+    p_surf_full   => NULL(), & !< Pressure at the top ocean interface (Pa).
+                               !! if there is sea-ice, then p_surf_flux is at ice-ocean interface
+    p_surf        => NULL(), & !< Pressure at the top ocean interface (Pa) as used
+                               !! to drive the ocean model. If p_surf is limited,
+                               !! p_surf may be smaller than p_surf_full,
+                               !! otherwise they are the same.
+    p_surf_SSH    => NULL(), & !< Pressure at the top ocean interface that is used
+                               !! in corrections to the sea surface height field
+                               !! that is passed back to the calling routines.
+                               !! This may point to p_surf or to p_surf_full.
+    net_mass_src  => NULL(), & !< The net mass source to the ocean, in kg m-2 s-1.
+
+  ! land ice-shelf related inputs
+    frac_shelf_u  => NULL(), &   !< Fractional ice shelf coverage of u-cells, nondimensional
+                                 !! from 0 to 1. This is only associated if ice shelves are
+                                 !< enabled, and is exactly 0 away from shelves or on land.
+    frac_shelf_v  => NULL(), &   !< Fractional ice shelf coverage of v-cells, nondimensional
+                                 !! from 0 to 1. This is only associated if ice shelves are
+                                 !< enabled, and is exactly 0 away from shelves or on land.
+    rigidity_ice_u => NULL(), &  !< Depth-integrated lateral viscosity of ice
+    rigidity_ice_v => NULL()     !< shelves or sea ice at u- or v-points (m3/s)
+end type mech_forcing
 
 !> Structure that defines the id handles for the forcing type
 type, public :: forcing_diags
@@ -896,10 +928,10 @@ subroutine calculateBuoyancyFlux2d(G, GV, fluxes, optics, h, Temp, Salt, tv, &
 end subroutine calculateBuoyancyFlux2d
 
 
-!> Write out chksums for basic state variables.
+!> Write out chksums for thermodynamic fluxes.
 subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   character(len=*),        intent(in) :: mesg      !< message
-  type(forcing),           intent(in) :: fluxes    !< fluxes type
+  type(forcing),           intent(in) :: fluxes    !< A structure containing thermodynamic forcing fields
   type(ocean_grid_type),   intent(in) :: G         !< grid type
   integer, optional,       intent(in) :: haloshift !< shift in halo
 
@@ -911,9 +943,6 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  if (associated(fluxes%taux) .and. associated(fluxes%tauy)) &
-    call uvchksum(mesg//" fluxes%tau[xy]", fluxes%taux, fluxes%tauy, G%HI, &
-                  haloshift=hshift, symmetric=.true.)
   if (associated(fluxes%ustar)) &
     call hchksum(fluxes%ustar, mesg//" fluxes%ustar",G%HI,haloshift=hshift)
   if (associated(fluxes%buoy)) &
@@ -976,10 +1005,32 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, haloshift)
     call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout",G%HI,haloshift=hshift)
 end subroutine MOM_forcing_chksum
 
+!> Write out chksums for the driving mechanical forces.
+subroutine MOM_mech_forcing_chksum(mesg, forces, G, haloshift)
+  character(len=*),        intent(in) :: mesg      !< message
+  type(mech_forcing),      intent(in) :: forces    !< A structure with the driving mechanical forces
+  type(ocean_grid_type),   intent(in) :: G         !< grid type
+  integer, optional,       intent(in) :: haloshift !< shift in halo
 
-!> Write out values of the fluxes arrays at the i,j location. This is a debugging tool.
-subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
-  type(forcing),         intent(in) :: fluxes !< Fluxes type
+  integer :: is, ie, js, je, nz, hshift
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  hshift=1; if (present(haloshift)) hshift=haloshift
+
+  ! Note that for the chksum calls to be useful for reproducing across PE
+  ! counts, there must be no redundant points, so all variables use is..ie
+  ! and js...je as their extent.
+  if (associated(forces%taux) .and. associated(forces%tauy)) &
+    call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
+                  haloshift=hshift, symmetric=.true.)
+  if (associated(forces%p_surf)) &
+    call hchksum(forces%p_surf, mesg//" forces%p_surf",G%HI,haloshift=hshift)
+
+end subroutine MOM_mech_forcing_chksum
+
+!> Write out values of the mechanical forcing arrays at the i,j location. This is a debugging tool.
+subroutine mech_forcing_SinglePointPrint(forces, G, i, j, mesg)
+  type(mech_forcing),      intent(in) :: forces    !< A structure with the driving mechanical forces
   type(ocean_grid_type), intent(in) :: G      !< Grid type
   character(len=*),      intent(in) :: mesg   !< Message
   integer,               intent(in) :: i      !< i-index
@@ -987,8 +1038,34 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
 
   write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
   write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
-  call locMsg(fluxes%taux,'taux')
-  call locMsg(fluxes%tauy,'tauy')
+  call locMsg(forces%taux,'taux')
+  call locMsg(forces%tauy,'tauy')
+
+  contains
+  !> Format and write a message depending on associated state of array
+  subroutine locMsg(array,aname)
+    real, dimension(:,:), pointer :: array !< Array to write element from
+    character(len=*)              :: aname !< Name of array
+
+    if (associated(array)) then
+      write(0,'(3a,es15.3)') 'MOM_forcing_type, mech_forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
+    else
+      write(0,'(4a)') 'MOM_forcing_type, mech_forcing_SinglePointPrint: ',trim(aname),' is not associated.'
+    endif
+  end subroutine locMsg
+
+end subroutine mech_forcing_SinglePointPrint
+
+!> Write out values of the fluxes arrays at the i,j location. This is a debugging tool.
+subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
+  type(forcing),         intent(in) :: fluxes !< A structure containing thermodynamic forcing fields
+  type(ocean_grid_type), intent(in) :: G      !< Grid type
+  character(len=*),      intent(in) :: mesg   !< Message
+  integer,               intent(in) :: i      !< i-index
+  integer,               intent(in) :: j      !< j-index
+
+  write(0,'(2a)') 'MOM_forcing_type, forcing_SinglePointPrint: Called from ',mesg
+  write(0,'(a,2es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: lon,lat = ',G%geoLonT(i,j),G%geoLatT(i,j)
   call locMsg(fluxes%ustar,'ustar')
   call locMsg(fluxes%buoy,'buoy')
   call locMsg(fluxes%sw,'sw')
@@ -1020,19 +1097,18 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%heat_content_vprec,'heat_content_vprec')
   call locMsg(fluxes%heat_content_cond,'heat_content_cond')
   call locMsg(fluxes%heat_content_cond,'heat_content_massout')
-  contains
 
+  contains
   !> Format and write a message depending on associated state of array
   subroutine locMsg(array,aname)
-  real, dimension(:,:), pointer :: array !< Array to write element from
-  character(len=*)              :: aname !< Name of array
+    real, dimension(:,:), pointer :: array !< Array to write element from
+    character(len=*)              :: aname !< Name of array
 
-  if (associated(array)) then
-    write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
-  else
-    write(0,'(4a)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' is not associated.'
-  endif
-
+    if (associated(array)) then
+      write(0,'(3a,es15.3)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' = ',array(i,j)
+    else
+      write(0,'(4a)') 'MOM_forcing_type, forcing_SinglePointPrint: ',trim(aname),' is not associated.'
+    endif
   end subroutine locMsg
 
 end subroutine forcing_SinglePointPrint
@@ -1655,8 +1731,9 @@ subroutine register_forcing_type_diags(Time, diag, use_temperature, handles, use
 end subroutine register_forcing_type_diags
 
 !> Accumulate the forcing over time steps
-subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
+subroutine forcing_accumulate(flux_tmp, forces, fluxes, dt, G, wt2)
   type(forcing),         intent(in)    :: flux_tmp
+  type(mech_forcing),    intent(in)    :: forces !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes
   real,                  intent(in)    :: dt   !< The elapsed time since the last call to this subroutine, in s
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
@@ -1684,21 +1761,15 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
   wt2 = 1.0 - wt1 ! = dt / (fluxes%dt_buoy_accum + dt)
   fluxes%dt_buoy_accum = fluxes%dt_buoy_accum + dt
 
-  ! Copy over the pressure and momentum flux fields.
+  ! Copy over the pressure fields.
   do j=js,je ; do i=is,ie
-    fluxes%p_surf(i,j) = flux_tmp%p_surf(i,j)
-    fluxes%p_surf_full(i,j) = flux_tmp%p_surf_full(i,j)
-  enddo ; enddo
-  do j=js,je ; do I=Isq,Ieq
-    fluxes%taux(I,j) = flux_tmp%taux(I,j)
-  enddo ; enddo
-  do J=Jsq,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = flux_tmp%tauy(i,J)
+    fluxes%p_surf(i,j) = forces%p_surf(i,j)
+    fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
   enddo ; enddo
 
   ! Average the water, heat, and salt fluxes, and ustar.
   do j=js,je ; do i=is,ie
-    fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*flux_tmp%ustar(i,j)
+    fluxes%ustar(i,j) = wt1*fluxes%ustar(i,j) + wt2*forces%ustar(i,j)
 
     fluxes%evap(i,j) = wt1*fluxes%evap(i,j) + wt2*flux_tmp%evap(i,j)
     fluxes%lprec(i,j) = wt1*fluxes%lprec(i,j) + wt2*flux_tmp%lprec(i,j)
@@ -1766,36 +1837,14 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
       fluxes%ustar_shelf(i,j)  = flux_tmp%ustar_shelf(i,j)
     enddo ; enddo
   endif
-
   if (associated(fluxes%iceshelf_melt) .and. associated(flux_tmp%iceshelf_melt)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%iceshelf_melt(i,j)  = flux_tmp%iceshelf_melt(i,j)
     enddo ; enddo
   endif
-
   if (associated(fluxes%frac_shelf_h) .and. associated(flux_tmp%frac_shelf_h)) then
     do i=isd,ied ; do j=jsd,jed
       fluxes%frac_shelf_h(i,j)  = flux_tmp%frac_shelf_h(i,j)
-    enddo ; enddo
-  endif
-  if (associated(fluxes%frac_shelf_u) .and. associated(flux_tmp%frac_shelf_u)) then
-    do I=IsdB,IedB ; do j=jsd,jed
-      fluxes%frac_shelf_u(I,j)  = flux_tmp%frac_shelf_u(I,j)
-    enddo ; enddo
-  endif
-  if (associated(fluxes%frac_shelf_v) .and. associated(flux_tmp%frac_shelf_v)) then
-    do i=isd,ied ; do J=JsdB,JedB
-      fluxes%frac_shelf_v(i,J)  = flux_tmp%frac_shelf_v(i,J)
-    enddo ; enddo
-  endif
-  if (associated(fluxes%rigidity_ice_u) .and. associated(flux_tmp%rigidity_ice_u)) then
-    do I=isd,ied-1 ; do j=jsd,jed
-      fluxes%rigidity_ice_u(I,j)  = flux_tmp%rigidity_ice_u(I,j)
-    enddo ; enddo
-  endif
-  if (associated(fluxes%rigidity_ice_v) .and. associated(flux_tmp%rigidity_ice_v)) then
-    do i=isd,ied ; do J=jsd,jed-1
-      fluxes%rigidity_ice_v(i,J)  = flux_tmp%rigidity_ice_v(i,J)
     enddo ; enddo
   endif
 
@@ -1806,11 +1855,130 @@ subroutine forcing_accumulate(flux_tmp, fluxes, dt, G, wt2)
 
 end subroutine forcing_accumulate
 
+!> This subroutine copies the computational domains of common forcing fields
+!! from a mech_forcing type to a (thermodynamic) forcing type.
+subroutine copy_common_forcing_fields(forces, fluxes, G)
+  type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
+  type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
+  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+
+  real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (associated(forces%ustar) .and. associated(fluxes%ustar)) then
+    do j=js,je ; do i=is,ie
+      fluxes%ustar(i,j) = forces%ustar(i,j)
+    enddo ; enddo
+  endif
+
+  if (associated(forces%p_surf) .and. associated(fluxes%p_surf)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf(i,j) = forces%p_surf(i,j)
+    enddo ; enddo
+  endif
+
+  if (associated(forces%p_surf_full) .and. associated(fluxes%p_surf_full)) then
+    do j=js,je ; do i=is,ie
+      fluxes%p_surf_full(i,j) = forces%p_surf_full(i,j)
+    enddo ; enddo
+  endif
+
+end subroutine copy_common_forcing_fields
+
+
+!> This subroutine calculates certain derived forcing fields based on information
+!! from a mech_forcing type and stores them in a (thermodynamic) forcing type.
+subroutine set_derived_forcing_fields(forces, fluxes, G, Rho0)
+  type(mech_forcing),      intent(in)    :: forces   !< A structure with the driving mechanical forces
+  type(forcing),           intent(inout) :: fluxes   !< A structure containing thermodynamic forcing fields
+  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+  real,                    intent(in)    :: Rho0     !< A reference density of seawater, in kg m-3,
+                                                     !! as used to calculate ustar.
+
+  real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (associated(forces%taux) .and. associated(forces%tauy) .and. &
+      associated(fluxes%ustar_gustless)) then
+    do j=js,je ; do i=is,ie
+      taux2 = 0.0
+      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
+        taux2 = (G%mask2dCu(I-1,j) * forces%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j) * forces%taux(I,j)**2) / &
+                (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+      tauy2 = 0.0
+      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
+        tauy2 = (G%mask2dCv(i,J-1) * forces%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
+                (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+
+      fluxes%ustar_gustless(i,j) = sqrt(sqrt(taux2 + tauy2) / Rho0)
+    enddo ; enddo
+  endif
+
+end subroutine set_derived_forcing_fields
+
+
+!> This subroutine calculates determines the net mass source to th eocean from
+!! a (thermodynamic) forcing type and stores it in a mech_forcing type.
+subroutine set_net_mass_forcing(fluxes, forces, G)
+  type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
+  type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
+  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (associated(forces%net_mass_src)) then
+    forces%net_mass_src(:,:) = 0.0
+    if (associated(fluxes%lprec)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lprec(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%fprec)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%fprec(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%vprec)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%vprec(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%lrunoff)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%lrunoff(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%frunoff)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%frunoff(i,j)
+    enddo ; enddo ; endif
+    if (associated(fluxes%evap)) then ; do j=js,je ; do i=is,ie
+      forces%net_mass_src(i,j) = forces%net_mass_src(i,j) + fluxes%evap(i,j)
+    enddo ; enddo ; endif
+  endif
+
+end subroutine set_net_mass_forcing
+
+!> This subroutine copies the computational domains of common forcing fields
+!! from a mech_forcing type to a (thermodynamic) forcing type.
+subroutine copy_back_forcing_fields(fluxes, forces, G)
+  type(forcing),           intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
+  type(mech_forcing),      intent(inout) :: forces   !< A structure with the driving mechanical forces
+  type(ocean_grid_type),   intent(in)    :: G        !< grid type
+
+  real :: taux2, tauy2 ! Squared wind stress components, in Pa^2.
+  integer :: i, j, is, ie, js, je
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  if (associated(forces%ustar) .and. associated(fluxes%ustar)) then
+    do j=js,je ; do i=is,ie
+      forces%ustar(i,j) = fluxes%ustar(i,j)
+    enddo ; enddo
+  endif
+
+end subroutine copy_back_forcing_fields
 
 !> Offer mechanical forcing fields for diagnostics for those
 !! fields registered as part of register_forcing_type_diags.
-subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
-  type(forcing),         intent(in)    :: fluxes   !< fluxes type
+subroutine mech_forcing_diags(forces, fluxes, dt, G, diag, handles)
+  type(mech_forcing),    intent(in)    :: forces   !< A structure with the driving mechanical forces
+  type(forcing),         intent(in)    :: fluxes   !< A structure containing thermodynamic forcing fields
   real,                  intent(in)    :: dt       !< time step
   type(ocean_grid_type), intent(in)    :: G        !< grid type
   type(diag_ctrl),       intent(in)    :: diag     !< diagnostic type
@@ -1823,10 +1991,10 @@ subroutine mech_forcing_diags(fluxes, dt, G, diag, handles)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   if (query_averaging_enabled(diag)) then
 
-    if ((handles%id_taux > 0) .and. ASSOCIATED(fluxes%taux)) &
-      call post_data(handles%id_taux, fluxes%taux, diag)
-    if ((handles%id_tauy > 0) .and. ASSOCIATED(fluxes%tauy)) &
-      call post_data(handles%id_tauy, fluxes%tauy, diag)
+    if ((handles%id_taux > 0) .and. ASSOCIATED(forces%taux)) &
+      call post_data(handles%id_taux, forces%taux, diag)
+    if ((handles%id_tauy > 0) .and. ASSOCIATED(forces%tauy)) &
+      call post_data(handles%id_tauy, forces%tauy, diag)
     if ((handles%id_ustar > 0) .and. ASSOCIATED(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
     if (handles%id_ustar_berg > 0) &
@@ -2334,15 +2502,14 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, press, iceberg)
+subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
-  logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
-  logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
   logical, optional,     intent(in) :: heat    !< If present and true, allocate heat fluxes
+  logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar and related fields
+  logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf and related fields
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
-  logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate fluxes for icebergs
 
   ! Local variables
@@ -2352,9 +2519,8 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
 
-  call myAlloc(fluxes%taux,IsdB,IedB,jsd,jed, stress)
-  call myAlloc(fluxes%tauy,isd,ied,JsdB,JedB, stress)
   call myAlloc(fluxes%ustar,isd,ied,jsd,jed, ustar)
+  call myAlloc(fluxes%ustar_gustless,isd,ied,jsd,jed, ustar)
 
   call myAlloc(fluxes%evap,isd,ied,jsd,jed, water)
   call myAlloc(fluxes%lprec,isd,ied,jsd,jed, water)
@@ -2386,51 +2552,73 @@ subroutine allocate_forcing_type(G, fluxes, stress, ustar, water, heat, shelf, p
     call myAlloc(fluxes%heat_content_massin,isd,ied,jsd,jed, .true.)
   endif ; endif
 
+  call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
+
   call myAlloc(fluxes%frac_shelf_h,isd,ied,jsd,jed, shelf)
-  call myAlloc(fluxes%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
-  call myAlloc(fluxes%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
   call myAlloc(fluxes%ustar_shelf,isd,ied,jsd,jed, shelf)
   call myAlloc(fluxes%iceshelf_melt,isd,ied,jsd,jed, shelf)
-  call myAlloc(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
-  call myAlloc(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
-
-  call myAlloc(fluxes%p_surf,isd,ied,jsd,jed, press)
 
   !These fields should only on allocated when iceberg area is being passed through the coupler.
   call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
-  contains
-
-  !> Allocates and zeroes-out array.
-  subroutine myAlloc(array, is, ie, js, je, flag)
-    real, dimension(:,:), pointer :: array !< Array to be allocated
-    integer,           intent(in) :: is !< Start i-index
-    integer,           intent(in) :: ie !< End i-index
-    integer,           intent(in) :: js !< Start j-index
-    integer,           intent(in) :: je !< End j-index
-    logical, optional, intent(in) :: flag !< Flag to indicate to allocate
-
-    if (present(flag)) then
-      if (flag) then
-        if (.not.associated(array)) then
-          ALLOCATE(array(is:ie,js:je))
-          array(is:ie,js:je) = 0.0
-        endif
-      endif
-    endif
-  end subroutine myAlloc
 
 end subroutine allocate_forcing_type
 
+!> Conditionally allocate fields within the mechanical forcing type
+subroutine allocate_mech_forcing(G, forces, stress, ustar, shelf, press, iceberg)
+  type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
+  type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
+
+  logical, optional,     intent(in) :: stress  !< If present and true, allocate taux, tauy
+  logical, optional,     intent(in) :: ustar   !< If present and true, allocate ustar and related fields
+  logical, optional,     intent(in) :: shelf   !< If present and true, allocate forces for ice-shelf
+  logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf and related fields
+  logical, optional,     intent(in) :: iceberg !< If present and true, allocate forces for icebergs
+
+  ! Local variables
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  logical :: heat_water
+
+  isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
+  IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
+
+  call myAlloc(forces%taux,IsdB,IedB,jsd,jed, stress)
+  call myAlloc(forces%tauy,isd,ied,JsdB,JedB, stress)
+
+  call myAlloc(forces%ustar,isd,ied,jsd,jed, ustar)
+
+  call myAlloc(forces%p_surf,isd,ied,jsd,jed, press)
+  call myAlloc(forces%p_surf_full,isd,ied,jsd,jed, press)
+  call myAlloc(forces%net_mass_src,isd,ied,jsd,jed, press)
+
+  call myAlloc(forces%rigidity_ice_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(forces%rigidity_ice_v,isd,ied,JsdB,JedB, shelf)
+  call myAlloc(forces%frac_shelf_u,IsdB,IedB,jsd,jed, shelf)
+  call myAlloc(forces%frac_shelf_v,isd,ied,JsdB,JedB, shelf)
+
+end subroutine allocate_mech_forcing
+
+!> Allocates and zeroes-out array.
+subroutine myAlloc(array, is, ie, js, je, flag)
+  real, dimension(:,:), pointer :: array !< Array to be allocated
+  integer,           intent(in) :: is !< Start i-index
+  integer,           intent(in) :: ie !< End i-index
+  integer,           intent(in) :: js !< Start j-index
+  integer,           intent(in) :: je !< End j-index
+  logical, optional, intent(in) :: flag !< Flag to indicate to allocate
+
+  if (present(flag)) then ; if (flag) then ; if (.not.associated(array)) then
+    ALLOCATE(array(is:ie,js:je)) ; array(is:ie,js:je) = 0.0
+  endif ; endif ; endif
+end subroutine myAlloc
 
 !> Deallocate the forcing type
 subroutine deallocate_forcing_type(fluxes)
   type(forcing), intent(inout) :: fluxes !< Forcing fields structure
 
-  if (associated(fluxes%taux))                 deallocate(fluxes%taux)
-  if (associated(fluxes%tauy))                 deallocate(fluxes%tauy)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
+  if (associated(fluxes%ustar_gustless))       deallocate(fluxes%ustar_gustless)
   if (associated(fluxes%buoy))                 deallocate(fluxes%buoy)
   if (associated(fluxes%sw))                   deallocate(fluxes%sw)
   if (associated(fluxes%sw_vis_dir))           deallocate(fluxes%sw_vis_dir)
@@ -2466,10 +2654,6 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%ustar_shelf))          deallocate(fluxes%ustar_shelf)
   if (associated(fluxes%iceshelf_melt))        deallocate(fluxes%iceshelf_melt)
   if (associated(fluxes%frac_shelf_h))         deallocate(fluxes%frac_shelf_h)
-  if (associated(fluxes%frac_shelf_u))         deallocate(fluxes%frac_shelf_u)
-  if (associated(fluxes%frac_shelf_v))         deallocate(fluxes%frac_shelf_v)
-  if (associated(fluxes%rigidity_ice_u))       deallocate(fluxes%rigidity_ice_u)
-  if (associated(fluxes%rigidity_ice_v))       deallocate(fluxes%rigidity_ice_v)
   if (associated(fluxes%ustar_berg))           deallocate(fluxes%ustar_berg)
   if (associated(fluxes%area_berg))            deallocate(fluxes%area_berg)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
@@ -2477,6 +2661,24 @@ subroutine deallocate_forcing_type(fluxes)
   call coupler_type_destructor(fluxes%tr_fluxes)
 
 end subroutine deallocate_forcing_type
+
+
+!> Deallocate the mechanical forcing type
+subroutine deallocate_mech_forcing(forces)
+  type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
+
+  if (associated(forces%taux))  deallocate(forces%taux)
+  if (associated(forces%tauy))  deallocate(forces%tauy)
+  if (associated(forces%ustar)) deallocate(forces%ustar)
+  if (associated(forces%p_surf))      deallocate(forces%p_surf)
+  if (associated(forces%p_surf_full)) deallocate(forces%p_surf_full)
+  if (associated(forces%net_mass_src))   deallocate(forces%net_mass_src)
+  if (associated(forces%rigidity_ice_u)) deallocate(forces%rigidity_ice_u)
+  if (associated(forces%rigidity_ice_v)) deallocate(forces%rigidity_ice_v)
+  if (associated(forces%frac_shelf_u))   deallocate(forces%frac_shelf_u)
+  if (associated(forces%frac_shelf_v))   deallocate(forces%frac_shelf_v)
+
+end subroutine deallocate_mech_forcing
 
 
 !> \namespace mom_forcing_type
