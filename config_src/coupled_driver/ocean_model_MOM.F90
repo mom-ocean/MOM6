@@ -881,11 +881,9 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, use_conT_absS, &
   endif
 
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  !If directed convert the surface T&S
-  !from conservative T to potential T and
-  !from absolute (reference) salinity to practical salinity
-  !
-  if(use_conT_absS) then
+  if (use_conT_absS) then
+    !If directed convert the surface T&S from conservative T to potential T and
+    !from absolute (reference) salinity to practical salinity
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(sfc_state%SSS(i+i0,j+j0))
       Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(sfc_state%SSS(i+i0,j+j0), &
@@ -898,14 +896,23 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, use_conT_absS, &
     enddo ; enddo
   endif
 
-  do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-    Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
-    if (present(patm)) &
-      Ocean_sfc%sea_lev(i,j) = Ocean_sfc%sea_lev(i,j) + patm(i,j) * press_to_z
-      if (associated(sfc_state%frazil)) &
+  if (present(patm)) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0) + patm(i,j) * press_to_z
+      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+    enddo ; enddo
+  else
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%sea_lev(i,j) = sfc_state%sea_lev(i+i0,j+j0)
+      Ocean_sfc%area(i,j) = G%areaT(i+i0,j+j0)
+    enddo ; enddo
+  endif
+
+  if (associated(sfc_state%frazil)) then
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%frazil(i,j) = sfc_state%frazil(i+i0,j+j0)
-    Ocean_sfc%area(i,j)   =  G%areaT(i+i0,j+j0)
-  enddo ; enddo
+    enddo ; enddo
+  endif
 
   if (Ocean_sfc%stagger == AGRID) then
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
