@@ -97,8 +97,9 @@ logical :: first_call = .true.
 
 contains
 
-subroutine MESO_wind_forcing(state, forces, day, G, CS)
-  type(surface),                 intent(inout) :: state
+subroutine MESO_wind_forcing(sfc_state, forces, day, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
@@ -159,8 +160,9 @@ subroutine MESO_wind_forcing(state, forces, day, G, CS)
 
 end subroutine MESO_wind_forcing
 
-subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
+subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes
   type(time_type),               intent(in)    :: day
   real,                          intent(in)    :: dt   !< The amount of time over which
@@ -291,10 +293,10 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         ! salinity (in PSU) that are being restored toward.
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
-              (CS%S_Restore(i,j) - state%SSS(i,j)) / &
-              (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
+              (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
+              (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_added(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
@@ -314,7 +316,7 @@ subroutine MESO_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
