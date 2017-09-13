@@ -85,8 +85,9 @@ end type user_surface_forcing_CS
 
 contains
 
-subroutine USER_wind_forcing(state, forces, day, G, CS)
-  type(surface),                 intent(inout) :: state
+subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
@@ -146,8 +147,9 @@ subroutine USER_wind_forcing(state, forces, day, G, CS)
 
 end subroutine USER_wind_forcing
 
-subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
+subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes
   type(time_type),               intent(in)    :: day
   real,                          intent(in)    :: dt   !< The amount of time over which
@@ -262,10 +264,10 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         Salin_restore = 0.0
 
         fluxes%heat_added(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j))
+            (Temp_restore - sfc_state%SST(i,j))
         fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / &
-             (0.5 * (Salin_restore + state%SSS(i,j))))
+            ((Salin_restore - sfc_state%SSS(i,j)) / &
+             (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -281,7 +283,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY

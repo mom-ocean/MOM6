@@ -166,8 +166,9 @@ integer :: id_clock_forcing
 
 contains
 
-subroutine set_forcing(state, forcing, fluxes, day_start, day_interval, G, CS)
-  type(surface),         intent(inout) :: state
+subroutine set_forcing(sfc_state, forcing, fluxes, day_start, day_interval, G, CS)
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),    intent(inout) :: forces !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day_start
@@ -222,21 +223,21 @@ subroutine set_forcing(state, forcing, fluxes, day_start, day_interval, G, CS)
   ! calls to various wind options
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
     if (trim(CS%wind_config) == "file") then
-      call wind_forcing_from_file(state, forces, day_center, G, CS)
+      call wind_forcing_from_file(sfc_state, forces, day_center, G, CS)
     elseif (trim(CS%wind_config) == "2gyre") then
-      call wind_forcing_2gyre(state, forces, day_center, G, CS)
+      call wind_forcing_2gyre(sfc_state, forces, day_center, G, CS)
     elseif (trim(CS%wind_config) == "1gyre") then
-      call wind_forcing_1gyre(state, forces, day_center, G, CS)
+      call wind_forcing_1gyre(sfc_state, forces, day_center, G, CS)
     elseif (trim(CS%wind_config) == "gyres") then
-      call wind_forcing_gyres(state, forces, day_center, G, CS)
+      call wind_forcing_gyres(sfc_state, forces, day_center, G, CS)
     elseif (trim(CS%wind_config) == "zero") then
-      call wind_forcing_zero(state, forces, day_center, G, CS)
+      call wind_forcing_zero(sfc_state, forces, day_center, G, CS)
     elseif (trim(CS%wind_config) == "MESO") then
       call MOM_error(FATAL, "MESO forcing is not available with the ice-shelf"//&
                "version of MOM_surface_forcing.")
-!      call MESO_wind_forcing(state, forces, day_center, G, CS%MESO_forcing_CSp)
+!      call MESO_wind_forcing(sfc_state, forces, day_center, G, CS%MESO_forcing_CSp)
     elseif (trim(CS%wind_config) == "USER") then
-      call USER_wind_forcing(state, forces, day_center, G, CS%user_forcing_CSp)
+      call USER_wind_forcing(sfc_state, forces, day_center, G, CS%user_forcing_CSp)
     elseif (CS%variable_winds .and. .not.CS%first_call_set_forcing) then
       call MOM_error(FATAL, &
        "MOM_surface_forcing: Variable winds defined with no wind config")
@@ -248,17 +249,17 @@ subroutine set_forcing(state, forcing, fluxes, day_start, day_interval, G, CS)
   if ((CS%variable_buoyforce .or. CS%first_call_set_forcing) .and. &
       (.not.CS%adiabatic)) then
     if (trim(CS%buoy_config) == "file") then
-      call buoyancy_forcing_from_files(state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_from_files(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "zero") then
-      call buoyancy_forcing_zero(state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_zero(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "linear") then
-      call buoyancy_forcing_linear(state, fluxes, day_center, dt, G, CS)
+      call buoyancy_forcing_linear(sfc_state, fluxes, day_center, dt, G, CS)
     elseif (trim(CS%buoy_config) == "MESO") then
       call MOM_error(FATAL, "MESO forcing is not available with the ice-shelf"//&
                "version of MOM_surface_forcing.")
-!      call MESO_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%MESO_forcing_CSp)
+!      call MESO_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%MESO_forcing_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
-      call USER_buoyancy_forcing(state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
+      call USER_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
       call MOM_mesg("MOM_surface_forcing: buoyancy forcing has been set to omitted.")
     elseif (CS%variable_buoyforce .and. .not.CS%first_call_set_forcing) then
@@ -271,11 +272,11 @@ subroutine set_forcing(state, forcing, fluxes, day_start, day_interval, G, CS)
   endif
 
   if (associated(CS%tracer_flow_CSp)) then
-    call call_tracer_set_forcing(state, fluxes, day_start, day_interval, G, CS%tracer_flow_CSp)
+    call call_tracer_set_forcing(sfc_state, fluxes, day_start, day_interval, G, CS%tracer_flow_CSp)
   endif
 
   ! Allow for user-written code to alter the fluxes after all the above
-  call user_alter_forcing(state, fluxes, day_center, G, CS%urf_CS)
+  call user_alter_forcing(sfc_state, fluxes, day_center, G, CS%urf_CS)
 
   ! Fields that exist in both the forcing and mech_forcing types must be copied.
   if (CS%variable_winds .or. CS%first_call_set_forcing) then
@@ -332,8 +333,9 @@ subroutine buoyancy_forcing_allocate(fluxes, G, CS)
 end subroutine buoyancy_forcing_allocate
 
 
-subroutine wind_forcing_zero(state, forces, day, G, CS)
-  type(surface),            intent(inout) :: state
+subroutine wind_forcing_zero(sfc_state, forces, day, G, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
@@ -383,8 +385,9 @@ subroutine wind_forcing_zero(state, forces, day, G, CS)
 end subroutine wind_forcing_zero
 
 
-subroutine wind_forcing_2gyre(state, forces, day, G, CS)
-  type(surface),            intent(inout) :: state
+subroutine wind_forcing_2gyre(sfc_state, forces, day, G, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
@@ -425,8 +428,9 @@ subroutine wind_forcing_2gyre(state, forces, day, G, CS)
 end subroutine wind_forcing_2gyre
 
 
-subroutine wind_forcing_1gyre(state, forces, day, G, CS)
-  type(surface),            intent(inout) :: state
+subroutine wind_forcing_1gyre(sfc_state, forces, day, G, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
@@ -466,8 +470,9 @@ subroutine wind_forcing_1gyre(state, forces, day, G, CS)
 end subroutine wind_forcing_1gyre
 
 
-subroutine wind_forcing_gyres(state, forces, day, G, CS)
-  type(surface),            intent(inout) :: state
+subroutine wind_forcing_gyres(sfc_state, forces, day, G, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
@@ -517,8 +522,9 @@ subroutine wind_forcing_gyres(state, forces, day, G, CS)
 end subroutine wind_forcing_gyres
 
 
-subroutine wind_forcing_from_file(state, forces, day, G, CS)
-  type(surface),            intent(inout) :: state
+subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
+  type(surface),            intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(mech_forcing),       intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),          intent(in)    :: day
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure
@@ -623,8 +629,9 @@ subroutine wind_forcing_from_file(state, forces, day, G, CS)
 end subroutine wind_forcing_from_file
 
 
-subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
-  type(surface),         intent(inout) :: state
+subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt   !< The amount of time over which
@@ -774,7 +781,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       fluxes%sw(i,j)                   = fluxes%sw(i,j)               * G%mask2dT(i,j)
       fluxes%latent(i,j)               = fluxes%latent(i,j)           * G%mask2dT(i,j)
 
-      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*state%SST(i,j)
+      fluxes%heat_content_lrunoff(i,j) = fluxes%C_p*fluxes%lrunoff(i,j)*sfc_state%SST(i,j)
       fluxes%latent_evap_diag(i,j)     = fluxes%latent_evap_diag(i,j) * G%mask2dT(i,j)
       fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*hlf
       fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*hlf
@@ -787,10 +794,10 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
-              ((CS%T_Restore(i,j) - state%SST(i,j)) * rhoXcp * CS%Flux_const)
+              ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
-              (CS%S_Restore(i,j) - state%SSS(i,j)) / &
-              (0.5*(state%SSS(i,j) + CS%S_Restore(i,j)))
+              (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
+              (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
           fluxes%heat_restore(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
@@ -799,7 +806,7 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
     else
       do j=js,je ; do i=is,ie
         if (G%mask2dT(i,j) > 0) then
-          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - state%sfc_density(i,j)) * &
+          fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
                              (CS%G_Earth*CS%Flux_const/CS%Rho0)
         else
           fluxes%buoy(i,j) = 0.0
@@ -815,9 +822,9 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 
 !### if (associated(CS%ctrl_forcing_CSp)) then
 !###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
+!###     SST_anom(i,j) = sfc_state%SST(i,j) - CS%T_Restore(i,j)
+!###     SSS_anom(i,j) = sfc_state%SSS(i,j) - CS%S_Restore(i,j)
+!###     SSS_mean(i,j) = 0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j))
 !###   enddo ; enddo
 !###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
 !###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
@@ -827,8 +834,9 @@ subroutine buoyancy_forcing_from_files(state, fluxes, day, dt, G, CS)
 end subroutine buoyancy_forcing_from_files
 
 
-subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
-  type(surface),         intent(inout) :: state
+subroutine buoyancy_forcing_zero(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt   !< The amount of time over which
@@ -885,8 +893,9 @@ subroutine buoyancy_forcing_zero(state, fluxes, day, dt, G, CS)
 end subroutine buoyancy_forcing_zero
 
 
-subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
-  type(surface),         intent(inout) :: state
+subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),         intent(inout) :: fluxes
   type(time_type),       intent(in)    :: day
   real,                  intent(in)    :: dt   !< The amount of time over which
@@ -947,10 +956,10 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
         S_restore = CS%S_south + (CS%S_north-CS%S_south)*y
         if (G%mask2dT(i,j) > 0) then
           fluxes%heat_restore(i,j) = G%mask2dT(i,j) * &
-              ((T_Restore - state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
+              ((T_Restore - sfc_state%SST(i,j)) * ((CS%Rho0 * fluxes%C_p) * CS%Flux_const))
           fluxes%vprec(i,j) = - (CS%Rho0*CS%Flux_const) * &
-              (S_Restore - state%SSS(i,j)) / &
-              (0.5*(state%SSS(i,j) + S_Restore))
+              (S_Restore - sfc_state%SSS(i,j)) / &
+              (0.5*(sfc_state%SSS(i,j) + S_Restore))
         else
           fluxes%heat_restore(i,j) = 0.0
           fluxes%vprec(i,j) = 0.0
@@ -961,7 +970,7 @@ subroutine buoyancy_forcing_linear(state, fluxes, day, dt, G, CS)
                      "RESTOREBUOY to linear not written yet.")
      !do j=js,je ; do i=is,ie
      !  if (G%mask2dT(i,j) > 0) then
-     !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - state%sfc_density(i,j)) * &
+     !    fluxes%buoy(i,j) = (CS%Dens_Restore(i,j) - sfc_state%sfc_density(i,j)) * &
      !                       (CS%G_Earth*CS%Flux_const/CS%Rho0)
      !  else
      !    fluxes%buoy(i,j) = 0.0
