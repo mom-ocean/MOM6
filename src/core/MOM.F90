@@ -87,9 +87,6 @@ use MOM_dynamics_split_RK2,    only : MOM_dyn_split_RK2_CS
 use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
-use MOM_dynamics_legacy_split, only : step_MOM_dyn_legacy_split, register_restarts_dyn_legacy_split
-use MOM_dynamics_legacy_split, only : initialize_dyn_legacy_split, end_dyn_legacy_split
-use MOM_dynamics_legacy_split, only : adjustments_dyn_legacy_split, MOM_dyn_legacy_split_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init
 use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
@@ -181,9 +178,6 @@ type, public :: MOM_control_struct
                                    !! terms, for derived diagnostics (e.g., energy budgets)
 
   logical :: split                   !< If true, use the split time stepping scheme.
-  logical :: legacy_split            !< If true, use the legacy split time stepping
-                                     !! code with all the options that were available in
-                                     !! the predecessor isopycnal model "GOLD".
   logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
                                      !! (i.e., no split between barotropic and baroclinic).
   logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
@@ -391,7 +385,6 @@ type, public :: MOM_control_struct
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
-  type(MOM_dyn_legacy_split_CS), pointer :: dyn_legacy_split_CSp => NULL()
 
   type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
   type(diabatic_CS),             pointer :: diabatic_CSp           => NULL()
@@ -721,11 +714,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       call cpu_clock_begin(id_clock_thermo)
 
-      ! These adjustments are a part of an archaic time stepping algorithm.
-      if (CS%split .and. CS%legacy_split .and. .not.CS%adiabatic) then
-        call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
-      endif
-
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
 
@@ -852,19 +840,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       endif
 
       mass_src_time = CS%t_dyn_rel_thermo
-      if (CS%legacy_split) then
-        call step_MOM_dyn_legacy_split(u, v, h, CS%tv, CS%visc, &
-                    Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
-                    mass_src_time, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                    eta_av, G, GV, CS%dyn_legacy_split_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
-      else
-        call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
-                    Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
-                    mass_src_time, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                    eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
-      endif
+      call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, &
+                  Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
+                  mass_src_time, dt_therm, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                  eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
-
 
     elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
       !   This section uses an unsplit stepping scheme for the dynamic
@@ -886,7 +866,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
     endif ! -------------------------------------------------- end SPLIT
-
 
 
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
@@ -1015,11 +994,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
         endif
 
         call enable_averaging(CS%t_dyn_rel_thermo, Time_local, CS%diag)
-
-        ! These adjustments are a part of an archaic time stepping algorithm.
-        if (CS%split .and. CS%legacy_split .and. .not.CS%adiabatic) then
-          call adjustments_dyn_legacy_split(u, v, h, dt, G, GV, CS%dyn_legacy_split_CSp)
-        endif
 
         ! Apply diabatic forcing, do mixing, and regrid.
         call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
@@ -1581,16 +1555,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   if (CS%split) then
-    call get_param(param_file, "MOM", "USE_LEGACY_SPLIT", CS%legacy_split, &
-                 "If true, use the full range of options available from \n"//&
-                 "the older GOLD-derived split time stepping code.", &
-                 default=.false.)
     CS%use_RK2 = .false.
   else
     call get_param(param_file, "MOM", "USE_RK2", CS%use_RK2, &
                  "If true, use RK2 instead of RK3 in the unsplit time stepping.", &
                  default=.false.)
-    CS%legacy_split = .false.
   endif
 
   call get_param(param_file, "MOM", "CALC_RHO_FOR_SEA_LEVEL", CS%calc_rho_for_sea_lev, &
@@ -1991,21 +1960,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call restart_init(param_file, CS%restart_CSp)
   call set_restart_fields(GV, param_file, CS)
   if (CS%split) then
-    if (CS%legacy_split) then
-      call register_restarts_dyn_legacy_split(dG%HI, GV, param_file, &
-               CS%dyn_legacy_split_CSp, CS%restart_CSp, CS%uh, CS%vh)
-    else
-      call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
-               CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
-    endif
+    call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
+             CS%dyn_split_RK2_CSp, CS%restart_CSp, CS%uh, CS%vh)
+  elseif (CS%use_RK2) then
+    call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
+           CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
   else
-    if (CS%use_RK2) then
-      call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
-             CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
-    else
-      call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
-             CS%dyn_unsplit_CSp, CS%restart_CSp)
-    endif
+    call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
+           CS%dyn_unsplit_CSp, CS%restart_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
@@ -2084,7 +2046,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",CS%restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
     ! \todo This block exists for legacy reasons and we should phase it out of
-    ! all examples.
+    ! all examples. !###
     if (CS%debug) then
       call uvchksum("Pre ALE adjust init cond [uv]", &
                     CS%u, CS%v, G%HI, haloshift=1)
@@ -2171,31 +2133,21 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp,CS%OBC)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
-    if (CS%legacy_split) then
-      call initialize_dyn_legacy_split(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
-                  G, GV, param_file, diag, CS%dyn_legacy_split_CSp, CS%restart_CSp, &
-                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE,    &
-                  CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, CS%visc,  &
-                  dirs, CS%ntrunc)
-    else
-      call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time,   &
-                  G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
-                  CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-                  CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
-                  CS%visc, dirs, CS%ntrunc)
-    endif
+    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+              G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
+              CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
+              CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
+              CS%visc, dirs, CS%ntrunc)
+  elseif (CS%use_RK2) then
+    call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,         &
+            param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,      &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
+            CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   else
-    if (CS%use_RK2) then
-      call initialize_dyn_unsplit_RK2(CS%u, CS%v, CS%h, Time, G, GV,         &
-              param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,      &
-              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
-              CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
-    else
-      call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,             &
-              param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,          &
-              CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
-              CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
-    endif
+    call initialize_dyn_unsplit(CS%u, CS%v, CS%h, Time, G, GV,             &
+            param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,          &
+            CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
+            CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
@@ -3808,15 +3760,13 @@ subroutine MOM_end(CS)
   endif
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
-  if (CS%split) then ; if (CS%legacy_split) then
-      call end_dyn_legacy_split(CS%dyn_legacy_split_CSp)
-    else
-      call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
-  endif ; else ; if (CS%use_RK2) then
-      call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
-    else
-      call end_dyn_unsplit(CS%dyn_unsplit_CSp)
-  endif ; endif
+  if (CS%split) then
+    call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
+  elseif (CS%use_RK2) then
+    call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
+  else
+    call end_dyn_unsplit(CS%dyn_unsplit_CSp)
+  endif
   DEALLOC_(CS%ave_ssh)
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
