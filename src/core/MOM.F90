@@ -3188,14 +3188,8 @@ end subroutine post_surface_diagnostics
 subroutine write_static_fields(G, diag)
   type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
   type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
-
-  ! The out_X arrays are needed because some of the elements of the grid
-  ! type may be reduced rank macros.
-  real    :: out_h(SZI_(G),SZJ_(G))
-  integer :: id, i, j, is, ie, js, je
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  out_h(:,:) = 0.0
+  ! Local variables
+  integer :: id
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_N')
@@ -3234,8 +3228,7 @@ subroutine write_static_fields(G, diag)
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
         cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
   if (id > 0) then
-    do j=js,je ; do i=is,ie ; out_h(i,j) = G%areaT(i,j) ; enddo ; enddo
-    call post_data(id, out_h, diag, .true.)
+    call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
