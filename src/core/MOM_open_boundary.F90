@@ -13,7 +13,7 @@ use MOM_grid,                 only : ocean_grid_type, hor_index_type
 use MOM_dyn_horgrid,          only : dyn_horgrid_type
 use MOM_io,                   only : EAST_FACE, NORTH_FACE
 use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
-use MOM_io,                   only : vardesc, query_vardesc
+use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tracer_registry,      only : add_tracer_OBC_values, tracer_registry_type
@@ -44,7 +44,9 @@ public open_boundary_zero_normal_flow
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
 public segment_tracer_registry_init
+public segment_tracer_registry_end
 public register_segment_tracer
+public register_temp_salt_segments
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -69,6 +71,11 @@ type, public :: OBC_segment_data_type
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
 
+!> Tracer segment data structure, for putting into an array of objects, not all the same shape.
+type, public :: segment_tracer_type
+  real, dimension(:,:,:), pointer :: tr         => NULL()  !< tracer concentration array
+end type segment_tracer_type
+
 !> Tracer on OBC segment data structure, for putting into a segment tracer registry.
 type, public :: OBC_segment_tracer_type
   real, dimension(:,:,:), pointer :: t          => NULL()  !< tracer concentration array
@@ -79,10 +86,11 @@ end type OBC_segment_tracer_type
 
 !> Type to carry tracers on segments
 type, public :: segment_tracer_registry_type
-  integer                       :: ntr = 0           !< number of registered tracers
+  integer                       :: ntseg = 0         !< number of registered tracer segments
   type(OBC_segment_tracer_type) :: Tr(MAX_FIELDS_)   !< array of registered tracers
   logical                       :: locked = .false.  !< New tracers may be registered if locked=.false.
                                                      !! When locked=.true.,no more tracers can be registered.
+                                                     !! Not sure who locks it or when...
 end type segment_tracer_registry_type
 
 !> Open boundary segment data structure.
@@ -128,11 +136,7 @@ type, public :: OBC_segment_type
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
                                                             !! that values should be nudged towards (m s-1).
-  real, pointer, dimension(:,:,:) :: T=>NULL()              !< The temperature on the OB segment
-                                                            !! velocity points (C).
-  real, pointer, dimension(:,:,:) :: S=>NULL()              !< The salinity on the OB segment
-                                                            !! velocity points ().
-  type(segment_tracer_registry_type), pointer :: Reg=>NULL()!< pointer to the tracer registry
+  type(segment_tracer_registry_type), pointer :: tr_Reg=>NULL()!< pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
@@ -1562,8 +1566,7 @@ end subroutine gradient_at_q_points
 
 
 !> Sets the initial values of the tracer open boundary conditions.
-!! Also allocates and fills the segment%T and segment%S arrays, but they
-!! are not yet used anywhere.
+!! Redoing this elsewhere.
 subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
@@ -1594,49 +1597,6 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 
     call pass_var(tv%T, G%Domain)
     call pass_var(tv%S, G%Domain)
-
-    do n=1,OBC%number_of_segments
-      segment => OBC%segment(n)
-      if (.not. segment%on_pe) cycle
-
-      if (segment%is_E_or_W) then
-        if (.not.ASSOCIATED(segment%T)) then
-          allocate(segment%T(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
-          allocate(segment%S(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
-        endif
-      else if (segment%is_N_or_S) then
-        if (.not.ASSOCIATED(segment%T)) then
-          allocate(segment%T(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
-          allocate(segment%S(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
-        endif
-      endif
-
-      if (segment%direction == OBC_DIRECTION_E) then
-        I=segment%HI%IsdB
-        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-          segment%T(I,j,k) = tv%T(i,j,k)
-          segment%S(I,j,k) = tv%S(i,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_W) then
-        I=segment%HI%IsdB
-        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-          segment%T(I,j,k) = tv%T(i+1,j,k)
-          segment%S(I,j,k) = tv%S(i+1,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_N) then
-        J=segment%HI%JsdB
-        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-          segment%T(i,J,k) = tv%T(i,j,k)
-          segment%S(i,J,k) = tv%S(i,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_S) then
-        J=segment%HI%JsdB
-        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-          segment%T(i,J,k) = tv%T(i,j+1,k)
-          segment%S(i,J,k) = tv%S(i,j+1,k)
-        enddo; enddo
-      endif
-    enddo
 
     do n=1,OBC%number_of_segments
       segment => OBC%segment(n)
@@ -2095,6 +2055,15 @@ function register_file_OBC(param_file, CS, OBC_Reg)
 
 end function register_file_OBC
 
+!> Clean up the file OBC from registry.
+subroutine file_OBC_end(CS)
+  type(file_OBC_CS), pointer    :: CS   !< OBC file control structure.
+
+  if (associated(CS)) then
+    deallocate(CS)
+  endif
+end subroutine file_OBC_end
+
 !> Initialize the segment tracer registry.
 subroutine segment_tracer_registry_init(param_file, Reg, segment)
   type(param_file_type),      intent(in)      :: param_file !< open file to parse for model parameters
@@ -2146,44 +2115,144 @@ subroutine register_segment_tracer(tr_desc, param_file, HI, GV, Reg, segment, tr
                                                                 !! tracer cells (units of tracer CONC)
 
 ! Local variables
-  integer :: ntr
+  integer :: ntseg
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not. associated(Reg)) call segment_tracer_registry_init(param_file, Reg, segment)
 
-  if (Reg%ntr>=MAX_FIELDS_) then
+  if (Reg%ntseg>=MAX_FIELDS_) then
     write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
-        &all the tracers being registered via register_tracer.")') Reg%ntr+1
+        &all the tracers being registered via register_tracer.")') Reg%ntseg+1
     call MOM_error(FATAL,"MOM register_tracer: "//mesg)
   endif
-  Reg%ntr = Reg%ntr + 1
-  ntr     = Reg%ntr
+  Reg%ntseg = Reg%ntseg + 1
+  ntseg     = Reg%ntseg
 
   if (present(tr_desc_ptr)) then
-    Reg%Tr(ntr)%vd => tr_desc_ptr
+    Reg%Tr(ntseg)%vd => tr_desc_ptr
   else
-    allocate(Reg%Tr(ntr)%vd) ; Reg%Tr(ntr)%vd = tr_desc
+    allocate(Reg%Tr(ntseg)%vd) ; Reg%Tr(ntseg)%vd = tr_desc
   endif
 
-  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name)
+  call query_vardesc(Reg%Tr(ntseg)%vd, name=Reg%Tr(ntseg)%name)
 
   if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
+      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntseg)%name)//&
       " with a locked tracer registry.")
 
-  if (present(OBC_scalar)) Reg%Tr(ntr)%OBC_inflow_conc = OBC_scalar
+  if (present(OBC_scalar)) Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar
   if (present(OBC_array)) then ; if (associated(OBC_array)) &
-                                    Reg%Tr(ntr)%t => OBC_array ; endif
+                                    Reg%Tr(ntseg)%t => OBC_array ; endif
 end subroutine register_segment_tracer
 
-!> Clean up the file OBC from registry.
-subroutine file_OBC_end(CS)
-  type(file_OBC_CS), pointer    :: CS   !< OBC file control structure.
+!> Clean up the segment tracer registry.
+subroutine segment_tracer_registry_end(Reg)
+  type(segment_tracer_registry_type), pointer :: Reg        !< pointer to tracer registry
 
-  if (associated(CS)) then
-    deallocate(CS)
+! Local variables
+  integer n
+
+  if (associated(Reg)) then
+    do n = 1, Reg%ntseg
+      if (associated(Reg%Tr(n)%t)) deallocate(Reg%Tr(n)%t)
+    enddo
+    deallocate(Reg)
   endif
-end subroutine file_OBC_end
+end subroutine segment_tracer_registry_end
+
+subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
+  type(ocean_grid_type),      intent(in)    :: G          !< Ocean grid structure
+  type(verticalGrid_type),    intent(in)    :: GV         !< ocean vertical grid structure
+  type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
+  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+  type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
+
+! Local variables
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz, nf
+  integer :: i, j, k
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(vardesc)                   :: vd_T, vd_S
+  type(segment_tracer_type), dimension(:), pointer :: fields
+
+  if (.not. associated(OBC)) return
+  if (.not. associated(tv%T) .and. associated(tv%S)) return
+  ! Both temperature and salinity fields
+  allocate(fields(2 * OBC%number_of_segments))
+
+  call pass_var(tv%T, G%Domain)
+  call pass_var(tv%S, G%Domain)
+
+  nz = G%ke
+  ! A better way to do this???
+  vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
+                  cmor_field_name="thetao",cmor_units="C",                &
+                  conversion=tv%C_p)
+  vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
+                  cmor_field_name="so",cmor_units="ppt",   &
+                  conversion=0.001)
+
+  nf = 0
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+    if (segment%is_E_or_W) then
+      nf = nf + 1
+      allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      nf = nf + 1
+      allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      ! Fill with T and S values
+      I=segment%HI%IsdB
+      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+        if (segment%direction == OBC_DIRECTION_W) then
+          if (G%mask2dCu(I,j) /= 0) then
+            fields(nf-1)%tr(I,j,k) = tv%T(i+1,j,k)
+            fields(nf)%tr(I,j,k) = tv%S(i+1,j,k)
+          endif
+        else
+          if (G%mask2dCu(I,j) /= 0) then
+            fields(nf-1)%tr(I,j,k) = tv%T(i,j,k)
+            fields(nf)%tr(I,j,k) = tv%S(i,j,k)
+          endif
+        endif
+      enddo ; enddo
+    else
+      nf = nf + 1
+      allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      nf = nf + 1
+      allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      ! Fill with T and S values
+      J=segment%HI%JsdB
+      do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+        if (segment%direction == OBC_DIRECTION_S) then
+          if (G%mask2dCv(i,J) /= 0) then
+            fields(nf-1)%tr(i,J,k) = tv%T(i,j+1,k)
+            fields(nf)%tr(i,J,k) = tv%S(i,j+1,k)
+          endif
+        else
+          if (G%mask2dCv(i,J) /= 0) then
+            fields(nf-1)%tr(i,J,k) = tv%T(i,j,k)
+            fields(nf)%tr(i,J,k) = tv%S(i,j,k)
+          endif
+        endif
+      enddo ; enddo
+    endif
+    ! Does argument 6 want to be an int or a segment object??
+    call register_segment_tracer(vd_T, param_file, segment%HI, GV, segment%tr_Reg, n, &
+                                 OBC_array=fields(nf-1)%tr)
+    call register_segment_tracer(vd_S, param_file, segment%HI, GV, segment%tr_Reg, n, &
+                                 OBC_array=fields(nf)%tr)
+  enddo
+end subroutine register_temp_salt_segments
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
