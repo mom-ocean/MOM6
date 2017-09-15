@@ -36,14 +36,15 @@ program MOM_main
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
   use MOM_file_parser,     only : read_param, get_param, log_param, log_version, param_file_type
   use MOM_file_parser,     only : close_param_file
-  use MOM_forcing_type,    only : forcing, forcing_diagnostics, mech_forcing_diags, MOM_forcing_chksum
+  use MOM_forcing_type,    only : forcing, mech_forcing, forcing_diagnostics
+  use MOM_forcing_type,    only : mech_forcing_diags, MOM_forcing_chksum, MOM_mech_forcing_chksum
   use MOM_get_input,       only : directories
   use MOM_grid,            only : ocean_grid_type
   use MOM_io,              only : file_exists, open_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : save_restart
-  use MOM_string_functions, only : uppercase
+  use MOM_string_functions,only : uppercase
   use MOM_sum_output,      only : write_energy, accumulate_net_input
   use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
@@ -71,11 +72,14 @@ program MOM_main
 
 #include <MOM_memory.h>
 
-  ! A structure containing pointers to the ocean forcing fields.
+  ! A structure with the driving mechanical surface forces
+  type(mech_forcing) :: forces
+  ! A structure containing pointers to the thermodynamic forcing fields
+  ! at the ocean surface.
   type(forcing) :: fluxes
 
   ! A structure containing pointers to the ocean surface state fields.
-  type(surface) :: state
+  type(surface) :: sfc_state
 
   ! A pointer to a structure containing metrics and related information.
   type(ocean_grid_type), pointer :: grid
@@ -287,7 +291,7 @@ program MOM_main
   Master_Time = Time
   grid => MOM_CSp%G
   GV   => MOM_CSp%GV
-  call calculate_surface_state(state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
+  call calculate_surface_state(sfc_state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
                                MOM_CSp%ave_ssh, grid, GV, MOM_CSp)
 
 
@@ -300,7 +304,8 @@ program MOM_main
   if (use_ice_shelf) then
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
-    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, MOM_CSp%diag, fluxes)
+    call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
+                              MOM_CSp%diag, forces, fluxes)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
@@ -425,15 +430,16 @@ program MOM_main
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
-        call set_forcing(state, fluxes, Time, Time_step_ocean, grid, &
+        call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
     endif
     if (MOM_CSp%debug) then
+      call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
       call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
     endif
 
     if (use_ice_shelf) then
-      call shelf_calc_flux(state, fluxes, Time, time_step, ice_shelf_CSp)
+      call shelf_calc_flux(sfc_state, forces, fluxes, Time, time_step, ice_shelf_CSp)
 !###IS     call add_shelf_flux_forcing(fluxes, ice_shelf_CSp)
 !###IS  ! With a coupled ice/ocean run, use the following call.
 !###IS      call add_shelf_flux_IOB(ice_ocean_bdry_type, ice_shelf_CSp)
@@ -452,9 +458,9 @@ program MOM_main
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_offline(fluxes, state, Time1, time_step, MOM_CSp)
+      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
     else
-      call step_MOM(fluxes, state, Time1, time_step, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
     endif
 
 !   Time = Time + Time_step_ocean
@@ -478,16 +484,16 @@ program MOM_main
     Time = Master_Time
 
     call enable_averaging(time_step, Time, MOM_CSp%diag)
-    call mech_forcing_diags(fluxes, time_step, grid, MOM_CSp%diag, &
+    call mech_forcing_diags(forces, fluxes, time_step, grid, MOM_CSp%diag, &
                             surface_forcing_CSp%handles)
     call disable_averaging(MOM_CSp%diag)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
         call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
-        call forcing_diagnostics(fluxes, state, fluxes%dt_buoy_accum, grid, &
+        call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, &
                                  MOM_CSp%diag, surface_forcing_CSp%handles)
-        call accumulate_net_input(fluxes, state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
+        call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
         call disable_averaging(MOM_CSp%diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
