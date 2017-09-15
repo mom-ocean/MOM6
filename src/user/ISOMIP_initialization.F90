@@ -579,7 +579,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     end select
     !  This call sets up the damping rates and interface heights.
     !  This sets the inverse damping timescale fields in the sponges.
-    call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
+    call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
 
     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
     T_range = T_range / G%max_depth ! Convert T_range into dT/dz
