@@ -84,13 +84,13 @@ type, public :: OBC_segment_tracer_type
   type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
 end type OBC_segment_tracer_type
 
-!> Type to carry tracers on segments
+!> Registry type for tracers on segments
 type, public :: segment_tracer_registry_type
   integer                       :: ntseg = 0         !< number of registered tracer segments
   type(OBC_segment_tracer_type) :: Tr(MAX_FIELDS_)   !< array of registered tracers
   logical                       :: locked = .false.  !< New tracers may be registered if locked=.false.
                                                      !! When locked=.true.,no more tracers can be registered.
-                                                     !! Not sure who locks it or when...
+                                                     !! Not sure who should lock it or when...
 end type segment_tracer_registry_type
 
 !> Open boundary segment data structure.
@@ -118,7 +118,7 @@ type, public :: OBC_segment_type
   real :: Tnudge_out        !< Inverse nudging timescale on outflow (1/s).
   logical :: on_pe          !< true if segment is located in the computational domain
   real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity
-                                                    !< wave speed (m -s) at OBC-points.
+                                                    !! wave speed (m -s) at OBC-points.
   real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
@@ -1047,7 +1047,15 @@ end function open_boundary_query
 !> Deallocate open boundary data
 subroutine open_boundary_dealloc(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
+  type(OBC_segment_type), pointer :: segment
+  integer :: n
+
   if (.not. associated(OBC)) return
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    call deallocate_OBC_segment_data(OBC, segment)
+  enddo
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (associated(OBC%segnum_v)) deallocate(OBC%segnum_v)
@@ -1698,6 +1706,29 @@ subroutine allocate_OBC_segment_data(OBC, segment)
 
 end subroutine allocate_OBC_segment_data
 
+!> Deallocate segment data fields
+subroutine deallocate_OBC_segment_data(OBC, segment)
+  type(ocean_OBC_type),   pointer       :: OBC     !< Open boundary structure
+  type(OBC_segment_type), intent(inout) :: segment !< Open boundary segment
+  ! Local variables
+  character(len=40)  :: mdl = "deallocate_OBC_segment_data" ! This subroutine's name.
+
+  if (.not. segment%on_pe) return
+
+  if (associated (segment%Cg)) deallocate(segment%Cg)
+  if (associated (segment%Htot)) deallocate(segment%Htot)
+  if (associated (segment%h)) deallocate(segment%h)
+  if (associated (segment%eta)) deallocate(segment%eta)
+  if (associated (segment%normal_trans_bt)) deallocate(segment%normal_trans_bt)
+  if (associated (segment%rx_normal)) deallocate(segment%rx_normal)
+  if (associated (segment%normal_vel)) deallocate(segment%normal_vel)
+  if (associated (segment%normal_vel_bt)) deallocate(segment%normal_vel_bt)
+  if (associated (segment%normal_trans)) deallocate(segment%normal_trans)
+  if (associated (segment%nudged_normal_vel)) deallocate(segment%nudged_normal_vel)
+  if (associated (segment%tr_Reg)) call segment_tracer_registry_end(segment%tr_Reg)
+
+end subroutine deallocate_OBC_segment_data
+
 !> Set tangential velocities outside of open boundaries to silly values
 !! (used for checking the interior state is independent of values outside
 !! of the domain).
@@ -2246,7 +2277,6 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
         endif
       enddo ; enddo
     endif
-    ! Does argument 6 want to be an int or a segment object??
     call register_segment_tracer(vd_T, param_file, segment%HI, GV, segment%tr_Reg, n, &
                                  OBC_array=fields(nf-1)%tr)
     call register_segment_tracer(vd_S, param_file, segment%HI, GV, segment%tr_Reg, n, &
