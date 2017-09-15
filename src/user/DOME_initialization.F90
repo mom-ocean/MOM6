@@ -340,7 +340,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       OBC_T_v(i,J,k) = T0(k)
-      segment%T(i,J,k) = T0(k)
     enddo ; enddo ; enddo
     call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
 !   call register_segment_tracer(tr_desc(m), param_file, segment%HI, GV, &
