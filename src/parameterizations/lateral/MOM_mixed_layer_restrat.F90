@@ -10,7 +10,7 @@ use MOM_diag_mediator, only : diag_update_remap_grids
 use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
-use MOM_forcing_type,  only : forcing
+use MOM_forcing_type,  only : mech_forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : vardesc, var_desc
@@ -84,14 +84,14 @@ contains
 !> Driver for the mixed-layer restratification parameterization.
 !! The code branches between two different implementations depending
 !! on whether the bulk-mixed layer or a general coordinate are in use.
-subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, VarMix, G, GV, CS)
+subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (H units = m or kg/m2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m3 or kg)
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
-  type(forcing),                             intent(in)    :: fluxes !< Pointers to forcing fields
+  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment (sec)
   real, dimension(:,:),                      pointer       :: MLD    !< Mixed layer depth provided by PBL scheme (H units)
   type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
@@ -101,15 +101,15 @@ subroutine mixedlayer_restrat(h, uhtr, vhtr, tv, fluxes, dt, MLD, VarMix, G, GV,
          "Module must be initialized before it is used.")
 
   if (GV%nkml>0) then
-    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
+    call mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, CS)
   else
-    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD, VarMix, G, GV, CS)
+    call mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD, VarMix, G, GV, CS)
   endif
 
 end subroutine mixedlayer_restrat
 
 !> Calculates a restratifying flow in the mixed layer.
-subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, VarMix, G, GV, CS)
+subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix, G, GV, CS)
   ! Arguments
   type(ocean_grid_type),                     intent(inout) :: G       !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV      !< Ocean vertical grid structure
@@ -117,7 +117,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, Var
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr    !< Accumulated zonal mass flux (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr    !< Accumulated meridional mass flux (m3 or kg)
   type(thermo_var_ptrs),                     intent(in)    :: tv      !< Thermodynamic variables structure
-  type(forcing),                             intent(in)    :: fluxes  !< Pointers to forcing fields
+  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt      !< Time increment (sec)
   real, dimension(:,:),                      pointer       :: MLD_in  !< Mixed layer depth provided by PBL scheme (H units)
   type(VarMix_CS),                           pointer       :: VarMix  !< Container for derived fields
@@ -282,7 +282,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, Var
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot_fast,Rml_av_fast,tv,p0,h,h_avail,&
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
-!$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
+!$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               htot_slow,MLD_slow,Rml_av_slow,VarMix,I_l_f,        &
 !$OMP                               res_upscale,                                       &
 !$OMP                               nz,MLD_fast,uDml_diag,vDml_diag,proper_averaging)  &
@@ -331,7 +331,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, Var
 
   if (CS%debug) then
     call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
-    call hchksum(fluxes%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
+    call hchksum(forces%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
     call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
     call hchksum(Rml_av_fast,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
@@ -343,7 +343,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, Var
 !   U - Component
 !$OMP do
   do j=js,je ; do I=is-1,ie
-    u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -419,7 +419,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, fluxes, dt, MLD_in, Var
 !  V- component
 !$OMP do
   do J=js-1,je ; do i=is,ie
-    u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -534,14 +534,14 @@ end subroutine mixedlayer_restrat_general
 
 
 !> Calculates a restratifying flow assuming a 2-layer bulk mixed layer.
-subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
+subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, forces, dt, G, GV, CS)
   type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (H units = m or kg/m2)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m3 or kg)
   type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
-  type(forcing),                             intent(in)    :: fluxes !< Pointers to forcing fields
+  type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
   real,                                      intent(in)    :: dt     !< Time increment (sec)
   type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
   ! Local variables
@@ -605,7 +605,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   p0(:) = 0.0
 !$OMP parallel default(none) shared(is,ie,js,je,G,GV,htot,Rml_av,tv,p0,h,h_avail,      &
 !$OMP                               h_neglect,g_Rho0,I4dt,CS,uhml,uhtr,dt,vhml,vhtr,   &
-!$OMP                               utimescale_diag,vtimescale_diag,fluxes,dz_neglect, &
+!$OMP                               utimescale_diag,vtimescale_diag,forces,dz_neglect, &
 !$OMP                               uDml_diag,vDml_diag,nkml)                          &
 !$OMP                       private(Rho0,h_vel,u_star,absf,mom_mixrate,timescale,      &
 !$OMP                               I2htot,z_topx2,hx2,a)                              &
@@ -641,7 +641,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
     do I=is-1,ie
       h_vel = 0.5*(htot(i,j) + htot(i+1,j)) * GV%H_to_m
 
-      u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i+1,j))
+      u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i+1,j))
       absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
       ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
       ! momentum mixing rate: pi^2*visc/h_ml^2
@@ -689,7 +689,7 @@ subroutine mixedlayer_restrat_BML(h, uhtr, vhtr, tv, fluxes, dt, G, GV, CS)
   do J=js-1,je ; do i=is,ie
     h_vel = 0.5*(htot(i,j) + htot(i,j+1)) * GV%H_to_m
 
-    u_star = 0.5*(fluxes%ustar(i,j) + fluxes%ustar(i,j+1))
+    u_star = 0.5*(forces%ustar(i,j) + forces%ustar(i,j+1))
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! peak ML visc: u_star * 0.41 * (h_ml*u_star)/(absf*h_ml + 4.0*u_star)
     ! momentum mixing rate: pi^2*visc/h_ml^2

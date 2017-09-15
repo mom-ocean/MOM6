@@ -40,7 +40,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
@@ -572,7 +572,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
     if (use_BBL_EOS) then
       do i=is,ie
-        press(i) = 0.0 ! or = fluxes%p_surf(i,j)
+        press(i) = 0.0 ! or = forces%p_surf(i,j)
         if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
       enddo
       do k=1,nz ; do i=is,ie
@@ -1023,7 +1023,7 @@ end function set_u_at_v
 !! the thickness of the topmost NKML layers (with a bulk mixed layer) are
 !! currently used.  The thicknesses are given in terms of fractional layers, so
 !! that this thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1035,9 +1035,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
                                                  !! thermodynamic fields. Absent fields have
                                                  !! NULL ptrs.
-  type(forcing),           intent(in)    :: fluxes !< A structure containing pointers to any
-                                                 !! possible forcing fields. Unused fields have
-                                                 !! NULL ptrs.
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
   real,                    intent(in)    :: dt   !< Time increment in s.
@@ -1056,7 +1054,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !                the units of h are denoted as H.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure containing pointers to any possible
+!  (in)      forces - A structure containing pointers to mechanical
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (out)     visc - A structure containing vertical viscosities and related
 !                   fields.
@@ -1167,7 +1165,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
          "Module must be initialized before it is used.")
-  if (.not.(CS%dynamic_viscous_ML .or. associated(fluxes%frac_shelf_h))) return
+  if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
+            associated(forces%frac_shelf_v)) ) return
 
   Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
@@ -1181,19 +1180,13 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   g_H_Rho0 = (GV%g_Earth * GV%H_to_m) / GV%Rho0
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
-  if (associated(fluxes%frac_shelf_h)) then
+  if (associated(forces%frac_shelf_u) .neqv. associated(forces%frac_shelf_v)) &
+    call MOM_error(FATAL, "set_viscous_ML: one of forces%frac_shelf_u and "//&
+                   "forces%frac_shelf_v is associated, but the other is not.")
+
+  if (associated(forces%frac_shelf_u)) then
     ! This configuration has ice shelves, and the appropriate variables need to
     ! be allocated.
-    if (.not.associated(fluxes%frac_shelf_u)) call MOM_error(FATAL, &
-      "set_viscous_ML: fluxes%frac_shelf_h is associated, but " // &
-      "fluxes%frac_shelf_u is not.")
-    if (.not.associated(fluxes%frac_shelf_v)) call MOM_error(FATAL, &
-      "set_viscous_ML: fluxes%frac_shelf_h is associated, but " // &
-      "fluxes%frac_shelf_v is not.")
-    if (.not.associated(visc%taux_shelf)) then
-      allocate(visc%taux_shelf(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%taux_shelf(:,:) = 0.0
-    endif
     if (.not.associated(visc%tauy_shelf)) then
       allocate(visc%tauy_shelf(G%isd:G%ied,G%JsdB:G%JedB))
       visc%tauy_shelf(:,:) = 0.0
@@ -1247,7 +1240,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif
   enddo ; endif
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS, &
+!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS, &
 !$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,OBC,    &
 !$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,mask_v,      &
 !$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
@@ -1268,16 +1261,16 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = dt_Rho0 * fluxes%taux(I,j)
-          vhtot(I) = 0.25 * dt_Rho0 * ((fluxes%tauy(i,J) + fluxes%tauy(i+1,J-1)) + &
-                                       (fluxes%tauy(i,J-1) + fluxes%tauy(i+1,J)))
+          uhtot(I) = dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+                                       (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
             absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
             if (CS%omega_frac > 0.0) &
               absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
-          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
+          U_Star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
         endif
       enddo
@@ -1356,9 +1349,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_h)) then
+    if (associated(forces%frac_shelf_u)) then
       do I=Isq,Ieq
-        if (fluxes%frac_shelf_u(I,j)*G%mask2dCu(I,j) == 0.0) then
+        if (forces%frac_shelf_u(I,j)*G%mask2dCu(I,j) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_u(I,j) = 0.0 ; visc%kv_tbl_shelf_u(I,j) = 0.0
         else
@@ -1415,7 +1408,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
                      dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
       endif
 
@@ -1489,7 +1482,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   enddo ! j-loop at u-points
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS,&
+!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS,&
 !$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,OBC,   &
 !$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
 !$OMP                                  m_to_H,H_to_m,mask_u) &
@@ -1511,9 +1504,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = dt_Rho0 * fluxes%tauy(i,J)
-          uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%taux(I-1,j+1)) + &
-                                       (fluxes%taux(I-1,j) + fluxes%taux(I,j+1)))
+          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+                                       (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
            absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
@@ -1521,7 +1514,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
 
-         U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
+         U_Star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
         endif
@@ -1601,9 +1594,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_h)) then
+    if (associated(forces%frac_shelf_v)) then
       do I=Is,Ie
-        if (fluxes%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
+        if (forces%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
@@ -1660,7 +1653,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
                      dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
       endif
 
