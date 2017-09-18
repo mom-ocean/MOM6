@@ -301,7 +301,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
-  logical :: debug=.true.
+  logical :: debug=.false.
   real :: npoints,varAvg
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
   real, dimension(SZI_(G),SZJ_(G)) :: good, fill
@@ -620,7 +620,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
   character(len=12)  :: dim_name(4)
-  logical :: debug=.true.
+  logical :: debug=.false.
   real :: npoints,varAvg
   real, dimension(SZI_(G),SZJ_(G)) :: lon_out, lat_out, tr_out, mask_out
   real, dimension(SZI_(G),SZJ_(G)) :: good, fill
