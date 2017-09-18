@@ -3189,7 +3189,8 @@ subroutine write_static_fields(G, diag)
   type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
   type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
   ! Local variables
-  integer :: id
+  real    :: tmp_h(SZI_(G),SZJ_(G))
+  integer :: id, i, j
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
         'Latitude of tracer (T) points', 'degrees_N')
@@ -3311,6 +3312,19 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
         'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
+
+  ! This static diagnostic is from CF 1.8, and is the fraction of a cell
+  ! covered by ocean, given as a percentage (poorly named).
+  id = register_static_field('ocean_model', 'area_t_percent', diag%axesT1, &
+        'Percentage of cell area covered by ocean', '%', &
+        cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
+        cmor_units='%', cmor_long_name='Sea Area Fraction', &
+        x_cell_method='mean', y_cell_method='mean')
+  if (id > 0) then
+    tmp_h(:,:) = 0.
+    tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
+    call post_data(id, tmp_h, diag, .true.)
+  endif
 
 end subroutine write_static_fields
 
