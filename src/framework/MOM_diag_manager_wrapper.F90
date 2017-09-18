@@ -41,7 +41,7 @@ integer function register_diag_field_array_fms(module_name, field_name, axes, in
              init_time, long_name=long_name, units=units, missing_value=missing_value, &
              mask_variant=mask_variant, standard_name=standard_name,                   &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg,                  &
-             interp_method=interp_method)
+             area=area, interp_method=interp_method)
 
 end function register_diag_field_array_fms
 
