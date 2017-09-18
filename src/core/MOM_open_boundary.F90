@@ -16,7 +16,7 @@ use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
 use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
-use MOM_tracer_registry,      only : add_tracer_OBC_values, tracer_registry_type
+use MOM_tracer_registry,      only : tracer_registry_type
 use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
@@ -2125,9 +2125,8 @@ subroutine segment_tracer_registry_init(param_file, Reg, segment)
 
 end subroutine segment_tracer_registry_init
 
-subroutine register_segment_tracer(tr_desc, param_file, HI, GV, Reg, segment, tr_desc_ptr, &
+subroutine register_segment_tracer(tr_desc, param_file, GV, Reg, segment, tr_desc_ptr, &
                                    OBC_scalar, OBC_array)
-  type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
@@ -2277,9 +2276,9 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
         endif
       enddo ; enddo
     endif
-    call register_segment_tracer(vd_T, param_file, segment%HI, GV, segment%tr_Reg, n, &
+    call register_segment_tracer(vd_T, param_file, GV, segment%tr_Reg, n, &
                                  OBC_array=fields(nf-1)%tr)
-    call register_segment_tracer(vd_S, param_file, segment%HI, GV, segment%tr_Reg, n, &
+    call register_segment_tracer(vd_S, param_file, GV, segment%tr_Reg, n, &
                                  OBC_array=fields(nf)%tr)
   enddo
 end subroutine register_temp_salt_segments

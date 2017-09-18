@@ -68,7 +68,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
       else
         dye = 0.0
       endif
-      call register_segment_tracer(tr_desc(m), param_file, OBC%segment(n)%HI, GV, &
+      call register_segment_tracer(tr_desc(m), param_file, GV, &
                                    OBC%segment(n)%tr_Reg, n, OBC_scalar=dye)
     enddo
   enddo
