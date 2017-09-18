@@ -733,7 +733,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia,WAVES=CS%Wave_Parameter_CSp)
+
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -1027,7 +1028,7 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         ! Apply diabatic forcing, do mixing, and regrid.
-        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, WAVES=CS%Wave_Parameter_CSp)
 
         call disable_averaging(CS%diag)
 
@@ -1146,7 +1147,7 @@ end subroutine step_MOM
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia,waves)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1159,6 +1160,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+  type(wave_parameters_CS), pointer, optional       :: WAVES
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
@@ -1197,7 +1199,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
 
     call cpu_clock_begin(id_clock_diabatic)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, G, GV, CS%diabatic_CSp)
+                  dtdia, G, GV, CS%diabatic_CSp,Waves=Waves)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 

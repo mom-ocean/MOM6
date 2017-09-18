@@ -33,7 +33,7 @@ public get_LA_windsea
 !> Container for wave related parameters
 type, public:: wave_parameters_CS ;
 private
-  logical :: UseWaves
+  logical, public :: UseWaves
   !^ True to enable this module
   logical, public :: LagrangianMixing
   !^ True if Stokes drift is present and mixing
@@ -83,7 +83,7 @@ private
   real, public :: WaveAge = 0.8
   real, public :: WaveWind = 10.0
   !
-  integer :: WaveMethod
+  integer, public :: WaveMethod
   !^ Options for various wave methods
   !    Valid (tested) choices are:
   !     - TEST_PROF

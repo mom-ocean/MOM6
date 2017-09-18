@@ -1613,7 +1613,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
-  call get_param(param_file, mod, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
+  call get_param(param_file, mdl, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
        "Flag to use Lagrangian Mixing", units="", &
        Default=.false.)
 
