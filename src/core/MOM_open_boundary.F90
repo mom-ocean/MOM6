@@ -47,6 +47,7 @@ public segment_tracer_registry_init
 public segment_tracer_registry_end
 public register_segment_tracer
 public register_temp_salt_segments
+public fill_temp_salt_segments
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -2190,18 +2191,18 @@ subroutine segment_tracer_registry_end(Reg)
   endif
 end subroutine segment_tracer_registry_end
 
-subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
-  type(ocean_grid_type),      intent(in)    :: G          !< Ocean grid structure
+subroutine register_temp_salt_segments(GV, OBC, tv, vd_T, vd_S, param_file)
   type(verticalGrid_type),    intent(in)    :: GV         !< ocean vertical grid structure
   type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
   type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+  type(vardesc),              intent(in)    :: vd_T       !< Temperature descriptor
+  type(vardesc),              intent(in)    :: vd_S       !< Salinity descriptor
   type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
 
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz, nf
   integer :: i, j, k
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
-  type(vardesc)                   :: vd_T, vd_S
   type(segment_tracer_type), dimension(:), pointer :: fields
 
   if (.not. associated(OBC)) return
@@ -2209,17 +2210,7 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
   ! Both temperature and salinity fields
   allocate(fields(2 * OBC%number_of_segments))
 
-  call pass_var(tv%T, G%Domain)
-  call pass_var(tv%S, G%Domain)
-
-  nz = G%ke
-  ! A better way to do this???
-  vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
-                  cmor_field_name="thetao",cmor_units="C",                &
-                  conversion=tv%C_p)
-  vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
-                  cmor_field_name="so",cmor_units="ppt",   &
-                  conversion=0.001)
+  nz = GV%ke
 
   nf = 0
   do n=1, OBC%number_of_segments
@@ -2231,6 +2222,7 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
+    ! Fill with T and S values later
     if (segment%is_E_or_W) then
       nf = nf + 1
       allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
@@ -2238,21 +2230,6 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
       nf = nf + 1
       allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
       fields(nf)%tr(:,:,:) = 0.0
-      ! Fill with T and S values
-      I=segment%HI%IsdB
-      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
-        if (segment%direction == OBC_DIRECTION_W) then
-          if (G%mask2dCu(I,j) /= 0) then
-            fields(nf-1)%tr(I,j,k) = tv%T(i+1,j,k)
-            fields(nf)%tr(I,j,k) = tv%S(i+1,j,k)
-          endif
-        else
-          if (G%mask2dCu(I,j) /= 0) then
-            fields(nf-1)%tr(I,j,k) = tv%T(i,j,k)
-            fields(nf)%tr(I,j,k) = tv%S(i,j,k)
-          endif
-        endif
-      enddo ; enddo
     else
       nf = nf + 1
       allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
@@ -2260,21 +2237,6 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
       nf = nf + 1
       allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
       fields(nf)%tr(:,:,:) = 0.0
-      ! Fill with T and S values
-      J=segment%HI%JsdB
-      do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
-        if (segment%direction == OBC_DIRECTION_S) then
-          if (G%mask2dCv(i,J) /= 0) then
-            fields(nf-1)%tr(i,J,k) = tv%T(i,j+1,k)
-            fields(nf)%tr(i,J,k) = tv%S(i,j+1,k)
-          endif
-        else
-          if (G%mask2dCv(i,J) /= 0) then
-            fields(nf-1)%tr(i,J,k) = tv%T(i,j,k)
-            fields(nf)%tr(i,J,k) = tv%S(i,j,k)
-          endif
-        endif
-      enddo ; enddo
     endif
     call register_segment_tracer(vd_T, param_file, GV, segment%tr_Reg, n, &
                                  OBC_array=fields(nf-1)%tr)
@@ -2282,6 +2244,62 @@ subroutine register_temp_salt_segments(G, GV, OBC, tv, param_file)
                                  OBC_array=fields(nf)%tr)
   enddo
 end subroutine register_temp_salt_segments
+
+subroutine fill_temp_salt_segments(G, OBC, tv)
+  type(ocean_grid_type),      intent(in)    :: G          !< Ocean grid structure
+  type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
+  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+
+! Local variables
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz
+  integer :: i, j, k
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(segment_tracer_type), dimension(:), pointer :: fields
+
+  if (.not. associated(OBC)) return
+  if (.not. associated(tv%T) .and. associated(tv%S)) return
+  ! Both temperature and salinity fields
+
+  call pass_var(tv%T, G%Domain)
+  call pass_var(tv%S, G%Domain)
+
+  nz = G%ke
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+    ! Fill with T and S values
+    if (segment%is_E_or_W) then
+      I=segment%HI%IsdB
+      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+        if (segment%direction == OBC_DIRECTION_W) then
+          segment%tr_Reg%Tr(1)%t(I,j,k) = tv%T(i+1,j,k)
+          segment%tr_Reg%Tr(2)%t(I,j,k) = tv%S(i+1,j,k)
+        else
+          segment%tr_Reg%Tr(1)%t(I,j,k) = tv%T(i,j,k)
+          segment%tr_Reg%Tr(2)%t(I,j,k) = tv%S(i,j,k)
+        endif
+      enddo ; enddo
+    else
+      J=segment%HI%JsdB
+      do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+        if (segment%direction == OBC_DIRECTION_S) then
+          segment%tr_Reg%Tr(1)%t(i,J,k) = tv%T(i,j+1,k)
+          segment%tr_Reg%Tr(2)%t(i,J,k) = tv%S(i,j+1,k)
+        else
+          segment%tr_Reg%Tr(1)%t(i,J,k) = tv%T(i,j,k)
+          segment%tr_Reg%Tr(2)%t(i,J,k) = tv%S(i,j,k)
+        endif
+      enddo ; enddo
+    endif
+  enddo
+end subroutine fill_temp_salt_segments
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
