@@ -353,13 +353,11 @@ end subroutine dyed_obc_tracer_end
 
 !> \namespace dyed_obc_tracer
 !!                                                                     *
-!!  By Robert Hallberg, 2002                                           *
+!!  By Kate Hedstrom, 2017, copied from DOME tracers.                  *
 !!                                                                     *
 !!    This file contains an example of the code that is needed to set  *
-!!  up and use a set (in this case eleven) of dynamically passive      *
-!!  tracers.  These tracers dye the inflowing water or water initially *
-!!  within a range of latitudes or water initially in a range of       *
-!!  depths.                                                            *
+!!  up and use a set of dynamically passive tracers. These tracers     *
+!!  dye the inflowing water, one per open boundary segment.            *
 !!                                                                     *
 !!    A single subroutine is called from within each file to register  *
 !!  each of the tracers for reinitialization and advection and to      *
