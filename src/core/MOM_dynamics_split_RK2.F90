@@ -29,7 +29,7 @@ use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_get_input,         only : directories
 use MOM_io,                only : MOM_io_init, vardesc, var_desc
 use MOM_restart,           only : register_restart_field, query_initialized, save_restart
-use MOM_restart,           only : restart_init, MOM_restart_CS
+use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
@@ -1068,9 +1068,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
   CS%set_visc_CSp => setVisc_CSp
-  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, activate= &
-            ((dirs%input_filename(1:1) == 'n') .and. &
-             (LEN_TRIM(dirs%input_filename) == 1))   )
+  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, &
+                                activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC
