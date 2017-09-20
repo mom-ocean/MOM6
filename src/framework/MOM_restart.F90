@@ -1208,7 +1208,7 @@ function is_new_run(CS)
 
   is_new_run = CS%new_run
 end function is_new_run
- 
+
 !> open_restart_units determines the number of existing restart files and optionally opens
 !! them and returns unit ids, paths and whether the files are global or spatially decomposed.
 function open_restart_units(filename, directory, G, CS, units, file_paths, &
