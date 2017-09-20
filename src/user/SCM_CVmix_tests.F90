@@ -202,12 +202,8 @@ subroutine SCM_CVmix_tests_wind_forcing(state, forces, day, G, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-
-  print*,G%IscB,G%IecB
-  print*,G%Isc, G%Iec
   do j=js,je ; do I=Isq,Ieq
     forces%taux(I,j) = CS%tau_x
-    print*,i,j,forces%taux(i,j)
   enddo ; enddo
   do J=Jsq,Jeq ; do i=is,ie
     forces%tauy(i,J) = CS%tau_y
