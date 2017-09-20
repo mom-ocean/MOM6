@@ -854,6 +854,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
     enddo ; enddo
   enddo
+  ! Application of boundary forcing and the checks for negative thickness may have changed layer thicknesses
+  call diag_update_remap_grids(CS%diag)
+
   if (CS%debug) then
     call MOM_state_chksum("after negative check ", u, v, h, G, GV, haloshift=0)
     call MOM_forcing_chksum("after negative check ", fluxes, G, haloshift=0)
