@@ -8,7 +8,8 @@ use MOM_diag_mediator, only : register_diag_field, diag_ctrl
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, allocate_forcing_type
+use MOM_forcing_type, only : forcing, mech_forcing
+use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, read_data, slasher
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
@@ -42,11 +43,12 @@ end type Neverland_surface_forcing_CS
 
 contains
 
-!> Sets the surface wind stresses, fluxes%taux and fluxes%tauy for the
+!> Sets the surface wind stresses, forces%taux and forces%tauy for the
 !! Neverland forcing configuration.
-subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
-  type(surface),                 intent(inout) :: state !< Fields describing surface state of ocean
-  type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
+subroutine Neverland_wind_forcing(sfc_state, forces, day, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
   type(Neverland_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
@@ -64,7 +66,7 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, stress=.true.)
+  call allocate_mech_forcing(G, forces, stress=.true.)
 
   !  Set the surface wind stresses, in units of Pa.  A positive taux
   !  accelerates the ocean to the (pseudo-)east.
@@ -72,36 +74,36 @@ subroutine Neverland_wind_forcing(state, fluxes, day, G, CS)
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
     PI = 4.0*atan(1.0)
-    fluxes%taux(:,:) = 0.0
+    forces%taux(:,:) = 0.0
     tau_max = 0.2
     off = 0.02
   do j=js,je ; do I=is-1,Ieq
 !    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
      y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
-!    fluxes%taux(I,j) =  G%mask2dCu(I,j) * 0.0
+!    forces%taux(I,j) =  G%mask2dCu(I,j) * 0.0
 
     if (y.le.0.29) then
-       fluxes%taux(I,j) = fluxes%taux(I,j) +  tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
+       forces%taux(I,j) = forces%taux(I,j) +  tau_max * ( (1/0.29)*y - ( 1/(2*PI) )*sin( (2*PI*y) / 0.29 ) )
     endif
     if (y.gt.0.29 .and. y.le.(0.8-off)) then
-       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
+       forces%taux(I,j) = forces%taux(I,j) + tau_max *(0.35+0.65*cos(PI*(y-0.29)/(0.51-off))  )
     endif
     if (y.gt.(0.8-off) .and. y.le.(1-off) ) then
-       fluxes%taux(I,j) = fluxes%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
+       forces%taux(I,j) = forces%taux(I,j) + tau_max *( 1.5*( (y-1+off) - (0.1/PI)*sin(10.0*PI*(y-0.8+off)) ) )
     endif
   enddo ; enddo
 
   do J=js-1,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
 
   !    Set the surface friction velocity, in units of m s-1.  ustar
   !  is always positive.
-! if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
+! if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
 !   !  This expression can be changed if desired, but need not be.
-!   fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-!      sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-!           0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
+!   forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+!      sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+!           0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
 ! enddo ; enddo ; endif
 
 end subroutine Neverland_wind_forcing
@@ -130,8 +132,9 @@ end subroutine Neverland_wind_forcing
 
 
 !> Surface fluxes of buoyancy for the Neverland configurations.
-subroutine Neverland_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state !< Fields describing surface state of ocean
+subroutine Neverland_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   real,                          intent(in)    :: dt !< Forcing time step (s).
@@ -195,7 +198,7 @@ subroutine Neverland_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY
