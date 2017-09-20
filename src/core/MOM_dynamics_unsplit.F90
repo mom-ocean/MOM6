@@ -390,7 +390,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp,Waves=Waves)
+                G, GV, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(up, vp, G%Domain)
@@ -458,7 +458,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
   call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp,Waves=Waves)
+                G, GV, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(upp, vpp, G%Domain)
@@ -532,7 +532,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call cpu_clock_begin(id_clock_vertvisc)
   call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
-                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,Waves=Waves)
+                G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
   call pass_vector(u, v, G%Domain)

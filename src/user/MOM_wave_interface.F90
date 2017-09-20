@@ -263,10 +263,10 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
       call get_param(param_file,mdl,"SURFBAND_STOKES_Y",CS%PrescribedSurfStkY,      &
            "Y-direction surface Stokes drift for bands.",units='m/s', &
            default=0.0)
-   case default 
+   case default
      call MOM_error(FATAL,'Check WAVE_METHOD.')
    end select
-    
+
   case (DHH85_STRING)!Donelan et al., 1985 spectrum
     WaveMethod = DHH85
     call get_param(param_file,mdl,"DHH85_AGE_FP",WaveAgePeakFreq,   &
@@ -280,7 +280,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
          units='', default=10.0)
   case (LF17_STRING)!Li and Fox-Kemper 17 wind-sea Langmuir number
     WaveMethod = LF17
-   case default 
+   case default
      call MOM_error(FATAL,'Check WAVE_METHOD.')
   end select
 
@@ -301,7 +301,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   ! Surface Values
   ALLOC_ (CS%US0_x(G%isdB:G%iedB,G%jsd:G%jed)) ; CS%US0_x(:,:) = 0.
   ALLOC_ (CS%US0_y(G%isd:G%ied,G%jsdB:G%jedB)) ; CS%US0_y(:,:) = 0.
-  ! Inverse Langmuir number
+  ! Langmuir number
   ALLOC_ (CS%LangNum(G%isc:G%iec,G%jsc:G%jec)) ; CS%LangNum(:,:) = 0.
 
   if (CS%StokesMixing) then
@@ -494,7 +494,7 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
     enddo
   elseif (WaveMethod==DHH85) then
     do ii=G%isdB,G%iedB
-      do jj=G%jsd,G%jed        
+      do jj=G%jsd,G%jed
         bottom = 0.0
         do kk=1, G%ke
           Top = Bottom
@@ -525,12 +525,12 @@ subroutine Import_Stokes_Drift(G,GV,Day,DT,CS,h,FLUXES)
   else!Keep this else, fallback to 0 Stokes drift
     do kk=1,G%ke
       do ii=G%isdB,G%iedB
-        do jj=G%jsd,G%jed        
+        do jj=G%jsd,G%jed
           CS%Us_x(ii,jj,kk) = 0.
         enddo
       enddo
       do ii=G%isd,G%ied
-        do jj=G%jsdB,G%jedB        
+        do jj=G%jsdB,G%jedB
           CS%Us_y(ii,jj,kk) = 0.
         enddo
       enddo
@@ -778,7 +778,7 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
   LA = max(0.1,sqrt(USTAR/(LA_STK+1.e-10)))
 
   if (LA_Misalignment) then
-    WaveDirection = atan2(LA_STKy,LA_STKx) 
+    WaveDirection = atan2(LA_STKy,LA_STKx)
     LA = LA * 1./sqrt(max(1.e-8,cos( WaveDirection - ShearDirection)))
   endif
 

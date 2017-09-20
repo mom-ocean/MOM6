@@ -59,7 +59,6 @@ use MOM_surface_forcing, only : forcing_save_restart
 use MOM_time_manager, only : time_type, get_time, set_time, operator(>)
 use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager, only : operator(/=)
-use MOM_time_manager, only : time_type_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_variables, only : surface
@@ -352,7 +351,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                OS%MOM_CSp%diag, OS%fluxes)
   endif
 
-  OS%use_waves=.false. ; 
+  OS%use_waves=.false. ;
   call get_param(param_file,mod,"USE_WAVES",OS%Use_Waves,&
        "If true, uses waves.",default=.false.)
   if (OS%use_waves) then
