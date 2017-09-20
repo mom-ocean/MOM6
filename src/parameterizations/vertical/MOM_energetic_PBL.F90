@@ -74,9 +74,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use CVmix_kpp, only : cvmix_kpp_efactor_model
-use CVmix_kinds_and_types, only : cvmix_global_params_type
-use MOM_wave_interface, only: wave_parameters_CS, Get_LA_waves
+use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -85,12 +83,6 @@ implicit none ; private
 
 public energetic_PBL, energetic_PBL_init, energetic_PBL_end
 public energetic_PBL_get_MLD
-
-! Enumerated constants
-integer, private, parameter :: LA_MODE_CONSTANT = 1,     &
-                               LA_MODE_PROFILE = 2,      &
-                               LA_MODE_BANDS = 3,         &
-                               LA_MODE_WINDSEA = 4 
 
 type, public :: energetic_PBL_CS ; private
   real    :: mstar           ! The ratio of the friction velocity cubed to the
@@ -163,6 +155,7 @@ type, public :: energetic_PBL_CS ; private
   real    :: MSTAR_XINT_UP   ! Similar but for transition to asymptotic cap.
   real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
                              ! changes to linear transition.
+  integer :: LT_ENHANCE_FORM ! Integer for Enhancement functional form (various options)
   real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
   real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
   real :: MSTAR_N = -2.      ! Exponent in decay at negative and positive limits of MLD_over_STAB
@@ -171,25 +164,21 @@ type, public :: energetic_PBL_CS ; private
                              !  ends of the linear fit within the well constrained region.
   real :: C_EK = 0.17        ! MSTAR Coefficient in rotation limit for mstar_mode=2
   real :: MSTAR_COEF = 0.3   ! MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
-  real :: LA_CONST           ! If using constant Langmuir number it is held here.
   real :: LaC_MLDoEK         ! Coefficients for Langmuir number modification based on
   real :: LaC_MLDoOB_stab    !  length scale ratios, MLD is boundary, EK is Ekman,
   real :: LaC_EKoOB_stab     !  and OB is Obukhov, the "o" in the name is for division.
   real :: LaC_MLDoOB_un      !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
   real :: LaC_EKoOB_un       !   ...
-  real :: LaDepthRatio=0.04  ! The ratio of OBL depth to average Stokes drift over
   real :: Max_Enhance_M = 5. ! The maximum allowed LT enhancement to the mixing.
   real :: CNV_MST_FAC        ! Factor to reduce mstar when statically unstable.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
-  
-  integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement form
+
   integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
                              !  set mstar
   integer :: CONST_MSTAR=0,MLD_o_OBUKHOV=1,EKMAN_o_OBUKHOV=2
-  integer :: LA_MODE
   logical :: MSTAR_FLATCAP=.true. !Set false to use asymptotic mstar cap.
   logical :: TKE_diagnostics = .false.
-  logical :: Use_LT = .false.
+  logical :: Use_LT = .false. ! Flag for using LT in Energy calculation
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
   logical :: Orig_MLD_iteration=.false. ! False to use old MLD value
@@ -581,12 +570,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     mech_TKE_k, conv_PErel_k
   real, dimension(SZK_(GV)) :: nstar_k
   integer, dimension(SZK_(GV)) :: num_itts
-  real, dimension(SZK_(GV)) :: cellHeight
-  real, dimension(SZK_(GV)+1) :: iFaceHeight
-  real :: DH
-  real :: CMNFACT, H20pct, usy20pct, usx20pct,wavedir,currentdir
-  logical :: FIRST_STK
-  integer :: b, ksfc
 
 
   integer :: i, j, k, is, ie, js, je, nz, itt, max_itt
@@ -694,13 +677,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! and ustar and wstar available to drive mixing at the first interior
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-
-      do k=1,G%ke
-        ! cell center and cell bottom in meters (negative values in the ocean)
-        dh = h(i,k) * GV%H_to_m ! Nominal thickness to use for increment
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-        iFaceHeight(k+1) = iFaceHeight(k) - dh
-      enddo
 
       U_Star = fluxes%ustar(i,j)
       taux2 = 0.
@@ -882,61 +858,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                                  ( (-Bf_Unstable+1.e-10)+                 &
                                    2. *MSTAR_MIX *U_STAR**3 / MLD_GUESS )
           if (CS%USE_LT) then
-            H20pct = -MLD_guess*CS%LaDepthRatio 
-            ! 1. Get LA
-            if ( CS%LA_MODE==LA_MODE_WINDSEA ) then
-              call get_LA_windsea( u_star_mean, H20pct, GV, LA)
-            elseif (CS%LA_MODE==LA_MODE_CONSTANT) then
-              LA = CS%LA_CONST
-            elseif (CS%LA_MODE==LA_MODE_PROFILE .or. CS%LA_MODE==LA_MODE_BANDS) then
-              if (.not.(present(WAVES).and.associated(WAVES))) then
-                 call MOM_error(FATAL,"Trying to use input WAVES information in KPP\n"//&
-                      "without activating USEWAVES")
-              endif
-              if (CS%LA_MODE==LA_MODE_BANDS) then
-                do b=1,WAVES%NumBands
-                  if (WAVES%PartitionMode==0) then
-                    CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
-                         / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
-                  elseif (WAVES%PartitionMode==1) then
-                    !Note in frequency mode we are TEMPORARILY
-                    ! using midpoint instead of integral/H to get average
-                    CMNFACT = EXP(H20pct/2.*2.*(2.*3.1415*WAVES%Freq_Cen(b))**2/ &
-                         GV%g_Earth)
-                  endif
-                  USy20pct = USy20pct + 0.5 * ( WAVES%STKy0(i,j,b) &
-                       + WAVES%STKy0(i,j-1,b) ) * CMNFACT
-                  USx20pct = USx20pct + 0.5 * ( WAVES%STKx0(i,j,b) &
-                       + WAVES%STKx0(i-1,j,b) ) * CMNFACT
-                enddo
-              elseif (CS%LA_MODE.eq.LA_MODE_PROFILE) then
-                FIRST_STK=.true.
-                do k=1,G%ke-1
-                  if (iFaceHeight(k+1).gt.H20pct) then
-                    USy20pct = usy20pct + 0.5*(waves%us_y(i,j,k) + waves%us_y(i,j-1,k))
-                    USx20pct = usx20pct + 0.5*(waves%us_x(i,j,k) + waves%us_x(i-1,j,k))
-                  else
-                    CMNFACT = max(0.,iFaceHeight(k)-h20pct)/(iFaceHeight(k)-iFaceHeight(k+1))
-                    USy20pct = usy20pct +0.5*(waves%us_y(i,j,k) + waves%us_y(i,j-1,k)) &
-                         * CMNFACT
-                    USx20pct = usx20pct +0.5*(waves%us_x(i,j,k) + waves%us_x(i-1,j,k)) &
-                         * CMNFACT
-                    if (FIRST_STK) then
-                      ksfc = k
-                      FIRST_STK=.false.
-                    endif
-                  endif
-                enddo
-                usx20pct=usx20pct/-h20pct
-                usy20pct=usy20pct/-h20pct
-              endif
-              wavedir=atan2(USy20pct,USx20pct)
-              ! Lagrangian current shear (Reynolds stress direction approx)
-              currentdir = atan2(v(i,1)-v(i,ksfc),u(i,1)-u(i,ksfc))
-              LA = max(1.e-6, sqrt(u_star/ &
-                                   (1.e-10+sqrt(USx20pct**2 + USy20pct**2))) &
-                                   *sqrt(1./max(0.000001,cos(wavedir-currentdir))))
-            end if
+            call get_Langmuir_Number( LA, G, GV, abs(MLD_guess), u_star_mean, I, J, &
+                                      H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
             WAVES%LangNum(i,j) = LA
             ! 2. Get parameters for modified LA
             MLD_o_Ekman = abs(MLD_guess*iL_Ekman)
@@ -953,7 +876,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                  CS%LaC_MLDoOB_stab * MLD_o_Obukhov_stab  + &
                  CS%LaC_MLDoOB_un * MLD_o_Obukhov_un )
             if (CS%LT_Enhance_Form==1) then
-              !Original w'/ust scaling w/ Van Roekel's scaling
+              !Original w'/ust scaling w/ Van Roekel et al. 2012 scaling
+              !  NOTE we know now that this is not the right way to scale M.
               ENHANCE_M = (1+(1.4*LA)**(-2)+(5.4*LA)**(-4))**(1.5)
             elseif (CS%LT_Enhance_Form==2) then
               ! Enhancement is multiplied (added mst_lt set to 0)
@@ -1079,8 +1003,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           endif
           N2_dissipation = 1. + CS%N2_DISSIPATION_SCALE_NEG! * &
           !                 max(0.,min(1.,(mech_tke(i)/TKE_forced(i,j,k))))
-
-
 
           if (debug) nstar_k(K) = nstar_FC
           
@@ -2046,100 +1968,6 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   return
 end subroutine ust_2_u10_coare3p5
 
-subroutine get_LA_windsea(ustar, hbl, GV, LA)
-! Original description:
-! This function returns the enhancement factor, given the 10-meter
-! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
-! Update (Jan/25):
-! Converted from function to subroutine, now returns Langmuir number.
-! Computs 10m wind internally, so only ustar and hbl need passed to
-! subroutine.
-!
-! Qing Li, 160606
-! BGR port from CVMix to MOM6 Jan/25/2017
-! BGR change output to LA from Efactor
-! BGR remove u10 input
-
-! Input
-  real, intent(in) :: &
-       ! water-side surface friction velocity (m/s)
-       ustar, &
-       ! boundary layer depth (m)
-       hbl
-  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, intent(out) :: LA
-! Local variables
-  ! parameters
-  real, parameter :: &
-       ! ratio of U19.5 to U10 (Holthuijsen, 2007)
-       u19p5_to_u10 = 1.075, &
-       ! ratio of mean frequency to peak frequency for
-       ! Pierson-Moskowitz spectrum (Webb, 2011)
-       fm_to_fp = 1.296, &
-       ! ratio of surface Stokes drift to U10
-       us_to_u10 = 0.0162, &
-       ! loss ratio of Stokes transport
-       r_loss = 0.667
-  real :: us, hm0, fm, fp, vstokes, kphil, kstar
-  real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
-  real :: pi, u10
-  pi = 4.0*atan(1.0)
-  ! Computing u10 based on u_star and COARE 3.5 relationships
-  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
-  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
-    ! surface Stokes drift
-    us = us_to_u10*u10
-    !
-    ! significant wave height from Pierson-Moskowitz
-    ! spectrum (Bouws, 1998)
-    hm0 = 0.0246 *u10**2
-    !
-    ! peak frequency (PM, Bouws, 1998)
-    tmp = 2.0 * PI * u19p5_to_u10 * u10
-    fp = 0.877 * GV%g_Earth / tmp
-    !
-    ! mean frequency
-    fm = fm_to_fp * fp
-    !
-    ! total Stokes transport (a factor r_loss is applied to account
-    !  for the effect of directional spreading, multidirectional waves
-    !  and the use of PM peak frequency and PM significant wave height
-    !  on estimating the Stokes transport)
-    vstokes = 0.125 * PI * r_loss * fm * hm0**2
-    !
-    ! the general peak wavenumber for Phillips' spectrum
-    ! (Breivik et al., 2016) with correction of directional spreading
-    kphil = 0.176 * us / vstokes
-    !
-    ! surface layer averaged Stokes dirft with Stokes drift profile
-    ! estimated from Phillips' spectrum (Breivik et al., 2016)
-    ! the directional spreading effect from Webb and Fox-Kemper, 2015
-    ! is also included
-    kstar = kphil * 2.56
-    ! surface layer
-    !z0 = 0.2 * abs(hbl)
-    !BGR hbl now adjusted by averaging ratio before function call.
-    z0 = abs(hbl)
-    z0i = 1.0 / z0
-    ! term 1 to 4
-    r1 = ( 0.151 / kphil * z0i -0.84 ) &
-         * ( 1.0 - exp(-2.0 * kphil * z0) )
-    r2 = -( 0.84 + 0.0591 / kphil * z0i ) &
-         *sqrt( 2.0 * PI * kphil * z0 ) &
-         *erfc( sqrt( 2.0 * kphil * z0 ) )
-    r3 = ( 0.0632 / kstar * z0i + 0.125 ) &
-         * (1.0 - exp(-2.0 * kstar * z0) )
-    r4 = ( 0.125 + 0.0946 / kstar * z0i ) &
-         *sqrt( 2.0 * PI *kstar * z0) &
-         *erfc( sqrt( 2.0 * kstar * z0 ) )
-    us_sl = us * (0.715 + r1 + r2 + r3 + r4)
-    !
-    LA = sqrt(ustar / us_sl)
-  else
-    LA=1.e8
-  endif
-endsubroutine Get_LA_windsea
-
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
@@ -2162,7 +1990,6 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   logical :: use_temperature, use_omega
   logical :: use_la_windsea
-  character(20) :: LA_MODE_STR
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (associated(CS)) then
@@ -2318,40 +2145,15 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
        "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
        " determine the Langmuir number.",                               &
        units="nondim", default=.false.)
+  ! Note this can be activated in other ways, but this should preserve the old method.
   if (use_la_windsea) then
-    CS%LA_MODE = LA_MODE_WINDSEA
     CS%USE_LT = .true.
   else
-    call get_param(param_file, mdl, "USE_LT", CS%USE_LT, &
-         "A logical to a LT parameterization.",              &
+    call get_param(param_file, mdl, "EPBL_LT", CS%USE_LT, &
+         "A logical to use a LT parameterization.",              &
          units="nondim", default=.false.)
   endif
   if (CS%USE_LT) then
-    if (.not.use_la_windsea) then
-      call get_param(param_file, mdl, "EPBL_LA_MODE",LA_MODE_STR,       &
-           "Mode to compute Langmuir number for ePBL.\n"//    &
-           "Options are:\n"//                                 &
-           " CONSTANT - Constant Langmuir number.\n"//        &
-           " PROFILE - Use WAVES with Stokes profile.\n"//    &
-           " BANDS - Use WAVES with Bands integration.\n"//   &
-           " WINDSEA - Li et al., 2017 windsea formula.",     &
-           default="CONSTANT")
-      select case (trim(LA_MODE_STR))
-        case ("CONSTANT") ;  CS%LA_MODE = LA_MODE_CONSTANT
-        case ("PROFILE")  ;  CS%LA_MODE = LA_MODE_PROFILE
-        case ("BANDS")    ;  CS%LA_MODE = LA_MODE_BANDS
-        case ("WINDSEA")  ;  CS%LA_MODE = LA_MODE_WINDSEA
-      end select
-    endif
-    if (CS%LA_MODE==LA_MODE_CONSTANT) then
-      call get_param(param_file, mdl, "CONSTANT_LA", CS%LA_CONST,&
-           "A constant Langmuir number for ePBL.",          &
-           units="nondim", default=1.e8)
-    endif
-    call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
-         "The depth (normalized by BLD) to average Stokes drift over in \n"//&
-         " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
-         units="nondim",default=0.04)
     call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
          "Integer for Langmuir number mode. \n"//                   &
          " *Requires USE_LA_LI2016 to be set to True. \n"//         &
