@@ -2,6 +2,8 @@
 !! and overflow experiment.
 module dense_water_initialization
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_ALE_sponge,    only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_dyn_horgrid,   only : dyn_horgrid_type
 use MOM_EOS,           only : EOS_type
@@ -238,7 +240,7 @@ subroutine dense_water_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, A
       enddo
     enddo
 
-    call initialize_ALE_sponge(Idamp, h, nz, G, param_file, ACSp)
+    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
 
     ! construct temperature and salinity for the sponge
     ! start with initial condition

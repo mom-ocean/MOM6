@@ -1,5 +1,6 @@
 !> Implements a boundary impulse response tracer to calculate Green's functions
 module boundary_impulse_tracer
+
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr

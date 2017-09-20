@@ -1,24 +1,6 @@
 module MOM_dynamics_unsplit_RK2
 
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
@@ -67,7 +49,7 @@ module MOM_dynamics_unsplit_RK2
 
 use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : ocean_internal_state, accel_diag_ptrs, cont_diag_ptrs
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -186,7 +168,7 @@ contains
 
 ! =============================================================================
 
-subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, fluxes, &
+subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
@@ -211,9 +193,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! the time step.
   real,                              intent(in)    :: dt      !< The baroclinic dynamics time step,
                                                               !! in s.
-  type(forcing),                     intent(in)    :: fluxes  !< A structure containing pointers to
-                                                              !! any possible forcing fields. Unused
-                                                              !! fields have NULL ptrs.
+  type(mech_forcing),                intent(in)    :: forces  !< A structure with the driving mechanical forces
   real, dimension(:,:),              pointer       :: p_surf_begin !< A pointer (perhaps NULL) to
                                                             !! the surface pressure at the beginning
                                                             !! of this dynamic step, in Pa.
@@ -295,7 +275,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (dyn_p_surf) then
     call safe_alloc_ptr(p_surf,G%isd,G%ied,G%jsd,G%jed) ; p_surf(:,:) = 0.0
   else
-    p_surf => fluxes%p_surf
+    p_surf => forces%p_surf
   endif
 
 ! Runge-Kutta second order accurate two step scheme is used to step
@@ -386,12 +366,12 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(up, vp, h_av, tv, fluxes, visc, dt_pred, G, GV, &
+  call set_viscous_ML(up, vp, h_av, tv, forces, visc, dt_pred, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt_pred, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt_pred, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc(up, vp, h_av, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)
@@ -446,13 +426,13 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
 ! up[n] <- up* + dt d/dz visc d/dz up
 ! u[n] <- u*[n] + dt d/dz visc d/dz u[n]
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc(up, vp, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
-  call vertvisc_coef(u_in, v_in, h_av, fluxes, visc, dt, G, GV, &
+  call vertvisc_coef(u_in, v_in, h_av, forces, visc, dt, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(u_in, v_in, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
+  call vertvisc(u_in, v_in, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp,&
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
   call cpu_clock_begin(id_clock_pass)

@@ -1,7 +1,8 @@
 module polynomial_functions
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
 !==============================================================================
-!
-! This file is part of MOM.
 !
 ! Date of creation: 2008.06.12
 ! L. White
@@ -12,7 +13,7 @@ module polynomial_functions
 
 implicit none ; private
 
-public :: evaluation_polynomial, integration_polynomial
+public :: evaluation_polynomial, integration_polynomial, first_derivative_polynomial
 
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
@@ -50,6 +51,37 @@ real function evaluation_polynomial( coefficients, nb_coefficients, x )
   evaluation_polynomial = f
 
 end function evaluation_polynomial
+
+!> Calculates the first derivative of a polynomial with coefficients as above
+!! evaluated at a point x
+real function first_derivative_polynomial( coefficients, nb_coefficients, x )
+! -----------------------------------------------------------------------------
+! The polynomial is defined by the coefficients contained in the
+! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ...
+! where C refers to the array 'coefficients'.
+! The number of coefficients is given by nb_coefficients and x
+! is the coordinate where the polynomial's derivative is to be evaluated.
+!
+! The function returns the value of the polynomial at x.
+! -----------------------------------------------------------------------------
+
+  ! Arguments
+  real, dimension(:), intent(in)        :: coefficients
+  integer, intent(in)                   :: nb_coefficients
+  real, intent(in)                      :: x
+
+  ! Local variables
+  integer                               :: k
+  real                                  :: f    ! value of polynomial at x
+
+  f = 0.0
+  do k = 2,nb_coefficients
+    f = f + REAL(k-1)*coefficients(k) * ( x**(k-2) )
+  end do
+
+  first_derivative_polynomial = f
+
+end function first_derivative_polynomial
 
 ! -----------------------------------------------------------------------------
 ! Exact integration of polynomial of degree n

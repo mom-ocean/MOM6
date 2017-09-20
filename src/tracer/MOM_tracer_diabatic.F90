@@ -4,6 +4,7 @@
 module MOM_tracer_diabatic
 
 ! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_grid,             only : ocean_grid_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_forcing_type,     only : forcing
@@ -252,8 +253,8 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-!  ! Only apply forcing if fluxes%sw is associated.
-!  if (.not.ASSOCIATED(fluxes%sw)) return
+  ! If no freshwater fluxes, nothing needs to be done in this routine
+  if ( (.not. ASSOCIATED(fluxes%netMassIn)) .or. (.not. ASSOCIATED(fluxes%netMassOut)) ) return
 
   in_flux(:,:) = 0.0 ; out_flux(:,:) = 0.0
   if(present(in_flux_optional)) then

@@ -177,13 +177,12 @@ subroutine find_obsolete_params(param_file)
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")
 
-  call read_param(param_file,"USE_LEGACY_SPLIT",test_logic)
-  if (.not.(split .and. test_logic)) then
-    call obsolete_logical(param_file, "FLUX_BT_COUPLING", .false.)
-    call obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
-    call obsolete_logical(param_file, "RESCALE_BE_FACE_AREAS", .false.)
-    call obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
-  endif
+  call obsolete_logical(param_file, "USE_LEGACY_SPLIT", .false.)
+
+  call obsolete_logical(param_file, "FLUX_BT_COUPLING", .false.)
+  call obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
+  call obsolete_logical(param_file, "RESCALE_BT_FACE_AREAS", .false.)
+  call obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
 
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 

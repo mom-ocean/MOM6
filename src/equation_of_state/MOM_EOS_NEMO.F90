@@ -1,23 +1,6 @@
 module MOM_EOS_NEMO
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !***********************************************************************
 !*  The subroutines in this file implement the equation of state for   *
@@ -41,6 +24,10 @@ public calculate_density_scalar_nemo, calculate_density_array_nemo
 interface calculate_density_nemo
   module procedure calculate_density_scalar_nemo, calculate_density_array_nemo
 end interface calculate_density_nemo
+
+interface calculate_density_derivs_nemo
+  module procedure calculate_density_derivs_scalar_nemo, calculate_density_derivs_array_nemo
+end interface calculate_density_derivs_nemo
 
    real, parameter :: Pa2db  = 1.e-4
    real, parameter :: rdeltaS = 32.
@@ -274,7 +261,7 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
  enddo
 end subroutine calculate_density_array_nemo
 
-subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
+subroutine calculate_density_derivs_array_nemo(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
   real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
@@ -352,7 +339,27 @@ subroutine calculate_density_derivs_nemo(T, S, pressure, drho_dT, drho_dS, start
     drho_dS(j) = zn / zs
   enddo
 
-end subroutine calculate_density_derivs_nemo
+end subroutine calculate_density_derivs_array_nemo
+
+!> Wrapper to calculate_density_derivs_array for scalar inputs
+subroutine calculate_density_derivs_scalar_nemo(T, S, pressure, drho_dt, drho_ds)
+  real,    intent(in)  :: T, S, pressure
+  real,    intent(out) :: drho_dt
+  real,    intent(out) :: drho_ds
+  ! Local variables
+  real :: al0, p0, lambda
+  integer :: j
+  real, dimension(1) :: T0, S0, pressure0
+  real, dimension(1) :: drdt0, drds0
+
+  T0(1) = T
+  S0(1) = S
+  pressure0(1) = pressure
+
+  call calculate_density_derivs_array_nemo(T0, S0, pressure0, drdt0, drds0, 1, 1)
+  drho_dt = drdt0(1)
+  drho_ds = drds0(1)
+end subroutine calculate_density_derivs_scalar_nemo
 
 subroutine calculate_compress_nemo(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.

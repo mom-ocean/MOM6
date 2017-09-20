@@ -176,6 +176,13 @@ type, public :: ocean_OBC_type
   logical :: OBC_pe !< Is there an open boundary on this tile?
   type(remapping_CS),      pointer :: remap_CS   !< ALE remapping control structure for segments only
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
+
+  real :: silly_h  !< A silly value of thickness outside of the domain that
+                   !! can be used to test the independence of the OBCs to
+                   !! this external data, in m.
+  real :: silly_u  !< A silly value of velocity outside of the domain that
+                   !! can be used to test the independence of the OBCs to
+                   !! this external data, in m/s.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -218,6 +225,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
   integer :: l ! For looping over segments
+  logical :: debug_OBC, debug
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
@@ -271,6 +279,23 @@ subroutine open_boundary_config(G, param_file, OBC)
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
          "viscosity term.", default=.false.)
+
+    call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
+    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
+    if (debug_OBC .or. debug) &
+      call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
+                 "If true, do additional calls to help debug the performance \n"//&
+                 "of the open boundary condition code.", default=.false.)
+
+    call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
+                 "A silly value of thicknesses used outside of open boundary \n"//&
+                 "conditions for debugging.", units="m", default=0.0, &
+                 do_not_log=.not.debug_OBC)
+    call get_param(param_file, mdl, "OBC_SILLY_VEL", OBC%silly_u, &
+                 "A silly value of velocities used outside of open boundary \n"//&
+                 "conditions for debugging.", units="m/s", default=0.0, &
+                 do_not_log=.not.debug_OBC)
+
     ! Allocate everything
     ! Note the 0-segment is needed when %segnum_u/v(:,:) = 0
     allocate(OBC%segment(0:OBC%number_of_segments))
@@ -311,6 +336,28 @@ subroutine open_boundary_config(G, param_file, OBC)
 
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
     call initialize_segment_data(G, OBC, param_file)
+
+    if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
+      call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
+                   "The maximum magnitude of the baroclinic radiation \n"//&
+                   "velocity (or speed of characteristics).  This is only \n"//&
+                   "used if one of the open boundary segments is using Orlanski.", &
+                   units="m s-1", default=10.0)
+      call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for velocities. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the open boundary segments is using Orlanski.", &
+                   units="nondim",  default=0.3)
+      call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
+                   "The relative weighting for the baroclinic radiation \n"//&
+                   "velocities (or speed of characteristics) at the new \n"//&
+                   "time level (1) or the running mean (0) for thicknesses. \n"//&
+                   "Valid values range from 0 to 1. This is only used if \n"//&
+                   "one of the open boundary segments is using Orlanski.", &
+                   units="nondim",  default=0.2)
+    endif
   endif
 
     ! Safety check
@@ -950,28 +997,6 @@ subroutine open_boundary_init(G, param_file, OBC)
   ! Local variables
 
   if (.not.associated(OBC)) return
-
-  if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
-    call get_param(param_file, mdl, "OBC_RADIATION_MAX", OBC%rx_max, &
-                   "The maximum magnitude of the baroclinic radiation \n"//&
-                   "velocity (or speed of characteristics).  This is only \n"//&
-                   "used if one of the open boundary segments is using Orlanski.", &
-                   units="m s-1", default=10.0)
-    call get_param(param_file, mdl, "OBC_RAD_VEL_WT", OBC%gamma_uv, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for velocities. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the open boundary segments is using Orlanski.", &
-                   units="nondim",  default=0.3)
-    call get_param(param_file, mdl, "OBC_RAD_THICK_WT", OBC%gamma_h, &
-                   "The relative weighting for the baroclinic radiation \n"//&
-                   "velocities (or speed of characteristics) at the new \n"//&
-                   "time level (1) or the running mean (0) for thicknesses. \n"//&
-                   "Valid values range from 0 to 1. This is only used if \n"//&
-                   "one of the open boundary segments is using Orlanski.", &
-                   units="nondim",  default=0.2)
-  endif
 
   id_clock_pass = cpu_clock_id('(Ocean OBC halo updates)', grain=CLOCK_ROUTINE)
 
@@ -1733,7 +1758,6 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
   real, dimension(SZI_(G),SZJB_(G), SZK_(G)),intent(inout) :: v !< Meridional velocity (m/s)
   ! Local variables
   integer :: i, j, k, n
-  real, parameter :: silly_value = 1.E40
 
   if (.not. associated(OBC)) return
 
@@ -1743,22 +1767,22 @@ subroutine open_boundary_test_extern_uv(G, OBC, u, v)
         J = OBC%segment(n)%HI%JsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
-            u(I,j+1,k) = silly_value
+            u(I,j+1,k) = OBC%silly_u
           enddo
         else
           do I = OBC%segment(n)%HI%IsdB, OBC%segment(n)%HI%IedB
-            u(I,j,k) = silly_value
+            u(I,j,k) = OBC%silly_u
           enddo
         endif
       elseif (OBC%segment(n)%is_E_or_W) then
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
-            v(i+1,J,k) = silly_value
+            v(i+1,J,k) = OBC%silly_u
           enddo
         else
           do J = OBC%segment(n)%HI%JsdB, OBC%segment(n)%HI%JedB
-            v(i,J,k) = silly_value
+            v(i,J,k) = OBC%silly_u
           enddo
         endif
       endif
@@ -1776,7 +1800,6 @@ subroutine open_boundary_test_extern_h(G, OBC, h)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)),intent(inout) :: h   !< Layer thickness (m or kg/m2)
   ! Local variables
   integer :: i, j, k, n
-  real, parameter :: silly_value = 1.E40
 
   if (.not. associated(OBC)) return
 
@@ -1786,22 +1809,22 @@ subroutine open_boundary_test_extern_h(G, OBC, h)
         J = OBC%segment(n)%HI%JsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
           do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-            h(i,j+1,k) = silly_value
+            h(i,j+1,k) = OBC%silly_h
           enddo
         else
           do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-            h(i,j,k) = silly_value
+            h(i,j,k) = OBC%silly_h
           enddo
         endif
       elseif (OBC%segment(n)%is_E_or_W) then
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-            h(i+1,j,k) = silly_value
+            h(i+1,j,k) = OBC%silly_h
           enddo
         else
           do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-            h(i,j,k) = silly_value
+            h(i,j,k) = OBC%silly_h
           enddo
         endif
       endif
