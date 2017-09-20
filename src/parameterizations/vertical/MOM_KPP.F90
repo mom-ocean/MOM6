@@ -3,17 +3,17 @@ module MOM_KPP
 
 ! License goes here?
 
-use MOM_coms,          only : max_across_PEs
-use MOM_debugging,     only : hchksum, is_NaN
-use MOM_diag_mediator, only : time_type, diag_ctrl, safe_alloc_ptr, post_data
-use MOM_diag_mediator, only : query_averaging_enabled, register_diag_field
-use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_PE
-use MOM_EOS,           only : EOS_type, calculate_density
-use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
-use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
-use MOM_grid,          only : ocean_grid_type, isPointInCell
-use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
+use MOM_coms,           only : max_across_PEs
+use MOM_debugging,      only : hchksum, is_NaN
+use MOM_diag_mediator,  only : time_type, diag_ctrl, safe_alloc_ptr, post_data
+use MOM_diag_mediator,  only : query_averaging_enabled, register_diag_field
+use MOM_error_handler,  only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_PE
+use MOM_EOS,            only : EOS_type, calculate_density
+use MOM_file_parser,    only : get_param, log_param, log_version, param_file_type
+use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
+use MOM_grid,           only : ocean_grid_type, isPointInCell
+use MOM_verticalGrid,   only : verticalGrid_type
+use MOM_wave_interface, only : wave_parameters_CS, Get_Langmuir_Number
 
 use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
@@ -47,8 +47,8 @@ integer, private, parameter :: SW_METHOD_LV1_SW = 2 !< Use shortwave radiation a
 integer, private, parameter :: LT_K_CONSTANT = 1,        & !< Constant enhance K through column
                                LT_K_SCALED = 2,          & !< Enhance K scales with G(sigma)
                                LT_K_MODE_CONSTANT = 1,   & !< Prescribed enhancement for K
-                               LT_K_MODE_VR12 = 2,       & !< Enhancement for K based on 
-                                                           !! Van Roekel et al., 2012 
+                               LT_K_MODE_VR12 = 2,       & !< Enhancement for K based on
+                                                           !! Van Roekel et al., 2012
                                LT_K_MODE_RW16 = 3,       & !< Enhancement for K based on
                                                            !! Reichl et al., 2016
                                LT_VT2_MODE_CONSTANT = 1, & !< Prescribed enhancement for Vt2
@@ -100,7 +100,7 @@ type, public :: KPP_CS ; private
   integer :: LT_VT2_METHOD             !< Integer for Vt2 LT method
   real    :: KPP_VT2_ENH_FAC           !< Factor to multiply by VT2 if Method is CONSTANT
   logical :: STOKES_MIXING             !< Flag if model is mixing down Stokes gradient
-                                       !! This is relavent for which current to use in RiB 
+                                       !! This is relavent for which current to use in RiB
 
   !> CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -124,17 +124,12 @@ type, public :: KPP_CS ; private
   integer :: id_NLT_dTdt = -1
   integer :: id_NLT_temp_budget = -1
   integer :: id_NLT_saln_budget = -1
-  integer :: id_us20pct = -1, id_vs20pct = -1
-  integer :: id_ussurf = -1, id_vssurf = -1
-  integer :: id_Langnum = -1
-  integer :: id_EnhK = -1
-  integer :: id_EnhW = -1
-  integer :: id_EnhVt2 = -1
+  integer :: id_EnhK = -1, id_EnhW = -1, id_EnhVt2 = -1
 
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of OBL (m)
-  real, allocatable, dimension(:,:)   :: OBLdepthprev  !< previous Depth (positive) of OBL (m)
+  real, allocatable, dimension(:,:)   :: OBLdepthprev !< previous Depth (positive) of OBL (m)
   real, allocatable, dimension(:,:,:) :: dRho      !< Bulk difference in density (kg/m3)
   real, allocatable, dimension(:,:,:) :: Uz2       !< Square of bulk difference in resolved velocity (m2/s2)
   real, allocatable, dimension(:,:,:) :: BulkRi    !< Bulk Richardson number for each layer (dimensionless)
@@ -150,14 +145,8 @@ type, public :: KPP_CS ; private
   real, allocatable, dimension(:,:)   :: Ssurf     !< Salinity of surface layer (ppt)
   real, allocatable, dimension(:,:)   :: Usurf     !< i-velocity of surface layer (m/s)
   real, allocatable, dimension(:,:)   :: Vsurf     !< j-velocity of surface layer (m/s)
-  real, allocatable, dimension(:,:)   :: Us20pct   !< i-velocity of surface layer Stokes (m/s)
-  real, allocatable, dimension(:,:)   :: Vs20pct   !< j-velocity of surface layer Stokes (m/s)
-  real, allocatable, dimension(:,:)   :: Ussurf    !< i-velocity of surface Stokes (m/s)
-  real, allocatable, dimension(:,:)   :: Vssurf    !< j-velocity of surface Stokes (m/s)
-  real, allocatable, dimension(:,:)   :: LangNum   !< Langmuir number
-  real, allocatable, dimension(:,:)   :: EnhW   !< Langmuir number
-  real, allocatable, dimension(:,:)   :: EnhK   !< Langmuir number
-  real, allocatable, dimension(:,:,:)   :: EnhVt2   !< Langmuir number
+  real, allocatable, dimension(:,:,:)   :: EnhK      !< Enhancement for mixing coefficient
+  real, allocatable, dimension(:,:,:)   :: EnhVt2  !< Enhancement for Vt2
 
 
 
@@ -420,7 +409,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
-                       CVmix_kpp_params_user=CS%KPP_params)
+                       CVmix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
   CS%diag => diag
@@ -483,25 +472,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
       'i-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
   CS%id_Vsurf = register_diag_field('ocean_model', 'KPP_Vsurf', diag%axesCv1, Time, &
       'j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
-  CS%id_us20pct = register_diag_field('ocean_model', 'Us_20pct', diag%axesT1, Time, &
-      'x-component Stokes drift of surface layer (20% of OBL depth) as passed to [CVmix] KPP',&
-      'm/s')
-  CS%id_vs20pct = register_diag_field('ocean_model', 'Vs_20pct', diag%axesT1, Time, &
-      'y-component Stokes drift of surface layer (20% of OBL depth) as passed to [CVmix] KPP',&
-      'm/s')
-  CS%id_ussurf = register_diag_field('ocean_model', 'Us_surf', diag%axesCu1, Time, &
-      'x-component Stokes drift at surface as passed to [CVmix] KPP',&
-      'm/s')
-  CS%id_vssurf = register_diag_field('ocean_model', 'Vs_surf', diag%axesCv1, Time, &
-      'y-component Stokes drift at surface as passed to [CVmix] KPP',&
-      'm/s')
-  CS%id_Langnum = register_diag_field('ocean_model', 'LangNum', diag%axesT1, Time, &
-      'Langmuir number as used by [CVmix] KPP',&
-      'nondim')
-  CS%id_EnhK = register_diag_field('ocean_model', 'EnhK', diag%axesT1, Time, &
+  CS%id_EnhK = register_diag_field('ocean_model', 'EnhK', diag%axesTI, Time, &
       'Langmuir number enhancement to K as used by [CVmix] KPP','nondim')
-  CS%id_EnhW = register_diag_field('ocean_model', 'EnhW', diag%axesT1, Time, &
-      'Langmuir number enhancement to W as used by [CVmix] KPP','nondim')
   CS%id_EnhVt2 = register_diag_field('ocean_model', 'EnhVt2', diag%axesTL, Time, &
       'Langmuir number enhancement to Vt2 as used by [CVmix] KPP','nondim')
 
@@ -538,22 +510,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   if (CS%id_Usurf > 0)    CS%Usurf(:,:) = 0.
   if (CS%id_Vsurf > 0)    allocate( CS%Vsurf( SZI_(G), SZJB_(G)) )
   if (CS%id_Vsurf > 0)    CS%Vsurf(:,:) = 0.
-  if (CS%id_us20pct > 0)    allocate( CS%Us20pct( SZI_(G), SZJ_(G)) )
-  if (CS%id_us20pct > 0)    CS%Us20pct(:,:) = 0.
-  if (CS%id_vs20pct > 0)    allocate( CS%Vs20pct( SZI_(G), SZJ_(G)) )
-  if (CS%id_vs20pct > 0)    CS%Vs20pct(:,:) = 0.
-  if (CS%id_ussurf > 0)    allocate( CS%ussurf( SZI_(G), SZJ_(G)) )
-  if (CS%id_ussurf > 0)    CS%ussurf(:,:) = 0.
-  if (CS%id_vssurf > 0)    allocate( CS%vssurf( SZI_(G), SZJ_(G)) )
-  if (CS%id_vssurf > 0)    CS%vssurf(:,:) = 0.
-  if (CS%id_LangNum > 0)    allocate( CS%LangNum( SZI_(G), SZJ_(G)) )
-  if (CS%id_LangNum > 0)    CS%LangNum(:,:) = 0.
   if (CS%id_EnhVt2 > 0)    allocate( CS%EnhVt2( SZI_(G), SZJ_(G), SZK_(G)) )
   if (CS%id_EnhVt2 > 0)    CS%EnhVt2(:,:,:) = 0.
-  if (CS%id_EnhW > 0)    allocate( CS%EnhW( SZI_(G), SZJ_(G)) )
-  if (CS%id_EnhW > 0)    CS%EnhW(:,:) = 0.
-  if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G)) )
-  if (CS%id_EnhK > 0)    CS%EnhK(:,:) = 0.
+  if (CS%id_EnhK > 0)    allocate( CS%EnhK( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
+  if (CS%id_EnhK > 0)    CS%EnhK(:,:,:) = 0.
 
 
 end function KPP_init
@@ -634,7 +594,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
   real :: VarUp, VarDn, M, VarLo, VarAvg
   real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
-  integer :: B 
+  integer :: B
   real :: WST
 
 
@@ -800,7 +760,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                "without activating USEWAVES")
         endif
         !For now get Langmuir number based on prev. MLD (otherwise must compute 3d LA)
-        MLD_GUESS = max(1.,abs(CS%OBLdepthprev(i,j) * 10.))
+        MLD_GUESS = max( 1., abs(CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
              H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
         WAVES%LangNum(i,j)=LA
@@ -877,8 +837,9 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       do k=1,G%ke
         Vt2_1d(k)=Vt2_1d(k)*LangEnhVT2(k)
+        if (CS%id_EnhVt2 > 0) CS%EnhVt2(i,j,k)=LangEnhVT2(k)
       enddo
-      
+
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center (m)
@@ -952,7 +913,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       !     endif
 
       !   enddo
-        
+
       !   BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
       !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
@@ -987,7 +948,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
       ! endif   ! endif for "correction" step
-! BGR: Above code either needs modified or removed (as Steve suggests).  
+! BGR: Above code either needs modified or removed (as Steve suggests).
 !      Do not uncomment as is if using Langmuir options
 ! smg: remove code above
 ! **********************************************************************
@@ -1032,7 +993,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
-                            CVmix_kpp_params_user=CS%KPP_params)
+                            CVmix_kpp_params_user=CS%KPP_params )
 
       IF (CS%LT_K_ENHANCEMENT) then
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
@@ -1049,12 +1010,14 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         endif
         do k=1,G%ke
           if (CS%LT_K_SHAPE== LT_K_CONSTANT) then
+            if (CS%id_EnhK > 0) CS%EnhK(i,j,:) = LangEnhK
             Kdiffusivity(k,1) = Kdiffusivity(k,1) * LangEnhK
             Kdiffusivity(k,2) = Kdiffusivity(k,2) * LangEnhK
             Kviscosity(k)     = Kviscosity(k)   * LangEnhK
           elseif (CS%LT_K_SHAPE == LT_K_SCALED) then
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)
             SigmaRatio = sigma * (1. - sigma)**2. / 0.148148037
+            if (CS%id_EnhK > 0) CS%EnhK(i,j,k) = (1.0 + (LangEnhK - 1.)*sigmaRatio)
             Kdiffusivity(k,1) = Kdiffusivity(k,1) * ( 1. + &
                                 ( LangEnhK - 1.)*sigmaRatio)
             Kdiffusivity(k,2) = Kdiffusivity(k,2) * ( 1. + &
@@ -1130,7 +1093,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! compute unresolved squared velocity for diagnostics
       if (CS%id_Vt2 > 0) then
-!BGR Now computing VT2 so can modify for LT         
+!BGR Now computing VT2 above so can modify for LT
+!    therefore, don't repeat this operation here
 !        Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
 !                    cellHeight(1:G%ke),                 & ! Depth of cell center (m)
 !                    ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
@@ -1140,8 +1104,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! Copy 1d data into 3d diagnostic arrays
-      !/ grabbing obldepth_0d for prev.
-      CS%OBLdepthprev(i,j)=OBLdepth_0d*0.1
+      !/ grabbing obldepth_0d for next time step.
+      CS%OBLdepthprev(i,j)=OBLdepth_0d
       !\ this can replace the other and be allocated independent of diagnostic output
       if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
       if (CS%id_BulkDrho > 0) CS%dRho(i,j,:)   = deltaRho(:)
@@ -1160,16 +1124,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if (CS%id_Ssurf  > 0)   CS%Ssurf(i,j)    = surfSalt
       if (CS%id_Usurf  > 0)   CS%Usurf(i,j)    = surfU
       if (CS%id_Vsurf  > 0)   CS%Vsurf(i,j)    = surfv
-      if (present(waves).and.associated(waves)) then
-         if (CS%id_us20pct  > 0)   CS%us20pct(i,j)    = usx20pct
-         if (CS%id_vs20pct  > 0)   CS%vs20pct(i,j)    = usy20pct
-         if (CS%id_ussurf  > 0)   CS%ussurf(i,j)    = WAVES%Us0_x(i,j)
-         if (CS%id_vssurf  > 0)   CS%vssurf(i,j)    = WAVES%Us0_y(i,j)
-         if (CS%id_LangNum > 0)   CS%LangNum(i,j)    = WAVES%LangNum(i,j)
-         if (CS%id_EnhW > 0)     CS%EnhW(i,j)    = LangEnhW
-         if (CS%id_EnhK > 0)     CS%EnhK(i,j)    = LangEnhK
-         if (CS%id_EnhVt2 > 0)   CS%EnhVt2(i,j,:)  = LangEnhVt2
-      endif
+
       ! Update output of routine
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
@@ -1223,12 +1178,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   if (CS%id_Ssurf    > 0) call post_data(CS%id_Ssurf,    CS%Ssurf,           CS%diag)
   if (CS%id_Usurf    > 0) call post_data(CS%id_Usurf,    CS%Usurf,           CS%diag)
   if (CS%id_Vsurf    > 0) call post_data(CS%id_Vsurf,    CS%Vsurf,           CS%diag)
-  if (CS%id_us20pct  > 0) call post_data(CS%id_us20pct,  CS%us20pct,         CS%diag)
-  if (CS%id_vs20pct  > 0) call post_data(CS%id_vs20pct,  CS%vs20pct,         CS%diag)
-  if (CS%id_ussurf   > 0) call post_data(CS%id_ussurf,   CS%ussurf,          CS%diag)
-  if (CS%id_vssurf   > 0) call post_data(CS%id_vssurf,   CS%vssurf,          CS%diag)
-  if (CS%id_LangNum  > 0) call post_data(CS%id_LangNum,  CS%LangNum,         CS%diag)
-  if (CS%id_EnhW     > 0) call post_data(CS%id_EnhW,     CS%EnhW,            CS%diag)
   if (CS%id_EnhK     > 0) call post_data(CS%id_EnhK,     CS%EnhK,            CS%diag)
   if (CS%id_EnhVt2   > 0) call post_data(CS%id_EnhVt2,   CS%EnhVt2,          CS%diag)
 

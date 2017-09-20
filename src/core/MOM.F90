@@ -310,10 +310,6 @@ type, public :: MOM_control_struct
   integer :: id_Tcon  = -1
   integer :: id_Sabs  = -1
 
-  ! 3-d waves fields
-  integer :: id_StokesDrift_x, id_StokesDrift_y
-  integer :: id_LangmuirNumber !2-d waves fields
-
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
@@ -332,6 +328,12 @@ type, public :: MOM_control_struct
   integer :: id_sob      = -1
   integer :: id_sstcon   = -1
   integer :: id_sssabs   = -1
+
+  ! 3-d waves fields
+  integer :: id_StokesDrift_x, id_StokesDrift_y
+
+  ! 2-d wave fields
+  integer :: id_LangmuirNumber
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -734,7 +736,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
       endif
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia,WAVES=CS%Wave_Parameter_CSp)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                           WAVES=CS%Wave_Parameter_CSp )
 
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -1029,7 +1032,8 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
         endif
 
         ! Apply diabatic forcing, do mixing, and regrid.
-        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, WAVES=CS%Wave_Parameter_CSp)
+        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                             WAVES=CS%Wave_Parameter_CSp)
 
         call disable_averaging(CS%diag)
 
@@ -1072,16 +1076,19 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
     if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
-    !Output Waves Here?
+    !Output Waves Here
     if (associated(CS%Wave_Parameter_CSp)) then
+       ! 3d Stokes drift (x)
        if (CS%id_StokesDrift_x > 0) then
           call post_data(CS%id_StokesDrift_x,CS%Wave_Parameter_CSp%US_x,CS%\
           diag)
        endif
+       ! 3d Stokes drift (y)
        if (CS%id_StokesDrift_y > 0) then
           call post_data(CS%id_StokesDrift_y,CS%Wave_Parameter_CSp%US_y,CS%\
           diag)
        endif
+       ! Langmuir Number
        if (CS%id_LangmuirNumber > 0 ) then
           call post_data(CS%id_LangmuirNumber, CS%Wave_Parameter_CSp%LangNum,CS%diag)
        endif
@@ -1151,7 +1158,7 @@ end subroutine step_MOM
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia,waves)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, waves)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1164,7 +1171,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia,waves)
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
-  type(wave_parameters_CS), pointer, optional       :: WAVES
+  type(wave_parameters_CS), pointer, optional :: WAVES !<Container for wave related parameters
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
@@ -1203,7 +1210,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia,waves)
 
     call cpu_clock_begin(id_clock_diabatic)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, G, GV, CS%diabatic_CSp,Waves=Waves)
+                  dtdia, G, GV, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -2267,7 +2274,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
-  call register_diags(Time, G, GV, CS, CS%ADp,WAVES=CS%Wave_Parameter_CSp)
+  call register_diags(Time, G, GV, CS, CS%ADp, WAVES=CS%Wave_Parameter_CSp)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
@@ -2406,7 +2413,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 !> Register the diagnostics
-subroutine register_diags(Time, G, GV, CS, ADp,waves)
+subroutine register_diags(Time, G, GV, CS, ADp, WAVES)
   type(time_type),           intent(in)    :: Time  !< current model time
   type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structu
   type(verticalGrid_type),   intent(inout) :: GV    !< ocean vertical grid structure
@@ -2622,9 +2629,9 @@ subroutine register_diags(Time, G, GV, CS, ADp,waves)
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
         'Salinity', 'PPT')
   endif
-  
+
   CS%id_StokesDrift_x = register_diag_field('ocean_model', 'Stokes_Drift_x', diag%axesCuL, &
-       Time, 'Stokes Drift in x-direction', 'meter second-1')                   
+       Time, 'Stokes Drift in x-direction', 'meter second-1')
   CS%id_StokesDrift_y = register_diag_field('ocean_model', 'Stokes_Drift_y', diag%axesCvL, &
        Time, 'Stokes Drift in y-direction', 'meter second-1')
   CS%id_LangmuirNumber = register_diag_field('ocean_model', 'Langmuir_Number', diag%axesT1, &
@@ -4219,4 +4226,3 @@ end subroutine MOM_end
 
 
 end module MOM
-

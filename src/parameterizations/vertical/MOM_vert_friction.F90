@@ -8,7 +8,6 @@ use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_file_parser, only : read_param!BGR added to check UseWaves
 use MOM_forcing_type, only : forcing
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
@@ -1614,9 +1613,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
   call get_param(param_file, mdl, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
-       "Flag to use Lagrangian Mixing", units="", &
+       "Flag to use Lagrangian Mixing (with Stokes drift). \n"//&
+       "Still needs work and testing, so not recommended for use.", units="", &
        Default=.false.)
-
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
@@ -1651,7 +1650,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
 
   if ((len_trim(CS%u_trunc_file) > 0) .or. (len_trim(CS%v_trunc_file) > 0)) &
     call PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS%PointAccel_CSp)
-
 
 end subroutine vertvisc_init
 

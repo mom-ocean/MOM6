@@ -206,10 +206,10 @@ type, public :: energetic_PBL_CS ; private
     ML_depth2, &       ! The mixed layer depth in m.
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
+    MSTAR_LT, &        ! Mstar for Langmuir turbulence
     MLD_EKMAN, &       ! MLD over Ekman length
     MLD_OBUKHOV, &     ! MLD over Obukhov length
     EKMAN_OBUKHOV, &   ! Ekman over Obukhov length
-    LA, &              ! Langmuir number
     LA_MOD             ! Modified Langmuir number
 
   real, allocatable, dimension(:,:,:) :: &
@@ -222,7 +222,7 @@ type, public :: energetic_PBL_CS ; private
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_OSBL = -1, id_LT_Enhancement = -1, id_MSTAR_mix = -1
   integer :: id_mld_ekman = -1, id_mld_obukhov = -1, id_ekman_obukhov = -1
-  integer :: id_LA = -1, id_LA_mod = -1
+  integer :: id_LA_mod = -1, id_MSTAR_LT
 end type energetic_PBL_CS
 
 integer :: num_msg = 0, max_msg = 2
@@ -491,7 +491,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   !/BGR added Aug24,2016 for adding iteration to get boundary layer depth
   !    - needed to compute new mixing length.
   real :: MLD_guess, MLD_found ! Mixing Layer depth guessed/found for iteration, in m.
-  real :: entrainment_depth
   real :: max_MLD, min_MLD ! Iteration bounds, in m, which are adjusted at each step
                            !  - These are initialized based on surface/bottom
                            !  1. The iteration guesses a value (possibly from
@@ -515,7 +514,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
   logical :: FIRST_OBL     ! Flag for computing "found" Mixing layer depth
   logical :: OBL_CONVERGED ! Flag for convergence of MLD
   integer :: OBL_IT        ! Iteration counter
-  integer :: spinup=0 ! this is super hacky never commit this
 !### These need to be made into run-time parameters.
   integer :: MAX_OBL_IT=20 ! Set maximum number of iterations.  Probably
                            !  best as an input parameter, but then may want
@@ -570,7 +568,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     mech_TKE_k, conv_PErel_k
   real, dimension(SZK_(GV)) :: nstar_k
   integer, dimension(SZK_(GV)) :: num_itts
-
 
   integer :: i, j, k, is, ie, js, je, nz, itt, max_itt
 
@@ -892,7 +889,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           !Reset mech_tke and conv_perel values (based on new mstar)
           mech_TKE(i) = ( MSTAR_mix * MSTAR_conv_adj * ENHANCE_M + MSTAR_LT) * (dt*GV%Rho0*U_Star**3)
           conv_PErel(i) = 0.0
-         if (CS%TKE_diagnostics) then
+          if (CS%TKE_diagnostics) then
             CS%diag_TKE_wind(i,j) = CS%diag_TKE_wind(i,j) + mech_TKE(i) * IdtdR0
             if (TKE_forced(i,j,1) <= 0.0) then
               CS%diag_TKE_forcing(i,j) = CS%diag_TKE_forcing(i,j) + &
@@ -1001,12 +998,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             nstar_FC = CS%nstar * conv_PErel(i) / (conv_PErel(i) + 0.2 * &
                             sqrt(0.5 * dt * GV%Rho0 * (absf(i)*(htot(i)*GV%H_to_m))**3 * conv_PErel(i)))
           endif
-          N2_dissipation = 1. + CS%N2_DISSIPATION_SCALE_NEG! * &
-          !                 max(0.,min(1.,(mech_tke(i)/TKE_forced(i,j,k))))
 
           if (debug) nstar_k(K) = nstar_FC
-          
+
           tot_TKE = mech_TKE(i) + nstar_FC * conv_PErel(i)
+
           !   For each interior interface, first discard the TKE to account for
           ! mixing of shortwave radiation through the next denser cell.
           if (TKE_forced(i,j,k) < 0.0) then
@@ -1131,7 +1127,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             ! At this point, Kddt_h(K) will be unknown because its value may depend
             ! on how much energy is available.  mech_TKE might be negative due to
             ! contributions from TKE_forced.
-
             h_tt = htot(i) + h_tt_min
             TKE_here = mech_TKE(i) + CS%wstar_ustar_coef*conv_PErel(i)
             if (TKE_here > 0.0) then
@@ -1172,6 +1167,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
             endif
 
             MKE_src = dMKE_max*(1.0 - exp(-Kddt_h_g0 * MKE2_Hharm))
+
             if (pe_chg_g0 .gt. 0.0) then
               !Negative buoyancy (increases PE)
               N2_dissipation = 1.+CS%N2_DISSIPATION_SCALE_NEG
@@ -1228,8 +1224,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 ! The energy change does not vary monotonically with Kddt_h.  Find the maximum?
                 Kd(i,k) = Kd_guess0 ; dPE_conv = PE_chg_g0
               endif
-              conv_PErel(i) = conv_PErel(i) - dPE_conv + CS%N2_dissipation_scale_pos*dpe_conv
-              mech_TKE(i) = mech_TKE(i) + MKE_src 
+              conv_PErel(i) = conv_PErel(i) - dPE_conv
+              mech_TKE(i) = mech_TKE(i) + MKE_src
               if (CS%TKE_diagnostics) then
                 dTKE_conv = dTKE_conv - CS%nstar*dPE_conv * IdtdR0
                 dTKE_MKE = dTKE_MKE + MKE_src * IdtdR0
@@ -1537,10 +1533,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       endif
       if (allocated(CS%Enhance_M)) CS%Enhance_M(i,j) = Enhance_M
       if (allocated(CS%mstar_mix)) CS%mstar_mix(i,j) = MSTAR_MIX
+      if (allocated(CS%mstar_lt)) CS%mstar_lt(i,j) = MSTAR_LT
       if (allocated(CS%MLD_Obukhov)) CS%MLD_Obukhov(i,j) = (MLD_guess*iL_Obukhov)
       if (allocated(CS%MLD_Ekman)) CS%MLD_Ekman(i,j) = (MLD_guess*iL_Ekman)
       if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(i,j) = (iL_Obukhov/(iL_Ekman+1.e-10))
-      if (allocated(CS%La)) CS%La(i,j) = LA
       if (allocated(CS%La_mod)) CS%La_mod(i,j) = LAmod
     else
       ! For masked points, Kd_int must still be set (to 0) because it has intent(out).
@@ -1603,11 +1599,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       call post_data(CS%id_MLD_Ekman, CS%MLD_EKMAN, CS%diag)
     if (CS%id_Ekman_Obukhov >0) &
       call post_data(CS%id_Ekman_Obukhov, CS%Ekman_Obukhov, CS%diag)
-    if (CS%id_LA >0) &
-      call post_data(CS%id_LA, CS%LA, CS%diag)
     if (CS%id_LA_MOD >0) &
       call post_data(CS%id_LA_MOD, CS%LA_MOD, CS%diag)
-
+    if (CS%id_MSTAR_LT > 0) &
+      call post_data(CS%id_MSTAR_LT, CS%MSTAR_LT, CS%diag)
   endif
 
 end subroutine energetic_PBL
@@ -2230,11 +2225,10 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
       Time, 'Boundary layer depth over Obukhov length.', 'meter')
   CS%id_ekman_obukhov = register_diag_field('ocean_model', 'EKMAN_OBUKHOV', diag%axesT1, &
       Time, 'Ekman length over Obukhov length.', 'meter')
-  CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
-      Time, 'Langmuir number.', 'non-dim')
   CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
       Time, 'Modified Langmuir number.', 'non-dim')
-
+  CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
+      Time, 'MSTAR applied for LT effect.', 'non-dim')
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
                  "If true, temperature and salinity are used as state \n"//&
@@ -2253,7 +2247,6 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
 
     CS%TKE_diagnostics = .true.
   endif
-  
   if ((CS%id_Mixing_Length>0) .or. (CS%id_Velocity_Scale>0)) then
     call safe_alloc_alloc(CS%Velocity_Scale,isd,ied,jsd,jed,GV%ke+1)
     call safe_alloc_alloc(CS%Mixing_Length,isd,ied,jsd,jed,GV%ke+1)
@@ -2264,14 +2257,14 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   call safe_alloc_alloc(CS%ML_depth, isd, ied, jsd, jed)
   call safe_alloc_alloc(CS%ML_depth2, isd, ied, jsd, jed)
   if (max(CS%id_LT_Enhancement, CS%id_mstar_mix,CS%id_mld_ekman, &
-       CS%id_ekman_obukhov, CS%id_mld_obukhov, CS%id_LA, CS%id_LA_mod)>0) then
+       CS%id_ekman_obukhov, CS%id_mld_obukhov, CS%id_LA_mod, CS%id_MSTAR_LT ) >0) then
     call safe_alloc_alloc(CS%Mstar_mix, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%Enhance_M, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%MLD_EKMAN, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%MLD_OBUKHOV, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%EKMAN_OBUKHOV, isd, ied, jsd, jed)
-    call safe_alloc_alloc(CS%LA, isd, ied, jsd, jed)
     call safe_alloc_alloc(CS%LA_MOD, isd, ied, jsd, jed)
+    call safe_alloc_alloc(CS%MSTAR_LT, isd, ied, jsd, jed)
   endif
 
   !Fitting coefficients to asymptote twoard 0 as MLD -> Ekman depth
@@ -2298,10 +2291,8 @@ subroutine energetic_PBL_end(CS)
   if (allocated(CS%MLD_EKMAN))           deallocate(CS%MLD_EKMAN)
   if (allocated(CS%MLD_OBUKHOV))         deallocate(CS%MLD_OBUKHOV)
   if (allocated(CS%EKMAN_OBUKHOV))       deallocate(CS%EKMAN_OBUKHOV)
-  if (allocated(CS%LA))                  deallocate(CS%LA)
-  if (allocated(CS%LA_mod))              deallocate(CS%LA_mod)
   if (allocated(CS%MSTAR_MIX))           deallocate(CS%MSTAR_MIX)
-  if (allocated(CS%LA))                  deallocate(CS%LA)
+  if (allocated(CS%MSTAR_LT))           deallocate(CS%MSTAR_LT)
   if (allocated(CS%LA_MOD))              deallocate(CS%LA_MOD)
   if (allocated(CS%diag_TKE_wind))       deallocate(CS%diag_TKE_wind)
   if (allocated(CS%diag_TKE_MKE))        deallocate(CS%diag_TKE_MKE)
