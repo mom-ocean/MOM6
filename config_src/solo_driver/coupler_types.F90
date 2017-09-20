@@ -1,7 +1,6 @@
 module coupler_types_mod
-!-----------------------------------------------------------------------
+
 ! This file is part of MOM6. See LICENSE.md for the license.
-!-----------------------------------------------------------------------
 
 !   This module contains the coupler-type declarations and methods for use in
 ! ocean-only configurations of MOM6.  It is intended that the version of
@@ -2856,12 +2855,18 @@ end subroutine CT_register_restarts_2d
 
 !> This subroutine registers the fields in a coupler_2d_bc_type to be saved
 !! in the specified restart file.
-subroutine CT_register_restarts_to_file_2d(var, file_name, rest_file, mpp_domain)
+subroutine CT_register_restarts_to_file_2d(var, file_name, rest_file, mpp_domain, &
+                                           varname_prefix)
   type(coupler_2d_bc_type), intent(inout) :: var  !< BC_type structure to be registered for restarts
   character(len=*),         intent(in)    :: file_name !< The name of the restart file
   type(restart_file_type),  pointer       :: rest_file !< A (possibly associated) structure describing the restart file
   type(domain2D),           intent(in)    :: mpp_domain !< The FMS domain to use for this registration call
+  character(len=*), optional, intent(in)  :: varname_prefix !< A prefix for the variable name
+                                                  !! in the restart file, intended to allow
+                                                  !! multiple BC_type variables to use the
+                                                  !! same restart files.
 
+  character(len=128) :: var_name
   integer :: n, m
 
   ! Register the fields with the restart file
@@ -2871,8 +2876,10 @@ subroutine CT_register_restarts_to_file_2d(var, file_name, rest_file, mpp_domain
 
     var%bc(n)%rest_type => rest_file
     do m = 1, var%bc(n)%num_fields
+      var_name = trim(var%bc(n)%field(m)%name)
+      if (present(varname_prefix)) var_name = trim(varname_prefix)//trim(var_name)
       var%bc(n)%field(m)%id_rest = register_restart_field(rest_file, &
-              file_name, var%bc(n)%field(m)%name, var%bc(n)%field(m)%values, &
+              file_name, var_name, var%bc(n)%field(m)%values, &
               mpp_domain, mandatory=.not.var%bc(n)%field(m)%may_init )
     enddo
   enddo
@@ -2934,12 +2941,19 @@ end subroutine CT_register_restarts_3d
 
 !> This subroutine registers the fields in a coupler_3d_bc_type to be saved
 !! in the specified restart file.
-subroutine CT_register_restarts_to_file_3d(var, file_name, rest_file, mpp_domain)
+subroutine CT_register_restarts_to_file_3d(var, file_name, rest_file, mpp_domain, &
+                                           varname_prefix)
   type(coupler_3d_bc_type), intent(inout) :: var  !< BC_type structure to be registered for restarts
   character(len=*),         intent(in)  :: file_name !< The name of the restart file
   type(restart_file_type),  pointer     :: rest_file !< A (possibly associated) structure describing the restart file
   type(domain2D),           intent(in)  :: mpp_domain     !< The FMS domain to use for this registration call
 
+  character(len=*), optional, intent(in)  :: varname_prefix !< A prefix for the variable name
+                                                  !! in the restart file, intended to allow
+                                                  !! multiple BC_type variables to use the
+                                                  !! same restart files.
+
+  character(len=128) :: var_name
   integer :: n, m
 
   ! Register the fields with the restart file
@@ -2949,8 +2963,10 @@ subroutine CT_register_restarts_to_file_3d(var, file_name, rest_file, mpp_domain
 
     var%bc(n)%rest_type => rest_file
     do m = 1, var%bc(n)%num_fields
+      var_name = trim(var%bc(n)%field(m)%name)
+      if (present(varname_prefix)) var_name = trim(varname_prefix)//trim(var_name)
       var%bc(n)%field(m)%id_rest = register_restart_field(rest_file, &
-              file_name, var%bc(n)%field(m)%name, var%bc(n)%field(m)%values, &
+              file_name, var_name, var%bc(n)%field(m)%values, &
               mpp_domain, mandatory=.not.var%bc(n)%field(m)%may_init )
     enddo
   enddo

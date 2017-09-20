@@ -1,23 +1,6 @@
 module ISOMIP_initialization
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_ALE_sponge, only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
@@ -596,7 +579,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     end select
     !  This call sets up the damping rates and interface heights.
     !  This sets the inverse damping timescale fields in the sponges.
-    call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
+    call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
 
     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
     T_range = T_range / G%max_depth ! Convert T_range into dT/dz

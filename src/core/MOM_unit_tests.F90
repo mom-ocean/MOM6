@@ -1,6 +1,8 @@
 !> Invokes unit tests in all modules that have them
 module MOM_unit_tests
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_error_handler,     only : MOM_error, FATAL, is_root_pe
 
 use MOM_string_functions,  only : string_functions_unit_tests

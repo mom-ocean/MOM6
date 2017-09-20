@@ -220,6 +220,7 @@ type, public:: diabatic_CS ; private
   real, allocatable, dimension(:,:)   :: KPP_temp_flux  !< KPP effective temperature flux (K m/s)
   real, allocatable, dimension(:,:)   :: KPP_salt_flux  !< KPP effective salt flux (ppt m/s)
 
+  type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type diabatic_CS
 
 ! clock ids
@@ -1219,7 +1220,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS, WAV
     call cpu_clock_begin(id_clock_sponge)
     if (associated(CS%ALE_sponge_CSp)) then
       ! ALE sponge
-      call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp)
+      call apply_ALE_sponge(h, dt, G, CS%ALE_sponge_CSp, CS%Time)
     else
       ! Layer mode sponge
       if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
@@ -1788,7 +1789,7 @@ end subroutine adiabatic_driver_init
 subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
-  type(time_type),         intent(in)    :: Time             !< model time
+  type(time_type), target                :: Time             !< model time
   type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
   type(verticalGrid_type), intent(in)    :: GV               !< model vertical grid structure
   type(param_file_type),   intent(in)    :: param_file       !< file to parse for parameter values
@@ -1828,6 +1829,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   endif
 
   CS%diag => diag
+  CS%Time => Time
+
   if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
   if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp

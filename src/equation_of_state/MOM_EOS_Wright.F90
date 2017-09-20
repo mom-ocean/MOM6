@@ -1,23 +1,6 @@
 module MOM_EOS_Wright
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !***********************************************************************
 !*  The subroutines in this file implement the equation of state for   *
@@ -33,12 +16,20 @@ implicit none ; private
 
 public calculate_compress_wright, calculate_density_wright
 public calculate_density_derivs_wright, calculate_specvol_derivs_wright
-public calculate_density_scalar_wright, calculate_density_array_wright
+public calculate_density_second_derivs_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
 
 interface calculate_density_wright
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
 end interface calculate_density_wright
+
+interface calculate_density_derivs_wright
+  module procedure calculate_density_derivs_scalar_wright, calculate_density_derivs_array_wright
+end interface
+
+interface calculate_density_second_derivs_wright
+  module procedure calculate_density_second_derivs_scalar_wright, calculate_density_second_derivs_array_wright
+end interface
 
 !real :: a0, a1, a2, b0, b1, b2, b3, b4, b5, c0, c1, c2, c3, c4, c5
 !    One of the two following blocks of values should be commented out.
@@ -140,8 +131,8 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
   enddo
 end subroutine calculate_density_array_wright
 
-! #@# This subroutine needs a doxygen description.
-subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
+!> For a given thermodynamic state, return the thermal/haline expansion coefficients
+subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
                                                  !! in C.
   real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
@@ -180,7 +171,105 @@ subroutine calculate_density_derivs_wright(T, S, pressure, drho_dT, drho_dS, sta
       (pressure(j)+p0) * ( (pressure(j)+p0)*a2 + (c4 + c5*T(j)) ))
   enddo
 
-end subroutine calculate_density_derivs_wright
+end subroutine calculate_density_derivs_array_wright
+
+!> The scalar version of calculate_density_derivs which promotes scalar inputs to a 1-element array and then
+!! demotes the output back to a scalar
+subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_dS)
+  real,    intent(in) :: T        !< Potential temperature relative to the surface
+                                  !! in C.
+  real,    intent(in) :: S        !< Salinity in PSU.
+  real,    intent(in) :: pressure !< Pressure in Pa.
+  real,    intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                   !! temperature, in kg m-3 K-1.
+  real,    intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                   !! in kg m-3 psu-1.
+
+  ! Local variables needed to promote the input/output scalars to 1-element arrays
+  real, dimension(1) :: T0, S0, P0
+  real, dimension(1) :: drdt0, drds0
+
+  T0(1) = T
+  S0(1) = S
+  P0(1) = pressure
+  call calculate_density_derivs_array_wright(T0, S0, P0, drdt0, drds0, 1, 1)
+  drho_dT = drdt0(1)
+  drho_dS = drds0(1)
+
+end subroutine calculate_density_derivs_scalar_wright
+
+!> Second derivatives of density with respect to temperature, salinity, and pressure
+subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp, start, npts)
+  real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar
+  real, dimension(:), intent(in   ) :: S !< Salinity in PSU
+  real, dimension(:), intent(in   ) :: P !< Pressure in Pa
+  real, dimension(:), intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect to S
+  real, dimension(:), intent(  out) :: drho_ds_dt !< Partial derivative of beta with resepct to T
+  real, dimension(:), intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect to T
+  real, dimension(:), intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect to pressure
+  real, dimension(:), intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect to pressure
+  integer,            intent(in   ) :: start !< Starting index in T,S,P
+  integer,            intent(in   ) :: npts  !< Number of points to loop over
+
+  integer :: j
+  ! Based on the above expression with common terms factored, there probably exists a more numerically stable
+  ! and/or efficient expression
+  real :: z0, z1, z2, z3, z4, z5, z6 ,z7, z8, z9, z10, z11, z2_2, z2_3
+
+  do j = start,start+npts-1
+    z0 = T(j)*(b1 + b5*S(j) + T(j)*(b2 + b3*T(j)))
+    z1 = (b0 + P(j) + b4*S(j) + z0)
+    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 2.*b3*T(j)))
+    z4 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))))
+    z5 = (b1 + b5*S(j) + T(j)*(b2 + b3*T(j)) + T(j)*(b2 + 2.*b3*T(j)))
+    z6 = c1 + c5*S(j) + T(j)*(c2 + c3*T(j)) + T(j)*(c2 + 2.*c3*T(j))
+    z7 = (c4 + c5*T(j) + a2*z1)
+    z8 = (c1 + c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)) + a1*z1)
+    z9 = (a0 + a2*S(j) + a1*T(j))
+    z10 = (b4 + b5*T(j))
+    z11 = (z10*z4 - z1*z7)
+    z2 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))) + z9*z1)
+    z2_2 = z2*z2
+    z2_3 = z2_2*z2
+
+    drho_ds_ds(j) = (z10*(c4 + c5*T(j)) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T(j) + z9*z10 + a2*z1)*z11)/z2_3
+    drho_ds_dt(j) = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
+    drho_dt_dt(j) = (z3*z6 - z1*(2.*c2 + 6.*c3*T(j) + a1*z5) + (2.*b2 + 4.*b3*T(j))*z4 - z5*z8)/z2_2 - &
+                    (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
+    drho_ds_dp(j) = (-c4 - c5*T(j) - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
+    drho_dt_dp(j) = (-c1 - c5*S(j) - T(j)*(2.*c2 + 3.*c3*T(j)) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
+  enddo
+
+end subroutine calculate_density_second_derivs_array_wright
+
+!> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs. Inputs
+!! promoted to 1-element array and output demoted to scalar
+subroutine calculate_density_second_derivs_scalar_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
+                                                         drho_ds_dp, drho_dt_dp)
+  real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
+  real, intent(in   ) :: S          !< Salinity in PSU
+  real, intent(in   ) :: P          !< Pressure in Pa
+  real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect to S
+  real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with resepct to T
+  real, intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect to T
+  real, intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect to pressure
+  real, intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect to pressure
+  ! Local variables
+  real, dimension(1) :: T0, S0, P0
+  real, dimension(1) :: drdsds, drdsdt, drdtdt, drdsdp, drdtdp
+
+  T0(1) = T
+  S0(1) = S
+  P0(1) = P
+  call calculate_density_second_derivs_array_wright(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
+  drho_ds_ds = drdsds(1)
+  drho_ds_dt = drdsdt(1)
+  drho_dt_dt = drdtdt(1)
+  drho_ds_dp = drdsdp(1)
+  drho_dt_dp = drdtdp(1)
+
+end subroutine calculate_density_second_derivs_scalar_wright
 
 subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface

@@ -1,24 +1,6 @@
-
 module MOM_EOS_TEOS10
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !***********************************************************************
 !*  The subroutines in this file implement the equation of state for   *
@@ -27,18 +9,28 @@ module MOM_EOS_TEOS10
 
 use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct
 use gsw_mod_toolbox, only : gsw_rho, gsw_rho_first_derivatives, gsw_specvol_first_derivatives
+use gsw_mod_toolbox, only : gsw_rho_second_derivatives
 !use gsw_mod_toolbox, only : gsw_sr_from_sp, gsw_ct_from_pt
 
 implicit none ; private
 
 public calculate_compress_teos10, calculate_density_teos10
-public calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
-public calculate_density_scalar_teos10, calculate_density_array_teos10
+public calculate_density_derivs_teos10
+public calculate_specvol_derivs_teos10
+public calculate_density_second_derivs_teos10
 public gsw_sp_from_sr, gsw_pt_from_ct
 
 interface calculate_density_teos10
   module procedure calculate_density_scalar_teos10, calculate_density_array_teos10
 end interface calculate_density_teos10
+
+interface calculate_density_derivs_teos10
+  module procedure calculate_density_derivs_scalar_teos10, calculate_density_derivs_array_teos10
+end interface calculate_density_derivs_teos10
+
+interface calculate_density_second_derivs_teos10
+  module procedure calculate_density_second_derivs_scalar_teos10, calculate_density_second_derivs_array_teos10
+end interface calculate_density_second_derivs_teos10
 
 real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar.
 
@@ -110,7 +102,7 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
  enddo
 end subroutine calculate_density_array_teos10
 
-subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
+subroutine calculate_density_derivs_array_teos10(T, S, pressure, drho_dT, drho_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
   real,    intent(in),  dimension(:) :: S        !< Absolute salinity in g/kg.
   real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
@@ -141,7 +133,20 @@ subroutine calculate_density_derivs_teos10(T, S, pressure, drho_dT, drho_dS, sta
     call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS(j), drho_dct=drho_dT(j))
   enddo
 
-end subroutine calculate_density_derivs_teos10
+end subroutine calculate_density_derivs_array_teos10
+
+subroutine calculate_density_derivs_scalar_teos10(T, S, pressure, drho_dT, drho_dS)
+  real,    intent(in)  ::  T, S, pressure
+  real,    intent(out) :: drho_dT, drho_dS
+  ! Local variables
+  real :: zs,zt,zp
+  !Conversions
+  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
+  zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
+  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
+  if(S.lt.-1.0e-10) return !Can we assume safely that this is a missing value?
+  call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS, drho_dct=drho_dT)
+end subroutine calculate_density_derivs_scalar_teos10
 
 subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),  dimension(:) :: T        !< Conservative temperature in C.
@@ -175,6 +180,66 @@ subroutine calculate_specvol_derivs_teos10(T, S, pressure, dSV_dT, dSV_dS, start
   enddo
 
 end subroutine calculate_specvol_derivs_teos10
+
+!> Calculate the 5 second derivatives of the equation of state for scalar inputs
+subroutine calculate_density_second_derivs_scalar_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                         drho_dT_dP)
+  real, intent(in)     :: T, S, pressure
+  real, intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
+  real, intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T
+  real, intent(out)    :: drho_dT_dT !< Partial derivative of alpha with respect to T
+  real, intent(out)    :: drho_dS_dP !< Partial derivative of beta with respect to pressure
+  real, intent(out)    :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
+! * Arguments: T - conservative temperature in C.                      *
+! *  (in)      S - absolute salinity in g/kg.                          *
+! *  (in)      pressure - pressure in Pa.                              *
+! *  (out)     drho_dT - the partial derivative of density with        *
+! *                      potential temperature, in kg m-3 K-1.         *
+! *  (out)     drho_dS - the partial derivative of density with        *
+! *                      salinity, in kg m-3 psu-1.                    *
+  real :: zs,zt,zp
+
+  !Conversions
+  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
+  zt = T !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
+  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
+  if(S.lt.-1.0e-10) return !Can we assume safely that this is a missing value?
+  call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS, rho_sa_ct=drho_dS_dT, &
+                                     rho_ct_ct=drho_dT_dT, rho_sa_p=drho_dS_dP, rho_ct_p=drho_dT_dP)
+
+end subroutine calculate_density_second_derivs_scalar_teos10
+
+!> Calculate the 5 second derivatives of the equation of state for scalar inputs
+subroutine calculate_density_second_derivs_array_teos10(T, S, pressure, drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, &
+                                                        drho_dT_dP, start, npts)
+  real, dimension(:), intent(in)     :: T, S, pressure
+  real, dimension(:), intent(out)    :: drho_dS_dS !< Partial derivative of beta with respect to S
+  real, dimension(:), intent(out)    :: drho_dS_dT !< Partial derivative of beta with resepct to T
+  real, dimension(:), intent(out)    :: drho_dT_dT !< Partial derivative of alpha with respect to T
+  real, dimension(:), intent(out)    :: drho_dS_dP !< Partial derivative of beta with respect to pressure
+  real, dimension(:), intent(out)    :: drho_dT_dP !< Partial derivative of alpha with respect to pressure
+  integer, intent(in)  :: start    !< The starting point in the arrays.
+  integer, intent(in)  :: npts     !< The number of values to calculate.
+! * Arguments: T - conservative temperature in C.                      *
+! *  (in)      S - absolute salinity in g/kg.                          *
+! *  (in)      pressure - pressure in Pa.                              *
+! *  (out)     drho_dT - the partial derivative of density with        *
+! *                      potential temperature, in kg m-3 K-1.         *
+! *  (out)     drho_dS - the partial derivative of density with        *
+! *                      salinity, in kg m-3 psu-1.                    *
+  real :: zs,zt,zp
+  integer :: j
+  do j=start,start+npts-1
+    !Conversions
+    zs = S(j) !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
+    zt = T(j) !gsw_ct_from_pt(S,T)  !Convert potantial temp to conservative temp
+    zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
+    if(zs .lt. -1.0e-10) return !Can we assume safely that this is a missing value?
+    call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS(j), rho_sa_ct=drho_dS_dT(j), &
+                                    rho_ct_ct=drho_dT_dT(j), rho_sa_p=drho_dS_dP(j), rho_ct_p=drho_dT_dP(j))
+  enddo
+
+end subroutine calculate_density_second_derivs_array_teos10
 
 !> This subroutine computes the in situ density of sea water (rho in *
 !! units of kg/m^3) and the compressibility (drho/dp = C_sound^-2)   *

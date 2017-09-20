@@ -1,23 +1,6 @@
 module MOM_sum_output
-!***********************************************************************
-!*                   GNU General Public License                        *
-!* This file is a part of MOM.                                         *
-!*                                                                     *
-!* MOM is free software; you can redistribute it and/or modify it and  *
-!* are expected to follow the terms of the GNU General Public License  *
-!* as published by the Free Software Foundation; either version 2 of   *
-!* the License, or (at your option) any later version.                 *
-!*                                                                     *
-!* MOM is distributed in the hope that it will be useful, but WITHOUT  *
-!* ANY WARRANTY; without even the implied warranty of MERCHANTABILITY  *
-!* or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public    *
-!* License for more details.                                           *
-!*                                                                     *
-!* For the full text of the GNU General Public License,                *
-!* write to: Free Software Foundation, Inc.,                           *
-!*           675 Mass Ave, Cambridge, MA 02139, USA.                   *
-!* or see:   http://www.gnu.org/licenses/gpl.html                      *
-!***********************************************************************
+
+! This file is part of MOM6. See LICENSE.md for the license.
 
 !********+*********+*********+*********+*********+*********+*********+**
 !*                                                                     *
@@ -160,7 +143,7 @@ end type sum_output_CS
 
 contains
 
-! #@# This subroutine needs a doxygen description.
+!> MOM_sum_output_init initializes the parameters and settings for the MOM_sum_output module.
 subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
                                 Input_start_time, CS)
   type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
@@ -284,12 +267,10 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 
 end subroutine MOM_sum_output_init
 
+!> MOM_sum_output_end deallocates memory used by the MOM_sum_output module.
 subroutine MOM_sum_output_end(CS)
-  type(Sum_output_CS), pointer :: CS
-!   This subroutine deallocates the memory owned by this module.
-! Argument: CS - The control structure returned by a previous call to
-!                MOM_sum_output_init.
-
+  type(Sum_output_CS), pointer :: CS  !< The control structure returned by a
+                                      !! previous call to MOM_sum_output_init.
   if (associated(CS)) then
     if (CS%do_APE_calc) then
       DEALLOC_(CS%lH)
@@ -907,9 +888,10 @@ end subroutine write_energy
 
 !> This subroutine accumates the net input of volume, and perhaps later salt and
 !! heat, through the ocean surface for use in diagnosing conservation.
-subroutine accumulate_net_input(fluxes, state, dt, G, CS)
+subroutine accumulate_net_input(fluxes, sfc_state, dt, G, CS)
   type(forcing),         intent(in) :: fluxes !< A structure containing pointers to any possible forcing fields.  Unused fields are unallocated.
-  type(surface),         intent(in) :: state
+  type(surface),         intent(in) :: sfc_state !< A structure containing fields that
+                                              !! describe the surface state of the ocean.
   real,                  intent(in) :: dt     !< The amount of time over which to average, in s.
   type(ocean_grid_type), intent(in) :: G      !< The ocean's grid structure.
   type(Sum_output_CS),   pointer    :: CS     !< The control structure returned by a previous call to MOM_sum_output_init.
@@ -980,32 +962,32 @@ subroutine accumulate_net_input(fluxes, state, dt, G, CS)
 !    enddo ; enddo ; endif
 
     ! smg: old code
-    if (ASSOCIATED(state%TempxPmE)) then
+    if (ASSOCIATED(sfc_state%TempxPmE)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * state%TempxPmE(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * sfc_state%TempxPmE(i,j)
       enddo ; enddo
     elseif (ASSOCIATED(fluxes%evap)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (C_p * state%SST(i,j)) * FW_in(i,j)
+        heat_in(i,j) = heat_in(i,j) + (C_p * sfc_state%SST(i,j)) * FW_in(i,j)
       enddo ; enddo
     endif
 
 
     ! The following heat sources may or may not be used.
-    if (ASSOCIATED(state%internal_heat)) then
+    if (ASSOCIATED(sfc_state%internal_heat)) then
       do j=js,je ; do i=is,ie
         heat_in(i,j) = heat_in(i,j) + (C_p * G%areaT(i,j)) * &
-                     state%internal_heat(i,j)
+                     sfc_state%internal_heat(i,j)
       enddo ; enddo
     endif
-    if (ASSOCIATED(state%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * state%frazil(i,j)
+    if (ASSOCIATED(sfc_state%frazil)) then ; do j=js,je ; do i=is,ie
+      heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * sfc_state%frazil(i,j)
     enddo ; enddo ; endif
     if (ASSOCIATED(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
       heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j)*fluxes%heat_added(i,j)
     enddo ; enddo ; endif
-!    if (ASSOCIATED(state%sw_lost)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * state%sw_lost(i,j)
+!    if (ASSOCIATED(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
+!      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * sfc_state%sw_lost(i,j)
 !    enddo ; enddo ; endif
 
     if (ASSOCIATED(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie

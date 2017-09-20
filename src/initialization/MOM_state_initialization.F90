@@ -89,7 +89,9 @@ use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
-use MOM_tracer_initialization_from_Z, only : horiz_interp_and_extrap_tracer
+use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
+
+use fms_io_mod, only : field_size
 
 implicit none ; private
 
@@ -171,7 +173,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                         ! is a run from a restart file; this option
                         ! allows the use of Fatal unused parameters.
   type(EOS_type), pointer :: eos => NULL()
-  logical :: debug    ! indicates whether to write debugging output
+  logical :: debug      ! If true, write debugging output.
+  logical :: debug_obc  ! If true, do debugging calls related to OBCs.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -185,6 +188,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
   call log_version(PF, mdl, version, "")
   call get_param(PF, mdl, "DEBUG", debug, default=.false.)
+  call get_param(PF, mdl, "DEBUG_OBC", debug_obc, default=.false.)
 
   new_sim = .false.
   if ((dirs%input_filename(1:1) == 'n') .and. &
@@ -523,7 +527,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
            sponge_CSp, ALE_sponge_CSp)
       case ("file"); call initialize_sponges_file(G, GV, use_temperature, tv, &
-                                               PF, sponge_CSp)
+                                               PF, sponge_CSp, ALE_sponge_CSp, Time)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
              "Unrecognized sponge configuration "//trim(config))
     end select
@@ -574,7 +578,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
     call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
   endif
 
-! call open_boundary_test_extern_h(G, OBC, h)
+  if (debug_OBC) call open_boundary_test_extern_h(G, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
 end subroutine MOM_initialize_state
@@ -1623,7 +1627,7 @@ end subroutine initialize_temp_salt_linear
 !! number of tracers should be restored within each sponge. The
 !!interface height is always subject to damping, and must always be
 !! the first registered field.
-subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
+subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, ALE_CSp, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
   logical,                 intent(in) :: use_temperature
@@ -1631,7 +1635,10 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
                                               !! variables.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(sponge_CS),         pointer    :: CSp  !! A pointer that is set to point to the control
-                                              !! structure for this module.
+                                              !! structure for this module (in layered mode).
+  type(ALE_sponge_CS),         pointer    :: ALE_CSp  !! A pointer that is set to point to the control
+                                                      !! structure for this module (in ALE mode).
+  type(time_type),         intent(in) :: Time
 !   This subroutine sets the inverse restoration time (Idamp), and   !
 ! the values towards which the interface heights and an arbitrary    !
 ! number of tracers should be restored within each sponge. The       !
@@ -1655,7 +1662,9 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
 !  (in/out)  CSp - A pointer that is set to point to the control structure
 !                  for this module
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The target interface heights, in m.
+  real, allocatable, dimension(:,:,:) :: eta ! The target interface heights, in m.
+  real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses, in m.
+
   real, dimension (SZI_(G),SZJ_(G),SZK_(G)) :: &
     tmp, tmp2 ! A temporary array for tracers.
   real, dimension (SZI_(G),SZJ_(G)) :: &
@@ -1665,11 +1674,20 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   real :: pres(SZI_(G))     ! An array of the reference pressure, in Pa.
 
   integer :: i, j, k, is, ie, js, je, nz
+  integer :: isd, ied, jsd, jed
+  integer, dimension(4) :: siz
+  integer :: nz_data  ! The size of the sponge source grid
   character(len=40) :: potemp_var, salin_var, Idamp_var, eta_var
   character(len=40) :: mdl = "initialize_sponges_file"
   character(len=200) :: damping_file, state_file  ! Strings for filenames
   character(len=200) :: filename, inputdir ! Strings for file/path and path.
+
+  logical :: use_ALE ! True if ALE is being used, False if in layered mode
+  logical :: new_sponges ! True if using the newer sponges which do not
+                         ! need to reside on the model horizontal grid.
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   pres(:) = 0.0 ; eta(:,:,:) = 0.0 ; tmp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
 
@@ -1681,7 +1699,6 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   call get_param(param_file, mdl, "SPONGE_STATE_FILE", state_file, &
                  "The name of the file with the state to damp toward.", &
                  default=damping_file)
-
   call get_param(param_file, mdl, "SPONGE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in \n"//&
                  "SPONGE_STATE_FILE.", default="PTEMP")
@@ -1694,12 +1711,26 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   call get_param(param_file, mdl, "SPONGE_IDAMP_VAR", Idamp_var, &
                  "The name of the inverse damping rate variable in \n"//&
                  "SPONGE_DAMPING_FILE.", default="IDAMP")
+  call get_param(param_file, mdl, "USE_REGRIDDING", use_ALE, do_not_log = .true.)
+
+  call get_param(param_file, mdl, "NEW_SPONGES", new_sponges, &
+                 "Set True if using the newer sponging code which \n"//&
+                 "performs on-the-fly regridding in lat-lon-time.",&
+                 "of sponge restoring data.", default=.false.)
+
+!  if (use_ALE) then
+!    call get_param(param_file, mdl, "SPONGE_RESTORE_ETA", restore_eta, &
+!                 "If true, then restore the interface positions towards \n"//&
+!                 "target values (in ALE mode)", default = .false.)
+!  endif
 
   filename = trim(inputdir)//trim(damping_file)
   call log_param(param_file, mdl, "INPUTDIR/SPONGE_DAMPING_FILE", filename)
   if (.not.file_exists(filename, G%Domain)) &
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
+  if (new_sponges .and. .not. use_ALE) &
+    call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
   call read_data(filename,"Idamp",Idamp(:,:), domain=G%Domain%mpp_domain)
 
@@ -1713,25 +1744,59 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
     call MOM_error(FATAL, " initialize_sponges: Unable to open "//trim(filename))
 
 
-!  The first call to set_up_sponge_field is for the interface height.!
-  call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+!  The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
-  do j=js,je ; do i=is,ie
-    eta(i,j,nz+1) = -G%bathyT(i,j)
-  enddo ; enddo
-  do k=nz,1,-1 ; do j=js,je ; do i=is,ie
-    if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
-      eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
-  enddo ; enddo ; enddo
+  if (.not. use_ALE) then
+    call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+
+    do j=js,je ; do i=is,ie
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+    enddo ; enddo
+    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+    enddo ; enddo ; enddo
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
-  call initialize_sponge(Idamp, eta, G, param_file, CSp)
+    call initialize_sponge(Idamp, eta, G, param_file, CSp)
+  else if (.not. new_sponges) then ! ALE mode
+
+    call field_size(filename,eta_var,siz,no_domain=.true.)
+    if (siz(1) /= G%ieg-G%isg+1 .or. siz(2) /= G%jeg-G%jsg+1) &
+      call MOM_error(FATAL,"initialize_sponge_file: Array size mismatch for sponge data.")
+
+!    ALE_CSp%time_dependent_target = .false.
+!    if (siz(4) > 1) ALE_CSp%time_dependent_target = .true.
+    nz_data = siz(3)-1
+    allocate(eta(isd:ied,jsd:jed,nz_data+1))
+    allocate(h(isd:ied,jsd:jed,nz_data))
+
+    call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+
+    do j=js,je ; do i=is,ie
+      eta(i,j,nz+1) = -G%bathyT(i,j)
+    enddo ; enddo
+
+    do k=nz,1,-1 ; do j=js,je ; do i=is,ie
+      if (eta(i,j,K) < (eta(i,j,K+1) + GV%Angstrom_z)) &
+        eta(i,j,K) = eta(i,j,K+1) + GV%Angstrom_z
+    enddo ; enddo ; enddo
+    do k=1,nz; do j=js,je ; do i=is,ie
+      h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
+    enddo ; enddo; enddo
+    call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
+  else
+    ! Initialize sponges without supplying sponge grid
+    call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
+  endif
+
+
 
 !   Now register all of the tracer fields which are damped in the    !
 ! sponge. By default, momentum is advected vertically within the     !
 ! sponge, but momentum is typically not damped within the sponge.    !
 
-  if ( GV%nkml>0 ) then
+  if ( GV%nkml>0 .and. .not. new_sponges) then
 !   This call to set_up_sponge_ML_density registers the target values of the
 ! mixed layer density, which is used in determining which layers can be
 ! inflated without causing static instabilities.
@@ -1749,12 +1814,16 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp)
   endif
 
 !  The remaining calls to set_up_sponge_field can be in any order.   !
-  if ( use_temperature ) then
+  if ( use_temperature .and. .not. new_sponges) then
     call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
     call read_data(filename, salin_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
+  else if (use_temperature) then
+    call set_up_ALE_sponge_field(filename, potemp_var, Time, G, tv%T, ALE_CSp)
+    call set_up_ALE_sponge_field(filename, salin_var, Time, G, tv%S, ALE_CSp)
   endif
+
 
 
 end subroutine initialize_sponges_file
@@ -1841,10 +1910,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   logical,       optional, intent(in)    :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
 
-  character(len=200) :: filename   ! The name of an input file containing temperature
-                                   ! and salinity in z-space; also used for  ice shelf area.
-  character(len=200) :: shelf_file ! The name of an input file used for  ice shelf area.
-  character(len=200) :: inputdir ! The directory where NetCDF input filesare.
+  character(len=200) :: filename   !< The name of an input file containing temperature
+                                   !! and salinity in z-space; also used for  ice shelf area.
+  character(len=200) :: tfilename  !< The name of an input file containing only temperature
+                                   !! in z-space.
+  character(len=200) :: sfilename  !< The name of an input file containing only salinity
+                                   !! in z-space.
+  character(len=200) :: shelf_file !< The name of an input file used for  ice shelf area.
+  character(len=200) :: inputdir   !! The directory where NetCDF input filesare.
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
@@ -1938,15 +2011,24 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 
   call get_param(PF, mdl, "TEMP_SALT_Z_INIT_FILE",filename, &
                  "The name of the z-space input file used to initialize \n"//&
-                 "the layer thicknesses, temperatures and salinities.", &
-                 default="temp_salt_z.nc", do_not_log=just_read)
+                 "temperatures (T) and salinities (S). If T and S are not \n" //&
+                 "in the same file, TEMP_Z_INIT_FILE and SALT_Z_INIT_FILE \n" //&
+                 "must be set.",default="temp_salt_z.nc",do_not_log=just_read)
+  call get_param(PF, mdl, "TEMP_Z_INIT_FILE",tfilename, &
+                 "The name of the z-space input file used to initialize \n"//&
+                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
+  call get_param(PF, mdl, "SALT_Z_INIT_FILE",sfilename, &
+                 "The name of the z-space input file used to initialize \n"//&
+                 "temperatures, only.", default=trim(filename),do_not_log=just_read)
   filename = trim(inputdir)//trim(filename)
+  tfilename = trim(inputdir)//trim(tfilename)
+  sfilename = trim(inputdir)//trim(sfilename)
   call get_param(PF, mdl, "Z_INIT_FILE_PTEMP_VAR", potemp_var, &
                  "The name of the potential temperature variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="ptemp", do_not_log=just_read)
+                 "TEMP_Z_INIT_FILE.", default="ptemp",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_FILE_SALT_VAR", salin_var, &
                  "The name of the salinity variable in \n"//&
-                 "TEMP_SALT_Z_INIT_FILE.", default="salt", do_not_log=just_read)
+                 "SALT_Z_INIT_FILE.", default="salt",do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_HOMOGENIZE", homogenize, &
                  "If True, then horizontally homogenize the interpolated \n"//&
                  "initial conditions.", default=.false., do_not_log=just_read)
@@ -2011,10 +2093,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 !   to the North/South Pole past the limits of the input data, they are extrapolated using the average
 !   value at the northernmost/southernmost latitude.
 
-  call horiz_interp_and_extrap_tracer(filename, potemp_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(tfilename, potemp_var,1.0,1, &
        G, temp_z, mask_z, z_in, z_edges_in, missing_value_temp, reentrant_x, tripolar_n, homogenize)
 
-  call horiz_interp_and_extrap_tracer(filename, salin_var,1.0,1, &
+  call horiz_interp_and_extrap_tracer(sfilename, salin_var,1.0,1, &
        G, salt_z, mask_z, z_in, z_edges_in, missing_value_salt, reentrant_x, tripolar_n, homogenize)
 
   kd = size(z_in,1)

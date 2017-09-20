@@ -1,6 +1,8 @@
 !> Regrid columns for the adaptive coordinate
 module coord_adapt
 
+! This file is part of MOM6. See LICENSE.md for the license.
+
 use MOM_EOS,           only : calculate_density_derivs
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
