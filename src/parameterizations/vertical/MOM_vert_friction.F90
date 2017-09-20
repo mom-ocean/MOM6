@@ -136,7 +136,7 @@ contains
 !! There is an additional stress term on the right-hand side
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
-subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
+subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
@@ -402,7 +402,7 @@ subroutine vertvisc(u, v, h, fluxes, visc, dt, OBC, ADp, CDp, G, GV, CS, &
      v = v - Waves%Us_y
   endif
 
-  call vertvisc_limit_vel(u, v, h, ADp, CDp, fluxes, visc, dt, G, GV, CS)
+  call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
