@@ -13,7 +13,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_grid,          only : ocean_grid_type, isPointInCell
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_wave_interface, only: wave_parameters_CS
+use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
 
 use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
 use CVmix_kpp, only : CVmix_coeffs_kpp
@@ -44,18 +44,20 @@ integer, private, parameter :: NLT_SHAPE_CUBIC_LMD = 4 !< Original shape, \f$ G(
 integer, private, parameter :: SW_METHOD_ALL_SW = 0 !< Use all shortwave radiation
 integer, private, parameter :: SW_METHOD_MXL_SW = 1 !< Use shortwave radiation absorbed in mixing layer
 integer, private, parameter :: SW_METHOD_LV1_SW = 2 !< Use shortwave radiation absorbed in layer 1
-integer, private, parameter :: LT_K_CONSTANT = 1,        &
-                               LT_K_SCALED = 2,          &
-                               LT_K_MODE_CONSTANT = 1,   &
-                               LT_K_MODE_VR12 = 2,       &
-                               LT_K_MODE_RW16 = 3,       &
-                               LT_VT2_MODE_CONSTANT = 1, &
-                               LT_VT2_MODE_VR12 = 2,     &
-                               LT_VT2_MODE_RW16 = 3,     &
-                               LT_VT2_MODE_LF17 = 4,     &
-                               LA_MODE_CONSTANT = 1,     &
-                               LA_MODE_PROFILE = 2,      &
-                               LA_MODE_BAND = 3
+integer, private, parameter :: LT_K_CONSTANT = 1,        & !< Constant enhance K through column
+                               LT_K_SCALED = 2,          & !< Enhance K scales with G(sigma)
+                               LT_K_MODE_CONSTANT = 1,   & !< Prescribed enhancement for K
+                               LT_K_MODE_VR12 = 2,       & !< Enhancement for K based on 
+                                                           !! Van Roekel et al., 2012 
+                               LT_K_MODE_RW16 = 3,       & !< Enhancement for K based on
+                                                           !! Reichl et al., 2016
+                               LT_VT2_MODE_CONSTANT = 1, & !< Prescribed enhancement for Vt2
+                               LT_VT2_MODE_VR12 = 2,     & !< Enhancement for Vt2 based on
+                                                           !! Van Roekel et al., 2012
+                               LT_VT2_MODE_RW16 = 3,     & !< Enhancement for Vt2 based on
+                                                           !! Reichl et al., 2016
+                               LT_VT2_MODE_LF17 = 4        !< Enhancement for Vt2 based on
+                                                           !! Li and Fox-Kemper, 2017
 
 !> Control structure for containing KPP parameters/data
 type, public :: KPP_CS ; private
@@ -89,17 +91,16 @@ type, public :: KPP_CS ; private
   logical :: correctSurfLayerAvg       !< If true, applies a correction to the averaging of surface layer properties
   real    :: surfLayerDepth            !< A guess at the depth of the surface layer (which should 0.1 of OBLdepth) (m)
   ! smg: obsolete above
-  integer :: SW_METHOD                 !<Sets method for using shortwave radiation in surface buoyancy flux
-  logical :: LT_K_Enhancement          !< Determines if enhancing mixing coefficients for Langmuir
-  integer :: LT_K_Shape                !< Determines if apply constant or normalized K Enhancement
-  integer :: LT_K_Method               !< Sets mode for LT enhancement of mixing coefficients
+  integer :: SW_METHOD                 !< Sets method for using shortwave radiation in surface buoyancy flux
+  logical :: LT_K_Enhancement          !< Flags if enhancing mixing coefficients due to LT
+  integer :: LT_K_Shape                !< Integer for constant or shape function enhancement
+  integer :: LT_K_Method               !< Integer for mixing coefficients LT method
   real    :: KPP_K_ENH_FAC             !< Factor to multiply by K if Method is CONSTANT
-  logical :: LT_Vt2_Enhancement        !< Determines if enhancing Vt2 due to Langmuir
-  integer :: LT_VT2_METHOD             !< Method to modify Vt2 due to Langmuir
+  logical :: LT_Vt2_Enhancement        !< Flags if enhancing Vt2 due to LT
+  integer :: LT_VT2_METHOD             !< Integer for Vt2 LT method
   real    :: KPP_VT2_ENH_FAC           !< Factor to multiply by VT2 if Method is CONSTANT
-  integer :: LA_METHOD                 !< Method to get Langmuir number for KPP
-  logical :: STOKES_MIXING             !< Stokes mixing? 
-  real :: KPP_LA_CONST
+  logical :: STOKES_MIXING             !< Flag if model is mixing down Stokes gradient
+                                       !! This is relavent for which current to use in RiB 
 
   !> CVmix parameters
   type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -183,14 +184,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
 
   ! Local variables
 #include "version_variable.h"
-  character(len=40) :: mdl = 'MOM_KPP'    ! name of this module
-  character(len=20) :: string,           &! local temporary string
-                       LT_K_Shape_Str,   &! string for passing Langmuir EF Method to CVMix
-                       LT_K_METHOD_STR,  &
-                       LT_VT2_Method_Str,&
-                       LA_METHOD_STR
-  logical :: CS_IS_ONE=.false.
-  !/LT_K_SHAPE
+  character(len=40) :: mdl = 'MOM_KPP' ! name of this module
+  character(len=20) :: string          ! local temporary string
+  logical :: CS_IS_ONE=.false.         ! Logical for setting Cs based on Non-local
+
   if (associated(CS)) call MOM_error(FATAL, 'MOM_KPP, KPP_init: '// &
            'Control structure has already been initialized')
   allocate(CS)
@@ -209,6 +206,8 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   call get_param(paramFile, mdl, 'PASSIVE', CS%passiveMode,           &
                  'If True, puts KPP into a passive-diagnostic mode.', &
                   default=.False.)
+  !BGR: Note using PASSIVE for KPP creates warning for PASSIVE from Convection
+  !     should we create a separate flag?
   if (present(passive)) passive=CS%passiveMode ! This is passed back to the caller so
                                                ! the caller knows to not use KPP output
   call get_param(paramFile, mdl, 'APPLY_NONLOCAL_TRANSPORT', CS%applyNonLocalTrans,  &
@@ -337,38 +336,40 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
                  units='m', default=0.)
 
-!Adding options for including Langmuir effects
-
-!/Options related to enhancing the mixing coefficient
+!/BGR: New options for including Langmuir effects
+!/ 1. Options related to enhancing the mixing coefficient
   call get_param(paramFile, mdl, "USE_KPP_LT_K", CS%LT_K_Enhancement, &
        'Flag for Langmuir turbulence enhancement of turbulent'//&
        'mixing coefficient.', units="", Default=.false.)
+  call get_param(paramFile, mdl, "STOKES_MIXING", CS%STOKES_MIXING, &
+       'Flag for Langmuir turbulence enhancement of turbulent'//&
+       'mixing coefficient.', units="", Default=.false.)
   if (CS%LT_K_Enhancement) then
-    call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', LT_K_SHAPE_STR,         &
+    call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', string,                 &
                  'Vertical dependence of LT enhancement of mixing. \n'//     &
                  'Valid options are: \n'//                                   &
                  '\t CONSTANT = Constant value for full OBL\n'//             &
                  '\t SCALED   = Varies based on normalized shape function.', &
                  default='CONSTANT')
-    select case ( trim(LT_K_SHAPE_STR))
+    select case ( trim(string))
       case ("CONSTANT") ; CS%LT_K_SHAPE = LT_K_CONSTANT
       case ("SCALED")   ; CS%LT_K_SHAPE = LT_K_SCALED
       case default ; call MOM_error(FATAL,"KPP_init: "//&
-                    "Unrecognized KPP_LT_K_SHAPE option"//trim(LT_K_SHAPE_STR))
+                    "Unrecognized KPP_LT_K_SHAPE option: "//trim(string))
     end select
-    call get_param(paramFile, mdl, "KPP_LT_K_METHOD",LT_K_METHOD_STR ,     &
+    call get_param(paramFile, mdl, "KPP_LT_K_METHOD", string ,                   &
                    'Method to enhance mixing coefficient in KPP. \n'//           &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_K_ENH_FAC) \n'//           &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
-                   '\t RW16     = Function of Langmuir number based on RW16',&
+                   '\t RW16     = Function of Langmuir number based on RW16',    &
                    default='CONSTANT')
-    select case ( trim(LT_K_METHOD_STR))
+    select case ( trim(string))
       case ("CONSTANT") ; CS%LT_K_METHOD = LT_K_MODE_CONSTANT
       case ("VR12")     ; CS%LT_K_METHOD = LT_K_MODE_VR12
       case ("RW16")     ; CS%LT_K_METHOD = LT_K_MODE_RW16
       case default      ; call MOM_error(FATAL,"KPP_init: "//&
-                    "Unrecognized KPP_LT_K_METHOD option"//trim(LT_K_METHOD_STR))
+                    "Unrecognized KPP_LT_K_METHOD option: "//trim(string))
     end select
     if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
       call get_param(paramFile, mdl, "KPP_K_ENH_FAC",CS%KPP_K_ENH_FAC ,     &
@@ -376,26 +377,26 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                    default=1.0)
     endif
   endif
-!/Options related to enhancing the unresolved Vt2/entrainment in Rib
+!/ 2. Options related to enhancing the unresolved Vt2/entrainment in Rib
   call get_param(paramFile, mdl, "USE_KPP_LT_VT2", CS%LT_Vt2_Enhancement, &
        'Flag for Langmuir turbulence enhancement of Vt2'//&
        'in Bulk Richardson Number.', units="", Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
-    call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",LT_VT2_METHOD_STR ,       &
+    call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
                    'Method to enhance Vt2 in KPP. \n'//                          &
                    'Valid options are: \n'//                                     &
                    '\t CONSTANT = Constant value (KPP_VT2_ENH_FAC) \n'//         &
                    '\t VR12     = Function of Langmuir number based on VR12\n'// &
                    '\t RW16     = Function of Langmuir number based on RW16\n'// &
-                   '\t LF17     = Function of Langmuir number based on LF17',&
+                   '\t LF17     = Function of Langmuir number based on LF17',    &
                    default='CONSTANT')
-    select case ( trim(LT_VT2_METHOD_STR))
+    select case ( trim(string))
       case ("CONSTANT") ; CS%LT_VT2_METHOD = LT_VT2_MODE_CONSTANT
       case ("VR12")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_VR12
       case ("RW16")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_RW16
       case ("LF17")     ; CS%LT_VT2_METHOD = LT_VT2_MODE_LF17
       case default      ; call MOM_error(FATAL,"KPP_init: "//&
-                    "Unrecognized KPP_LT_VT2_METHOD option"//trim(LT_VT2_METHOD_STR))
+                    "Unrecognized KPP_LT_VT2_METHOD option: "//trim(string))
     end select
     if (CS%LT_VT2_METHOD==LT_VT2_MODE_CONSTANT) then
       call get_param(paramFile, mdl, "KPP_VT2_ENH_FAC",CS%KPP_VT2_ENH_FAC ,     &
@@ -403,28 +404,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                    default=1.0)
     endif
   end if
-  call get_param(paramFile, mdl, "KPP_LA_METHOD",LA_METHOD_STR ,       &
-                   'Method to Langmuir number for KPP. \n'//                          &
-                   'Valid options are: \n'//                                     &
-                   '\t CONSTANT = Constant value (KPP_LA_CONST) \n'//         &
-                   '\t PROFILE  = Compute from Stokes drift profile \n'// &
-                   '\t BAND     = Compute from integrated bands', &
-                   default='CONSTANT')
-  select case ( trim(LA_METHOD_STR))
-      case ("CONSTANT") ; CS%LA_METHOD = LA_MODE_CONSTANT
-      case ("PROFILE")  ; CS%LA_METHOD = LA_MODE_PROFILE
-      case ("BAND")     ; CS%LA_METHOD = LA_MODE_BAND
-      case default      ; call MOM_error(FATAL,"KPP_init: "//&
-                    "Unrecognized KPP_LT_VT2_METHOD option"//trim(LT_VT2_METHOD_STR))
-  end select
-  if (CS%LA_METHOD==LA_MODE_CONSTANT) then
-    call get_param(paramFile, mdl, "KPP_LA_CONST",CS%KPP_LA_CONST ,     &
-                   'Constant value of Langmuir number for KPP.',  &
-                   default=1.e8)
-  endif
-  call get_param(paramFile, mdl, "STOKES_MIXING",CS%STOKES_MIXING ,     &
-                   'Logical to determine if momentum mixes down Stokes gradient.',  &
-                   default=.false.)
+
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
@@ -440,9 +420,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
-                       CVmix_kpp_params_user=CS%KPP_params)!,&
-!                       llangmuirEF=Langmuir_K_Enhancement)!, &
-!                       LangEFMethod=LangEFMethod)
+                       CVmix_kpp_params_user=CS%KPP_params)
 
   ! Register diagnostics
   CS%diag => diag
@@ -647,16 +625,17 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
   real :: hcorr ! A cumulative correction arising from inflation of vanished layers (m)
   integer :: kk, ksfc, ktmp
 
-!/BGR added
+  ! For Langmuir Calculations
   real :: LangEnhW     ! Langmuir enhancement for turbulent velocity scale
   real, dimension(G%ke) :: LangEnhVt2   ! Langmuir enhancement for unresolved shear
+  real, dimension(G%ke) :: U_H, V_H
+  real :: MLD_GUESS, LA
   real :: LangEnhK     ! Langmuir enhancement for mixing coefficient
   real :: surfHuS, surfHvS, surfUs, surfVs, wavedir, currentdir
   real :: VarUp, VarDn, M, VarLo, VarAvg
   real :: H10pct, H20pct,CMNFACT, USx20pct, USy20pct
   integer :: B 
   real :: WST
-  real :: Tup, Hup, Tlo, Hlo, DPT
 
 
 #ifdef __DO_SAFETY_CHECKS__
@@ -699,6 +678,11 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! skip calling KPP for land points
       if (G%mask2dT(i,j)==0.) cycle
+
+      do k=1,G%ke
+        U_H(k) = 0.5 * (U(i,j,k)+U(i-1,j,k))
+        V_H(k) = 0.5 * (V(i,j,k)+V(i,j-1,k))
+      enddo
 
       ! things independent of position within the column
       Coriolis = 0.25*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) &
@@ -811,70 +795,17 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       enddo ! k-loop finishes
 
       if (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) then
-        USy20pct = 0.0; USy20pct = 0.0;
-        H20pct=min(-0.1,-CS%OBLdepthprev(i,j)*2.0);!hTot is 10% of OBL, hence 2x
-        if (CS%LA_METHOD.eq.LA_MODE_BAND .or. CS%LA_METHOD.eq.LA_MODE_PROFILE) then
-          if (.not.(present(WAVES).and.associated(WAVES))) then
-            call MOM_error(FATAL,"Trying to use input WAVES information in KPP\n"//&
-                                 "without activating USEWAVES")
-          endif
-          if (CS%LA_METHOD.eq.LA_MODE_BAND) then
-            do b=1,WAVES%NumBands
-              if (WAVES%PartitionMode==0) then
-                CMNFACT = (1.0 - EXP(H20pct*2*WAVES%WaveNum_Cen(b))) &
-                     / (0.0-H20pct) / (2*WAVES%WaveNum_Cen(b))
-              elseif (WAVES%PartitionMode==1) then
-                !Note in frequency mode we are TEMPORARILY
-                ! using midpoint instead of integral/H to get average
-                CMNFACT = EXP(H20pct/2.*2.*(2.*3.1415*WAVES%Freq_Cen(b))**2/ &
-                     GV%g_Earth)
-              endif
-              USy20pct = USy20pct + 0.5 * ( WAVES%STKy0(i,j,b) &
-                  + WAVES%STKy0(i,j-1,b) ) * CMNFACT
-              USx20pct = USx20pct + 0.5 * ( WAVES%STKx0(i,j,b) &
-                  + WAVES%STKx0(i-1,j,b) ) * CMNFACT
-            enddo
-          elseif (CS%LA_METHOD.eq.LA_MODE_PROFILE) then
-            do k=1,G%ke-1
-              if (iFaceHeight(k+1).gt.H20pct) then
-                USy20pct = usy20pct + 0.5*(waves%us_y(i,j,k) + waves%us_y(i,j-1,k))
-                USx20pct = usx20pct + 0.5*(waves%us_x(i,j,k) + waves%us_x(i-1,j,k))
-              else
-                CMNFACT = max(0.,iFaceHeight(k)-h20pct)/(iFaceHeight(k)-iFaceHeight(k+1))
-                USy20pct = usy20pct +0.5*(waves%us_y(i,j,k) + waves%us_y(i,j-1,k)) &
-                           * CMNFACT
-                USx20pct = usx20pct +0.5*(waves%us_x(i,j,k) + waves%us_x(i-1,j,k)) &
-                           * CMNFACT
-              endif
-            enddo
-            usx20pct=usx20pct/-h20pct
-            usy20pct=usy20pct/-h20pct
-          endif
-          wavedir=atan2(USy20pct,USx20pct)
-          ! Lagrangian current shear (Reynolds stress direction approx)
-          if (CS%Stokes_Mixing) then
-            currentdir= atan2(0.5*(waves%us_y(i,j,1)+waves%us_y(i,j-1,1) - &
-                 waves%us_y(i,j,ksfc)-waves%us_y(i,j-1,ksfc)               &
-                 +v(i,j,1)+v(i,j-1,1)-v(i,j,ksfc)-v(i,j-1,ksfc)),          &
-                 0.5*(waves%us_x(i,j,1)+waves%us_x(i-1,j,1) -              &
-                 waves%us_x(i,j,ksfc)-waves%us_x(i-1,j,ksfc)               &
-                 +u(i,j,1)+u(i-1,j,1)-u(i,j,ksfc)-u(i-1,j,ksfc)))
-          else
-            currentdir = atan2(                                       &
-                 0.5*(v(i,j,1)+v(i,j-1,1)-v(i,j,ksfc)-v(i,j-1,ksfc)), &
-                 0.5*(u(i,j,1)+u(i-1,j,1)-u(i,j,ksfc)-u(i-1,j,ksfc)) )
-          endif
-          WAVES%LangNum(i,j) = max(1.e-6, sqrt(surfFricVel/ &
-                                   (1.e-10+sqrt(USx20pct**2 + USy20pct**2))) &
-                                   *sqrt(1./max(0.000001,cos(wavedir-currentdir))))
-        elseif (CS%LA_METHOD.eq.LA_MODE_CONSTANT) then
-          WAVES%LangNum(i,j) = CS%KPP_LA_CONST
-        else
-          ! This shouldn't be reached.
-          print*,'Why are you here?'
-          WAVES%LangNum(i,j) = 1.e8
+        if (.not.(present(WAVES).and.associated(WAVES))) then
+          call MOM_error(FATAL,"Trying to use input WAVES information in KPP\n"//&
+               "without activating USEWAVES")
         endif
+        !For now get Langmuir number based on prev. MLD (otherwise must compute 3d LA)
+        MLD_GUESS = max(1.,abs(CS%OBLdepthprev(i,j) * 10.))
+        call get_Langmuir_Number( LA, G, GV, MLD_guess, surfFricVel, I, J, &
+             H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
+        WAVES%LangNum(i,j)=LA
       endif
+
 
       ! compute in-situ density
       call calculate_density(Temp_1D, Salt_1D, pres_1D, rho_1D, 1, 3*G%ke, EOS)
@@ -903,9 +834,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface (m2/s3)
         surfFricVel,       & ! (in)  Turbulent friction velocity at surface (m/s)
         w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
-        CVmix_kpp_params_user=CS%KPP_params, &
-        langmuir_efactor = LangEnhW & ! (in) Langmuir enhancement
-        )
+        CVmix_kpp_params_user=CS%KPP_params )
 
       !Compute CVMix VT2
       Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
@@ -951,7 +880,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       enddo
       
       ! Calculate Bulk Richardson number from eq (21) of LMD94
-      !BGR pass EnhVT here
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr = cellHeight(1:G%ke),      & ! Depth of cell center (m)
                   delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) (1/s)
@@ -1059,7 +987,8 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
       ! endif   ! endif for "correction" step
-! BGR: Above code either needs modified or removed.  Do not uncomment as is.
+! BGR: Above code either needs modified or removed (as Steve suggests).  
+!      Do not uncomment as is if using Langmuir options
 ! smg: remove code above
 ! **********************************************************************
 
@@ -1104,8 +1033,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
                             CVmix_kpp_params_user=CS%KPP_params)
-                            !langmuir_efactor = LangEnhW
-                            !LangmuirEnhance_K = LangEnhK
 
       IF (CS%LT_K_ENHANCEMENT) then
         if (CS%LT_K_METHOD==LT_K_MODE_CONSTANT) then
@@ -1148,26 +1075,6 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       ! MOM6 recommended shape is the parabolic; it gives deeper boundary layer
       ! and no spurious extrema.
       if (surfBuoyFlux < 0.0) then
-         Hup=h(i,j,1)*GV%H_to_m;
-         Tup=Temp(i,j,1)*Hup
-         Tlo=0.0;Hlo=0.0;
-         DPT=0.0;
-        !  do ktmp = 2,G%ke
-        !     DPT=DPT+ h(i,j,ktmp)*GV%H_to_m
-        !     if (DPT.lt..2*OBLdepth_0d) then
-        !        delH = h(i,j,ktmp)*GV%H_to_m
-        !        Hup = Hup + delH
-        !        Tup = Tup + Temp(i,j,ktmp) * delH
-        !     elseif (DPT.lt.OBLdepth_0d) then
-        !        delH = h(i,j,ktmp)*GV%H_to_m
-        !        Hlo = Hlo + delH
-        !        Tlo = Tlo + Temp(i,j,ktmp) * delH
-        !        Tlo = max(Tlo,Temp(i,j,ktmp))
-        !     endif
-        ! enddo
-        ! Tup=Tup/Hup;!Tlo=Tlo/Hlo;
-        ! CS%CS2=6.32*max((Tlo-Tup)/0.01,0.0)
-        ! print*,DPT,OBLdepth_0d,CS%CS2
         if (CS%NLT_shape == NLT_SHAPE_CUBIC) then
           do k = 2, G%ke
             sigma = min(1.0,-iFaceHeight(k)/OBLdepth_0d)

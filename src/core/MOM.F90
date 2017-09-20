@@ -312,6 +312,7 @@ type, public :: MOM_control_struct
 
   ! 3-d waves fields
   integer :: id_StokesDrift_x, id_StokesDrift_y
+  integer :: id_LangmuirNumber !2-d waves fields
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
@@ -1080,6 +1081,9 @@ subroutine step_MOM(fluxes, state, Time_start, time_interval, CS)
        if (CS%id_StokesDrift_y > 0) then
           call post_data(CS%id_StokesDrift_y,CS%Wave_Parameter_CSp%US_y,CS%\
           diag)
+       endif
+       if (CS%id_LangmuirNumber > 0 ) then
+          call post_data(CS%id_LangmuirNumber, CS%Wave_Parameter_CSp%LangNum,CS%diag)
        endif
     endif
 
@@ -2623,6 +2627,9 @@ subroutine register_diags(Time, G, GV, CS, ADp,waves)
        Time, 'Stokes Drift in x-direction', 'meter second-1')                   
   CS%id_StokesDrift_y = register_diag_field('ocean_model', 'Stokes_Drift_y', diag%axesCvL, &
        Time, 'Stokes Drift in y-direction', 'meter second-1')
+  CS%id_LangmuirNumber = register_diag_field('ocean_model', 'Langmuir_Number', diag%axesT1, &
+       Time, 'Langmuir Number', 'non-dim')
+
 
   ! Diagnostics related to tracer transport
   CS%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
