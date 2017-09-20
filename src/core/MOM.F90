@@ -55,7 +55,7 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
-use MOM_restart,              only : restart_init, MOM_restart_CS
+use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_area_mean, global_area_integral
 use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
@@ -1076,23 +1076,24 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   Itot_wt_ssh = 1.0/tot_wt_ssh
   do j=js,je ; do i=is,ie
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
+    ssh(i,j) = CS%ave_ssh(i,j)
   enddo ; enddo
-
-  call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_integrated_diagnostics(CS, G, GV, CS%diag, dt*n_max, CS%tv, fluxes)
-  call disable_averaging(CS%diag)
-
-  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
-  call calculate_surface_state(sfc_state, u, v, h, CS%ave_ssh, G, GV, CS)
-
-  call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_surface_diagnostics(CS, G, CS%diag, sfc_state)
-  call disable_averaging(CS%diag)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
+
+  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
+  call calculate_surface_state(sfc_state, u, v, h, CS%ave_ssh, G, GV, CS)
+
+  ! Do diagnostics that only occur at the end of a complete forcing step.
+  call cpu_clock_begin(id_clock_diagnostics)
+  call enable_averaging(dt*n_max, Time_local, CS%diag)
+  call post_integrated_diagnostics(CS, G, GV, CS%diag, dt*n_max, CS%tv, ssh, fluxes)
+  call post_surface_diagnostics(CS, G, CS%diag, sfc_state)
+  call disable_averaging(CS%diag)
+  call cpu_clock_end(id_clock_diagnostics)
 
   call cpu_clock_end(id_clock_other)
 
@@ -1796,6 +1797,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
          "WRITE_GEOM must be equal to 0, 1 or 2.")
   write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
      ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
+! If the restart file type had been initialized, this could become:
+!  write_geom_files = ((write_geom==2) .or. &
+!                      ((write_geom==1) .and. is_new_run(CS%restart_CSp)))
 
   ! Check for inconsistent parameter settings.
   if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
@@ -2225,8 +2229,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
   ! This subroutine initializes any tracer packages.
-  new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
-             (LEN_TRIM(dirs%input_filename) == 1))
+  new_sim = is_new_run(CS%restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
              CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
@@ -2992,14 +2995,17 @@ subroutine post_diags_TS_vardec(G, CS, dt)
 end subroutine post_diags_TS_vardec
 
 !> This routine posts diagnostics of various integrated quantities.
-subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
-  type(MOM_control_struct), intent(in)    :: CS  !< control structure
-  type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
-  type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
-  type(diag_ctrl),          intent(in)    :: diag  !< regulates diagnostic output
-  real,                     intent(in)    :: dt_int  !< total time step associated with these diagnostics, in s.
-  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
-  type(forcing),            intent(in)    :: fluxes  !< pointers to forcing fields
+subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, ssh, fluxes)
+  type(MOM_control_struct), intent(in) :: CS  !< control structure
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
+  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
+  real,                     intent(in) :: dt_int  !< total time step associated with these diagnostics, in s.
+  type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without
+                                              !! corrections for ice displacement(m)
+  type(forcing),            intent(in) :: fluxes  !< pointers to forcing fields
 
   real, allocatable, dimension(:,:) :: &
     tmp,              & ! temporary 2d field
@@ -3021,13 +3027,13 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
 
   ! area mean SSH
   if (CS%id_ssh_ga > 0) then
-    ssh_ga = global_area_mean(CS%ave_ssh, G)
+    ssh_ga = global_area_mean(ssh, G)
     call post_data(CS%id_ssh_ga, ssh_ga, diag)
   endif
 
   I_time_int = 1.0 / dt_int
   if (CS%id_ssh > 0) &
-    call post_data(CS%id_ssh, CS%ave_ssh, diag, mask=G%mask2dT)
+    call post_data(CS%id_ssh, ssh, diag, mask=G%mask2dT)
 
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
@@ -3036,7 +3042,7 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
      allocate(zos(G%isd:G%ied,G%jsd:G%jed))
      zos(:,:) = 0.0
      do j=js,je ; do i=is,ie
-       zos(i,j) = CS%ave_ssh(i,j)
+       zos(i,j) = ssh(i,j)
      enddo ; enddo
      if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
@@ -3067,7 +3073,7 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
   if(CS%id_volo > 0) then
     allocate(tmp(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
-      tmp(i,j) = G%mask2dT(i,j)*(CS%ave_ssh(i,j) + G%bathyT(i,j))
+      tmp(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(tmp, G)
     call post_data(CS%id_volo, volo, diag)
