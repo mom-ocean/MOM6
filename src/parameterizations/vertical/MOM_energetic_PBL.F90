@@ -183,8 +183,8 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
     ! Additional output parameters also 2d
-    ML_depth, &        ! The mixed layer depth in m.
-    ML_depth2, &       ! The mixed layer depth in m.
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MLD_EKMAN, &       ! MLD over Ekman length
@@ -2250,7 +2250,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "ePBL code, derived from OMEGA and ANGSTROM.", units="meter second-1")
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'meter')
+      Time, 'Surface boundary layer depth', 'meter',                            &
+      cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme',    &
+      cmor_units='meter')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', 'meter3 second-3')
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
@@ -2277,7 +2279,9 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'MSTAR that is used.', 'non-dim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
+      Time, 'ePBL Surface Boundary layer depth.', 'meter')
+  ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
+  !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
       Time, 'Boundary layer depth over Ekman length.', 'meter')
   CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
