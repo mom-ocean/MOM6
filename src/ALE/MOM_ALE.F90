@@ -416,6 +416,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
   ! Remap all variables from old grid h onto new grid h_new
+  call diag_update_remap_grids(CS%diag, alt_h = h_new)
 
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
@@ -861,7 +862,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
         if(CS_ALE%do_tendency_diag(m)) then
 
           if(CS_ALE%id_tracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag)
+            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag, alt_h = h_new)
           endif
 
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
@@ -885,7 +886,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
           endif
 
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag)
+            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag, alt_h = h_new)
           endif
           if (CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
             do j = G%jsc,G%jec
