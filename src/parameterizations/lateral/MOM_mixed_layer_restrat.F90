@@ -776,7 +776,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=48)  :: flux_units
+  real :: flux_to_kg_per_s
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -857,14 +857,14 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
+  else ; flux_to_kg_per_s = 1. ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Zonal Thickness Flux to Restratify Mixed Layer', conversion=flux_to_kg_per_s, &
       y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Meridional Thickness Flux to Restratify Mixed Layer', conversion=flux_to_kg_per_s, &
       x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
       'Mixed Layer Zonal Restratification Timescale', 'second')
