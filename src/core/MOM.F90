@@ -630,11 +630,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
   endif
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain, clock=id_clock_pass)
 
   if (CS%interp_p_surf) then
     if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
@@ -706,20 +703,19 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
       call cpu_clock_end(id_clock_BBL_visc)
 
-      call cpu_clock_begin(id_clock_pass)
-      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain )
-      if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain, clock=id_clock_pass)
+      if (do_pass_kv_bbl_thick) &
+        call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (diabatic_first)")
 
       call cpu_clock_begin(id_clock_thermo)
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+      do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
-      do_pass_kv_turb = associated(CS%visc%Kv_turb)
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
       call disable_averaging(CS%diag)
@@ -733,32 +729,27 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
-    if (CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
-      if (CS%t_dyn_rel_adv == 0.0) then
-        if (thermo_does_span_coupling) then
-          dtth = dt_therm
-        else
-          dtth = dt*min(ntstep,n_max-n+1)
-        endif
-
-        call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
-        call cpu_clock_begin(id_clock_thick_diff)
-        if (associated(CS%VarMix)) &
-          call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
-        call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, GV, &
-                               CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
-        call cpu_clock_end(id_clock_thick_diff)
-        call cpu_clock_begin(id_clock_pass)
-        call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-        call cpu_clock_end(id_clock_pass)
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
-
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated.
-        call diag_update_remap_grids(CS%diag)
-
+    if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
+      if (thermo_does_span_coupling) then
+        dtth = dt_therm
+      else
+        dtth = dt*min(ntstep,n_max-n+1)
       endif
+
+      call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (associated(CS%VarMix)) &
+        call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, GV, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+      call disable_averaging(CS%diag)
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+
+      ! Whenever thickness changes let the diag manager know, target grids
+      ! for vertical remapping may need to be regenerated.
+      call diag_update_remap_grids(CS%diag)
     endif
 
     ! The bottom boundary layer properties are out-of-date and need to be
@@ -777,22 +768,23 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     endif
 
-    call cpu_clock_begin(id_clock_pass)
-    if (do_pass_kv_turb) call do_group_pass(CS%pass_kv_turb, G%Domain)
+    if (do_pass_kv_turb) &
+      call do_group_pass(CS%pass_kv_turb, G%Domain, clock=id_clock_pass)
     do_pass_kv_turb = .false.
-    call cpu_clock_end(id_clock_pass)
 
     if (do_calc_bbl) then
-      call cpu_clock_begin(id_clock_pass)
       if (G%nonblocking_updates) then
-        if (do_pass_Ray) call start_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        if (do_pass_Ray) &
+          call start_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
         ! do_calc_bbl will be set to .false. when the message passing is complete.
       else
-        if (do_pass_Ray) call do_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        if (do_pass_Ray) &
+          call do_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
       endif
-      call cpu_clock_end(id_clock_pass)
     endif
 
     if (CS%interp_p_surf) then
@@ -806,6 +798,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       enddo ; enddo
     endif
 
+    ! The original velocities might be stored for debugging.
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         CS%u_prev(I,j,k) = u(I,j,k)
@@ -821,10 +814,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     enddo ; enddo ; enddo
 
     if (G%nonblocking_updates) then ; if (do_calc_bbl) then
-      call cpu_clock_begin(id_clock_pass)
-        if (do_pass_Ray) call complete_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      if (do_pass_Ray) &
+        call complete_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+      if (do_pass_kv_bbl_thick) &
+        call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
     endif ; endif
 
     if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
@@ -880,9 +873,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
       call cpu_clock_end(id_clock_thick_diff)
-      call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-      call cpu_clock_end(id_clock_pass)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
@@ -897,9 +888,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
                               CS%VarMix, G, GV, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
-      call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-      call cpu_clock_end(id_clock_pass)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
       if (CS%debug) then
         call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
         call uvchksum("Post-mixedlayer_restrat [uv]htr", &
@@ -979,6 +968,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       CS%t_dyn_rel_adv = 0.0
       call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
+      if (CS%diabatic_first .and. CS%use_temperature) then
+        ! Temperature and salinity need halo updates because they will be used
+        ! in the dynamics before they are changed again.
+        call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
+      endif
+
     endif
 
     !===========================================================================
@@ -1001,19 +996,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
         call disable_averaging(CS%diag)
 
-      else  !  "else branch for if (.not.CS%diabatic_first) then"
-        if (abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
+      endif
+
+      if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
               "step_MOM: Mismatch between the dynamics and diabatic times "//&
               "with DIABATIC_FIRST.")
-
-        ! Tracers have been advected and diffused, and need halo updates.
-        if (CS%use_temperature) then
-          call cpu_clock_begin(id_clock_pass)
-          call do_group_pass(CS%pass_T_S, G%Domain)
-          call cpu_clock_end(id_clock_pass)
-        endif
-      endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)"
-
       ! Record that the dynamics and diabatic processes are synchronized.
       CS%t_dyn_rel_thermo = 0.0
       call cpu_clock_end(id_clock_thermo)
@@ -1034,7 +1021,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     ! Calculate diagnostics at the end of the time step.
     call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
 
-    call enable_averaging(dt,Time_local, CS%diag)
+    call enable_averaging(dt, Time_local, CS%diag)
     ! These diagnostics are available every time step.
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
@@ -1204,9 +1191,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
       call cpu_clock_end(id_clock_ALE)
     endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    call do_group_pass(CS%pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
     if (CS%debug .and. CS%use_ALE_algorithm) then
       call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1247,9 +1232,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
     call cpu_clock_end(id_clock_diabatic)
 
     if (CS%use_temperature) then
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_T_S, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
       if (CS%debug) then
         if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
         if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
@@ -1635,6 +1618,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
+  if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of topography \n"//&
@@ -1927,7 +1911,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
-    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%u_prev(:,:,:) = 0.0
+    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
   endif
 
   MOM_internal_state%u => CS%u ; MOM_internal_state%v => CS%v
@@ -2081,6 +2065,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     else
       call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     endif
+
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
     if (CS%use_temperature) then
@@ -2249,9 +2234,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 
-  call cpu_clock_begin(id_clock_pass_init)
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
-
+  call cpu_clock_begin(id_clock_pass_init)
   dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
   call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain, halo=dynamics_stencil)
   if (CS%use_temperature) then

@@ -327,9 +327,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   if (CS%use_neutral_diffusion) then
 
     if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion coeffs (tracer_hordiff)")
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_t, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+
+    call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
     ! We are assuming that neutral surfaces do not evolve (much) as a result of multiple
     ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
@@ -348,9 +347,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     do itt=1,num_itts
       if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
       if (itt>1) then ! Update halos for subsequent iterations
-        call cpu_clock_begin(id_clock_pass)
-        call do_group_pass(CS%pass_t, G%Domain)
-        call cpu_clock_end(id_clock_pass)
+        call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
       do m=1,ntr ! for each tracer
         call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
@@ -362,9 +359,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
 
     if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
     do itt=1,num_itts
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_t, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,I_numitts,CS,G,GV,khdt_y,h, &
 !$OMP                                    h_neglect,khdt_x,ntr,Idt,Reg)           &
 !$OMP                            private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
@@ -607,17 +602,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   do i=is-2,ie+2 ; p_ref_cv(i) = tv%P_Ref ; enddo
 
-  call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(CS%pass_t, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
   ! Determine which layers the mixed- and buffer-layers map into...
-!$OMP parallel do default(none) shared(nkmb,is,ie,js,je,tv,p_ref_cv,rho_coord)
-  do k=1,nkmb
-    do j=js-2,je+2
-       call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
-                           rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state)
-    enddo
- enddo
+  !$OMP parallel do default(shared)
+  do k=1,nkmb ; do j=js-2,je+2
+    call calculate_density(tv%T(:,j,k),tv%S(:,j,k), p_ref_cv, &
+                         rho_coord(:,j,k), is-2, ie-is+5, tv%eqn_of_state)
+  enddo ; enddo
 
   do j=js-2,je+2 ; do i=is-2,ie+2
     Rml_max(i,j) = rho_coord(i,j,1)
@@ -1015,9 +1006,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do itt=1,max_itt
 
     if (itt > 1) then ! The halos have already been filled if itt==1.
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_t, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
     endif
 
     do m=1,ntr
