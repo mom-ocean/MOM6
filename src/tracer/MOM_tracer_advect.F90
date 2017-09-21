@@ -200,9 +200,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, CS, Reg, &
   do itt=1,max_iter
 
     if (isv > is-stencil) then
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_uhr_vhr_t_hprev, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call do_group_pass(CS%pass_uhr_vhr_t_hprev, G%Domain, clock=id_clock_pass)
 
       nsten_halo = min(is-isd,ied-ie,js-jsd,jed-je)/stencil
       isv = is-nsten_halo*stencil ; jsv = js-nsten_halo*stencil
