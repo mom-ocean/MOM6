@@ -1681,8 +1681,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
-  character(len=48)  :: flux_units
-  real :: omega, strat_floor
+  real :: omega, strat_floor, flux_to_kg_per_s
 
   if (associated(CS)) then
     call MOM_error(WARNING, &
@@ -1760,16 +1759,16 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "If true, write out verbose debugging data.", default=.false.)
 
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
+  else ; flux_to_kg_per_s = 1. ; endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
-           'Time Mean Diffusive Zonal Thickness Flux', flux_units, &
-           y_cell_method='sum', v_extensive=.true.)
+           'Time Mean Diffusive Zonal Thickness Flux', 'kg s-1', &
+           y_cell_method='sum', v_extensive=.true., conversion=flux_to_kg_per_s)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
-           'Time Mean Diffusive Meridional Thickness Flux', flux_units, &
-           x_cell_method='sum', v_extensive=.true.)
+           'Time Mean Diffusive Meridional Thickness Flux', 'kg s-1', &
+           x_cell_method='sum', v_extensive=.true., conversion=flux_to_kg_per_s)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
