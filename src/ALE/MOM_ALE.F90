@@ -9,7 +9,8 @@ module MOM_ALE
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging,        only : check_column_integrals
-use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl
+use MOM_diag_mediator,    only : time_type, diag_update_remap_grids
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_EOS,              only : calculate_density
