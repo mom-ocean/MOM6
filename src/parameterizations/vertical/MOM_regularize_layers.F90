@@ -34,8 +34,7 @@ module MOM_regularize_layers
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : time_type, diag_ctrl
-use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -72,8 +71,6 @@ type, public :: regularize_layers_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
-
-  type(group_pass_type) :: pass_h ! For group pass
 
   integer :: id_def_rat = -1
   logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
@@ -145,12 +142,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (CS%regularize_surface_layers) then
-    call cpu_clock_begin(id_clock_pass)
-    call create_group_pass(CS%pass_h,h,G%Domain)
-    call do_group_pass(CS%pass_h,G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (CS%regularize_surface_layers) &
+    call pass_var(h, G%Domain, clock=id_clock_pass)
 
   if (CS%regularize_surface_layers) then
     call regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
