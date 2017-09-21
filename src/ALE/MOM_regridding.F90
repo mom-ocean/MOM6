@@ -375,7 +375,7 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
                trim(message), units=coordinateUnits(coord_mode))
   elseif (index(trim(string),'RFNC1:')==1) then
     ! Function used for set target interface densities
-    call rho_function1( trim(string(7:)), rho_target )
+    ke = rho_function1( trim(string(7:)), rho_target )
   elseif (index(trim(string),'HYBRID:')==1) then
     ke = GV%ke; allocate(dz(ke))
     ! The following assumes the FILE: syntax of above but without "FILE:" in the string
@@ -1901,6 +1901,10 @@ subroutine set_target_densities( CS, rho_int )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: rho_int !< Interface densities
 
+  if (size(CS%target_density)/=size(rho_int)) then
+    call MOM_error(FATAL, "set_target_densities inconsistent args!")
+  endif
+
   CS%target_density(:) = rho_int(:)
   CS%target_density_set = .true.
 
@@ -2248,7 +2252,8 @@ subroutine dz_function1( string, dz )
 end subroutine dz_function1
 
 !> Parses a string and generates a rho_target(:) profile with refined resolution downward
-subroutine rho_function1( string, rho_target )
+!! and returns the number of levels
+integer function rho_function1( string, rho_target )
   character(len=*),   intent(in)    :: string !< String with list of parameters in form
                                               !! dz_min, H_total, power, precision
   real, dimension(:), allocatable, intent(inout) :: rho_target !< Profile of interface densities
@@ -2269,7 +2274,9 @@ subroutine rho_function1( string, rho_target )
   enddo
   rho_target(nki+4) = rho_4
 
-end subroutine rho_function1
+  rho_function1 = nk
+
+end function rho_function1
 
 !> \namespace mom_regridding
 !!
