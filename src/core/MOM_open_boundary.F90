@@ -1411,9 +1411,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   ! Actually update u_new, v_new
   call open_boundary_apply_normal_flow(OBC, G, u_new, v_new)
 
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u_new, v_new, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u_new, v_new, G%Domain, clock=id_clock_pass)
 
 end subroutine radiation_open_bdry_conds
 

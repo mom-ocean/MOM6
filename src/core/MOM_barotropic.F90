@@ -822,13 +822,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     ! These calculations can be done almost immediately, but the halo updates
     ! must be done before the [abcd]mer and [abcd]zon are calculated.
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-    if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     if (nonblock_setup) then
-      call start_group_pass(CS%pass_q_DCor, CS%BT_Domain)
+      call start_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     else
-      call do_group_pass(CS%pass_q_DCor, CS%BT_Domain)
+      call do_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     endif
-    if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
 
@@ -940,9 +938,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   if (nonblock_setup .and. .not.CS%linearized_BT_PV) then
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-    if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
-    call complete_group_pass(CS%pass_q_DCor, CS%BT_Domain)
-    if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
+    call complete_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
 
@@ -1529,10 +1525,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
     if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
-      if (id_clock_pass_step > 0) call cpu_clock_begin(id_clock_pass_step)
-      call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain)
+      call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain, clock=id_clock_pass_step)
       isv = isvf ; iev = ievf ; jsv = jsvf ; jev = jevf
-      if (id_clock_pass_step > 0) call cpu_clock_end(id_clock_pass_step)
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
       isv = isv+stencil ; iev = iev-stencil
