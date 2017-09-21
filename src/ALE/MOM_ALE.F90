@@ -416,9 +416,12 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
+  ! The presence of dt is used for expediency to distinguish whether ALE_main is being called during init
+  ! or in the main loop. Tendency diagnostics in remap_all_state_vars also rely on this logic.
+  if (present(dt)) then
+    call diag_update_remap_grids(CS%diag, alt_h = h_new)
+  endif
   ! Remap all variables from old grid h onto new grid h_new
-  call diag_update_remap_grids(CS%diag, alt_h = h_new)
-
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
