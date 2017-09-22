@@ -311,6 +311,9 @@ type, public :: barotropic_CS ; private
   logical :: adjust_BT_cont  ! If true, adjust the curve fit to the BT_cont type
                              ! that is used by the barotropic solver to match the
                              ! transport about which the flow is being linearized.
+  logical :: use_old_coriolis_bracket_bug !< If True, use an order of operations
+                             !! that is not bitwise rotationally symmetric in the
+                             !! meridional Coriolis term of the barotropic solver.
   type(time_type), pointer :: Time ! A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -1801,14 +1804,25 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       endif
 
       ! Now update the meridional velocity.
+      if (CS%use_old_coriolis_bracket_bug) then
 !GOMP do
-      do J=jsv-1,jev ; do i=isv,iev
-        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-                (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
-                     (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
-                    dgeo_de * CS%IdyCv(i,J)
-      enddo ; enddo
+        do J=jsv-1,jev ; do i=isv,iev
+          Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
+                  (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+          PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+                       (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+                      dgeo_de * CS%IdyCv(i,J)
+        enddo ; enddo
+      else
+!GOMP do
+        do J=jsv-1,jev ; do i=isv,iev
+          Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
+                  (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+          PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
+                       (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+                      dgeo_de * CS%IdyCv(i,J)
+        enddo ; enddo
+      endif
 
       if (CS%dynamic_psurf) then
 !GOMP do
@@ -4102,6 +4116,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "The value of DTBT that will actually be used is an \n"//&
                  "integer fraction of DT, rounding down.", units="s or nondim",&
                  default = -0.98)
+  call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", &
+                 CS%use_old_coriolis_bracket_bug , &
+                 "If True, use an order of operations that is not bitwise\n"//&
+                 "rotationally symmetric in the meridional Coriolis term of\n"//&
+                 "the barotropic solver.", default=.false.)
 
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
   call clone_MOM_domain(G%Domain, CS%BT_Domain, min_halo=wd_halos, symmetric=.true.)
