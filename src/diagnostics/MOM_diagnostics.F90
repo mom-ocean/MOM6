@@ -1159,16 +1159,16 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
                  units='m', default=-1.)
 
   if (GV%Boussinesq) then
-    thickness_units = "meter" ; flux_units = "meter3 second-1"
+    thickness_units = "m" ; flux_units = "m3 s-1"
   else
-    thickness_units = "kilogram meter-2" ; flux_units = "kilogram second-1"
+    thickness_units = "kg m-2" ; flux_units = "kg s-1"
   endif
 
   CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', diag%axesZL, Time, &
-      'Layer Average Ocean Temperature', 'Celsius')
+      'Layer Average Ocean Temperature', 'degC')
 
   CS%id_salt_layer_ave = register_diag_field('ocean_model', 'salt_layer_ave', diag%axesZL, Time, &
-      'Layer Average Ocean Salinity', 'ppt')
+      'Layer Average Ocean Salinity', 'psu')
 
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2',           &
@@ -1186,62 +1186,62 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   endif
 
   CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga',    &
-      Time, diag, 'Global Mean Ocean Potential Temperature', 'Celsius',&
+      Time, diag, 'Global Mean Ocean Potential Temperature', 'degC',&
       standard_name='sea_water_potential_temperature')
 
   CS%id_soga = register_scalar_field('ocean_model', 'soga', &
-      Time, diag, 'Global Mean Ocean Salinity', 'ppt',      &
+      Time, diag, 'Global Mean Ocean Salinity', 'psu',      &
       standard_name='sea_water_salinity')
 
   CS%id_tosga = register_scalar_field('ocean_model', 'sst_global', Time, diag,&
       long_name='Global Area Average Sea Surface Temperature',                &
       units='degC', standard_name='sea_surface_temperature',                  &
       cmor_field_name='tosga', cmor_standard_name='sea_surface_temperature',  &
-      cmor_units='degC', cmor_long_name='Sea Surface Temperature')
+      cmor_long_name='Sea Surface Temperature')
 
   CS%id_sosga = register_scalar_field('ocean_model', 'sss_global', Time, diag,&
       long_name='Global Area Average Sea Surface Salinity',                   &
-      units='ppt', standard_name='sea_surface_salinity',                      &
+      units='psu', standard_name='sea_surface_salinity',                      &
       cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity',     &
-      cmor_units='ppt', cmor_long_name='Sea Surface Salinity')
+      cmor_long_name='Sea Surface Salinity')
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
-      'Interface Height Relative to Mean Sea Level', 'meter')
+      'Interface Height Relative to Mean Sea Level', 'm')
   if (CS%id_e>0) call safe_alloc_ptr(CS%e,isd,ied,jsd,jed,nz+1)
 
   CS%id_e_D = register_diag_field('ocean_model', 'e_D', diag%axesTi, Time, &
-      'Interface Height above the Seafloor', 'meter')
+      'Interface Height above the Seafloor', 'm')
   if (CS%id_e_D>0) call safe_alloc_ptr(CS%e_D,isd,ied,jsd,jed,nz+1)
 
   CS%id_Rml = register_diag_field('ocean_model', 'Rml', diag%axesTL, Time, &
-      'Mixed Layer Coordinate Potential Density', 'kg meter-3')
+      'Mixed Layer Coordinate Potential Density', 'kg m-3')
 
   CS%id_Rcv = register_diag_field('ocean_model', 'Rho_cv', diag%axesTL, Time, &
-      'Coordinate Potential Density', 'kg meter-3')
+      'Coordinate Potential Density', 'kg m-3')
 
   CS%id_rhopot0 = register_diag_field('ocean_model', 'rhopot0', diag%axesTL, Time, &
-      'Potential density referenced to surface', 'kg meter-3')
+      'Potential density referenced to surface', 'kg m-3')
   CS%id_rhopot2 = register_diag_field('ocean_model', 'rhopot2', diag%axesTL, Time, &
-      'Potential density referenced to 2000 dbar', 'kg meter-3')
+      'Potential density referenced to 2000 dbar', 'kg m-3')
   CS%id_rhoinsitu = register_diag_field('ocean_model', 'rhoinsitu', diag%axesTL, Time, &
-      'In situ density', 'kg meter-3')
+      'In situ density', 'kg m-3')
 
   CS%id_du_dt = register_diag_field('ocean_model', 'dudt', diag%axesCuL, Time, &
-      'Zonal Acceleration', 'meter second-2')
+      'Zonal Acceleration', 'm s-2')
   if ((CS%id_du_dt>0) .and. .not.ASSOCIATED(CS%du_dt)) then
     call safe_alloc_ptr(CS%du_dt,IsdB,IedB,jsd,jed,nz)
     call register_time_deriv(MIS%u, CS%du_dt, CS)
   endif
 
   CS%id_dv_dt = register_diag_field('ocean_model', 'dvdt', diag%axesCvL, Time, &
-      'Meridional Acceleration', 'meter second-2')
+      'Meridional Acceleration', 'm s-2')
   if ((CS%id_dv_dt>0) .and. .not.ASSOCIATED(CS%dv_dt)) then
     call safe_alloc_ptr(CS%dv_dt,isd,ied,JsdB,JedB,nz)
     call register_time_deriv(MIS%v, CS%dv_dt, CS)
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
-      'Thickness tendency', trim(thickness_units)//" second-1")
+      'Thickness tendency', trim(thickness_units)//" s-1")
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(MIS%h, CS%dh_dt, CS)
@@ -1275,43 +1275,43 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   ! terms in the kinetic energy budget
   CS%id_KE = register_diag_field('ocean_model', 'KE', diag%axesTL, Time, &
-      'Layer kinetic energy per unit mass', 'meter2 second-2')
+      'Layer kinetic energy per unit mass', 'm2 s-2')
   if (CS%id_KE>0) call safe_alloc_ptr(CS%KE,isd,ied,jsd,jed,nz)
 
   CS%id_dKEdt = register_diag_field('ocean_model', 'dKE_dt', diag%axesTL, Time, &
-      'Kinetic Energy Tendency of Layer', 'meter3 second-3')
+      'Kinetic Energy Tendency of Layer', 'm3 s-3')
   if (CS%id_dKEdt>0) call safe_alloc_ptr(CS%dKE_dt,isd,ied,jsd,jed,nz)
 
   CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', diag%axesTL, Time, &
-      'Potential to Kinetic Energy Conversion of Layer', 'meter3 second-3')
+      'Potential to Kinetic Energy Conversion of Layer', 'm3 s-3')
   if (CS%id_PE_to_KE>0) call safe_alloc_ptr(CS%PE_to_KE,isd,ied,jsd,jed,nz)
 
   CS%id_KE_Coradv = register_diag_field('ocean_model', 'KE_Coradv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Coriolis and Advection', 'meter3 second-3')
+      'Kinetic Energy Source from Coriolis and Advection', 'm3 s-3')
   if (CS%id_KE_Coradv>0) call safe_alloc_ptr(CS%KE_Coradv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_adv = register_diag_field('ocean_model', 'KE_adv', diag%axesTL, Time, &
-      'Kinetic Energy Source from Advection', 'meter3 second-3')
+      'Kinetic Energy Source from Advection', 'm3 s-3')
   if (CS%id_KE_adv>0) call safe_alloc_ptr(CS%KE_adv,isd,ied,jsd,jed,nz)
 
   CS%id_KE_visc = register_diag_field('ocean_model', 'KE_visc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Vertical Viscosity and Stresses', 'meter3 second-3')
+      'Kinetic Energy Source from Vertical Viscosity and Stresses', 'm3 s-3')
   if (CS%id_KE_visc>0) call safe_alloc_ptr(CS%KE_visc,isd,ied,jsd,jed,nz)
 
   CS%id_KE_horvisc = register_diag_field('ocean_model', 'KE_horvisc', diag%axesTL, Time, &
-      'Kinetic Energy Source from Horizontal Viscosity', 'meter3 second-3')
+      'Kinetic Energy Source from Horizontal Viscosity', 'm3 s-3')
   if (CS%id_KE_horvisc>0) call safe_alloc_ptr(CS%KE_horvisc,isd,ied,jsd,jed,nz)
 
   CS%id_KE_dia = register_diag_field('ocean_model', 'KE_dia', diag%axesTL, Time, &
-      'Kinetic Energy Source from Diapycnal Diffusion', 'meter3 second-3')
+      'Kinetic Energy Source from Diapycnal Diffusion', 'm3 s-3')
   if (CS%id_KE_dia>0) call safe_alloc_ptr(CS%KE_dia,isd,ied,jsd,jed,nz)
 
 
   ! gravity wave CFLs
   CS%id_cg1 = register_diag_field('ocean_model', 'cg1', diag%axesT1, Time, &
-      'First baroclinic gravity wave speed', 'meter second-1')
+      'First baroclinic gravity wave speed', 'm s-1')
   CS%id_Rd1 = register_diag_field('ocean_model', 'Rd1', diag%axesT1, Time, &
-      'First baroclinic deformation radius', 'meter')
+      'First baroclinic deformation radius', 'm')
   CS%id_cfl_cg1 = register_diag_field('ocean_model', 'CFL_cg1', diag%axesT1, Time, &
       'CFL of first baroclinic gravity wave = dt*cg1*(1/dx+1/dy)', 'nondim')
   CS%id_cfl_cg1_x = register_diag_field('ocean_model', 'CFL_cg1_x', diag%axesT1, Time, &
@@ -1319,9 +1319,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%id_cfl_cg1_y = register_diag_field('ocean_model', 'CFL_cg1_y', diag%axesT1, Time, &
       'j-component of CFL of first baroclinic gravity wave = dt*cg1*/dy', 'nondim')
   CS%id_cg_ebt = register_diag_field('ocean_model', 'cg_ebt', diag%axesT1, Time, &
-      'Equivalent barotropic gravity wave speed', 'meter second-1')
+      'Equivalent barotropic gravity wave speed', 'm s-1')
   CS%id_Rd_ebt = register_diag_field('ocean_model', 'Rd_ebt', diag%axesT1, Time, &
-      'Equivalent barotropic deformation radius', 'meter')
+      'Equivalent barotropic deformation radius', 'm')
   CS%id_p_ebt = register_diag_field('ocean_model', 'p_ebt', diag%axesTL, Time, &
       'Equivalent barotropic modal strcuture', 'nondim')
 
@@ -1345,13 +1345,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
       'Density weighted column integrated potential temperature', 'degC kg m-2',                    &
       cmor_field_name='opottempmint',                                                               &
       cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_potential_temperature',&
-      cmor_units='degC kg m-2', cmor_standard_name='Depth integrated density times potential temperature')
+      cmor_standard_name='Depth integrated density times potential temperature')
 
   CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time,   &
-      'Density weighted column integrated salinity', 'ppt kg m-2',                     &
+      'Density weighted column integrated salinity', 'psu kg m-2',                     &
       cmor_field_name='somint',                                                        &
       cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_salinity',&
-      cmor_units='ppt kg m-2', cmor_standard_name='Depth integrated density times salinity')
+      cmor_standard_name='Depth integrated density times salinity')
 
   CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', diag%axesT1, Time, &
       'The column integrated in situ density', 'kg m-2')

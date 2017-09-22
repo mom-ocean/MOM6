@@ -981,43 +981,43 @@ logical function MEKE_init(Time, G, param_file, diag, CS, MEKE, restart_CS)
 ! Register fields for output from this module.
   CS%diag => diag
   CS%id_MEKE = register_diag_field('ocean_model', 'MEKE', diag%axesT1, Time, &
-     'Mesoscale Eddy Kinetic Energy', 'meter2 second-2')
+     'Mesoscale Eddy Kinetic Energy', 'm2 s-2')
   if (.not. associated(MEKE%MEKE)) CS%id_MEKE = -1
   CS%id_Kh = register_diag_field('ocean_model', 'MEKE_KH', diag%axesT1, Time, &
-     'MEKE derived diffusivity', 'meter2 second-1')
+     'MEKE derived diffusivity', 'm2 s-1')
   if (.not. associated(MEKE%Kh)) CS%id_Kh = -1
   CS%id_Ku = register_diag_field('ocean_model', 'MEKE_KU', diag%axesT1, Time, &
-     'MEKE derived lateral viscosity', 'meter2 second-1')
+     'MEKE derived lateral viscosity', 'm2 s-1')
   if (.not. associated(MEKE%Ku)) CS%id_Ku = -1
   CS%id_Ue = register_diag_field('ocean_model', 'MEKE_Ue', diag%axesT1, Time, &
-     'MEKE derived eddy-velocity scale', 'meter second-1')
+     'MEKE derived eddy-velocity scale', 'm s-1')
   if (.not. associated(MEKE%MEKE)) CS%id_Ue = -1
   CS%id_Ub = register_diag_field('ocean_model', 'MEKE_Ub', diag%axesT1, Time, &
-     'MEKE derived bottom eddy-velocity scale', 'meter second-1')
+     'MEKE derived bottom eddy-velocity scale', 'm s-1')
   if (.not. associated(MEKE%MEKE)) CS%id_Ub = -1
   CS%id_Ut = register_diag_field('ocean_model', 'MEKE_Ut', diag%axesT1, Time, &
-     'MEKE derived barotropic eddy-velocity scale', 'meter second-1')
+     'MEKE derived barotropic eddy-velocity scale', 'm s-1')
   if (.not. associated(MEKE%MEKE)) CS%id_Ut = -1
   CS%id_src = register_diag_field('ocean_model', 'MEKE_src', diag%axesT1, Time, &
-     'MEKE energy source', 'meter2 second-3')
+     'MEKE energy source', 'm2 s-3')
   CS%id_decay = register_diag_field('ocean_model', 'MEKE_decay', diag%axesT1, Time, &
-     'MEKE decay rate', 'second-1')
+     'MEKE decay rate', 's-1')
   CS%id_KhMEKE_u = register_diag_field('ocean_model', 'KHMEKE_u', diag%axesCu1, Time, &
-     'Zonal diffusivity of MEKE', 'meter2 second-1')
+     'Zonal diffusivity of MEKE', 'm2 s-1')
   CS%id_KhMEKE_v = register_diag_field('ocean_model', 'KHMEKE_v', diag%axesCv1, Time, &
-     'Meridional diffusivity of MEKE', 'meter2 second-1')
+     'Meridional diffusivity of MEKE', 'm2 s-1')
   CS%id_GM_src = register_diag_field('ocean_model', 'MEKE_GM_src', diag%axesT1, Time, &
-     'MEKE energy available from thickness mixing', 'Watt meter-2')
+     'MEKE energy available from thickness mixing', 'W m-2')
   if (.not. associated(MEKE%GM_src)) CS%id_GM_src = -1
   CS%id_mom_src = register_diag_field('ocean_model', 'MEKE_mom_src',diag%axesT1, Time, &
-     'MEKE energy available from momentum', 'Watt meter-2')
+     'MEKE energy available from momentum', 'W m-2')
   if (.not. associated(MEKE%mom_src)) CS%id_mom_src = -1
   CS%id_Le = register_diag_field('ocean_model', 'MEKE_Le', diag%axesT1, Time, &
-     'Eddy mixing length used in the MEKE derived eddy diffusivity', 'meter')
+     'Eddy mixing length used in the MEKE derived eddy diffusivity', 'm')
   CS%id_Lrhines = register_diag_field('ocean_model', 'MEKE_Lrhines', diag%axesT1, Time, &
-     'Rhines length scale used in the MEKE derived eddy diffusivity', 'meter')
+     'Rhines length scale used in the MEKE derived eddy diffusivity', 'm')
   CS%id_Leady = register_diag_field('ocean_model', 'MEKE_Leady', diag%axesT1, Time, &
-     'Eady length scale used in the MEKE derived eddy diffusivity', 'meter')
+     'Eady length scale used in the MEKE derived eddy diffusivity', 'm')
   CS%id_gamma_b = register_diag_field('ocean_model', 'MEKE_gamma_b', diag%axesT1, Time, &
      'Ratio of bottom-projected eddy velocity to column-mean eddy velocity', 'nondim')
   CS%id_gamma_t = register_diag_field('ocean_model', 'MEKE_gamma_t', diag%axesT1, Time, &

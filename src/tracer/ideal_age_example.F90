@@ -203,14 +203,14 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%ntr = 0
   if (do_ideal_age) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age", "years", "Ideal Age Tracer", cmor_field_name="agessc", caller=mdl)
+    CS%tr_desc(m) = var_desc("age", "yr", "Ideal Age Tracer", cmor_field_name="agessc", caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
   endif
 
   if (do_vintage) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("vintage", "years", "Exponential Vintage Tracer", &
+    CS%tr_desc(m) = var_desc("vintage", "yr", "Exponential Vintage Tracer", &
                             caller=mdl)
     CS%tracer_ages(m) = .false. ; CS%sfc_growth_rate(m) = 1.0/30.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 1e-20 ; CS%tracer_start_year(m) = 0.0
@@ -221,7 +221,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   if (do_ideal_age_dated) then
     CS%ntr = CS%ntr + 1 ; m = CS%ntr
-    CS%tr_desc(m) = var_desc("age_dated","years","Ideal Age Tracer with a Start Date",&
+    CS%tr_desc(m) = var_desc("age_dated","yr","Ideal Age Tracer with a Start Date",&
                             caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%sfc_growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
@@ -359,8 +359,8 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "years m3 s-1"
-  else ; flux_units = "years kg s-1" ; endif
+  if (GV%Boussinesq) then ; flux_units = "yr m3 s-1"
+  else ; flux_units = "yr kg s-1" ; endif
 
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
