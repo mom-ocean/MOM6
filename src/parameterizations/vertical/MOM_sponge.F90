@@ -246,7 +246,7 @@ subroutine init_sponge_diags(Time, G, diag, CS)
 
   CS%diag => diag
   CS%id_w_sponge = register_diag_field('ocean_model', 'w_sponge', diag%axesTi, &
-      Time, 'The diapycnal motion due to the sponges', 'meter second-1')
+      Time, 'The diapycnal motion due to the sponges', 'm s-1')
 
 end subroutine init_sponge_diags
 

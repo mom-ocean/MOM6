@@ -122,7 +122,7 @@ subroutine set_grid_metrics(G, param_file)
                  "If true, write out verbose debugging data.", default=.false.)
 
   ! These are defaults that may be changed in the next select block.
-  G%x_axis_units = "degrees_E" ; G%y_axis_units = "degrees_N"
+  G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file)
     case ("cartesian"); call set_grid_metrics_cartesian(G, param_file)

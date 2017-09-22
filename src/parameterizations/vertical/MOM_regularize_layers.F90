@@ -1019,13 +1019,13 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
                  default=.true.)
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
-      Time, 'Max face thickness deficit ratio', 'Nondim')
+      Time, 'Max face thickness deficit ratio', 'nondim')
 
 #ifdef DEBUG_CODE
   CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', diag%axesT1, &
-      Time, 'Corrected thickness deficit ratio', 'Nondim')
+      Time, 'Corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', diag%axesT1, &
-      Time, 'Filtered thickness deficit ratio', 'Nondim')
+      Time, 'Filtered thickness deficit ratio', 'nondim')
   CS%id_e1 = register_diag_field('ocean_model', 'er_1', diag%axesTi, &
       Time, 'Intial interface depths before remapping', 'm')
   CS%id_e2 = register_diag_field('ocean_model', 'er_2', diag%axesTi, &
@@ -1034,30 +1034,30 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'Intial interface depths filtered', 'm')
 
   CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', diag%axesCu1, &
-      Time, 'U-point thickness deficit ratio', 'Nondim')
+      Time, 'U-point thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', diag%axesCu1, &
-      Time, 'U-point 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', diag%axesCu1, &
-      Time, 'U-point corrected thickness deficit ratio', 'Nondim')
+      Time, 'U-point corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', diag%axesCu1, &
-      Time, 'U-point corrected 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point corrected 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', diag%axesCu1, &
-      Time, 'U-point filtered thickness deficit ratio', 'Nondim')
+      Time, 'U-point filtered thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', diag%axesCu1, &
-      Time, 'U-point filtered 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point filtered 2-layer thickness deficit ratio', 'nondim')
 
   CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', diag%axesCv1, &
-      Time, 'V-point thickness deficit ratio', 'Nondim')
+      Time, 'V-point thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', diag%axesCv1, &
-      Time, 'V-point 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', diag%axesCv1, &
-      Time, 'V-point corrected thickness deficit ratio', 'Nondim')
+      Time, 'V-point corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', diag%axesCv1, &
-      Time, 'V-point corrected 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point corrected 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', diag%axesCv1, &
-      Time, 'V-point filtered thickness deficit ratio', 'Nondim')
+      Time, 'V-point filtered thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', diag%axesCv1, &
-      Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
 #endif
 
   if(CS%allow_clocks_in_omp_loops) then

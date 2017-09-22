@@ -243,12 +243,12 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
       'ndiff_tracer_conc_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,      &
       'Neutral diffusion tracer concentration tendency for '//trim(Reg%Tr(n)%name),&
-       'Degree C per second')
+      'degC s-1')
 
       CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',                                      &
       'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,                                          &
       'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                                          &
-      'Watts/m2',cmor_field_name='opottemppmdiff', cmor_units='W m-2',                                                 &
+      'W m-2',cmor_field_name='opottemppmdiff',                                                                     &
       cmor_standard_name=                                                                                              &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion', &
       cmor_long_name =                                                                                                 &
@@ -258,7 +258,7 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                                   &
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                                       &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                                         &
-      'Watts/m2',cmor_field_name='opottemppmdiff_2d', cmor_units='W m-2',                                                              &
+      'W m-2',cmor_field_name='opottemppmdiff_2d',                                                                                  &
       cmor_standard_name=                                                                                                              &
       'tendency_of_sea_water_potential_temperature_expressed_as_heat_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
       cmor_long_name =                                                                                                                 &
@@ -267,24 +267,24 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'Watts')
+      'W')
 
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'Watts')
+      'W')
 
     elseif(trim(Reg%Tr(n)%name) == 'S') then
 
       CS%id_neutral_diff_tracer_conc_tend(n) = register_diag_field('ocean_model',  &
       'ndiff_tracer_conc_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,      &
       'Neutral diffusion tracer concentration tendency for '//trim(Reg%Tr(n)%name),&
-       'tracer concentration units per second')
+      'tracer concentration * s-1')
 
       CS%id_neutral_diff_tracer_cont_tend(n) = register_diag_field('ocean_model',                         &
       'ndiff_tracer_cont_tendency_'//trim(Reg%Tr(n)%name), diag%axesTL, Time,                             &
       'Neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                             &
-      'kg m-2 s-1',cmor_field_name='osaltpmdiff', cmor_units='kg m-2 s-1',                                &
+      'kg m-2 s-1',cmor_field_name='osaltpmdiff',                                                         &
       cmor_standard_name=                                                                                 &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion', &
       cmor_long_name =                                                                                    &
@@ -294,7 +294,7 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_cont_tend_2d(n) = register_diag_field('ocean_model',                                      &
       'ndiff_tracer_cont_tendency_2d_'//trim(Reg%Tr(n)%name), diag%axesT1, Time,                                          &
       'Depth integrated neutral diffusion tracer content tendency for '//trim(Reg%Tr(n)%name),                            &
-      'kg m-2 s-1',cmor_field_name='osaltpmdiff_2d', cmor_units='kg m-2 s-1',                                             &
+      'kg m-2 s-1',cmor_field_name='osaltpmdiff_2d',                                                                      &
       cmor_standard_name=                                                                                                 &
       'tendency_of_sea_water_salinity_expressed_as_salt_content_due_to_parameterized_mesocale_diffusion_depth_integrated',&
       cmor_long_name =                                                                                                    &
@@ -303,12 +303,12 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'kg/s')
+      'kg s-1')
 
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'kg/s')
+      'kg s-1')
 
     else
 
@@ -330,12 +330,12 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
       CS%id_neutral_diff_tracer_trans_x_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_x_2d_'//trim(Reg%Tr(n)%name), diag%axesCu1, Time,                  &
       'Depth integrated neutral diffusion zonal tracer transport for '//trim(Reg%Tr(n)%name),&
-      'kg/s')
+      'kg s-1')
 
       CS%id_neutral_diff_tracer_trans_y_2d(n) = register_diag_field('ocean_model',           &
       'ndiff_tracer_trans_y_2d_'//trim(Reg%Tr(n)%name), diag%axesCv1, Time,                  &
       'Depth integrated neutral diffusion merid tracer transport for '//trim(Reg%Tr(n)%name),&
-      'kg/s')
+      'kg s-1')
 
     endif
 
