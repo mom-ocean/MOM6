@@ -510,7 +510,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_pre_dyn
   real :: tot_wt_ssh, Itot_wt_ssh
 
-  type(time_type) :: Time_local
+  type(time_type) :: Time_local, end_time_thermo
   logical :: showCallTree
   ! These are used for group halo passes.
   logical :: do_pass_kv_turb, do_pass_Ray, do_pass_kv_bbl_thick
@@ -685,41 +685,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       ! The end-time of the diagnostic interval needs to be set ahead if there
       ! are multiple dynamic time steps worth of thermodynamics applied here.
-      call enable_averaging(dtdia, Time_local + &
-                                   set_time(int(floor(dtdia-dt+0.5))), CS%diag)
-
-      if (CS%debug) then
-        call uvchksum("Pre set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
-        call hchksum(h,"Pre set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
-        if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G%HI, haloshift=1)
-        if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G%HI, haloshift=1)
-      endif
-
-      !   Calculate the BBL properties and store them inside visc (u,h).
-      ! This is here so that CS%visc is updated before diabatic() when
-      ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
-      ! and set_viscous_BBL is called as a part of the dynamic stepping.
-      call cpu_clock_begin(id_clock_BBL_visc)
-      call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
-      call cpu_clock_end(id_clock_BBL_visc)
-
-      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain, clock=id_clock_pass)
-      if (do_pass_kv_bbl_thick) &
-        call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
-      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (diabatic_first)")
-
-      call cpu_clock_begin(id_clock_thermo)
+      end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true.)
       do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
-
-      call disable_averaging(CS%diag)
-      call cpu_clock_end(id_clock_thermo)
 
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
@@ -921,81 +895,21 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     endif
 
     if (do_advection) then ! Do advective transport and lateral tracer mixing.
-
-      if (CS%debug) then
-        call cpu_clock_begin(id_clock_other)
-        call uvchksum("Pre-advection [uv]", u, v, G%HI, haloshift=2)
-        call hchksum(h,"Pre-advection h", G%HI, haloshift=1, scale=GV%H_to_m)
-        call uvchksum("Pre-advection uhtr", CS%uhtr, CS%vhtr, G%HI, &
-                      haloshift=0, scale=GV%H_to_m)
-      ! call MOM_state_chksum("Pre-advection ", u, v, &
-      !                       h, CS%uhtr, CS%vhtr, G, GV, haloshift=1)
-          if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
-          if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
-          if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
-                         "Pre-advection frazil", G%HI, haloshift=0)
-          if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
-                         "Pre-advection salt deficit", G%HI, haloshift=0)
-      ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
-        call check_redundant("Pre-advection ", u, v, G)
-        call cpu_clock_end(id_clock_other)
-      endif
-
-      call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
-      call enable_averaging(CS%t_dyn_rel_adv, Time_local, CS%diag)
-
-      call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, &
-                         CS%tracer_adv_CSp, CS%tracer_Reg)
-      call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
-                          CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
-      if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
-      call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
-
-      call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn)
-      ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
-      ! from before the dynamics calls
-      call diag_update_remap_grids(CS%diag)
-
-      call disable_averaging(CS%diag)
-      call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
-
-      ! Reset the accumulated transports to 0 and record that the dynamics
-      ! and advective times now agree.
-      call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
-      CS%uhtr(:,:,:) = 0.0
-      CS%vhtr(:,:,:) = 0.0
-      CS%t_dyn_rel_adv = 0.0
-      call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
-
-      if (CS%diabatic_first .and. CS%use_temperature) then
-        ! Temperature and salinity need halo updates because they will be used
-        ! in the dynamics before they are changed again.
-        call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
-      endif
-
+      call step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, CS%tv, Time_local)
     endif
 
     !===========================================================================
     ! This is the second place where the diabatic processes and remapping could occur.
     if (CS%t_dyn_rel_adv == 0.0) then
-      call cpu_clock_begin(id_clock_thermo)
-
       if (.not.CS%diabatic_first) then
         dtdia = CS%t_dyn_rel_thermo
         if (thermo_does_span_coupling .and. (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
           call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                          "before call to diabatic.")
         endif
-
-        call enable_averaging(CS%t_dyn_rel_thermo, Time_local, CS%diag)
-
         ! Apply diabatic forcing, do mixing, and regrid.
-        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.)
         do_pass_kv_turb = associated(CS%visc%Kv_turb)
-
-        call disable_averaging(CS%diag)
-
       endif
 
       if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
@@ -1003,7 +917,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
               "with DIABATIC_FIRST.")
       ! Record that the dynamics and diabatic processes are synchronized.
       CS%t_dyn_rel_thermo = 0.0
-      call cpu_clock_end(id_clock_thermo)
     endif
 
     call cpu_clock_begin(id_clock_dynamics)
@@ -1089,9 +1002,76 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
 end subroutine step_MOM
 
+!> step_MOM_tracer_dyn does tracer advection and lateral diffusion, bringing the
+!! tracers up to date with the changes in state due to the dynamics.  Surface
+!! sources and sinks and remapping are handled via step_MOM_thermo.
+subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, tv, Time_local)
+  type(MOM_control_struct), intent(inout) :: CS     !< control structure
+  type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                            intent(in)    :: h      !< layer thicknesses after the transports (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
+  type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
+  type(time_type),          intent(in)    :: Time_local !< The model time at the end
+                                                    !! of the time step.
+  logical :: showCallTree
+  showCallTree = callTree_showQuery()
+
+  if (CS%debug) then
+    call cpu_clock_begin(id_clock_other)
+    call hchksum(h,"Pre-advection h", G%HI, haloshift=1, scale=GV%H_to_m)
+    call uvchksum("Pre-advection uhtr", CS%uhtr, CS%vhtr, G%HI, &
+                  haloshift=0, scale=GV%H_to_m)
+    if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre-advection T", G%HI, haloshift=1)
+    if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre-advection S", G%HI, haloshift=1)
+    if (associated(CS%tv%frazil)) call hchksum(CS%tv%frazil, &
+                   "Pre-advection frazil", G%HI, haloshift=0)
+    if (associated(CS%tv%salt_deficit)) call hchksum(CS%tv%salt_deficit, &
+                   "Pre-advection salt deficit", G%HI, haloshift=0)
+  ! call MOM_thermo_chksum("Pre-advection ", CS%tv, G)
+    call cpu_clock_end(id_clock_other)
+  endif
+
+  call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
+  call enable_averaging(CS%t_dyn_rel_adv, Time_local, CS%diag)
+
+  call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, &
+                     CS%tracer_adv_CSp, CS%tracer_Reg)
+  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
+                      CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
+  if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
+  call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
+
+  call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
+  call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn)
+  ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
+  ! from before the dynamics calls
+  call diag_update_remap_grids(CS%diag)
+
+  call disable_averaging(CS%diag)
+  call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
+
+  ! Reset the accumulated transports to 0 and record that the dynamics
+  ! and advective times now agree.
+  call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
+  CS%uhtr(:,:,:) = 0.0
+  CS%vhtr(:,:,:) = 0.0
+  CS%t_dyn_rel_adv = 0.0
+  call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
+
+  if (CS%diabatic_first .and. CS%use_temperature) then
+    ! Temperature and salinity need halo updates because they will be used
+    ! in the dynamics before they are changed again.
+    call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
+  endif
+
+end subroutine step_MOM_tracer_dyn
+
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, update_BBL)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1104,10 +1084,13 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+  type(time_type),          intent(in)    :: end_time !< The model time at the end of this step.
+  logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
+  logical :: do_pass_kv_bbl_thick
   logical :: showCallTree
 
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
@@ -1117,6 +1100,35 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
   use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
+  call enable_averaging(dtdia, end_time, CS%diag)
+
+  if (update_BBL) then
+    if (CS%debug) then
+      call uvchksum("Pre set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
+      call hchksum(h,"Pre set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
+      if (associated(CS%tv%T)) call hchksum(CS%tv%T, "Pre set_viscous_BBL T", G%HI, haloshift=1)
+      if (associated(CS%tv%S)) call hchksum(CS%tv%S, "Pre set_viscous_BBL S", G%HI, haloshift=1)
+    endif
+
+    !   Calculate the BBL properties and store them inside visc (u,h).
+    ! This is here so that CS%visc is updated before diabatic() when
+    ! DIABATIC_FIRST=True. Otherwise diabatic() is called after the dynamics
+    ! and set_viscous_BBL is called as a part of the dynamic stepping.
+    call cpu_clock_begin(id_clock_BBL_visc)
+    call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
+    call cpu_clock_end(id_clock_BBL_visc)
+
+    if (.not.G%Domain%symmetric) then
+      if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+        call do_group_pass(CS%pass_ray, G%Domain, clock=id_clock_pass)
+      if ((associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) .or. &
+          (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))) &
+        call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
+    endif
+    if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
+  endif
+
+  call cpu_clock_begin(id_clock_thermo)
   if (.not.CS%adiabatic) then
 
     if (CS%debug) then
@@ -1240,6 +1252,9 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
     endif
 
   endif   ! endif for the block "if (.not.CS%adiabatic)"
+  call cpu_clock_end(id_clock_thermo)
+
+  call disable_averaging(CS%diag)
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
 
