@@ -413,9 +413,7 @@ type, public :: MOM_control_struct
   type(group_pass_type) :: pass_bbl_thick_kv_bbl
   type(group_pass_type) :: pass_T_S_h
   type(group_pass_type) :: pass_T_S
-  type(group_pass_type) :: pass_kv_turb
   type(group_pass_type) :: pass_uv_T_S_h
-  type(group_pass_type) :: pass_ssh
 
 end type MOM_control_struct
 
@@ -513,7 +511,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   type(time_type) :: Time_local, end_time_thermo
   logical :: showCallTree
   ! These are used for group halo passes.
-  logical :: do_pass_kv_turb, do_pass_Ray, do_pass_kv_bbl_thick
+  logical :: do_pass_Ray, do_pass_kv_bbl_thick
 
   G => CS%G ; GV => CS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
@@ -587,9 +585,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       do_pass_kv_bbl_thick = .TRUE.
     endif
   endif
-  do_pass_kv_turb = associated(CS%visc%Kv_turb)
-  if (associated(CS%visc%Kv_turb)) &
-    call create_group_pass(CS%pass_kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
 
   if (.not.CS%adiabatic .AND. CS%use_ALE_algorithm ) then
     if (CS%use_temperature) then
@@ -689,7 +684,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true.)
-      do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -741,10 +735,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_BBL_visc)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     endif
-
-    if (do_pass_kv_turb) &
-      call do_group_pass(CS%pass_kv_turb, G%Domain, clock=id_clock_pass)
-    do_pass_kv_turb = .false.
 
     if (do_calc_bbl) then
       if (G%nonblocking_updates) then
@@ -909,7 +899,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
         endif
         ! Apply diabatic forcing, do mixing, and regrid.
         call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.)
-        do_pass_kv_turb = associated(CS%visc%Kv_turb)
       endif
 
       if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
@@ -1485,6 +1474,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   real, dimension(:,:), pointer :: shelf_area
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h
+  type(group_pass_type) :: tmp_pass_Kv_turb
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
@@ -2260,6 +2250,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call create_group_pass(CS%pass_uv_T_S_h, CS%h, G%Domain, halo=dynamics_stencil)
 
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
+
+  if (associated(CS%visc%Kv_turb)) then
+    !### For some reason the following does not work.
+!     call pass_var(CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+    call create_group_pass(tmp_pass_Kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+    call do_group_pass(tmp_pass_Kv_turb, G%Domain)
+  endif
+
   call cpu_clock_end(id_clock_pass_init)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
