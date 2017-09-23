@@ -55,7 +55,7 @@ use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
-use MOM_restart,              only : restart_init, MOM_restart_CS
+use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
 use MOM_spatial_means,        only : global_area_mean, global_area_integral
 use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
@@ -630,11 +630,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call disable_averaging(CS%diag)
   endif
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call complete_group_pass(CS%pass_tau_ustar_psurf, G%Domain, clock=id_clock_pass)
 
   if (CS%interp_p_surf) then
     if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
@@ -706,20 +703,19 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call set_viscous_BBL(u, v, h, CS%tv, CS%visc, G, GV, CS%set_visc_CSp)
       call cpu_clock_end(id_clock_BBL_visc)
 
-      call cpu_clock_begin(id_clock_pass)
-      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain )
-      if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      if (do_pass_Ray) call do_group_pass(CS%pass_ray, G%Domain, clock=id_clock_pass)
+      if (do_pass_kv_bbl_thick) &
+        call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (diabatic_first)")
 
       call cpu_clock_begin(id_clock_thermo)
 
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+      do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
-      do_pass_kv_turb = associated(CS%visc%Kv_turb)
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
       call disable_averaging(CS%diag)
@@ -733,32 +729,27 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
-    if (CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
-      if (CS%t_dyn_rel_adv == 0.0) then
-        if (thermo_does_span_coupling) then
-          dtth = dt_therm
-        else
-          dtth = dt*min(ntstep,n_max-n+1)
-        endif
-
-        call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
-        call cpu_clock_begin(id_clock_thick_diff)
-        if (associated(CS%VarMix)) &
-          call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
-        call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, GV, &
-                               CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
-        call cpu_clock_end(id_clock_thick_diff)
-        call cpu_clock_begin(id_clock_pass)
-        call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-        call cpu_clock_end(id_clock_pass)
-        call disable_averaging(CS%diag)
-        if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
-
-        ! Whenever thickness changes let the diag manager know, target grids
-        ! for vertical remapping may need to be regenerated.
-        call diag_update_remap_grids(CS%diag)
-
+    if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
+      if (thermo_does_span_coupling) then
+        dtth = dt_therm
+      else
+        dtth = dt*min(ntstep,n_max-n+1)
       endif
+
+      call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (associated(CS%VarMix)) &
+        call calc_slope_functions(h, CS%tv, dt, G, GV, CS%VarMix)
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dtth, G, GV, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+      call disable_averaging(CS%diag)
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+
+      ! Whenever thickness changes let the diag manager know, target grids
+      ! for vertical remapping may need to be regenerated.
+      call diag_update_remap_grids(CS%diag)
     endif
 
     ! The bottom boundary layer properties are out-of-date and need to be
@@ -777,22 +768,23 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     endif
 
-    call cpu_clock_begin(id_clock_pass)
-    if (do_pass_kv_turb) call do_group_pass(CS%pass_kv_turb, G%Domain)
+    if (do_pass_kv_turb) &
+      call do_group_pass(CS%pass_kv_turb, G%Domain, clock=id_clock_pass)
     do_pass_kv_turb = .false.
-    call cpu_clock_end(id_clock_pass)
 
     if (do_calc_bbl) then
-      call cpu_clock_begin(id_clock_pass)
       if (G%nonblocking_updates) then
-        if (do_pass_Ray) call start_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        if (do_pass_Ray) &
+          call start_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
         ! do_calc_bbl will be set to .false. when the message passing is complete.
       else
-        if (do_pass_Ray) call do_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
+        if (do_pass_Ray) &
+          call do_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
       endif
-      call cpu_clock_end(id_clock_pass)
     endif
 
     if (CS%interp_p_surf) then
@@ -806,6 +798,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       enddo ; enddo
     endif
 
+    ! The original velocities might be stored for debugging.
     if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
       do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
         CS%u_prev(I,j,k) = u(I,j,k)
@@ -821,10 +814,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     enddo ; enddo ; enddo
 
     if (G%nonblocking_updates) then ; if (do_calc_bbl) then
-      call cpu_clock_begin(id_clock_pass)
-        if (do_pass_Ray) call complete_group_pass(CS%pass_Ray, G%Domain)
-        if (do_pass_kv_bbl_thick) call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      if (do_pass_Ray) &
+        call complete_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+      if (do_pass_kv_bbl_thick) &
+        call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
     endif ; endif
 
     if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
@@ -880,9 +873,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
       call cpu_clock_end(id_clock_thick_diff)
-      call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-      call cpu_clock_end(id_clock_pass)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
@@ -897,9 +888,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
                               CS%VarMix, G, GV, CS%mixedlayer_restrat_CSp)
       call cpu_clock_end(id_clock_ml_restrat)
-      call cpu_clock_begin(id_clock_pass)
-      call pass_var(h, G%Domain) !###, halo=max(2,cont_stensil))
-      call cpu_clock_end(id_clock_pass)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
       if (CS%debug) then
         call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
         call uvchksum("Post-mixedlayer_restrat [uv]htr", &
@@ -979,6 +968,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       CS%t_dyn_rel_adv = 0.0
       call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
+      if (CS%diabatic_first .and. CS%use_temperature) then
+        ! Temperature and salinity need halo updates because they will be used
+        ! in the dynamics before they are changed again.
+        call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
+      endif
+
     endif
 
     !===========================================================================
@@ -1001,19 +996,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
         call disable_averaging(CS%diag)
 
-      else  !  "else branch for if (.not.CS%diabatic_first) then"
-        if (abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
+      endif
+
+      if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
               "step_MOM: Mismatch between the dynamics and diabatic times "//&
               "with DIABATIC_FIRST.")
-
-        ! Tracers have been advected and diffused, and need halo updates.
-        if (CS%use_temperature) then
-          call cpu_clock_begin(id_clock_pass)
-          call do_group_pass(CS%pass_T_S, G%Domain)
-          call cpu_clock_end(id_clock_pass)
-        endif
-      endif ! close of "if (.not.CS%diabatic_first) then ; if (.not.CS%adiabatic)"
-
       ! Record that the dynamics and diabatic processes are synchronized.
       CS%t_dyn_rel_thermo = 0.0
       call cpu_clock_end(id_clock_thermo)
@@ -1034,7 +1021,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     ! Calculate diagnostics at the end of the time step.
     call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
 
-    call enable_averaging(dt,Time_local, CS%diag)
+    call enable_averaging(dt, Time_local, CS%diag)
     ! These diagnostics are available every time step.
     if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
     if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
@@ -1076,23 +1063,24 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   Itot_wt_ssh = 1.0/tot_wt_ssh
   do j=js,je ; do i=is,ie
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
+    ssh(i,j) = CS%ave_ssh(i,j)
   enddo ; enddo
-
-  call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_integrated_diagnostics(CS, G, GV, CS%diag, dt*n_max, CS%tv, fluxes)
-  call disable_averaging(CS%diag)
-
-  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
   call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
-  call calculate_surface_state(sfc_state, u, v, h, CS%ave_ssh, G, GV, CS)
-
-  call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_surface_diagnostics(CS, G, CS%diag, sfc_state)
-  call disable_averaging(CS%diag)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
+
+  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
+  call calculate_surface_state(sfc_state, u, v, h, CS%ave_ssh, G, GV, CS)
+
+  ! Do diagnostics that only occur at the end of a complete forcing step.
+  call cpu_clock_begin(id_clock_diagnostics)
+  call enable_averaging(dt*n_max, Time_local, CS%diag)
+  call post_integrated_diagnostics(CS, G, GV, CS%diag, dt*n_max, CS%tv, ssh, fluxes)
+  call post_surface_diagnostics(CS, G, CS%diag, sfc_state)
+  call disable_averaging(CS%diag)
+  call cpu_clock_end(id_clock_diagnostics)
 
   call cpu_clock_end(id_clock_other)
 
@@ -1203,9 +1191,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
       call cpu_clock_end(id_clock_ALE)
     endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
 
-    call cpu_clock_begin(id_clock_pass)
-    call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    call do_group_pass(CS%pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
     if (CS%debug .and. CS%use_ALE_algorithm) then
       call MOM_state_chksum("Post-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1246,9 +1232,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
     call cpu_clock_end(id_clock_diabatic)
 
     if (CS%use_temperature) then
-      call cpu_clock_begin(id_clock_pass)
-      call do_group_pass(CS%pass_T_S, G%Domain)
-      call cpu_clock_end(id_clock_pass)
+      call do_group_pass(CS%pass_T_S, G%Domain, clock=id_clock_pass)
       if (CS%debug) then
         if (associated(tv%T)) call hchksum(tv%T, "Post-diabatic T", G%HI, haloshift=1)
         if (associated(tv%S)) call hchksum(tv%S, "Post-diabatic S", G%HI, haloshift=1)
@@ -1634,6 +1618,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
+  if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of topography \n"//&
@@ -1796,6 +1781,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
          "WRITE_GEOM must be equal to 0, 1 or 2.")
   write_geom_files = ((write_geom==2) .or. ((write_geom==1) .and. &
      ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
+! If the restart file type had been initialized, this could become:
+!  write_geom_files = ((write_geom==2) .or. &
+!                      ((write_geom==1) .and. is_new_run(CS%restart_CSp)))
 
   ! Check for inconsistent parameter settings.
   if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
@@ -1887,10 +1875,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
     CS%vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
-                       cmor_field_name="thetao",cmor_units="C",                &
+                       cmor_field_name="thetao",                               &
                        conversion=CS%tv%C_p)
-    CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
-                       cmor_field_name="so",cmor_units="ppt",   &
+    CS%vd_S = var_desc(name="S",units="psu",longname="Salinity",&
+                       cmor_field_name="so",                    &
                        conversion=0.001)
     if(CS%advect_TS) then
       call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
@@ -1925,7 +1913,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
-    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%u_prev(:,:,:) = 0.0
+    allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
   endif
 
   MOM_internal_state%u => CS%u ; MOM_internal_state%v => CS%v
@@ -2079,6 +2067,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     else
       call ALE_main( G, GV, CS%h, CS%u, CS%v, CS%tv, CS%tracer_Reg, CS%ALE_CSp )
     endif
+
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
     if (CS%use_temperature) then
@@ -2217,18 +2206,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                         CS%S_diffx_2d, CS%S_diffy_2d, CS%S_advection_xy)
     endif
     call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao", cmor_units="C", &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao",                 &
                       cmor_standard_name="sea_water_potential_temperature",          &
                       cmor_long_name ="Sea Water Potential Temperature")
-    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PPT", Time,               &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="ppt", &
+    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "psu", Time,               &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="so",                   &
                       cmor_standard_name="sea_water_salinity",                     &
                       cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.
-  new_sim = ((dirs%input_filename(1:1) == 'n') .and. &
-             (LEN_TRIM(dirs%input_filename) == 1))
+  new_sim = is_new_run(CS%restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, CS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
              CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, CS%tv)
@@ -2248,9 +2236,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp)
   endif
 
-  call cpu_clock_begin(id_clock_pass_init)
   !--- set up group pass for u,v,T,S and h. pass_uv_T_S_h also is used in step_MOM
-
+  call cpu_clock_begin(id_clock_pass_init)
   dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
   call create_group_pass(CS%pass_uv_T_S_h, CS%u, CS%v, G%Domain, halo=dynamics_stencil)
   if (CS%use_temperature) then
@@ -2354,18 +2341,18 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  T_flux_units    = get_tr_flux_units(GV, "Celsius")
-  S_flux_units    = get_tr_flux_units(GV, "PPT")
+  T_flux_units    = get_tr_flux_units(GV, "degC")
+  S_flux_units    = get_tr_flux_units(GV, "psu")
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
-      'Zonal velocity', 'meter  second-1', cmor_field_name='uo', cmor_units='m s-1', &
+      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
       cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
-      'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
+      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true.)
@@ -2375,81 +2362,81 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       standard_name='sea_water_volume')
   CS%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='meter', missing_value=CS%missing)
+      long_name= 'Sea surface height above geoid', units='m', missing_value=CS%missing)
   CS%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
       standard_name='square_of_sea_surface_height_above_geoid',             &
       long_name='Square of sea surface height above geoid', units='m2', missing_value=CS%missing)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'meter', CS%missing)
+      'Sea Surface Height', 'm', CS%missing)
   CS%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
   CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
-      'Instantaneous Sea Surface Height', 'meter', CS%missing)
+      'Instantaneous Sea Surface Height', 'm', CS%missing)
   CS%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'meter second-1', CS%missing)
+      'Sea Surface Zonal Velocity', 'm s-1', CS%missing)
   CS%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'meter second-1', CS%missing)
+      'Sea Surface Meridional Velocity', 'm s-1', CS%missing)
   CS%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'meter second-1', CS%missing)
+      'Sea Surface Speed', 'm s-1', CS%missing)
 
   if (CS%use_temperature) then
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius',                                 &
-         cmor_field_name="thetao", cmor_units="C",                          &
+        'Potential Temperature', 'degC',                                    &
+         cmor_field_name="thetao",                                          &
          cmor_standard_name="sea_water_potential_temperature",              &
          cmor_long_name ="Sea Water Potential Temperature")
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        long_name='Salinity', units='PPT', cmor_field_name='so',            &
-        cmor_long_name='Sea Water Salinity', cmor_units='ppt',              &
+        long_name='Salinity', units='psu', cmor_field_name='so',            &
+        cmor_long_name='Sea Water Salinity',                                &
         cmor_standard_name='sea_water_salinity')
     CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
         long_name='Sea Water Potential Temperature at Sea Floor',                    &
         standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
     CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
         long_name='Sea Water Salinity at Sea Floor',                                 &
-        standard_name='sea_water_salinity_at_sea_floor', units='ppt')
+        standard_name='sea_water_salinity_at_sea_floor', units='psu')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
-        cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
+        'Sea Surface Temperature', 'degC', CS%missing, cmor_field_name='tos', &
+        cmor_long_name='Sea Surface Temperature',                                &
         cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
-        cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
+        'Sea Surface Temperature Squared', 'degC2', CS%missing, cmor_field_name='tossq', &
+        cmor_long_name='Square of Sea Surface Temperature ',                      &
         cmor_standard_name='square_of_sea_surface_temperature')
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
+        'Sea Surface Salinity', 'psu', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity',                            &
         cmor_standard_name='sea_surface_salinity')
     CS%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'ppt**2', CS%missing, cmor_field_name='sossq', &
-        cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
+        'Sea Surface Salinity Squared', 'psu', CS%missing, cmor_field_name='sossq', &
+        cmor_long_name='Square of Sea Surface Salinity ',                     &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (CS%use_conT_absS) then
       CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
           'Conservative Temperature', 'Celsius')
       CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
-          long_name='Absolute Salinity', units='g/Kg')
+          long_name='Absolute Salinity', units='g kg-1')
       CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
           'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
       CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
+          'Sea Surface Absolute Salinity', 'g kg-1', CS%missing)
     endif
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
     CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                         &
-          'Heat from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                    &
-          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
+          'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil',                    &
+          cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
           cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
   endif
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'g Salt meter-2 s-1')
+         'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
   CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
-         'Heat flux into ocean from mass flux into ocean', 'Watt meter-2')
+         'Heat flux into ocean from mass flux into ocean', 'W m-2')
   CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'Watt meter-2')
+         'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
 
 
   ! lateral heat advective and diffusive fluxes
@@ -2522,33 +2509,33 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   ! diagnostics for values prior to diabatic and prior to ALE
   CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
-      'Zonal velocity before diabatic forcing', 'meter second-1')
+      'Zonal velocity before diabatic forcing', 'm s-1')
   CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
-      'Meridional velocity before diabatic forcing', 'meter second-1')
+      'Meridional velocity before diabatic forcing', 'm s-1')
   CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
       'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
   CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
-      'Interface Heights before diabatic forcing', 'meter')
+      'Interface Heights before diabatic forcing', 'm')
   if (.not. CS%adiabatic) then
     CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
-        'Zonal velocity before remapping', 'meter second-1')
+        'Zonal velocity before remapping', 'm s-1')
     CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
-        'Meridional velocity before remapping', 'meter second-1')
+        'Meridional velocity before remapping', 'm s-1')
     CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
         'Layer Thickness before remapping', thickness_units, v_extensive=.true.)
     CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
         'Temperature before remapping', 'degC')
     CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
-        'Salinity before remapping', 'ppt')
+        'Salinity before remapping', 'psu')
     CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-        'Interface Heights before remapping', 'meter')
+        'Interface Heights before remapping', 'm')
   endif
 
   if (CS%use_temperature) then
     CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius')
+        'Potential Temperature', 'degC')
     CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
-        'Salinity', 'PPT')
+        'Salinity', 'psu')
   endif
 
   ! Diagnostics related to tracer transport
@@ -2559,16 +2546,16 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
       x_cell_method='sum', v_extensive=.true.)
   CS%id_umo = register_diag_field('ocean_model', 'umo', &
-      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg/s', &
+      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
   CS%id_vmo = register_diag_field('ocean_model', 'vmo', &
-      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg/s', &
+      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg s-1', &
       standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
   CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
-      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg/s', &
+      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
   CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
-      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg/s', &
+      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
 
 end subroutine register_diags
@@ -2592,9 +2579,9 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! heat tendencies from lateral advection
   CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2',v_extensive=.true.)
+      'Horizontal convergence of residual mean heat advective fluxes', 'W m-2',v_extensive=.true.)
   CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W/m2')
+      'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W m-2')
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%T_advection_xy,isd,ied,jsd,jed,nz)
     CS%tendency_diagnostics = .true.
@@ -2602,16 +2589,16 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! net temperature and heat tendencies
   CS%id_T_tendency = register_diag_field('ocean_model', 'T_tendency', diag%axesTL, Time, &
-      'Net time tendency for temperature', 'degC/s')
+      'Net time tendency for temperature', 'degC s-1')
   CS%id_Th_tendency = register_diag_field('ocean_model', 'Th_tendency', diag%axesTL, Time,        &
-      'Net time tendency for heat', 'W/m2',                                                       &
-      cmor_field_name="opottemptend", cmor_units="W m-2",                                         &
+      'Net time tendency for heat', 'W m-2',                                                      &
+      cmor_field_name="opottemptend",                                                             &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
       v_extensive=.true.)
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
-      'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
-      cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
+      'Vertical sum of net time tendency for heat', 'W m-2',                                                  &
+      cmor_field_name="opottemptend_2d",                                                                      &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
   if (CS%id_T_tendency > 0) then
@@ -2632,9 +2619,9 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! salt tendencies from lateral advection
   CS%id_S_advection_xy = register_diag_field('ocean_model', 'S_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)', v_extensive=.true.)
+      'Horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1', v_extensive=.true.)
   CS%id_S_advection_xy_2d = register_diag_field('ocean_model', 'S_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
+      'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1')
   if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%S_advection_xy,isd,ied,jsd,jed,nz)
     CS%tendency_diagnostics = .true.
@@ -2642,16 +2629,16 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! net salinity and salt tendencies
   CS%id_S_tendency = register_diag_field('ocean_model', 'S_tendency', diag%axesTL, Time, &
-      'Net time tendency for salinity', 'PPT/s')
+      'Net time tendency for salinity', 'psu s-1')
   CS%id_Sh_tendency = register_diag_field('ocean_model', 'Sh_tendency', diag%axesTL, Time,&
-      'Net time tendency for salt', 'kg/(m2 * s)',                                        &
-      cmor_field_name="osalttend", cmor_units="kg m-2 s-1",                               &
+      'Net time tendency for salt', 'kg m-2 s-1',                                         &
+      cmor_field_name="osalttend",                                                        &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
       v_extensive=.true.)
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
-      'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
-      cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
+      'Vertical sum of net time tendency for salt', 'kg m-2 s-1',                                &
+      cmor_field_name="osalttend_2d",                                                            &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
   if (CS%id_S_tendency > 0) then
@@ -2700,12 +2687,12 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
   endif
 
   CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
-      'ALE variance decay for salinity', 'PPT2 s-1')
+      'ALE variance decay for salinity', 'psu2 s-1')
   if (CS%id_S_vardec > 0) then
     call safe_alloc_ptr(CS%S_squared,isd,ied,jsd,jed,nz)
     CS%S_squared(:,:,:) = 0.
 
-    vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
+    vd_tmp = var_desc(name="S2", units="psu2", longname="Squared Salinity")
     call register_tracer(CS%S_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
   endif
 
@@ -2994,14 +2981,17 @@ subroutine post_diags_TS_vardec(G, CS, dt)
 end subroutine post_diags_TS_vardec
 
 !> This routine posts diagnostics of various integrated quantities.
-subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
-  type(MOM_control_struct), intent(in)    :: CS  !< control structure
-  type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
-  type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
-  type(diag_ctrl),          intent(in)    :: diag  !< regulates diagnostic output
-  real,                     intent(in)    :: dt_int  !< total time step associated with these diagnostics, in s.
-  type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
-  type(forcing),            intent(in)    :: fluxes  !< pointers to forcing fields
+subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, ssh, fluxes)
+  type(MOM_control_struct), intent(in) :: CS  !< control structure
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
+  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
+  real,                     intent(in) :: dt_int  !< total time step associated with these diagnostics, in s.
+  type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh !< Time mean surface height without
+                                              !! corrections for ice displacement(m)
+  type(forcing),            intent(in) :: fluxes  !< pointers to forcing fields
 
   real, allocatable, dimension(:,:) :: &
     tmp,              & ! temporary 2d field
@@ -3023,13 +3013,13 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
 
   ! area mean SSH
   if (CS%id_ssh_ga > 0) then
-    ssh_ga = global_area_mean(CS%ave_ssh, G)
+    ssh_ga = global_area_mean(ssh, G)
     call post_data(CS%id_ssh_ga, ssh_ga, diag)
   endif
 
   I_time_int = 1.0 / dt_int
   if (CS%id_ssh > 0) &
-    call post_data(CS%id_ssh, CS%ave_ssh, diag, mask=G%mask2dT)
+    call post_data(CS%id_ssh, ssh, diag, mask=G%mask2dT)
 
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
@@ -3038,7 +3028,7 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
      allocate(zos(G%isd:G%ied,G%jsd:G%jed))
      zos(:,:) = 0.0
      do j=js,je ; do i=is,ie
-       zos(i,j) = CS%ave_ssh(i,j)
+       zos(i,j) = ssh(i,j)
      enddo ; enddo
      if (ASSOCIATED(fluxes%p_surf)) then
        do j=js,je ; do i=is,ie
@@ -3069,7 +3059,7 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, fluxes)
   if(CS%id_volo > 0) then
     allocate(tmp(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
-      tmp(i,j) = G%mask2dT(i,j)*(CS%ave_ssh(i,j) + G%bathyT(i,j))
+      tmp(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(tmp, G)
     call post_data(CS%id_volo, volo, diag)
@@ -3191,55 +3181,84 @@ subroutine write_static_fields(G, diag)
   type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
   type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
   ! Local variables
-  integer :: id
+  real    :: tmp_h(SZI_(G),SZJ_(G))
+  integer :: id, i, j
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
-        'Latitude of tracer (T) points', 'degrees_N')
+        'Latitude of tracer (T) points', 'degrees_north')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon', diag%axesT1, &
-        'Longitude of tracer (T) points', 'degrees_E')
+        'Longitude of tracer (T) points', 'degrees_east')
   if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_c', diag%axesB1, &
-        'Latitude of corner (Bu) points', 'degrees_N', interp_method='none')
+        'Latitude of corner (Bu) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_c', diag%axesB1, &
-        'Longitude of corner (Bu) points', 'degrees_E', interp_method='none')
+        'Longitude of corner (Bu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_v', diag%axesCv1, &
-        'Latitude of meridional velocity (Cv) points', 'degrees_N', interp_method='none')
+        'Latitude of meridional velocity (Cv) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_v', diag%axesCv1, &
-        'Longitude of meridional velocity (Cv) points', 'degrees_E', interp_method='none')
+        'Longitude of meridional velocity (Cv) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_u', diag%axesCu1, &
-        'Latitude of zonal velocity (Cu) points', 'degrees_N', interp_method='none')
+        'Latitude of zonal velocity (Cu) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_u', diag%axesCu1, &
-        'Longitude of zonal velocity (Cu) points', 'degrees_E', interp_method='none')
+        'Longitude of zonal velocity (Cu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
         'Surface area of tracer (T) cells', 'm2',                    &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area')
+        cmor_long_name='Ocean Grid-Cell Area',      &
+        x_cell_method='sum', y_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
     call diag_register_area_ids(diag, id_area_t=id)
+  endif
+
+  id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
+        'Surface area of x-direction flow (U) cells', 'm2',             &
+        cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
+  endif
+
+  id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
+        'Surface area of y-direction flow (V) cells', 'm2',             &
+        cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
+  endif
+
+  id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
+        'Surface area of B-grid flow (Q) cells', 'm2',                  &
+        cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid',&
-        area=diag%axesT1%id_area)
+        cmor_standard_name='sea_floor_depth_below_geoid',&
+        area=diag%axesT1%id_area, x_cell_method='mean', y_cell_method='mean')
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
@@ -3286,6 +3305,19 @@ subroutine write_static_fields(G, diag)
         'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
 
+  ! This static diagnostic is from CF 1.8, and is the fraction of a cell
+  ! covered by ocean, given as a percentage (poorly named).
+  id = register_static_field('ocean_model', 'area_t_percent', diag%axesT1, &
+        'Percentage of cell area covered by ocean', '%', &
+        cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
+        cmor_long_name='Sea Area Fraction', &
+        x_cell_method='mean', y_cell_method='mean')
+  if (id > 0) then
+    tmp_h(:,:) = 0.
+    tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
+    call post_data(id, tmp_h, diag, .true.)
+  endif
+
 end subroutine write_static_fields
 
 
@@ -3323,10 +3355,10 @@ subroutine set_restart_fields(GV, param_file, CS)
   vd = var_desc("h",thickness_units,"Layer Thickness")
   call register_restart_field(CS%h, vd, .true., CS%restart_CSp)
 
-  vd = var_desc("u","meter second-1","Zonal velocity",'u','L')
+  vd = var_desc("u","m s-1","Zonal velocity",'u','L')
   call register_restart_field(CS%u, vd, .true., CS%restart_CSp)
 
-  vd = var_desc("v","meter second-1","Meridional velocity",'v','L')
+  vd = var_desc("v","m s-1","Meridional velocity",'v','L')
   call register_restart_field(CS%v, vd, .true., CS%restart_CSp)
 
   if (CS%use_frazil) then

@@ -183,8 +183,8 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
     ! Additional output parameters also 2d
-    ML_depth, &        ! The mixed layer depth in m.
-    ML_depth2, &       ! The mixed layer depth in m.
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MLD_EKMAN, &       ! MLD over Ekman length
@@ -2247,47 +2247,50 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min, &
                  "The (tiny) minimum friction velocity used within the \n"//&
-                 "ePBL code, derived from OMEGA and ANGSTROM.", units="meter second-1")
+                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'meter')
+      Time, 'Surface boundary layer depth', 'm',                            &
+      cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
       Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation'//&
-            ' through model layers', 'meter3 second-3')
+            ' through model layers', 'm3 s-3')
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'meter3 second-3')
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3')
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'meter')
+      Time, 'Surface region thickness that is used', 'm')
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
-      Time, 'Mixing Length that is used', 'meter')
+      Time, 'Mixing Length that is used', 'm')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second-1')
+      Time, 'Velocity Scale that is used.', 'm s-1')
   CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
-      Time, 'LT enhancement that is used.', 'non-dim')
+      Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
-      Time, 'MSTAR that is used.', 'non-dim')
+      Time, 'MSTAR that is used.', 'nondim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
+      Time, 'ePBL Surface Boundary layer depth.', 'm')
+  ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
+  !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
-      Time, 'Boundary layer depth over Ekman length.', 'meter')
+      Time, 'Boundary layer depth over Ekman length.', 'm')
   CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
-      Time, 'Boundary layer depth over Obukhov length.', 'meter')
+      Time, 'Boundary layer depth over Obukhov length.', 'm')
   CS%id_ekman_obukhov = register_diag_field('ocean_model', 'EKMAN_OBUKHOV', diag%axesT1, &
-      Time, 'Ekman length over Obukhov length.', 'meter')
+      Time, 'Ekman length over Obukhov length.', 'm')
   CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
-      Time, 'Langmuir number.', 'non-dim')
+      Time, 'Langmuir number.', 'nondim')
   CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
-      Time, 'Modified Langmuir number.', 'non-dim')
+      Time, 'Modified Langmuir number.', 'nondim')
 
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &
