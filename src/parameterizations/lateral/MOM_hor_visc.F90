@@ -1513,39 +1513,39 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! Register fields for output from this module.
 
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
-      'Zonal Acceleration from Horizontal Viscosity', 'meter second-2')
+      'Zonal Acceleration from Horizontal Viscosity', 'm s-2')
 
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
-      'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
+      'Meridional Acceleration from Horizontal Viscosity', 'm s-2')
 
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
-        'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',        &
-        cmor_field_name='difmxybo', cmor_units='m4 s-1',                        &
+        'Biharmonic Horizontal Viscosity at h Points', 'm4 s-1',        &
+        cmor_field_name='difmxybo',                                             &
         cmor_long_name='Ocean lateral biharmonic viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
 
     CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-        'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
+        'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1')
   endif
 
   if (CS%Laplacian) then
     CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
-        'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',        &
-        cmor_field_name='difmxylo', cmor_units='m2 s-1',                        &
+        'Laplacian Horizontal Viscosity at h Points', 'm2 s-1',        &
+        cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-        'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
+        'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms', 'Watt meter-2')
+      'Integral work done by lateral friction terms', 'W m-2')
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
-      'Depth integrated work done by lateral friction', 'Watt meter-2',                          &
-      cmor_field_name='dispkexyfo', cmor_units='W m-2',                                          &
+      'Depth integrated work done by lateral friction', 'W m-2',                          &
+      cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
 
