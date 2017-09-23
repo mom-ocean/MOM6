@@ -211,6 +211,7 @@ type, public:: diabatic_CS ; private
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
+  type(group_pass_type) :: pass_Kv         !< For group halo pass
 
   ! Data arrays for communicating between components
   real, allocatable, dimension(:,:,:) :: KPP_NLTheat    !< KPP non-local transport for heat (m/s)
@@ -341,6 +342,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   type(p3d) :: z_ptrs(7)  ! pointers to diagnostics to be interpolated to depth
   integer :: num_z_diags  ! number of diagnostics to be interpolated to depth
   integer :: z_ids(7)     ! id numbers of diagnostics to be interpolated to depth
+  integer :: dir_flag     ! An integer encoding the directions in which to do halo updates.
   logical :: showCallTree ! If true, show the call tree
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb, m
 
@@ -832,7 +834,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   ! enough iterations are permitted in Calculate_Entrainment.
   ! Even if too few iterations are allowed, it is still guarded
   ! against.  In other words the checks are probably unnecessary.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,hold,h,eb,ea,GV)
+  !$OMP parallel do default(shared)
   do j=js,je
     do i=is,ie
       hold(i,j,1) = h(i,j,1)
@@ -880,8 +882,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! are lighter than the mixed layer have temperatures and salinities
       ! that correspond to their prescribed densities.
       if (CS%massless_match_targets) then
-!$OMP parallel do default (none) shared(is,ie,js,je,nkmb,hold,h_neglect,eb,ea,nz,kb,tv) &
-!$OMP                           private(h_tr,b1,d1,c1,b_denom_1)
+        !$OMP parallel do default (shared) private(h_tr,b1,d1,c1,b_denom_1)
         do j=js,je
           do i=is,ie
             h_tr = hold(i,j,1) + h_neglect
@@ -963,7 +964,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       ! The mixed layer code has already been called, but there is some needed
       ! bookkeeping.
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,hold,h_orig,ea,eaml,eb,ebml)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         hold(i,j,k) = h_orig(i,j,k)
         ea(i,j,k) = ea(i,j,k) + eaml(i,j,k)
@@ -1080,7 +1081,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       Tdif_flx(i,j,1) = 0.0 ; Tdif_flx(i,j,nz+1) = 0.0
       Tadv_flx(i,j,1) = 0.0 ; Tadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Tdif_flx,Idt,ea,eb,Tadv_flx,tv)
+    !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Tdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
                         (tv%T(i,j,k-1) - tv%T(i,j,k))
@@ -1094,7 +1095,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       Sdif_flx(i,j,1) = 0.0 ; Sdif_flx(i,j,nz+1) = 0.0
       Sadv_flx(i,j,1) = 0.0 ; Sadv_flx(i,j,nz+1) = 0.0
     enddo ; enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,Sdif_flx,Idt,ea,eb,Sadv_flx,tv)
+    !$OMP parallel do default(shared)
     do K=2,nz ; do j=js,je ; do i=is,ie
       Sdif_flx(i,j,K) = (Idt * 0.5*(ea(i,j,k) + eb(i,j,k-1))) * &
                         (tv%S(i,j,k-1) - tv%S(i,j,k))
@@ -1107,9 +1108,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   call cpu_clock_begin(id_clock_tracers)
   if (CS%mix_boundary_tracers) then
     Tr_ea_BBL = sqrt(dt*CS%Kd_BBL_tr)
-!$OMP parallel do default(none) shared(is,ie,js,je,ebtr,nz,G,GV,h,dt,CS,h_neglect,  &
-!$OMP                                  ea,eb,Tr_ea_BBL,eatr,visc,hold,h_neglect2 )  &
-!$OMP                          private(htot,in_boundary,add_ent)
+    !$OMP parallel do default(shared) private(htot,in_boundary,add_ent)
     do j=js,je
       do i=is,ie
         ebtr(i,j,nz) = eb(i,j,nz)
@@ -1172,9 +1171,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     do j=js,je ; do i=is,ie
       ebtr(i,j,nz) = eb(i,j,nz) ; eatr(i,j,1) = ea(i,j,1)
     enddo ; enddo
-!$OMP parallel do default(none) shared(nz,is,ie,js,je,visc,dt,GV,h,hold,h_neglect,&
-!$OMP                                  ebtr,eb,eatr,ea )                          &
-!$OMP                          private(add_ent)
+    !$OMP parallel do default(shared) private(add_ent)
     do k=nz,2,-1 ; do j=js,je ; do i=is,ie
       if (visc%Kd_extra_S(i,j,k) > 0.0) then
         add_ent = ((dt * visc%Kd_extra_S(i,j,k)) * GV%m_to_H**2) / &
@@ -1227,7 +1224,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       ! Layer mode sponge
       if (CS%bulkmixedlayer .and. ASSOCIATED(tv%eqn_of_state)) then
         do i=is,ie ; p_ref_cv(i) = tv%P_Ref ; enddo
-!$OMP parallel do default(none) shared(js,je,p_ref_cv,Rcv_ml,is,ie,tv)
+        !$OMP parallel do default(shared)
         do j=js,je
            call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
                                is, ie-is+1, tv%eqn_of_state)
@@ -1245,10 +1242,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   endif ! CS%use_sponge
 
 
-!$OMP parallel default(none) shared(is,ie,js,je,nz,CDp,Idt,G,GV,ea,eb,CS,hold) private(net_ent)
 !   Save the diapycnal mass fluxes as a diagnostic field.
   if (ASSOCIATED(CDp%diapyc_vel)) then
-!$OMP do
+    !$OMP parallel do default(shared)
     do j=js,je
       do K=2,nz ; do i=is,ie
         CDp%diapyc_vel(i,j,K) = Idt * (GV%H_to_m * (ea(i,j,k) - eb(i,j,k-1)))
@@ -1268,7 +1264,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call hchksum(ea, "before net flux rearrangement ea",G%HI, scale=GV%H_to_m)
       call hchksum(eb, "before net flux rearrangement eb",G%HI, scale=GV%H_to_m)
     endif
-!$OMP do
+    !$OMP parallel do default(shared) private(net_ent)
     do j=js,je
       do K=2,GV%nkml ; do i=is,ie
         net_ent = ea(i,j,k) - eb(i,j,k-1)
@@ -1282,9 +1278,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
   endif
 
-
 ! Initialize halo regions of ea, eb, and hold to default values.
-!$OMP do
+  !$OMP parallel do default(shared)
   do k=1,nz
     do i=is-1,ie+1
       hold(i,js-1,k) = GV%Angstrom ; ea(i,js-1,k) = 0.0 ; eb(i,js-1,k) = 0.0
@@ -1295,19 +1290,22 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       hold(ie+1,j,k) = GV%Angstrom ; ea(ie+1,j,k) = 0.0 ; eb(ie+1,j,k) = 0.0
     enddo
   enddo
-!$OMP end parallel
 
   call cpu_clock_begin(id_clock_pass)
-  if (G%symmetric) then
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_All+Omit_Corners,halo=1)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_All+Omit_Corners,halo=1)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_All+Omit_Corners,halo=1)
-  else
-    call create_group_pass(CS%pass_hold_eb_ea,hold,G%Domain,To_West+To_South+Omit_Corners,halo=1)
-    call create_group_pass(CS%pass_hold_eb_ea,eb,G%Domain,To_West+To_South+Omit_Corners,halo=1)
-    call create_group_pass(CS%pass_hold_eb_ea,ea,G%Domain,To_West+To_South+Omit_Corners,halo=1)
+  if (G%symmetric) then ; dir_flag = To_All+Omit_Corners
+  else ; dir_flag = To_West+To_South+Omit_Corners ; endif
+  call create_group_pass(CS%pass_hold_eb_ea, hold, G%Domain, dir_flag, halo=1)
+  call create_group_pass(CS%pass_hold_eb_ea, eb, G%Domain, dir_flag, halo=1)
+  call create_group_pass(CS%pass_hold_eb_ea, ea, G%Domain, dir_flag, halo=1)
+  call do_group_pass(CS%pass_hold_eb_ea, G%Domain)
+  ! visc%Kv_turb is not in the group pass because it has larger vertical extent.
+  if (associated(visc%Kv_turb)) then
+!### For some reason this hangs....
+!    call pass_var(visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+!### while this does not...
+    call create_group_pass(CS%pass_Kv, visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+    call do_group_pass(CS%pass_Kv, G%Domain)
   endif
-  call do_group_pass(CS%pass_hold_eb_ea,G%Domain)
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
@@ -1321,8 +1319,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       call hchksum(hold, "before u/v tridiag hold",G%HI, scale=GV%H_to_m)
     endif
     call cpu_clock_begin(id_clock_tridiag)
-!$OMP parallel do default(none) shared(js,je,Isq,Ieq,ADp,u,hold,ea,h_neglect,eb,nz,Idt) &
-!$OMP                          private(hval,b1,d1,c1,eaval)
+    !$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
     do j=js,je
       do I=Isq,Ieq
         if (ASSOCIATED(ADp%du_dt_dia)) ADp%du_dt_dia(I,j,1) = u(I,j,1)
@@ -1354,8 +1351,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (CS%debug) then
       call MOM_state_chksum("aft 1st loop tridiag ", u, v, h, G, GV, haloshift=0)
     endif
-!$OMP parallel do default(none) shared(Jsq,Jeq,is,ie,ADp,v,hold,ea,h_neglect,eb,nz,Idt) &
-!$OMP                          private(hval,b1,d1,c1,eaval)
+    !$OMP parallel do default(shared) private(hval,b1,d1,c1,eaval)
     do J=Jsq,Jeq
       do i=is,ie
         if (ASSOCIATED(ADp%dv_dt_dia)) ADp%dv_dt_dia(i,J,1) = v(i,J,1)
@@ -1711,13 +1707,13 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
   work_2d(:,:) = 0.0
 
   ! zero the tendencies at start of first call
-  if(ncall == 1) then
+  if (ncall == 1) then
     CS%frazil_heat_diag(:,:,:) = 0.0
     CS%frazil_temp_diag(:,:,:) = 0.0
   endif
 
   ! temperature tendency
-  if(CS%id_frazil_temp_tend > 0) then
+  if (CS%id_frazil_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%frazil_temp_diag(i,j,k) = CS%frazil_temp_diag(i,j,k) + Idt * (tv%T(i,j,k)-temp_old(i,j,k))
     enddo ; enddo ; enddo
@@ -1727,7 +1723,7 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
   endif
 
   ! heat tendency
-  if(CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
+  if (CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       CS%frazil_heat_diag(i,j,k) = CS%frazil_heat_diag(i,j,k) + &
                                    GV%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
@@ -1748,7 +1744,6 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
       call post_data(CS%id_frazil_heat_tend_2d, work_2d, CS%diag)
     endif
   endif
-
 
 end subroutine diagnose_frazil_tendency
 

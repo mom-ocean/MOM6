@@ -581,8 +581,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
- elseif (CS%useCVMix) then
-    !NOTE{BGR}: this needs cleaned up.  Works in 1D case, not tested outside.
+  elseif (CS%useCVMix) then
+    !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%CVMix_shear_CSp)
   elseif (associated(visc%Kv_turb)) then
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
