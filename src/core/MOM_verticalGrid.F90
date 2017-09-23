@@ -157,9 +157,9 @@ function get_thickness_units(GV)
 !  (ret)     get_thickness_units - The model's vertical thickness units.
 
   if (GV%Boussinesq) then
-    get_thickness_units = "meter"
+    get_thickness_units = "m"
   else
-    get_thickness_units = "kilogram meter-2"
+    get_thickness_units = "kg m-2"
   endif
 end function get_thickness_units
 
@@ -175,9 +175,9 @@ function get_flux_units(GV)
 !  (ret)     get_flux_units - The model's thickness flux units.
 
   if (GV%Boussinesq) then
-    get_flux_units = "meter3 second-1"
+    get_flux_units = "m3 s-1"
   else
-    get_flux_units = "kilogram second-1"
+    get_flux_units = "kg s-1"
   endif
 end function get_flux_units
 
@@ -226,14 +226,14 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
     "tr_units, tr_vol_conc_units, and tr_mass_conc_units may be present.")
   if (present(tr_units)) then
     if (GV%Boussinesq) then
-      get_tr_flux_units = trim(tr_units)//" meter3 second-1"
+      get_tr_flux_units = trim(tr_units)//" m3 s-1"
     else
-      get_tr_flux_units = trim(tr_units)//" kilogram second-1"
+      get_tr_flux_units = trim(tr_units)//" kg s-1"
     endif
   endif
   if (present(tr_vol_conc_units)) then
     if (GV%Boussinesq) then
-      get_tr_flux_units = trim(tr_vol_conc_units)//" second-1"
+      get_tr_flux_units = trim(tr_vol_conc_units)//" s-1"
     else
       get_tr_flux_units = trim(tr_vol_conc_units)//" m-3 kg s-1"
     endif
@@ -242,7 +242,7 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
     if (GV%Boussinesq) then
       get_tr_flux_units = trim(tr_mass_conc_units)//" kg-1 m3 s-1"
     else
-      get_tr_flux_units = trim(tr_mass_conc_units)//" second-1"
+      get_tr_flux_units = trim(tr_mass_conc_units)//" s-1"
     endif
   endif
 

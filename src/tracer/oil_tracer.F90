@@ -366,8 +366,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "years m3 s-1"
-  else ; flux_units = "years kg s-1" ; endif
+  if (GV%Boussinesq) then ; flux_units = "yr m3 s-1"
+  else ; flux_units = "yr kg s-1" ; endif
 
   do m=1,CS%ntr
     ! Register the tracer for the restart file.

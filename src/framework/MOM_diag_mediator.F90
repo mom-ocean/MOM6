@@ -1569,10 +1569,11 @@ end function register_scalar_field
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
-     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area)
+     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
+     x_cell_method, y_cell_method)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axes_grp),   intent(in) :: axes
+  type(axes_grp),   target,   intent(in) :: axes
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, do_not_log
@@ -1581,6 +1582,8 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
   integer,          optional, intent(in) :: area !< fms_id for area_t
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1604,6 +1607,7 @@ function register_static_field(module_name, field_name, axes, &
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   integer :: dm_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=9) :: axis_name
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1624,6 +1628,14 @@ function register_static_field(module_name, field_name, axes, &
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(x_cell_method)) then
+      call get_diag_axis_name(axes%handles(1), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+    endif
+    if (present(y_cell_method)) then
+      call get_diag_axis_name(axes%handles(2), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+    endif
   endif
 
   if (present(cmor_field_name)) then
@@ -1655,6 +1667,14 @@ function register_static_field(module_name, field_name, axes, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(x_cell_method)) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+      endif
+      if (present(y_cell_method)) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+      endif
     endif
   endif
 

@@ -2020,21 +2020,21 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       diag%axesCu1, Time, 'BBL thickness at u points', 'meter')
+       diag%axesCu1, Time, 'BBL thickness at u points', 'm')
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'meter2 second-1')
+       Time, 'BBL viscosity at u points', 'm2 s-1')
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       diag%axesCv1, Time, 'BBL thickness at v points', 'meter')
+       diag%axesCv1, Time, 'BBL thickness at v points', 'm')
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'meter2 second-1')
+       Time, 'BBL viscosity at v points', 'm2 s-1')
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'meter second-1')
+       Time, 'Rayleigh drag velocity at u points', 'm s-1')
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'meter second-1')
+       Time, 'Rayleigh drag velocity at v points', 'm s-1')
   endif
 
   if (differential_diffusion) then
@@ -2046,9 +2046,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u = 0.0
     allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
-       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
+       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
-       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
+       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
   endif
 
   CS%Hbbl = CS%Hbbl * GV%m_to_H

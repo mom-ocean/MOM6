@@ -28,7 +28,7 @@ use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
-use MOM_restart, only : restore_state, MOM_restart_CS
+use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
@@ -179,10 +179,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call get_param(PF, mdl, "DEBUG", debug, default=.false.)
   call get_param(PF, mdl, "DEBUG_OBC", debug_obc, default=.false.)
 
-  new_sim = .false.
-  if ((dirs%input_filename(1:1) == 'n') .and. &
-      (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
-
+  new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, &
+                                 G, restart_CS)
   just_read = .not.new_sim
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, &
