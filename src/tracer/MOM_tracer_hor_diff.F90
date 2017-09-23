@@ -1412,22 +1412,22 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
   CS%id_CFL    = -1
 
   CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
-     'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'meter2 second-1')
+     'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'm2 s-1')
   CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCv1, Time, &
-     'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'meter2 second-1')
+     'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'm2 s-1')
   CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesT1, Time,&
-     'Epipycnal tracer diffusivity at tracer cell center', 'meter2 second-1',   &
-     cmor_field_name='diftrelo', cmor_units='m2 sec-1',                         &
+     'Epipycnal tracer diffusivity at tracer cell center', 'm2 s-1',   &
+     cmor_field_name='diftrelo',                                                &
      cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
      cmor_long_name = 'Ocean Tracer Epineutral Laplacian Diffusivity')
 
   CS%id_khdt_x = register_diag_field('ocean_model', 'KHDT_x', diag%axesCu1, Time, &
-     'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'meter2')
+     'Epipycnal tracer diffusivity operator at zonal faces of tracer cell', 'm2')
   CS%id_khdt_y = register_diag_field('ocean_model', 'KHDT_y', diag%axesCv1, Time, &
-     'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'meter2')
+     'Epipycnal tracer diffusivity operator at meridional faces of tracer cell', 'm2')
   if (CS%check_diffusive_CFL) then
     CS%id_CFL = register_diag_field('ocean_model', 'CFL_lateral_diff', diag%axesT1, Time,&
-       'Grid CFL number for lateral/neutral tracer diffusion', 'dimensionless')
+       'Grid CFL number for lateral/neutral tracer diffusion', 'nondim')
   endif
 
 
