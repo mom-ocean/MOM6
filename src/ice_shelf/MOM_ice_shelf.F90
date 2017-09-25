@@ -1338,15 +1338,15 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   if (CS%find_salt_root) then ! read liquidus coeffs.
      call get_param(param_file, mdl, "TFREEZE_S0_P0",CS%lambda1, &
                  "this is the freezing potential temperature at \n"//&
-                 "S=0, P=0.", units="deg C", default=0.0, do_not_log=.true.)
+                 "S=0, P=0.", units="degC", default=0.0, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DS",CS%lambda1, &
                  "this is the derivative of the freezing potential \n"//&
                  "temperature with salinity.", &
-                 units="deg C PSU-1", default=-0.054, do_not_log=.true.)
+                 units="degC psu-1", default=-0.054, do_not_log=.true.)
     call get_param(param_file, mdl, "DTFREEZE_DP",CS%lambda3, &
                  "this is the derivative of the freezing potential \n"//&
                  "temperature with pressure.", &
-                 units="deg C Pa-1", default=0.0, do_not_log=.true.)
+                 units="degC Pa-1", default=0.0, do_not_log=.true.)
 
   endif
 
@@ -1382,7 +1382,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                  "The molecular kinimatic viscosity of sea water at the \n"//&
                  "freezing temperature.", units="m2 s-1", default=1.95e-6)
   call get_param(param_file, mdl, "ICE_SHELF_SALINITY", CS%Salin_ice, &
-                 "The salinity of the ice inside the ice shelf.", units="PSU", &
+                 "The salinity of the ice inside the ice shelf.", units="psu", &
                  default=0.0)
   call get_param(param_file, mdl, "ICE_SHELF_TEMPERATURE", CS%Temp_ice, &
                  "The temperature at the center of the ice shelf.", &
@@ -1908,33 +1908,33 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
   CS%id_mass_flux = register_diag_field('ocean_model', 'mass_flux', CS%diag%axesT1,&
      CS%Time,'Total mass flux of freshwater across the ice-ocean interface.', 'kg/s')
   CS%id_melt = register_diag_field('ocean_model', 'melt', CS%diag%axesT1, CS%Time, &
-     'Ice Shelf Melt Rate', 'meter year-1')
+     'Ice Shelf Melt Rate', 'm yr-1')
   CS%id_thermal_driving = register_diag_field('ocean_model', 'thermal_driving', CS%diag%axesT1, CS%Time, &
      'pot. temp. in the boundary layer minus freezing pot. temp. at the ice-ocean interface.', 'Celsius')
   CS%id_haline_driving = register_diag_field('ocean_model', 'haline_driving', CS%diag%axesT1, CS%Time, &
-     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'PPT')
+     'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'psu')
   CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
-     'salinity at the ice-ocean interface.', 'PPT')
+     'salinity at the ice-ocean interface.', 'psu')
   CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesT1, CS%Time, &
-     'Eastward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
+     'Eastward vel. in the boundary layer (used to compute ustar)', 'm s-1')
   CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesT1, CS%Time, &
-     'Northward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
+     'Northward vel. in the boundary layer (used to compute ustar)', 'm s-1')
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf salinity exchange velocity', 'meter second-1')
+     'Sub-shelf salinity exchange velocity', 'm s-1')
   CS%id_exch_vel_t = register_diag_field('ocean_model', 'exch_vel_t', CS%diag%axesT1, CS%Time, &
-     'Sub-shelf thermal exchange velocity', 'meter second-1')
+     'Sub-shelf thermal exchange velocity', 'm s-1')
   CS%id_tfreeze = register_diag_field('ocean_model', 'tfreeze', CS%diag%axesT1, CS%Time, &
-     'In Situ Freezing point at ice shelf interface', 'degrees Celsius')
+     'In Situ Freezing point at ice shelf interface', 'degC')
   CS%id_tfl_shelf = register_diag_field('ocean_model', 'tflux_shelf', CS%diag%axesT1, CS%Time, &
-     'Heat conduction into ice shelf', 'Watts meter-2')
+     'Heat conduction into ice shelf', 'W m-2')
   CS%id_ustar_shelf = register_diag_field('ocean_model', 'ustar_shelf', CS%diag%axesT1, CS%Time, &
      'Fric vel under shelf', 'm/s')
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
     CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesB1,CS%Time, &
-       'x-velocity of ice', 'm year')
+       'x-velocity of ice', 'm yr')
     CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesB1,CS%Time, &
-       'y-velocity of ice', 'm year')
+       'y-velocity of ice', 'm yr')
     CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesB1,CS%Time, &
        'mask for u-nodes', 'none')
     CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesB1,CS%Time, &

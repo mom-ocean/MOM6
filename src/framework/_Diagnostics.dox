@@ -225,4 +225,11 @@ The data is made available to the diag_manager via a call to post_data() which i
 call post_data(diag_id, data, diag_control)
 ```
 
+\subsection diag_post_frequency Artifacts of posting frequency for diagnostics
+
+Variables area "posted" for i/o or averaging to the diag_manager (via MOM6's diag_mediator) at different frequencies relative to each other.
+This is because the MOM6 algorithm takes the form of nested sub-cycles with different time-steps in each loop (e.g. barotropic solver with dynamics).
+A consequence of this is that a time average of a related quantities may appear to be inconsistent since the diagnostic posted with higher frequency may not vary linearly between the end-points seen on the longer time-step.
+The differences are usually small, but if you see large differences it might indicate you should re-examine the time-steps used for the various sub-cycles.
+
 */

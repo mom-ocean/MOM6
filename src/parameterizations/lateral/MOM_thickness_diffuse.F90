@@ -1773,29 +1773,28 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
    'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',               &
-   'Watt meter-2', cmor_field_name='tnkebto',                                                        &
+   'W m-2', cmor_field_name='tnkebto',                                                        &
    cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',&
-   cmor_units='W m-2',                                                                               &
    cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
 
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at U-point', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-point', 'm s-2')
   CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at V-point', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-point', 'm s-2')
   CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time,               &
-       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'meter second-2',&
+       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'm s-2',&
    cmor_field_name='diftrblo',                                                               &
    cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection',       &
    cmor_units='m2 s-1',                                                                      &
    cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'm s-2')
   CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'm s-2')
   CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
-           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'm s-2')
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
            'Zonal slope of neutral surface', 'nondim')
@@ -1804,13 +1803,13 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
            'Meridional slope of neutral surface', 'nondim')
   if (CS%id_slope_y > 0) call safe_alloc_ptr(CS%diagSlopeY,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
   CS%id_sfn_x =  register_diag_field('ocean_model', 'GM_sfn_x', diag%axesCui, Time, &
-           'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
+           'Parameterized Zonal Overturning Streamfunction', 'm3 s-1')
   CS%id_sfn_y =  register_diag_field('ocean_model', 'GM_sfn_y', diag%axesCvi, Time, &
-           'Parameterized Meridional Overturning Streamfunction', 'meter3 second-1')
+           'Parameterized Meridional Overturning Streamfunction', 'm3 s-1')
   CS%id_sfn_unlim_x =  register_diag_field('ocean_model', 'GM_sfn_unlim_x', diag%axesCui, Time, &
-           'Parameterized Zonal Overturning Streamfunction before limiting/smoothing', 'meter3 second-1')
+           'Parameterized Zonal Overturning Streamfunction before limiting/smoothing', 'm3 s-1')
   CS%id_sfn_unlim_y =  register_diag_field('ocean_model', 'GM_sfn_unlim_y', diag%axesCvi, Time, &
-           'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', 'meter3 second-1')
+           'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', 'm3 s-1')
 
 end subroutine thickness_diffuse_init
 

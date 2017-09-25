@@ -288,7 +288,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
   CS%id_Htracer_remap_tendency_2d(:) = -1
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
-      'Change in interface height due to ALE regridding', 'meter')
+      'Change in interface height due to ALE regridding', 'm')
 
   if(ntr > 0) then
 
@@ -298,24 +298,24 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
         trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
         'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'degC/s')
+        'degC s-1')
 
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
         'Tendency from vertical remapping for heat',                        &
-         'W/m2',v_extensive=.true.)
+         'W m-2',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
         'Vertical sum of tendency from vertical remapping for heat',           &
-         'W/m2')
+         'W m-2')
 
       else
 
         CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
         trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
         'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'tracer conc / sec')
+        'tracer concentration * s-1')
 
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
