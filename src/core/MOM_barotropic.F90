@@ -148,6 +148,12 @@ type, private :: BT_OBC_type
   integer :: is_u_obc, ie_u_obc, js_u_obc, je_u_obc
   integer :: is_v_obc, ie_v_obc, js_v_obc, je_v_obc
   logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
+  ! for group halo pass
+  type(group_pass_type) :: pass_uv
+  type(group_pass_type) :: pass_uhvh
+  type(group_pass_type) :: pass_h
+  type(group_pass_type) :: pass_cg
+  type(group_pass_type) :: pass_eta_outer
 end type BT_OBC_type
 
 type, public :: barotropic_CS ; private
@@ -959,7 +965,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
 
   ! Set up fields related to the open boundary conditions.
   if (apply_OBCs) then
-    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, G, GV, MS, ievf-ie, use_BT_cont, &
+    call set_up_BT_OBC(OBC, eta, CS%BT_OBC, CS%BT_Domain, G, GV, MS, ievf-ie, use_BT_cont, &
                        Datu, Datv, BTCL_u, BTCL_v)
   endif
 
@@ -2717,7 +2723,7 @@ end subroutine apply_eta_OBCs
 
 !> This subroutine sets up the private structure used to apply the open
 !! boundary conditions, as developed by Mehmet Ilicak.
-subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
+subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, MS, halo, use_BT_cont, Datu, Datv, BTCL_u, BTCL_v)
   type(ocean_OBC_type),                  pointer       :: OBC    !< An associated pointer to an OBC type.
   type(memory_size_type),                intent(in)    :: MS     !< A type that describes the memory sizes of the
                                                                  !! argument arrays.
@@ -2726,6 +2732,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   type(BT_OBC_type),                     intent(inout) :: BT_OBC !< A structure with the private barotropic arrays
                                                                  !! related to the open boundary conditions,
                                                                  !! set by set_up_BT_OBC.
+  type(MOM_domain_type),                 intent(inout)    :: BT_Domain !< MOM_domain_type associated with wide arrays
   type(ocean_grid_type),                 intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in)    :: GV     !< The ocean's vertical grid structure.
   integer,                               intent(in)    :: halo   !< The extra halo size to use here.
@@ -2746,10 +2753,13 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
   integer :: isdw, iedw, jsdw, jedw
   logical :: OBC_used
   type(OBC_segment_type), pointer  :: segment !< Open boundary segment
+
+
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   isdw = MS%isdw ; iedw = MS%iedw ; jsdw = MS%jsdw ; jedw = MS%jedw
+
 
   if ((isdw < isd) .or. (jsdw < jsd)) then
     call MOM_error(FATAL, "set_up_BT_OBC: Open boundary conditions are not "//&
@@ -2769,6 +2779,11 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
     allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw))   ; BT_OBC%vbt_outer(:,:) = 0.0
     allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw)) ; BT_OBC%eta_outer_v(:,:)=0.0
     BT_OBC%is_alloced = .true.
+    call create_group_pass(BT_OBC%pass_uv, BT_OBC%ubt_outer, BT_OBC%vbt_outer, BT_Domain)
+    call create_group_pass(BT_OBC%pass_uhvh, BT_OBC%uhbt, BT_OBC%vhbt, BT_Domain)
+    call create_group_pass(BT_OBC%pass_eta_outer, BT_OBC%eta_outer_u, BT_OBC%eta_outer_v, BT_Domain,To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%pass_h, BT_OBC%H_u, BT_OBC%H_v, BT_Domain,To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%pass_cg, BT_OBC%Cg_u, BT_OBC%Cg_v, BT_Domain,To_All+Scalar_Pair)
   endif
 
   if (BT_OBC%apply_u_OBCs) then
@@ -2876,6 +2891,12 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, G, GV, MS, halo, use_BT_cont, Datu, D
       enddo
     endif
   endif
+
+  call do_group_pass(BT_OBC%pass_uv, BT_Domain)
+  call do_group_pass(BT_OBC%pass_uhvh, BT_Domain)
+  call do_group_pass(BT_OBC%pass_eta_outer, BT_Domain)
+  call do_group_pass(BT_OBC%pass_h, BT_Domain)
+  call do_group_pass(BT_OBC%pass_cg, BT_Domain)
 
 end subroutine set_up_BT_OBC
 
