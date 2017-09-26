@@ -2331,7 +2331,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
 
   real :: conv2watt
-  character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
+  character(len=48) :: thickness_units, flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
@@ -2341,12 +2341,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  T_flux_units    = trim("Watts/m2")
-  S_flux_units    = get_tr_flux_units(GV, "PPT")
-  if (.not. GV%Boussinesq) then
-    call MOM_error(WARNING, "register_diags: Conversion from temperature flux to W m2 for advective" // &
-                            "and diffusive fluxes is done using a Boussinesq approximation")
-  endif
+  S_flux_units    = get_tr_flux_units(GV, "psu")
   conv2watt       = GV%H_to_kg_m2 * C_p
 
   !Initialize the diagnostics mask arrays.
@@ -2446,16 +2441,16 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! lateral heat advective and diffusive fluxes
   CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time,          &
-      'Advective (by residual mean) Zonal Flux of Potential Temperature', T_flux_units, &
+      'Advective (by residual mean) Zonal Flux of Potential Temperature', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
   CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time,               &
-      'Advective (by residual mean) Meridional Flux of Potential Temperature', T_flux_units, &
+      'Advective (by residual mean) Meridional Flux of Potential Temperature', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
   CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time,        &
-      'Diffusive Zonal Flux of Potential Temperature', T_flux_units,                      &
+      'Diffusive Zonal Flux of Potential Temperature', 'W m-2',                      &
       v_extensive = .true., conversion = conv2watt)
   CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Potential Temperature', T_flux_units,          &
+      'Diffusive Meridional Flux of Potential Temperature', 'W m-2',          &
       v_extensive = .true., conversion = conv2watt)
   if (CS%id_Tadx   > 0) call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tady   > 0) call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
@@ -2480,13 +2475,13 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
+      'Vertically Integrated Advective Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
+      'Vertically Integrated Advective Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
+      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
+      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
