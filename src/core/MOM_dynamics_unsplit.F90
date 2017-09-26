@@ -281,10 +281,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, CS%continuity_CSp, &
                   OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(hp, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(hp, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
   call enable_averaging(0.5*dt,Time_local-set_time(int(0.5*dt)), CS%diag)
 !   Here the first half of the thickness fluxes are offered for averaging.
@@ -313,9 +311,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u, v, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
@@ -369,9 +365,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(up, vp, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
@@ -379,10 +373,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call continuity(up, vp, hp, h_av, uh, vh, &
                   (0.5*dt), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(h_av, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(h_av, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
 ! h_av <- (hp + h_av)/2
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
@@ -437,9 +429,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(upp, vpp, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(upp, vpp, G%Domain, clock=id_clock_pass)
 
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
@@ -447,10 +437,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call continuity(upp, vpp, hp, h, uh, vh, &
                   (dt*0.5), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(h, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(h, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
@@ -511,9 +499,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call vertvisc(u, v, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u, v, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)

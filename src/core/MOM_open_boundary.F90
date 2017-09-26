@@ -3,25 +3,26 @@ module MOM_open_boundary
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
-use MOM_diag_mediator, only : diag_ctrl, time_type
-use MOM_domains, only : pass_var, pass_vector
-use MOM_domains, only : To_All, SCALAR_PAIR, CGRID_NE
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type, log_param
-use MOM_grid, only : ocean_grid_type, hor_index_type
-use MOM_dyn_horgrid, only : dyn_horgrid_type
-use MOM_io, only : EAST_FACE, NORTH_FACE
-use MOM_io, only : slasher, read_data, field_size, SINGLE_FILE
-use MOM_obsolete_params, only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
-use MOM_string_functions, only : extract_word, remove_spaces
-use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
-use MOM_variables, only : thermo_var_ptrs
+use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_diag_mediator,        only : diag_ctrl, time_type
+use MOM_domains,              only : pass_var, pass_vector
+use MOM_domains,              only : To_All, SCALAR_PAIR, CGRID_NE
+use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
+use MOM_grid,                 only : ocean_grid_type, hor_index_type
+use MOM_dyn_horgrid,          only : dyn_horgrid_type
+use MOM_io,                   only : EAST_FACE, NORTH_FACE
+use MOM_io,                   only : slasher, read_data, field_size, SINGLE_FILE
+use MOM_io,                   only : vardesc, query_vardesc, var_desc
+use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
+use MOM_string_functions,     only : extract_word, remove_spaces
+use MOM_tracer_registry,      only : tracer_registry_type
+use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
-use MOM_remapping, only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_h, end_remapping
-use MOM_regridding, only : regridding_CS
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
+use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
+use MOM_regridding,           only : regridding_CS
+use MOM_verticalGrid,         only : verticalGrid_type
 
 implicit none ; private
 
@@ -42,6 +43,11 @@ public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
 public register_OBC, OBC_registry_init
 public register_file_OBC, file_OBC_end
+public segment_tracer_registry_init
+public segment_tracer_registry_end
+public register_segment_tracer
+public register_temp_salt_segments
+public fill_temp_salt_segments
 
 integer, parameter, public :: OBC_NONE = 0, OBC_SIMPLE = 1, OBC_WALL = 2
 integer, parameter, public :: OBC_FLATHER = 3
@@ -65,6 +71,28 @@ type, public :: OBC_segment_data_type
   real, dimension(:,:), pointer   :: bt_vel=>NULL()     !< barotropic velocity (m s-1)
   real                            :: value              !< constant value if fid is equal to -1
 end type OBC_segment_data_type
+
+!> Tracer segment data structure, for putting into an array of objects, not all the same shape.
+type, public :: segment_tracer_type
+  real, dimension(:,:,:), pointer :: tr         => NULL()  !< tracer concentration array
+end type segment_tracer_type
+
+!> Tracer on OBC segment data structure, for putting into a segment tracer registry.
+type, public :: OBC_segment_tracer_type
+  real, dimension(:,:,:), pointer :: t          => NULL()  !< tracer concentration array
+  real                            :: OBC_inflow_conc = 0.0 !< tracer concentration for generic inflows
+  character(len=32)               :: name                  !< tracer name used for error messages
+  type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
+end type OBC_segment_tracer_type
+
+!> Registry type for tracers on segments
+type, public :: segment_tracer_registry_type
+  integer                       :: ntseg = 0         !< number of registered tracer segments
+  type(OBC_segment_tracer_type) :: Tr(MAX_FIELDS_)   !< array of registered tracers
+  logical                       :: locked = .false.  !< New tracers may be registered if locked=.false.
+                                                     !! When locked=.true.,no more tracers can be registered.
+                                                     !! Not sure who should lock it or when...
+end type segment_tracer_registry_type
 
 !> Open boundary segment data structure.
 type, public :: OBC_segment_type
@@ -91,10 +119,9 @@ type, public :: OBC_segment_type
   real :: Tnudge_out        !< Inverse nudging timescale on outflow (1/s).
   logical :: on_pe          !< true if segment is located in the computational domain
   real, pointer, dimension(:,:)   :: Cg=>NULL()     !< The external gravity
-                                                    !< wave speed (m -s) at OBC-points.
+                                                    !! wave speed (m -s) at OBC-points.
   real, pointer, dimension(:,:)   :: Htot=>NULL()   !< The total column thickness (m) at OBC-points.
   real, pointer, dimension(:,:,:) :: h=>NULL()      !< The cell thickness (m) at OBC-points.
-  real, pointer, dimension(:,:,:) :: e=>NULL()      !< The interface height (m?) at OBC-points.
   real, pointer, dimension(:,:,:) :: normal_vel=>NULL()     !< The layer velocity normal to the OB
                                                             !! segment (m s-1).
   real, pointer, dimension(:,:,:) :: normal_trans=>NULL()   !< The layer transport normal to the OB
@@ -110,10 +137,7 @@ type, public :: OBC_segment_type
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
                                                             !! that values should be nudged towards (m s-1).
-  real, pointer, dimension(:,:,:) :: T=>NULL()              !< The temperature on the OB segment
-                                                            !! velocity points (C).
-  real, pointer, dimension(:,:,:) :: S=>NULL()              !< The salinity on the OB segment
-                                                            !! velocity points ().
+  type(segment_tracer_registry_type), pointer :: tr_Reg=>NULL()!< pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
 end type OBC_segment_type
 
@@ -1024,7 +1048,15 @@ end function open_boundary_query
 !> Deallocate open boundary data
 subroutine open_boundary_dealloc(OBC)
   type(ocean_OBC_type), pointer :: OBC !< Open boundary control structure
+  type(OBC_segment_type), pointer :: segment
+  integer :: n
+
   if (.not. associated(OBC)) return
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    call deallocate_OBC_segment_data(OBC, segment)
+  enddo
   if (associated(OBC%segment)) deallocate(OBC%segment)
   if (associated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (associated(OBC%segnum_v)) deallocate(OBC%segnum_v)
@@ -1409,9 +1441,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   ! Actually update u_new, v_new
   call open_boundary_apply_normal_flow(OBC, G, u_new, v_new)
 
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u_new, v_new, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u_new, v_new, G%Domain, clock=id_clock_pass)
 
 end subroutine radiation_open_bdry_conds
 
@@ -1543,8 +1573,7 @@ end subroutine gradient_at_q_points
 
 
 !> Sets the initial values of the tracer open boundary conditions.
-!! Also allocates and fills the segment%T and segment%S arrays, but they
-!! are not yet used anywhere.
+!! Redoing this elsewhere.
 subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
   type(ocean_grid_type),                     intent(inout) :: G !< Ocean grid structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundary structure
@@ -1575,49 +1604,6 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 
     call pass_var(tv%T, G%Domain)
     call pass_var(tv%S, G%Domain)
-
-    do n=1,OBC%number_of_segments
-      segment => OBC%segment(n)
-      if (.not. segment%on_pe) cycle
-
-      if (segment%is_E_or_W) then
-        if (.not.ASSOCIATED(segment%T)) then
-          allocate(segment%T(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
-          allocate(segment%S(segment%HI%IsdB,segment%HI%jsd:segment%HI%jed,G%ke))
-        endif
-      else if (segment%is_N_or_S) then
-        if (.not.ASSOCIATED(segment%T)) then
-          allocate(segment%T(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
-          allocate(segment%S(segment%HI%isd:segment%HI%ied,segment%HI%JsdB,G%ke))
-        endif
-      endif
-
-      if (segment%direction == OBC_DIRECTION_E) then
-        I=segment%HI%IsdB
-        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-          segment%T(I,j,k) = tv%T(i,j,k)
-          segment%S(I,j,k) = tv%S(i,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_W) then
-        I=segment%HI%IsdB
-        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
-          segment%T(I,j,k) = tv%T(i+1,j,k)
-          segment%S(I,j,k) = tv%S(i+1,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_N) then
-        J=segment%HI%JsdB
-        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-          segment%T(i,J,k) = tv%T(i,j,k)
-          segment%S(i,J,k) = tv%S(i,j,k)
-        enddo; enddo
-      elseif (segment%direction == OBC_DIRECTION_S) then
-        J=segment%HI%JsdB
-        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
-          segment%T(i,J,k) = tv%T(i,j+1,k)
-          segment%S(i,J,k) = tv%S(i,j+1,k)
-        enddo; enddo
-      endif
-    enddo
 
     do n=1,OBC%number_of_segments
       segment => OBC%segment(n)
@@ -1745,6 +1731,29 @@ subroutine allocate_OBC_segment_data(OBC, segment)
   endif
 
 end subroutine allocate_OBC_segment_data
+
+!> Deallocate segment data fields
+subroutine deallocate_OBC_segment_data(OBC, segment)
+  type(ocean_OBC_type),   pointer       :: OBC     !< Open boundary structure
+  type(OBC_segment_type), intent(inout) :: segment !< Open boundary segment
+  ! Local variables
+  character(len=40)  :: mdl = "deallocate_OBC_segment_data" ! This subroutine's name.
+
+  if (.not. segment%on_pe) return
+
+  if (associated (segment%Cg)) deallocate(segment%Cg)
+  if (associated (segment%Htot)) deallocate(segment%Htot)
+  if (associated (segment%h)) deallocate(segment%h)
+  if (associated (segment%eta)) deallocate(segment%eta)
+  if (associated (segment%normal_trans_bt)) deallocate(segment%normal_trans_bt)
+  if (associated (segment%rx_normal)) deallocate(segment%rx_normal)
+  if (associated (segment%normal_vel)) deallocate(segment%normal_vel)
+  if (associated (segment%normal_vel_bt)) deallocate(segment%normal_vel_bt)
+  if (associated (segment%normal_trans)) deallocate(segment%normal_trans)
+  if (associated (segment%nudged_normal_vel)) deallocate(segment%nudged_normal_vel)
+  if (associated (segment%tr_Reg)) call segment_tracer_registry_end(segment%tr_Reg)
+
+end subroutine deallocate_OBC_segment_data
 
 !> Set tangential velocities outside of open boundaries to silly values
 !! (used for checking the interior state is independent of values outside
@@ -2111,6 +2120,211 @@ subroutine file_OBC_end(CS)
     deallocate(CS)
   endif
 end subroutine file_OBC_end
+
+!> Initialize the segment tracer registry.
+subroutine segment_tracer_registry_init(param_file, Reg, segment)
+  type(param_file_type),      intent(in)      :: param_file !< open file to parse for model parameters
+  type(segment_tracer_registry_type), pointer :: Reg        !< pointer to tracer registry
+  integer, intent(in)                         :: segment    !< which segment this is
+
+  integer, save :: init_calls = 0
+
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mdl = "segment_tracer_registry_init" ! This routine's name.
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not.associated(Reg)) then ; allocate(Reg)
+  else ; return ; endif
+
+  init_calls = init_calls + 1
+
+  ! Read all relevant parameters and write them to the model log.
+  if (init_calls == 1) call log_version(param_file, mdl, version, "")
+
+! Need to call once per segment with tracers...
+! if (init_calls > 1) then
+!   write(mesg,'("segment_tracer_registry_init called ",I3, &
+!     &" times with different registry pointers.")') init_calls
+!   if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer"//mesg)
+! endif
+
+end subroutine segment_tracer_registry_init
+
+subroutine register_segment_tracer(tr_desc, param_file, GV, Reg, segment, tr_desc_ptr, &
+                                   OBC_scalar, OBC_array)
+  type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
+  type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
+  type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
+  type(segment_tracer_registry_type), pointer   :: Reg          !< pointer to the segment tracer registry
+  integer, intent(in)                           :: segment      !< which segment this is
+  type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
+                                                                !! stored value of tr%tr_desc. This target must be
+                                                                !! an enduring part of the control structure,
+                                                                !! because the tracer registry will use this memory,
+                                                                !! but it also means that any updates to this
+                                                                !! structure in the calling module will be
+                                                                !! available subsequently to the tracer registry.
+  real, intent(in),                optional     :: OBC_scalar   !< the tracer for all inflows via OBC for which
+                                                                !! OBC_array are not specified (units of tracer CONC)
+  real, pointer, dimension(:,:,:), optional     :: OBC_array    !< tracer at inflows through u- or v-faces of
+                                                                !! tracer cells (units of tracer CONC)
+
+! Local variables
+  integer :: ntseg
+  character(len=256) :: mesg    ! Message for error messages.
+
+  if (.not. associated(Reg)) call segment_tracer_registry_init(param_file, Reg, segment)
+
+  if (Reg%ntseg>=MAX_FIELDS_) then
+    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
+        &all the tracers being registered via register_tracer.")') Reg%ntseg+1
+    call MOM_error(FATAL,"MOM register_tracer: "//mesg)
+  endif
+  Reg%ntseg = Reg%ntseg + 1
+  ntseg     = Reg%ntseg
+
+  if (present(tr_desc_ptr)) then
+    Reg%Tr(ntseg)%vd => tr_desc_ptr
+  else
+    allocate(Reg%Tr(ntseg)%vd) ; Reg%Tr(ntseg)%vd = tr_desc
+  endif
+
+  call query_vardesc(Reg%Tr(ntseg)%vd, name=Reg%Tr(ntseg)%name)
+
+  if (Reg%locked) call MOM_error(FATAL, &
+      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntseg)%name)//&
+      " with a locked tracer registry.")
+
+  if (present(OBC_scalar)) Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar
+  if (present(OBC_array)) then ; if (associated(OBC_array)) &
+                                    Reg%Tr(ntseg)%t => OBC_array ; endif
+end subroutine register_segment_tracer
+
+!> Clean up the segment tracer registry.
+subroutine segment_tracer_registry_end(Reg)
+  type(segment_tracer_registry_type), pointer :: Reg        !< pointer to tracer registry
+
+! Local variables
+  integer n
+
+  if (associated(Reg)) then
+    do n = 1, Reg%ntseg
+      if (associated(Reg%Tr(n)%t)) deallocate(Reg%Tr(n)%t)
+    enddo
+    deallocate(Reg)
+  endif
+end subroutine segment_tracer_registry_end
+
+subroutine register_temp_salt_segments(GV, OBC, tv, vd_T, vd_S, param_file)
+  type(verticalGrid_type),    intent(in)    :: GV         !< ocean vertical grid structure
+  type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
+  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+  type(vardesc),              intent(in)    :: vd_T       !< Temperature descriptor
+  type(vardesc),              intent(in)    :: vd_S       !< Salinity descriptor
+  type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
+
+! Local variables
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz, nf
+  integer :: i, j, k
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(segment_tracer_type), dimension(:), pointer :: fields
+
+  if (.not. associated(OBC)) return
+  if (.not. associated(tv%T) .and. associated(tv%S)) return
+  ! Both temperature and salinity fields
+  allocate(fields(2 * OBC%number_of_segments))
+
+  nz = GV%ke
+
+  nf = 0
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+    ! Fill with T and S values later
+    if (segment%is_E_or_W) then
+      nf = nf + 1
+      allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      nf = nf + 1
+      allocate(fields(nf)%tr(IsdB:IedB,jsd:jed,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+    else
+      nf = nf + 1
+      allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+      nf = nf + 1
+      allocate(fields(nf)%tr(isd:ied,JsdB:JedB,nz))
+      fields(nf)%tr(:,:,:) = 0.0
+    endif
+    call register_segment_tracer(vd_T, param_file, GV, segment%tr_Reg, n, &
+                                 OBC_array=fields(nf-1)%tr)
+    call register_segment_tracer(vd_S, param_file, GV, segment%tr_Reg, n, &
+                                 OBC_array=fields(nf)%tr)
+  enddo
+end subroutine register_temp_salt_segments
+
+subroutine fill_temp_salt_segments(G, OBC, tv)
+  type(ocean_grid_type),      intent(in)    :: G          !< Ocean grid structure
+  type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
+  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+
+! Local variables
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz
+  integer :: i, j, k
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  type(segment_tracer_type), dimension(:), pointer :: fields
+
+  if (.not. associated(OBC)) return
+  if (.not. associated(tv%T) .and. associated(tv%S)) return
+  ! Both temperature and salinity fields
+
+  call pass_var(tv%T, G%Domain)
+  call pass_var(tv%S, G%Domain)
+
+  nz = G%ke
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle
+
+    isd = segment%HI%isd ; ied = segment%HI%ied
+    jsd = segment%HI%jsd ; jed = segment%HI%jed
+    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+    ! Fill with T and S values
+    if (segment%is_E_or_W) then
+      I=segment%HI%IsdB
+      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+        if (segment%direction == OBC_DIRECTION_W) then
+          segment%tr_Reg%Tr(1)%t(I,j,k) = tv%T(i+1,j,k)
+          segment%tr_Reg%Tr(2)%t(I,j,k) = tv%S(i+1,j,k)
+        else
+          segment%tr_Reg%Tr(1)%t(I,j,k) = tv%T(i,j,k)
+          segment%tr_Reg%Tr(2)%t(I,j,k) = tv%S(i,j,k)
+        endif
+      enddo ; enddo
+    else
+      J=segment%HI%JsdB
+      do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+        if (segment%direction == OBC_DIRECTION_S) then
+          segment%tr_Reg%Tr(1)%t(i,J,k) = tv%T(i,j+1,k)
+          segment%tr_Reg%Tr(2)%t(i,J,k) = tv%S(i,j+1,k)
+        else
+          segment%tr_Reg%Tr(1)%t(i,J,k) = tv%T(i,j,k)
+          segment%tr_Reg%Tr(2)%t(i,J,k) = tv%S(i,j,k)
+        endif
+      enddo ; enddo
+    endif
+  enddo
+end subroutine fill_temp_salt_segments
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary

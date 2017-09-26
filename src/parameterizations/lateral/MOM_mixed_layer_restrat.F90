@@ -776,7 +776,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=48)  :: flux_units
+  real :: flux_to_kg_per_s
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -857,31 +857,31 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
+  else ; flux_to_kg_per_s = 1. ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
       y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
       x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
-      'Mixed Layer Zonal Restratification Timescale', 'second')
+      'Mixed Layer Zonal Restratification Timescale', 's')
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
-      'Mixed Layer Meridional Restratification Timescale', 'second')
+      'Mixed Layer Meridional Restratification Timescale', 's')
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
-      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'meter')
+      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm')
   CS%id_Rml = register_diag_field('ocean_model', 'ML_buoy_restrat', diag%axesT1, Time, &
-      'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', 'm/s^2')
+      'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', 'm s2')
   CS%id_uDml = register_diag_field('ocean_model', 'udml_restrat', diag%axesCu1, Time, &
-      'Transport stream function amplitude for zonal restratification of mixed layer', 'm3/s')
+      'Transport stream function amplitude for zonal restratification of mixed layer', 'm3 s-1')
   CS%id_vDml = register_diag_field('ocean_model', 'vdml_restrat', diag%axesCv1, Time, &
-      'Transport stream function amplitude for meridional restratification of mixed layer', 'm3/s')
+      'Transport stream function amplitude for meridional restratification of mixed layer', 'm3 s-1')
   CS%id_uml = register_diag_field('ocean_model', 'uml_restrat', diag%axesCu1, Time, &
-      'Surface zonal velocity component of mixed layer restratification', 'm/s')
+      'Surface zonal velocity component of mixed layer restratification', 'm s-1')
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
-      'Surface meridional velocity component of mixed layer restratification', 'm/s')
+      'Surface meridional velocity component of mixed layer restratification', 'm s-1')
 
   ! If MLD_filtered is being used, we need to update halo regions after a restart
   if (associated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)

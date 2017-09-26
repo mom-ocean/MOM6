@@ -2,25 +2,25 @@ module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_hor_index, only : hor_index_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, MOM_restart_CS
-use MOM_time_manager, only : time_type, get_time
-use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_diag_mediator,      only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,      only : diag_ctrl
+use MOM_diag_to_Z,          only : register_Z_tracer, diag_to_Z_CS
+use MOM_error_handler,      only : MOM_error, FATAL, WARNING
+use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,       only : forcing
+use MOM_hor_index,          only : hor_index_type
+use MOM_grid,               only : ocean_grid_type
+use MOM_io,                 only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary,      only : ocean_OBC_type
+use MOM_restart,            only : register_restart_field, MOM_restart_CS
+use MOM_time_manager,       only : time_type, get_time
+use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
+use MOM_tracer_registry,    only : add_tracer_diagnostics, add_tracer_OBC_values
+use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_variables,          only : surface
+use MOM_verticalGrid,       only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
+use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -31,7 +31,7 @@ public register_dyed_obc_tracer, initialize_dyed_obc_tracer
 public dyed_obc_tracer_column_physics, dyed_obc_tracer_end
 
 ! ntr is the number of tracers in this module.
-integer, parameter :: ntr = 4
+integer, parameter :: NTR = 4
 
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
@@ -209,29 +209,6 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     endif
   endif ! restart
 
-! Doing this elsewhere, right?
-! if (associated(OBC)) then
-!   call query_vardesc(CS%tr_desc(1), name, caller="initialize_dyed_obc_tracer")
-!   if (OBC%specified_v_BCs_exist_globally) then
-!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-!     do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-!       if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-!       else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
-!     enddo ; enddo ; enddo
-!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
-!                                0.0, OBC_in_v=OBC_tr1_v)
-!   else
-!     ! This is not expected in the dyed_obc example.
-!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
-!   endif
-!   ! All tracers but the first have 0 concentration in their inflows. As this
-!   ! is the default value, the following calls are unnecessary.
-!   do m=2,NTR
-!     call query_vardesc(CS%tr_desc(m), name, caller="initialize_dyed_obc_tracer")
-!     call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
-!   enddo
-! endif
-
   ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
@@ -376,13 +353,11 @@ end subroutine dyed_obc_tracer_end
 
 !> \namespace dyed_obc_tracer
 !!                                                                     *
-!!  By Robert Hallberg, 2002                                           *
+!!  By Kate Hedstrom, 2017, copied from DOME tracers.                  *
 !!                                                                     *
 !!    This file contains an example of the code that is needed to set  *
-!!  up and use a set (in this case eleven) of dynamically passive      *
-!!  tracers.  These tracers dye the inflowing water or water initially *
-!!  within a range of latitudes or water initially in a range of       *
-!!  depths.                                                            *
+!!  up and use a set of dynamically passive tracers. These tracers     *
+!!  dye the inflowing water, one per open boundary segment.            *
 !!                                                                     *
 !!    A single subroutine is called from within each file to register  *
 !!  each of the tracers for reinitialization and advection and to      *

@@ -1114,7 +1114,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
   vars(4) = var_desc("geolon","degree","longitude at tracer (T) points",'h','1','1')
   vars(5) = var_desc("D","meter","Basin Depth",'h','1','1')
-  vars(6) = var_desc("f","second-1","Coriolis Parameter",'q','1','1')
+  vars(6) = var_desc("f","s-1","Coriolis Parameter",'q','1','1')
   vars(7) = var_desc("dxCv","m","Zonal grid spacing at v points",'v','1','1')
   vars(8) = var_desc("dyCu","m","Meridional grid spacing at u points",'u','1','1')
   vars(9) = var_desc("dxCu","m","Zonal grid spacing at u points",'u','1','1')
@@ -1128,12 +1128,12 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
 
   vars(17)= var_desc("dxCvo","m","Open zonal grid spacing at v points",'v','1','1')
   vars(18)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
-  vars(19)= var_desc("wet", "none", "land or ocean?", 'h','1','1')
+  vars(19)= var_desc("wet", "nondim", "land or ocean?", 'h','1','1')
 
-  vars(20) = var_desc("Dblock_u","meter","Blocked depth at u points",'u','1','1')
-  vars(21) = var_desc("Dopen_u","meter","Open depth at u points",'u','1','1')
-  vars(22) = var_desc("Dblock_v","meter","Blocked depth at v points",'v','1','1')
-  vars(23) = var_desc("Dopen_v","meter","Open depth at v points",'v','1','1')
+  vars(20) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
+  vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
+  vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
+  vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
 
   nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 

@@ -9,7 +9,8 @@ module MOM_ALE
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging,        only : check_column_integrals
-use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl, time_type
+use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl
+use MOM_diag_mediator,    only : time_type, diag_update_remap_grids
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_domains,          only : create_group_pass, do_group_pass, group_pass_type
 use MOM_EOS,              only : calculate_density
@@ -287,7 +288,7 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
   CS%id_Htracer_remap_tendency_2d(:) = -1
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
-      'Change in interface height due to ALE regridding', 'meter')
+      'Change in interface height due to ALE regridding', 'm')
 
   if(ntr > 0) then
 
@@ -297,24 +298,24 @@ subroutine ALE_register_diags(Time, G, diag, C_p, Reg, CS)
         CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
         trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
         'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'degC/s')
+        'degC s-1')
 
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
         'Tendency from vertical remapping for heat',                        &
-         'W/m2',v_extensive=.true.)
+         'W m-2',v_extensive=.true.)
 
         CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
         'Vertical sum of tendency from vertical remapping for heat',           &
-         'W/m2')
+         'W m-2')
 
       else
 
         CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
         trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
         'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'tracer conc / sec')
+        'tracer concentration * s-1')
 
         CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
         trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
@@ -415,8 +416,12 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
 
   if (CS%show_call_tree) call callTree_waypoint("new grid generated (ALE_main)")
 
+  ! The presence of dt is used for expediency to distinguish whether ALE_main is being called during init
+  ! or in the main loop. Tendency diagnostics in remap_all_state_vars also rely on this logic.
+  if (present(dt)) then
+    call diag_update_remap_grids(CS%diag, alt_h = h_new)
+  endif
   ! Remap all variables from old grid h onto new grid h_new
-
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
                              u, v, CS%show_call_tree, dt )
 
@@ -861,7 +866,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
         if(CS_ALE%do_tendency_diag(m)) then
 
           if(CS_ALE%id_tracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag)
+            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag, alt_h = h_new)
           endif
 
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
@@ -885,7 +890,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
           endif
 
           if (CS_ALE%id_Htracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag)
+            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag, alt_h = h_new)
           endif
           if (CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
             do j = G%jsc,G%jec
