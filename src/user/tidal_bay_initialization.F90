@@ -42,7 +42,7 @@ function register_tidal_bay_OBC(param_file, CS, OBC_Reg)
   endif
   allocate(CS)
 
-  ! Register the tracer for horizontal advection & diffusion.
+  ! Register the open boundaries.
   call register_OBC(casename, param_file, OBC_Reg)
   register_tidal_bay_OBC = .true.
 
