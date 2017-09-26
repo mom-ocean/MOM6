@@ -2185,7 +2185,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
-  call register_diags(Time, G, GV, CS, CS%ADp)
+  call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
@@ -2322,13 +2322,15 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 !> Register the diagnostics
-subroutine register_diags(Time, G, GV, CS, ADp)
+subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   type(time_type),           intent(in)    :: Time  !< current model time
   type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structu
   type(verticalGrid_type),   intent(inout) :: GV    !< ocean vertical grid structure
   type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
   type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
+  real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
 
+  real :: conv2watt
   character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
@@ -2339,8 +2341,13 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  T_flux_units    = get_tr_flux_units(GV, "degC")
-  S_flux_units    = get_tr_flux_units(GV, "psu")
+  T_flux_units    = trim("Watts/m2")
+  S_flux_units    = get_tr_flux_units(GV, "PPT")
+  if (.not. GV%Boussinesq) then
+    call MOM_error(WARNING, "register_diags: Conversion from temperature flux to W m2 for advective" // &
+                            "and diffusive fluxes is done using a Boussinesq approximation")
+  endif
+  conv2watt       = GV%H_to_kg_m2 * C_p
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2438,14 +2445,18 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
 
   ! lateral heat advective and diffusive fluxes
-  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Potential Temperature', T_flux_units)
+  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time,          &
+      'Advective (by residual mean) Zonal Flux of Potential Temperature', T_flux_units, &
+      v_extensive = .true., conversion = conv2watt)
+  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time,               &
+      'Advective (by residual mean) Meridional Flux of Potential Temperature', T_flux_units, &
+      v_extensive = .true., conversion = conv2watt)
+  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time,        &
+      'Diffusive Zonal Flux of Potential Temperature', T_flux_units,                      &
+      v_extensive = .true., conversion = conv2watt)
   CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Potential Temperature', T_flux_units)
+      'Diffusive Meridional Flux of Potential Temperature', T_flux_units,          &
+      v_extensive = .true., conversion = conv2watt)
   if (CS%id_Tadx   > 0) call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tady   > 0) call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2454,13 +2465,13 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   ! lateral salt advective and diffusive fluxes
   CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units)
+      'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Salinity', S_flux_units)
+      'Advective (by residual mean) Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Salinity', S_flux_units)
+      'Diffusive Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salinity', S_flux_units)
+      'Diffusive Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
   if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2469,13 +2480,13 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Advective Meridional Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
   CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units, conversion = conv2watt)
   if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
