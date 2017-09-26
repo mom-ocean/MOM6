@@ -1116,7 +1116,7 @@ end subroutine open_boundary_impose_normal_slope
 !! Also adjust u- and v-point cell area on specified open boundaries.
 subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
   type(ocean_OBC_type),              pointer       :: OBC !< Open boundary control structure
-  type(dyn_horgrid_type),            intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),            intent(inout) :: G !< Ocean grid structure
   real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: areaCu !< Area of a u-cell (m2)
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: areaCv !< Area of a u-cell (m2)
   ! Local variables
@@ -1134,12 +1134,22 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         if (G%mask2dCu(I,j) == 0) OBC%segnum_u(I,j) = OBC_NONE
+        if (segment%direction == OBC_DIRECTION_W) then
+          G%mask2dT(i,j) = 0
+        else
+          G%mask2dT(i+1,j) = 0
+        endif
       enddo
     else
       ! Sweep along v-segments and delete the OBC for blocked points.
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         if (G%mask2dCv(i,J) == 0) OBC%segnum_v(i,J) = OBC_NONE
+        if (segment%direction == OBC_DIRECTION_S) then
+          G%mask2dT(i,j) = 0
+        else
+          G%mask2dT(i,j+1) = 0
+        endif
       enddo
     endif
   enddo
