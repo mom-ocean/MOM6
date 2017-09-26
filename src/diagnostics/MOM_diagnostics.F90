@@ -128,6 +128,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_temp_int       = -1, id_salt_int       = -1
   integer :: id_mass_wt        = -1, id_col_mass       = -1
   integer :: id_masscello      = -1, id_masso          = -1
+  integer :: id_volcello       = -1
   integer :: id_thetaoga       = -1, id_soga           = -1
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
@@ -187,28 +188,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     !! variable that gives the "correct" free surface height (Boussinesq) or total water column
     !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
     !! calculating interface heights, in m or kg m-2.
-
-! Diagnostics not more naturally calculated elsewhere are computed here.
-
-! Arguments:
-!  (in)      u   - zonal velocity component (m/s).
-!  (in)      v   - meridional velocity component (m/s).
-!  (in)      h   - layer thickness,  meter(Bouss)  kg/m^2(non-Bouss).
-!  (in)      uh  - transport through zonal faces = u*h*dy, m3/s(Bouss) kg/s(non-Bouss).
-!  (in)      vh  - transport through meridional faces = v*h*dx, m3/s(Bouss) kg/s(non-Bouss).
-!  (in)      tv  - structure pointing to various thermodynamic variables.
-!  (in)      ADp - structure with pointers to accelerations in momentum equation.
-!  (in)      CDp - structure with pointers to terms in continuity equation.
-!  (in)      dt  - time difference in s since the last call to this subroutine.
-!  (in)      G   - ocean grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS  - control structure returned by a previous call to diagnostics_init.
-!  (in,opt)  eta_bt - An optional barotropic variable that gives the "correct"
-!                     free surface height (Boussinesq) or total water column
-!                     mass per unit area (non-Boussinesq).  This is used to
-!                     dilate the layer thicknesses when calculating interface
-!                     heights, in m or kg m-2.
-
+  ! Local variables
   integer i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
 
   ! coordinate variable potential density, in kg m-3.
@@ -288,19 +268,19 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
-  ! diagnose thickness of grid cells (meter)
-  if (CS%id_thkcello > 0) then
-
-    ! thkcello = h for Boussinesq
-    if (GV%Boussinesq) then
-      call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
-
-    ! thkcello = dp/(rho*g) for non-Boussinesq
-    else
+  ! diagnose thickness/volumes of grid cells (meter)
+  if (CS%id_thkcello>0 .or. CS%id_volcello>0) then
+    if (GV%Boussinesq) then ! thkcello = h for Boussinesq
+      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
+      if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
+        do k=1,nz; do j=js,je ; do i=is,ie
+          CS%diag_tmp3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_volcello, CS%diag_tmp3d, CS%diag)
+      endif
+    else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-
-        ! pressure loading at top of surface layer (Pa)
-        if(ASSOCIATED(fluxes%p_surf)) then
+        if(ASSOCIATED(fluxes%p_surf)) then ! Pressure loading at top of surface layer (Pa)
           do i=is,ie
             pressure_1d(i) = fluxes%p_surf(i,j)
           enddo
@@ -309,27 +289,28 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
             pressure_1d(i) = 0.0
           enddo
         endif
-
-        do k=1,nz
-          ! pressure for EOS at the layer center (Pa)
-          do i=is,ie
+        do k=1,nz ! Integrate vertically downward for pressure
+          do i=is,ie ! Pressure for EOS at the layer center (Pa)
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
-          ! store in-situ density (kg/m3) in diag_tmp3d
+          ! Store in-situ density (kg/m3) in diag_tmp3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
                                  CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
-          ! cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
-          do i=is,ie
+          do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
             CS%diag_tmp3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
           enddo
-          ! pressure for EOS at the bottom interface (Pa)
-          do i=is,ie
+          do i=is,ie ! Pressure for EOS at the bottom interface (Pa)
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
-
       enddo ! j
-      call post_data(CS%id_thkcello, CS%diag_tmp3d, CS%diag)
+      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, CS%diag_tmp3d, CS%diag)
+      if (CS%id_volcello > 0) then
+        do k=1,nz; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
+          CS%diag_tmp3d(i,j,k) = G%areaT(i,j) * CS%diag_tmp3d(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(CS%id_volcello, CS%diag_tmp3d, CS%diag)
+      endif
     endif
   endif
 
@@ -1179,6 +1160,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+
+  CS%id_volcello = register_diag_field('ocean_model', 'volcello', diag%axesTL,&
+      Time, 'Ocean grid-cell volume', 'm3',           &
+      standard_name='ocean_volume', v_extensive=.true., x_cell_method='sum', y_cell_method='sum')
 
   if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.GV%Boussinesq)) &
       .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
