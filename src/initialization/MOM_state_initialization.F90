@@ -25,9 +25,10 @@ use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query, set_tracer_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
+use MOM_open_boundary, only : fill_temp_salt_segments
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
-use MOM_restart, only : restore_state, MOM_restart_CS
+use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
@@ -146,7 +147,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
-  logical :: use_temperature, use_sponge
+  logical :: use_temperature, use_sponge, use_OBC
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
@@ -178,10 +179,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   call get_param(PF, mdl, "DEBUG", debug, default=.false.)
   call get_param(PF, mdl, "DEBUG_OBC", debug_obc, default=.false.)
 
-  new_sim = .false.
-  if ((dirs%input_filename(1:1) == 'n') .and. &
-      (LEN_TRIM(dirs%input_filename) == 1)) new_sim = .true.
-
+  new_sim = determine_is_new_run(dirs%input_filename, dirs%restart_input_dir, &
+                                 G, restart_CS)
   just_read = .not.new_sim
 
   call get_param(PF, mdl, "INPUTDIR", inputdir, &
@@ -191,6 +190,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   use_temperature = ASSOCIATED(tv%T)
   useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
+  use_OBC = associated(OBC)
   if (use_EOS) eos => tv%eqn_of_state
 
 !====================================================================
@@ -364,6 +364,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       end select
     endif
   endif  ! not from_Z_file.
+  if (use_temperature .and. use_OBC) &
+    call fill_temp_salt_segments(G, OBC, tv)
 
   ! The thicknesses in halo points might be needed to initialize the velocities.
   if (new_sim) call pass_var(h, G%Domain)

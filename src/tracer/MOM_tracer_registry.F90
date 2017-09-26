@@ -289,13 +289,14 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
 
 end subroutine MOM_tracer_chkinv
 
-!> This routine include declares and sets the variable "version".
+!> Initialize the tracer registry.
 subroutine tracer_registry_init(param_file, Reg)
   type(param_file_type),      intent(in) :: param_file !< open file to parse for model parameters
   type(tracer_registry_type), pointer    :: Reg        !< pointer to tracer registry
 
   integer, save :: init_calls = 0
 
+! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.

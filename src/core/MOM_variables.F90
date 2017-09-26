@@ -6,7 +6,6 @@ use MOM_domains, only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_debugging, only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc
 use MOM_EOS, only : EOS_type
 
 use coupler_types_mod, only : coupler_2d_bc_type
@@ -16,7 +15,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_thermovar_chksum
-public ocean_grid_type, vardesc, alloc_BT_cont_type, dealloc_BT_cont_type
+public ocean_grid_type, alloc_BT_cont_type, dealloc_BT_cont_type
 
 type, public :: p3d
   real, dimension(:,:,:), pointer :: p => NULL()

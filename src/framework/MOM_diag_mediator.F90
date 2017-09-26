@@ -615,7 +615,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:), pointer :: locfield => NULL()
   logical :: used, is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, i, j
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -651,6 +651,13 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%conversion_factor/=0.) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
+    do j=jsv,jev ; do i=isv,iev
+      if (field(i,j) == diag_cs%missing_value) then
+        locfield(i,j) = diag_cs%missing_value
+      else
+        locfield(i,j) = field(i,j) * diag%conversion_factor
+      endif
+    enddo ; enddo
     locfield(isv:iev,jsv:jev) = field(isv:iev,jsv:jev) * diag%conversion_factor
   else
     locfield => field
@@ -830,7 +837,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -865,9 +872,15 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag%conversion_factor/=0.) then
-    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), &
-                        lbound(field,3):ubound(field,3) ) )
-    locfield(isv:iev,jsv:jev,:) = field(isv:iev,jsv:jev,:) * diag%conversion_factor
+    ks = lbound(field,3) ; ke = ubound(field,3)
+    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
+    do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
+      if (field(i,j,k) == diag_cs%missing_value) then
+        locfield(i,j,k) = diag_cs%missing_value
+      else
+        locfield(i,j,k) = field(i,j,k) * diag%conversion_factor
+      endif
+    enddo ; enddo ; enddo
   else
     locfield => field
   endif
@@ -1569,10 +1582,11 @@ end function register_scalar_field
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
-     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area)
+     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
+     x_cell_method, y_cell_method)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axes_grp),   intent(in) :: axes
+  type(axes_grp),   target,   intent(in) :: axes
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, do_not_log
@@ -1581,6 +1595,8 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
   integer,          optional, intent(in) :: area !< fms_id for area_t
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1604,6 +1620,7 @@ function register_static_field(module_name, field_name, axes, &
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   integer :: dm_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=9) :: axis_name
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1624,6 +1641,14 @@ function register_static_field(module_name, field_name, axes, &
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(x_cell_method)) then
+      call get_diag_axis_name(axes%handles(1), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+    endif
+    if (present(y_cell_method)) then
+      call get_diag_axis_name(axes%handles(2), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+    endif
   endif
 
   if (present(cmor_field_name)) then
@@ -1655,6 +1680,14 @@ function register_static_field(module_name, field_name, axes, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(x_cell_method)) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+      endif
+      if (present(y_cell_method)) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+      endif
     endif
   endif
 

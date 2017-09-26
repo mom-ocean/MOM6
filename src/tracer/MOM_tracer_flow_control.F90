@@ -251,13 +251,13 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #endif
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
     register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
-                        tr_Reg, restart_CS)
+                                tr_Reg, restart_CS)
   if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
     register_boundary_impulse_tracer(HI, GV, param_file,  CS%boundary_impulse_tracer_CSp, &
-                        tr_Reg, restart_CS)
+                                     tr_Reg, restart_CS)
   if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
     register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
-                         tr_Reg, restart_CS)
+                             tr_Reg, restart_CS)
 
 
 end subroutine call_tracer_register
@@ -265,7 +265,7 @@ end subroutine call_tracer_register
 !> This subroutine calls all registered tracer initialization
 !! subroutines.
 subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OBC, &
-                                CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
+                                    CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
   logical,                               intent(in)    :: restart !< 1 if the fields have already
                                                                   !! been read from a restart file.
   type(time_type), target,               intent(in)    :: day     !< Time of the start of the run.
