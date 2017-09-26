@@ -9,7 +9,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : OBC_segment_type
+use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -240,6 +240,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
                               !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
+! Local variables
   real, pointer, dimension(:,:,:) :: &
     OBC_T_v => NULL(), &    ! specify the values of T and S that should come
     OBC_S_v => NULL()       ! boundary conditions, in C and psu.
@@ -334,11 +335,15 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 
+    ! This is no longer a full 3-D array thanks to the segment code above,
+    ! which is what we want now.
     allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       OBC_T_v(i,J,k) = T0(k)
     enddo ; enddo ; enddo
     call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
+!   call register_segment_tracer(tr_desc(m), param_file, segment%HI, GV, &
+!                                segment%Reg, m, OBC_scalar=1.0)
   endif
 
 end subroutine DOME_set_OBC_data

@@ -105,7 +105,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_ini
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
-use MOM_open_boundary,         only : OBC_registry_type
+use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -1884,6 +1884,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
       call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
       call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
     endif
+    if (associated(CS%OBC)) &
+      call register_temp_salt_segments(GV, CS%OBC, CS%tv, CS%vd_T, CS%vd_S, param_file)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
