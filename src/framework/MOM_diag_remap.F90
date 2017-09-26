@@ -248,8 +248,8 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
   ! Calculate remapping thicknesses for different target grids based on
   ! nominal/target interface locations. This happens for every call on the
   ! assumption that h, T, S has changed.
-  do j=G%jsd, G%jed
-    do i=G%isd, G%ied
+  do j=G%jsc-1, G%jec+1
+    do i=G%isc-1, G%iec+1
       if (G%mask2dT(i,j)==0.) then
         remap_cs%h(i,j,:) = 0.
         cycle
