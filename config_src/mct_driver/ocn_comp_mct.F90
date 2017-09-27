@@ -381,17 +381,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     ocn_modelio_name = 'ocn_modelio.nml' // trim(inst_suffix)
     call shr_file_setIO(ocn_modelio_name,glb%stdout)
 
-    !if (debug) write(*,*) "stdout-1"
-    !if (debug) write(6,*) "stdout-2"
-    !if (debug) write(glb%stdout,*) "stdout-3"
-
     !  set the shr log io unit number
     call shr_file_setLogUnit(glb%stdout)
-
-    !if (debug) write(*,*) "stdout-4"
-    !if (debug) write(6,*) "stdout-5"
-    !if (debug) write(glb%stdout,*) "stdout-6"
-
   end if
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
@@ -482,25 +473,14 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     ! read name of restart file in the pointer file
     nu = shr_file_getUnit()
     restart_pointer_file = trim(glb%pointer_filename)
-    write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
     open(nu, file=restart_pointer_file, form='formatted', status='unknown')
     read(nu,'(a)') restartfile
     close(nu)
-    restartfile = trim(restartpath) // trim(restartfile)
-    write(6,*) 'Reading ocn pointer file: ', restartfile
-    write(6,*)'runtype, restartfile',runtype, restartfile
-    write(glb%stdout,*) 'Reading ocn pointer file: ',trim(restartfile)
+    !restartfile = trim(restartpath) // trim(restartfile)
+    if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     !endif
     call shr_file_freeUnit(nu)
-    !restartfile = '/glade/scratch/gmarques/mom_test/run/mom_test.mom6.r.0001-01-01-21600.nc'
-    !call seq_infodata_GetData( glb%infodata, case_name=runid )
-    !call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    !call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    !seconds = seconds + hour*3600 + minute*60
-    !write(restartfile,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') trim(runid), year, month, day, seconds
-    if (debug .and. root_pe().eq.pe_here()) then
-      write(glb%stdout,*)'runtype, restartfile,time_init,time_in',runtype, restartfile !, time_init, time_in
-    endif
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
   endif
 
