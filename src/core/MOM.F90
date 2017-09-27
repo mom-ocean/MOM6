@@ -33,6 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
+use MOM_diag_mediator,        only : diag_associate_volume_cell_measure
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -2111,6 +2112,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
+  ! Register the volume cell measure (must be one of first diagnostics)
+  call register_cell_measure(G, CS%diag, Time)
+
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
@@ -3180,6 +3184,21 @@ subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
 
 end subroutine post_surface_diagnostics
+
+!> Sets a handle inside diagnostics mediator to associate 3d cell measures
+subroutine register_cell_measure(G, diag, Time)
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
+  type(time_type),         intent(in)    :: Time !< Model time
+  ! Local variables
+  integer :: id
+  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
+                           Time, 'Ocean grid-cell volume', 'm3', &
+                           standard_name='ocean_volume', v_extensive=.true., &
+                           x_cell_method='sum', y_cell_method='sum')
+  call diag_associate_volume_cell_measure(diag, id)
+
+end subroutine register_cell_measure
 
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.

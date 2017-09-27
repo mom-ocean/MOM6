@@ -30,6 +30,7 @@ use MOM_coms,              only : reproducing_sum
 use MOM_diag_mediator,     only : post_data, post_data_1d_k
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
+use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
@@ -1161,12 +1162,13 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
 
-  CS%id_volcello = register_diag_field('ocean_model', 'volcello', diag%axesTL,&
-      Time, 'Ocean grid-cell volume', 'm3',           &
-      standard_name='ocean_volume', v_extensive=.true., x_cell_method='sum', y_cell_method='sum')
+  ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
+  ! must be registered first. We earlier stored the handle of volcello but need it here for posting
+  ! by this module.
+  CS%id_volcello = diag_get_volume_cell_measure_dm_id(diag)
 
-  if (((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_thkcello>0.and..not.GV%Boussinesq)) &
-      .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
+  if ((((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_volcello>0) .or. &
+      (CS%id_thkcello>0.and..not.GV%Boussinesq)) ) .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
     call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
   endif
 
