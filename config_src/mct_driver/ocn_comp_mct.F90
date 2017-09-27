@@ -381,17 +381,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     ocn_modelio_name = 'ocn_modelio.nml' // trim(inst_suffix)
     call shr_file_setIO(ocn_modelio_name,glb%stdout)
 
-    !if (debug) write(*,*) "stdout-1"
-    !if (debug) write(6,*) "stdout-2"
-    !if (debug) write(glb%stdout,*) "stdout-3"
-
     !  set the shr log io unit number
     call shr_file_setLogUnit(glb%stdout)
-
-    !if (debug) write(*,*) "stdout-4"
-    !if (debug) write(6,*) "stdout-5"
-    !if (debug) write(glb%stdout,*) "stdout-6"
-
   end if
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
@@ -479,37 +470,19 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   else                           ! hybrid or branch or continuos runs
     ! output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
-    ! read pointer_filename
-    ! write name of restart file in the rpointer file
+    ! read name of restart file in the pointer file
     nu = shr_file_getUnit()
-    !if (is_root_pe()) then
-      restart_pointer_file = trim(glb%pointer_filename)
-      write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
-      open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-      read(nu,'(a)') restartfile
-      close(nu)
-      !restartfile = trim(restartpath) // trim(restartfile)
-      write(glb%stdout,*) 'Reading ocn pointer file: ',trim(restartfile)
+    restart_pointer_file = trim(glb%pointer_filename)
+    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
+    open(nu, file=restart_pointer_file, form='formatted', status='unknown')
+    read(nu,'(a)') restartfile
+    close(nu)
+    !restartfile = trim(restartpath) // trim(restartfile)
+    if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     !endif
     call shr_file_freeUnit(nu)
-    !restartfile = '/glade/scratch/gmarques/mom_test/run/mom_test.mom6.r.0001-01-01-21600.nc'
-    !call seq_infodata_GetData( glb%infodata, case_name=runid )
-    !call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    !call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-    !seconds = seconds + hour*3600 + minute*60
-    !write(restartfile,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5,".nc")') trim(runid), year, month, day, seconds
-    if (debug .and. root_pe().eq.pe_here()) then
-      write(glb%stdout,*)'runtype, restartfile,time_init,time_in',runtype, restartfile !, time_init, time_in
-    endif
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
   endif
-
-  !if (debug .and. root_pe().eq.pe_here()) then
-  !  write(glb%stdout,*)'runtype, restartfile,time_init,time_in',runtype, restartfile,time_init,time_in
-  !endif
-
-  ! Initialize the MOM6 model
-  !call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in)
 
   ! Initialize ocn_state%state out of sight
   call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
@@ -1136,25 +1109,26 @@ subroutine ocn_export(ind, ocn_public, grid, o2x)
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     n = n+1
     ! This is a simple second-order difference
-    o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) + ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    !o2x(ind%o2x_So_dhdx, n) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
-!    slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
-    !if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
-!    slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
-    !if (grid%mask2dCu(I,j)==0.) slp_R = 0.
-!    slp_C = 0.5 * (slp_L + slp_R)
-!    if ( (slp_L * slp_R) > 0.0 ) then
+    slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
+    if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
+    slp_R = (ssh(I+1,j) - ssh(I,j)) * grid%mask2dCu(I,j)
+    if (grid%mask2dCu(I+1,j)==0.) slp_R = 0.
+    slp_C = 0.5 * (slp_L + slp_R)
+    if ( (slp_L * slp_R) > 0.0 ) then
       ! This limits the slope so that the edge values are bounded by the
       ! two cell averages spanning the edge.
-!      u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-!      u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
-!      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-!    else
+      u_min = min( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+      u_max = max( ssh(i-1,j), ssh(i,j), ssh(i+1,j) )
+      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+    else
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
-!      slope = 0.0
-!    end if
-!    o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+      slope = 0.0
+    end if
+    o2x(ind%o2x_So_dhdx, n) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
+    if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdx, n) = 0.0
   end do; end do
 
   ! d/dy ssh
@@ -1162,24 +1136,27 @@ subroutine ocn_export(ind, ocn_public, grid, o2x)
   do j=grid%jsc, grid%jec ; do i=grid%isc,grid%iec
     n = n+1
     ! This is a simple second-order difference
-    o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) + ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    !o2x(ind%o2x_So_dhdy, n) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
     ! This is a PLM slope which might be less prone to the A-grid null mode
-!    slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
-!    slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
-!    slp_C = 0.5 * (slp_L + slp_R)
-!    write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
-!    if ((slp_L * slp_R) > 0.0) then
+    slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
+    if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
+    slp_R = ssh(i,J+1) - ssh(i,J) * grid%mask2dCv(i,J)
+    if (grid%mask2dCv(i,J+1)==0.) slp_R = 0.
+    slp_C = 0.5 * (slp_L + slp_R)
+    !write(6,*)'slp_L, slp_R,i,j,slp_L*slp_R', slp_L, slp_R,i,j,slp_L*slp_R
+    if ((slp_L * slp_R) > 0.0) then
       ! This limits the slope so that the edge values are bounded by the
       ! two cell averages spanning the edge.
-!      u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-!      u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
-!      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
-!    else
+      u_min = min( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+      u_max = max( ssh(i,j-1), ssh(i,j), ssh(i,j+1) )
+      slope = sign( min( abs(slp_C), 2.*min( ssh(i,j) - u_min, u_max - ssh(i,j) ) ), slp_C )
+    else
       ! Extrema in the mean values require a PCM reconstruction avoid generating
       ! larger extreme values.
-!      slope = 0.0
-!    end if
-!    o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+      slope = 0.0
+    end if
+    o2x(ind%o2x_So_dhdy, n) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
+    if (grid%mask2dT(i,j)==0.) o2x(ind%o2x_So_dhdy, n) = 0.0
   end do; end do
 
 end subroutine ocn_export
