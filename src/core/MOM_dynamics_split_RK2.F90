@@ -880,10 +880,10 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
-  vd = var_desc("u2","meter second-1","Auxiliary Zonal velocity",'u','L')
+  vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
   call register_restart_field(CS%u_av, vd, .false., restart_CS)
 
-  vd = var_desc("v2","meter second-1","Auxiliary Meridional velocity",'v','L')
+  vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
   call register_restart_field(CS%v_av, vd, .false., restart_CS)
 
   vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
@@ -895,10 +895,10 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
   call register_restart_field(vh, vd, .false., restart_CS)
 
-  vd = var_desc("diffu","meter second-2","Zonal horizontal viscous acceleration",'u','L')
+  vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
   call register_restart_field(CS%diffu, vd, .false., restart_CS)
 
-  vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
+  vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
   call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
@@ -1106,23 +1106,23 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration', 'meter second-2')
+      'Zonal Coriolis and Advective Acceleration', 'm s-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration', 'meter second-2')
+      'Meridional Coriolis and Advective Acceleration', 'm s-2')
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'meter second-2')
+      'Zonal Pressure Force Acceleration', 'm s-2')
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'meter second-2')
+      'Meridional Pressure Force Acceleration', 'm s-2')
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
-      'Barotropic-step Averaged Zonal Velocity', 'meter second-1')
+      'Barotropic-step Averaged Zonal Velocity', 'm s-1')
   CS%id_vav = register_diag_field('ocean_model', 'vav', diag%axesCvL, Time, &
-      'Barotropic-step Averaged Meridional Velocity', 'meter second-1')
+      'Barotropic-step Averaged Meridional Velocity', 'm s-1')
 
   CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
-    'Barotropic Anomaly Zonal Acceleration', 'meter second-1')
+    'Barotropic Anomaly Zonal Acceleration', 'm s-1')
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
-    'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
+    'Barotropic Anomaly Meridional Acceleration', 'm s-1')
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

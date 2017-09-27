@@ -33,6 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
+use MOM_diag_mediator,        only : diag_associate_volume_cell_measure
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -105,7 +106,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_ini
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
-use MOM_open_boundary,         only : OBC_registry_type
+use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -1847,15 +1848,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
     CS%vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
-                       cmor_field_name="thetao",cmor_units="C",                &
+                       cmor_field_name="thetao",                               &
                        conversion=CS%tv%C_p)
-    CS%vd_S = var_desc(name="S",units="PPT",longname="Salinity",&
-                       cmor_field_name="so",cmor_units="ppt",   &
+    CS%vd_S = var_desc(name="S",units="psu",longname="Salinity",&
+                       cmor_field_name="so",                    &
                        conversion=0.001)
     if(CS%advect_TS) then
       call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
       call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
     endif
+    if (associated(CS%OBC)) &
+      call register_temp_salt_segments(GV, CS%OBC, CS%tv, CS%vd_T, CS%vd_S, param_file)
   endif
   if (CS%use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0
@@ -2081,6 +2084,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call write_static_fields(G, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
+  ! Register the volume cell measure (must be one of first diagnostics)
+  call register_cell_measure(G, CS%diag, Time)
+
   call cpu_clock_begin(id_clock_MOM_init)
   if (CS%use_ALE_algorithm) then
     call ALE_writeCoordinateFile( CS%ALE_CSp, GV, dirs%output_directory )
@@ -2157,7 +2163,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since tracer registry is locked
-  call register_diags(Time, G, GV, CS, CS%ADp)
+  call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
@@ -2176,11 +2182,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                         CS%S_diffx_2d, CS%S_diffy_2d, CS%S_advection_xy)
     endif
     call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao", cmor_units="C", &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao",                 &
                       cmor_standard_name="sea_water_potential_temperature",          &
                       cmor_long_name ="Sea Water Potential Temperature")
-    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "PPT", Time,               &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="so", cmor_units="ppt", &
+    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "psu", Time,               &
+                      G, CS%diag_to_Z_CSp, cmor_field_name="so",                   &
                       cmor_standard_name="sea_water_salinity",                     &
                       cmor_long_name ="Sea Water Salinity")
   endif
@@ -2298,14 +2304,16 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 !> Register the diagnostics
-subroutine register_diags(Time, G, GV, CS, ADp)
+subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   type(time_type),           intent(in)    :: Time  !< current model time
   type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structu
   type(verticalGrid_type),   intent(inout) :: GV    !< ocean vertical grid structure
   type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
   type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
+  real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
 
-  character(len=48) :: thickness_units, flux_units, T_flux_units, S_flux_units
+  real :: conv2watt
+  character(len=48) :: thickness_units, flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
@@ -2315,18 +2323,18 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  T_flux_units    = get_tr_flux_units(GV, "Celsius")
-  S_flux_units    = get_tr_flux_units(GV, "PPT")
+  S_flux_units    = get_tr_flux_units(GV, "psu")
+  conv2watt       = GV%H_to_kg_m2 * C_p
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
   !call diag_masks_set(G, CS%missing)
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
-      'Zonal velocity', 'meter  second-1', cmor_field_name='uo', cmor_units='m s-1', &
+      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
       cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
   CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
-      'Meridional velocity', 'meter second-1', cmor_field_name='vo', cmor_units='m s-1', &
+      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true.)
@@ -2336,92 +2344,96 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       standard_name='sea_water_volume')
   CS%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='meter', missing_value=CS%missing)
+      long_name= 'Sea surface height above geoid', units='m', missing_value=CS%missing)
   CS%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
       standard_name='square_of_sea_surface_height_above_geoid',             &
       long_name='Square of sea surface height above geoid', units='m2', missing_value=CS%missing)
   CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'meter', CS%missing)
+      'Sea Surface Height', 'm', CS%missing)
   CS%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
   CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
-      'Instantaneous Sea Surface Height', 'meter', CS%missing)
+      'Instantaneous Sea Surface Height', 'm', CS%missing)
   CS%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'meter second-1', CS%missing)
+      'Sea Surface Zonal Velocity', 'm s-1', CS%missing)
   CS%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'meter second-1', CS%missing)
+      'Sea Surface Meridional Velocity', 'm s-1', CS%missing)
   CS%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'meter second-1', CS%missing)
+      'Sea Surface Speed', 'm s-1', CS%missing)
 
   if (CS%use_temperature) then
     CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius',                                 &
-         cmor_field_name="thetao", cmor_units="C",                          &
+        'Potential Temperature', 'degC',                                    &
+         cmor_field_name="thetao",                                          &
          cmor_standard_name="sea_water_potential_temperature",              &
          cmor_long_name ="Sea Water Potential Temperature")
     CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        long_name='Salinity', units='PPT', cmor_field_name='so',            &
-        cmor_long_name='Sea Water Salinity', cmor_units='ppt',              &
+        long_name='Salinity', units='psu', cmor_field_name='so',            &
+        cmor_long_name='Sea Water Salinity',                                &
         cmor_standard_name='sea_water_salinity')
     CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
         long_name='Sea Water Potential Temperature at Sea Floor',                    &
         standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
     CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
         long_name='Sea Water Salinity at Sea Floor',                                 &
-        standard_name='sea_water_salinity_at_sea_floor', units='ppt')
+        standard_name='sea_water_salinity_at_sea_floor', units='psu')
     CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'Celsius', CS%missing, cmor_field_name='tos', &
-        cmor_long_name='Sea Surface Temperature', cmor_units='degC',             &
+        'Sea Surface Temperature', 'degC', CS%missing, cmor_field_name='tos', &
+        cmor_long_name='Sea Surface Temperature',                                &
         cmor_standard_name='sea_surface_temperature')
     CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'Celsius**2', CS%missing, cmor_field_name='tossq', &
-        cmor_long_name='Square of Sea Surface Temperature ', cmor_units='degC^2', &
+        'Sea Surface Temperature Squared', 'degC2', CS%missing, cmor_field_name='tossq', &
+        cmor_long_name='Square of Sea Surface Temperature ',                      &
         cmor_standard_name='square_of_sea_surface_temperature')
     CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'PPT', CS%missing, cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity', cmor_units='ppt',          &
+        'Sea Surface Salinity', 'psu', CS%missing, cmor_field_name='sos', &
+        cmor_long_name='Sea Surface Salinity',                            &
         cmor_standard_name='sea_surface_salinity')
     CS%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'ppt**2', CS%missing, cmor_field_name='sossq', &
-        cmor_long_name='Square of Sea Surface Salinity ', cmor_units='ppt^2', &
+        'Sea Surface Salinity Squared', 'psu', CS%missing, cmor_field_name='sossq', &
+        cmor_long_name='Square of Sea Surface Salinity ',                     &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (CS%use_conT_absS) then
       CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
           'Conservative Temperature', 'Celsius')
       CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
-          long_name='Absolute Salinity', units='g/Kg')
+          long_name='Absolute Salinity', units='g kg-1')
       CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
           'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
       CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g/Kg', CS%missing)
+          'Sea Surface Absolute Salinity', 'g kg-1', CS%missing)
     endif
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
     CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                         &
-          'Heat from frazil formation', 'Watt meter-2', cmor_field_name='hfsifrazil',                    &
-          cmor_units='W m-2', cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
+          'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil',                    &
+          cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
           cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
   endif
 
   CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'g Salt meter-2 s-1')
+         'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
   CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
-         'Heat flux into ocean from mass flux into ocean', 'Watt meter-2')
+         'Heat flux into ocean from mass flux into ocean', 'W m-2')
   CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'Watt meter-2')
+         'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
 
 
   ! lateral heat advective and diffusive fluxes
-  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Potential Temperature', T_flux_units)
-  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Potential Temperature', T_flux_units)
-  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Potential Temperature', T_flux_units)
+  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time,          &
+      'Advective (by residual mean) Zonal Flux of Potential Temperature', 'W m-2', &
+      v_extensive = .true., conversion = conv2watt)
+  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time,               &
+      'Advective (by residual mean) Meridional Flux of Potential Temperature', 'W m-2', &
+      v_extensive = .true., conversion = conv2watt)
+  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time,        &
+      'Diffusive Zonal Flux of Potential Temperature', 'W m-2',                      &
+      v_extensive = .true., conversion = conv2watt)
   CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Potential Temperature', T_flux_units)
+      'Diffusive Meridional Flux of Potential Temperature', 'W m-2',          &
+      v_extensive = .true., conversion = conv2watt)
   if (CS%id_Tadx   > 0) call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tady   > 0) call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2430,13 +2442,13 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   ! lateral salt advective and diffusive fluxes
   CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units)
+      'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Salinity', S_flux_units)
+      'Advective (by residual mean) Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Salinity', S_flux_units)
+      'Diffusive Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salinity', S_flux_units)
+      'Diffusive Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
   if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2445,13 +2457,13 @@ subroutine register_diags(Time, G, GV, CS, ADp)
 
   ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Advective Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Advective Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', T_flux_units)
+      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
   if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
@@ -2489,16 +2501,16 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
       x_cell_method='sum', v_extensive=.true.)
   CS%id_umo = register_diag_field('ocean_model', 'umo', &
-      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg/s', &
+      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
   CS%id_vmo = register_diag_field('ocean_model', 'vmo', &
-      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg/s', &
+      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg s-1', &
       standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
   CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
-      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg/s', &
+      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
   CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
-      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg/s', &
+      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
 
 end subroutine register_diags
@@ -2522,9 +2534,9 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! heat tendencies from lateral advection
   CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean heat advective fluxes', 'W/m2',v_extensive=.true.)
+      'Horizontal convergence of residual mean heat advective fluxes', 'W m-2',v_extensive=.true.)
   CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W/m2')
+      'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W m-2')
   if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%T_advection_xy,isd,ied,jsd,jed,nz)
     CS%tendency_diagnostics = .true.
@@ -2532,16 +2544,16 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! net temperature and heat tendencies
   CS%id_T_tendency = register_diag_field('ocean_model', 'T_tendency', diag%axesTL, Time, &
-      'Net time tendency for temperature', 'degC/s')
+      'Net time tendency for temperature', 'degC s-1')
   CS%id_Th_tendency = register_diag_field('ocean_model', 'Th_tendency', diag%axesTL, Time,        &
-      'Net time tendency for heat', 'W/m2',                                                       &
-      cmor_field_name="opottemptend", cmor_units="W m-2",                                         &
+      'Net time tendency for heat', 'W m-2',                                                      &
+      cmor_field_name="opottemptend",                                                             &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
       v_extensive=.true.)
   CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
-      'Vertical sum of net time tendency for heat', 'W/m2',                                                   &
-      cmor_field_name="opottemptend_2d", cmor_units="W m-2",                                                   &
+      'Vertical sum of net time tendency for heat', 'W m-2',                                                  &
+      cmor_field_name="opottemptend_2d",                                                                      &
       cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
   if (CS%id_T_tendency > 0) then
@@ -2562,9 +2574,9 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! salt tendencies from lateral advection
   CS%id_S_advection_xy = register_diag_field('ocean_model', 'S_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)', v_extensive=.true.)
+      'Horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1', v_extensive=.true.)
   CS%id_S_advection_xy_2d = register_diag_field('ocean_model', 'S_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg/(m2 * s)')
+      'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1')
   if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
     call safe_alloc_ptr(CS%S_advection_xy,isd,ied,jsd,jed,nz)
     CS%tendency_diagnostics = .true.
@@ -2572,16 +2584,16 @@ subroutine register_diags_TS_tendency(Time, G, CS)
 
   ! net salinity and salt tendencies
   CS%id_S_tendency = register_diag_field('ocean_model', 'S_tendency', diag%axesTL, Time, &
-      'Net time tendency for salinity', 'PPT/s')
+      'Net time tendency for salinity', 'psu s-1')
   CS%id_Sh_tendency = register_diag_field('ocean_model', 'Sh_tendency', diag%axesTL, Time,&
-      'Net time tendency for salt', 'kg/(m2 * s)',                                        &
-      cmor_field_name="osalttend", cmor_units="kg m-2 s-1",                               &
+      'Net time tendency for salt', 'kg m-2 s-1',                                         &
+      cmor_field_name="osalttend",                                                        &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
       v_extensive=.true.)
   CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
-      'Vertical sum of net time tendency for salt', 'kg/(m2 * s)',                               &
-      cmor_field_name="osalttend_2d", cmor_units="kg m-2 s-1",                                   &
+      'Vertical sum of net time tendency for salt', 'kg m-2 s-1',                                &
+      cmor_field_name="osalttend_2d",                                                            &
       cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
       cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
   if (CS%id_S_tendency > 0) then
@@ -2630,12 +2642,12 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
   endif
 
   CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
-      'ALE variance decay for salinity', 'PPT2 s-1')
+      'ALE variance decay for salinity', 'psu2 s-1')
   if (CS%id_S_vardec > 0) then
     call safe_alloc_ptr(CS%S_squared,isd,ied,jsd,jed,nz)
     CS%S_squared(:,:,:) = 0.
 
-    vd_tmp = var_desc(name="S2", units="PPT2", longname="Squared Salinity")
+    vd_tmp = var_desc(name="S2", units="psu2", longname="Squared Salinity")
     call register_tracer(CS%S_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
   endif
 
@@ -3118,6 +3130,21 @@ subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
 
 end subroutine post_surface_diagnostics
 
+!> Sets a handle inside diagnostics mediator to associate 3d cell measures
+subroutine register_cell_measure(G, diag, Time)
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
+  type(time_type),         intent(in)    :: Time !< Model time
+  ! Local variables
+  integer :: id
+  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
+                           Time, 'Ocean grid-cell volume', 'm3', &
+                           standard_name='ocean_volume', v_extensive=.true., &
+                           x_cell_method='sum', y_cell_method='sum')
+  call diag_associate_volume_cell_measure(diag, id)
+
+end subroutine register_cell_measure
+
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
 subroutine write_static_fields(G, diag)
@@ -3128,41 +3155,41 @@ subroutine write_static_fields(G, diag)
   integer :: id, i, j
 
   id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
-        'Latitude of tracer (T) points', 'degrees_N')
+        'Latitude of tracer (T) points', 'degrees_north')
   if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon', diag%axesT1, &
-        'Longitude of tracer (T) points', 'degrees_E')
+        'Longitude of tracer (T) points', 'degrees_east')
   if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_c', diag%axesB1, &
-        'Latitude of corner (Bu) points', 'degrees_N', interp_method='none')
+        'Latitude of corner (Bu) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_c', diag%axesB1, &
-        'Longitude of corner (Bu) points', 'degrees_E', interp_method='none')
+        'Longitude of corner (Bu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_v', diag%axesCv1, &
-        'Latitude of meridional velocity (Cv) points', 'degrees_N', interp_method='none')
+        'Latitude of meridional velocity (Cv) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_v', diag%axesCv1, &
-        'Longitude of meridional velocity (Cv) points', 'degrees_E', interp_method='none')
+        'Longitude of meridional velocity (Cv) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolat_u', diag%axesCu1, &
-        'Latitude of zonal velocity (Cu) points', 'degrees_N', interp_method='none')
+        'Latitude of zonal velocity (Cu) points', 'degrees_north', interp_method='none')
   if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'geolon_u', diag%axesCu1, &
-        'Longitude of zonal velocity (Cu) points', 'degrees_E', interp_method='none')
+        'Longitude of zonal velocity (Cu) points', 'degrees_east', interp_method='none')
   if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
 
   id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
         'Surface area of tracer (T) cells', 'm2',                    &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
-        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area',      &
+        cmor_long_name='Ocean Grid-Cell Area',      &
         x_cell_method='sum', y_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
@@ -3172,7 +3199,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
         'Surface area of x-direction flow (U) cells', 'm2',             &
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
-        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
@@ -3181,7 +3208,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
         'Surface area of y-direction flow (V) cells', 'm2',             &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
-        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
@@ -3190,7 +3217,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
         'Surface area of B-grid flow (Q) cells', 'm2',                  &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
-        cmor_units='m2', cmor_long_name='Ocean Grid-Cell Area',         &
+        cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
@@ -3200,7 +3227,7 @@ subroutine write_static_fields(G, diag)
         'Depth of the ocean at tracer points', 'm',                      &
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
-        cmor_units='m', cmor_standard_name='sea_floor_depth_below_geoid',&
+        cmor_standard_name='sea_floor_depth_below_geoid',&
         area=diag%axesT1%id_area, x_cell_method='mean', y_cell_method='mean')
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
@@ -3253,7 +3280,7 @@ subroutine write_static_fields(G, diag)
   id = register_static_field('ocean_model', 'area_t_percent', diag%axesT1, &
         'Percentage of cell area covered by ocean', '%', &
         cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
-        cmor_units='%', cmor_long_name='Sea Area Fraction', &
+        cmor_long_name='Sea Area Fraction', &
         x_cell_method='mean', y_cell_method='mean')
   if (id > 0) then
     tmp_h(:,:) = 0.
@@ -3298,10 +3325,10 @@ subroutine set_restart_fields(GV, param_file, CS)
   vd = var_desc("h",thickness_units,"Layer Thickness")
   call register_restart_field(CS%h, vd, .true., CS%restart_CSp)
 
-  vd = var_desc("u","meter second-1","Zonal velocity",'u','L')
+  vd = var_desc("u","m s-1","Zonal velocity",'u','L')
   call register_restart_field(CS%u, vd, .true., CS%restart_CSp)
 
-  vd = var_desc("v","meter second-1","Meridional velocity",'v','L')
+  vd = var_desc("v","m s-1","Meridional velocity",'v','L')
   call register_restart_field(CS%v, vd, .true., CS%restart_CSp)
 
   if (CS%use_frazil) then
