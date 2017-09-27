@@ -1456,6 +1456,12 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
   logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
   ! Local variables
   character(len=9) :: axis_name
+  logical :: x_mean, y_mean, x_sum, y_sum
+
+  x_mean = .false.
+  y_mean = .false.
+  x_sum = .false.
+  y_sum = .false.
 
   ostring = ''
   if (present(cell_methods)) then
@@ -1474,12 +1480,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
+        if (trim(x_cell_method)=='mean') x_mean=.true.
+        if (trim(x_cell_method)=='sum') x_sum=.true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
+        if (trim(axes%x_cell_method)=='mean') x_mean=.true.
+        if (trim(axes%x_cell_method)=='sum') x_sum=.true.
       endif
     endif
     if (present(y_cell_method)) then
@@ -1487,12 +1497,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
+        if (trim(y_cell_method)=='mean') y_mean=.true.
+        if (trim(y_cell_method)=='sum') y_sum=.true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
+        if (trim(axes%y_cell_method)=='mean') y_mean=.true.
+        if (trim(axes%y_cell_method)=='sum') y_sum=.true.
       endif
     endif
     if (present(v_cell_method)) then
@@ -1525,6 +1539,13 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
       endif
+    endif
+    if (x_mean .and. y_mean) then
+      call diag_field_add_attribute(id, 'cell_methods', 'area:mean')
+      ostring = trim(adjustl(ostring))//' area:mean'
+    elseif (x_sum .and. y_sum) then
+      call diag_field_add_attribute(id, 'cell_methods', 'area:sum')
+      ostring = trim(adjustl(ostring))//' area:sum'
     endif
   endif
   ostring = adjustl(ostring)
@@ -1639,7 +1660,7 @@ function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
      cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
-     x_cell_method, y_cell_method)
+     x_cell_method, y_cell_method, area_cell_method)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
   type(axes_grp),   target,   intent(in) :: axes
@@ -1653,6 +1674,7 @@ function register_static_field(module_name, field_name, axes, &
   integer,          optional, intent(in) :: area !< fms_id for area_t
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
+  character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1705,6 +1727,9 @@ function register_static_field(module_name, field_name, axes, &
       call get_diag_axis_name(axes%handles(2), axis_name)
       call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
     endif
+    if (present(area_cell_method)) then
+      call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
+    endif
   endif
 
   if (present(cmor_field_name)) then
@@ -1743,6 +1768,9 @@ function register_static_field(module_name, field_name, axes, &
       if (present(y_cell_method)) then
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+      endif
+      if (present(area_cell_method)) then
+        call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
       endif
     endif
   endif
