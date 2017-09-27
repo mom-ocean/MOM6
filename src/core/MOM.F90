@@ -106,6 +106,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
+use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -1968,6 +1969,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, CS%restart_CSp)
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
+
+  if (associated(CS%OBC)) &
+    call open_boundary_register_restarts(dG%HI, GV, CS%OBC, CS%restart_CSp)
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
