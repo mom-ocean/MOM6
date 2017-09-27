@@ -363,13 +363,7 @@ type, public :: MOM_control_struct
   integer :: id_T_vardec = -1
   integer :: id_S_vardec = -1
 
-  ! diagnostic for fields prior to applying diapycnal physics
-  integer :: id_u_predia = -1
-  integer :: id_v_predia = -1
-  integer :: id_h_predia = -1
-  integer :: id_T_predia = -1
-  integer :: id_S_predia = -1
-  integer :: id_e_predia = -1
+  ! diagnostic for fields prior to applying ALE remapping
   integer :: id_u_preale = -1
   integer :: id_v_preale = -1
   integer :: id_h_preale = -1
@@ -1076,7 +1070,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
   type(time_type),          intent(in)    :: end_time !< The model time at the end of this step.
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: do_pass_kv_bbl_thick
@@ -1129,16 +1123,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
       call MOM_thermo_chksum("Pre-diabatic ", CS%tv, G,haloshift=0)
       call check_redundant("Pre-diabatic ", u, v, G)
       call MOM_forcing_chksum("Pre-diabatic", fluxes, G, haloshift=0)
-    endif
-
-    if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
-    if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
-    if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h, CS%diag)
-    if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, CS%tv%T, CS%diag)
-    if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, CS%tv%S, CS%diag)
-    if (CS%id_e_predia > 0) then
-      call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_predia)
-      call post_data(CS%id_e_predia, eta_predia, CS%diag)
     endif
 
     call cpu_clock_begin(id_clock_diabatic)
@@ -2251,12 +2235,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call do_group_pass(CS%pass_uv_T_S_h, G%Domain)
 
-  if (associated(CS%visc%Kv_turb)) then
-    !### For some reason the following does not work.
-!     call pass_var(CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
-    call create_group_pass(tmp_pass_Kv_turb, CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
-    call do_group_pass(tmp_pass_Kv_turb, G%Domain)
-  endif
+  if (associated(CS%visc%Kv_turb)) &
+    call pass_var(CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
 
   call cpu_clock_end(id_clock_pass_init)
 
@@ -2519,14 +2499,6 @@ subroutine register_diags(Time, G, GV, CS, ADp)
   endif
 
   ! diagnostics for values prior to diabatic and prior to ALE
-  CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
-      'Zonal velocity before diabatic forcing', 'meter second-1')
-  CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
-      'Meridional velocity before diabatic forcing', 'meter second-1')
-  CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
-      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
-  CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
-      'Interface Heights before diabatic forcing', 'meter')
   if (.not. CS%adiabatic) then
     CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
         'Zonal velocity before remapping', 'meter second-1')
@@ -2540,13 +2512,6 @@ subroutine register_diags(Time, G, GV, CS, ADp)
         'Salinity before remapping', 'ppt')
     CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
         'Interface Heights before remapping', 'meter')
-  endif
-
-  if (CS%use_temperature) then
-    CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
-        'Potential Temperature', 'Celsius')
-    CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
-        'Salinity', 'PPT')
   endif
 
   ! Diagnostics related to tracer transport

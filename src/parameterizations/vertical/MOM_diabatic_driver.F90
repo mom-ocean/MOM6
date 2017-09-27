@@ -40,6 +40,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_io,                  only : vardesc, var_desc
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
+use MOM_interface_heights,   only : find_eta
 use MOM_internal_tides,      only : propagate_int_tide
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
@@ -164,6 +165,10 @@ type, public:: diabatic_CS ; private
   integer :: id_Tdif     = -1, id_Tadv     = -1, id_Sdif         = -1, id_Sadv     = -1
   integer :: id_MLD_003  = -1, id_MLD_0125  = -1, id_MLD_user     = -1, id_mlotstsq = -1
   integer :: id_subMLN2  = -1, id_brine_lay = -1
+
+  ! diagnostic for fields prior to applying diapycnal physics
+  integer :: id_u_predia = -1, id_v_predia = -1, id_h_predia = -1
+  integer :: id_T_predia = -1, id_S_predia = -1, id_e_predia = -1
 
   integer :: id_diabatic_diff_temp_tend     = -1
   integer :: id_diabatic_diff_saln_tend     = -1
@@ -291,6 +296,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     Kd_heat,  & ! diapycnal diffusivity of heat (m^2/s)
     Kd_salt,  & ! diapycnal diffusivity of salt and passive tracers (m^2/s)
     Kd_ePBL,  & ! test array of diapycnal diffusivities at interfaces (m^2/s)
+    eta, &      ! Interface heights before diapycnal mixing, in m.
     Tdif_flx, & ! diffusive diapycnal heat flux across interfaces (K m/s)
     Tadv_flx, & ! advective diapycnal heat flux across interfaces (K m/s)
     Sdif_flx, & ! diffusive diapycnal salt flux across interfaces (ppt m/s)
@@ -360,6 +366,20 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   if (nz == 1) return
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic(), MOM_diabatic_driver.F90")
+
+
+  ! Offer diagnostics of various state varables at the start of diabatic;
+  ! these are mostly for debugging purposes.
+  if (CS%id_u_predia > 0) call post_data(CS%id_u_predia, u, CS%diag)
+  if (CS%id_v_predia > 0) call post_data(CS%id_v_predia, v, CS%diag)
+  if (CS%id_h_predia > 0) call post_data(CS%id_h_predia, h, CS%diag)
+  if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
+  if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
+  if (CS%id_e_predia > 0) then
+    call find_eta(h, tv, GV%g_Earth, G, GV, eta)
+    call post_data(CS%id_e_predia, eta, CS%diag)
+  endif
+
 
   ! set equivalence between the same bits of memory for these arrays
   eaml => eatr ; ebml => ebtr
@@ -1299,13 +1319,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   call create_group_pass(CS%pass_hold_eb_ea, ea, G%Domain, dir_flag, halo=1)
   call do_group_pass(CS%pass_hold_eb_ea, G%Domain)
   ! visc%Kv_turb is not in the group pass because it has larger vertical extent.
-  if (associated(visc%Kv_turb)) then
-!### For some reason this hangs....
-!    call pass_var(visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
-!### while this does not...
-    call create_group_pass(CS%pass_Kv, visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
-    call do_group_pass(CS%pass_Kv, G%Domain)
-  endif
+  if (associated(visc%Kv_turb)) &
+    call pass_var(visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
@@ -2051,6 +2066,23 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   if (CS%id_dudt_dia > 0) call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
   if (CS%id_dvdt_dia > 0) call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
   if (CS%id_wd > 0)       call safe_alloc_ptr(CDp%diapyc_vel,isd,ied,jsd,jed,nz+1)
+
+  ! diagnostics for values prior to diabatic and prior to ALE
+  CS%id_u_predia = register_diag_field('ocean_model', 'u_predia', diag%axesCuL, Time, &
+      'Zonal velocity before diabatic forcing', 'meter second-1')
+  CS%id_v_predia = register_diag_field('ocean_model', 'v_predia', diag%axesCvL, Time, &
+      'Meridional velocity before diabatic forcing', 'meter second-1')
+  CS%id_h_predia = register_diag_field('ocean_model', 'h_predia', diag%axesTL, Time, &
+      'Layer Thickness before diabatic forcing', thickness_units, v_extensive=.true.)
+  CS%id_e_predia = register_diag_field('ocean_model', 'e_predia', diag%axesTi, Time, &
+      'Interface Heights before diabatic forcing', 'meter')
+  if (use_temperature) then
+    CS%id_T_predia = register_diag_field('ocean_model', 'temp_predia', diag%axesTL, Time, &
+        'Potential Temperature', 'Celsius')
+    CS%id_S_predia = register_diag_field('ocean_model', 'salt_predia', diag%axesTL, Time, &
+        'Salinity', 'PPT')
+  endif
+
 
   !call set_diffusivity_init(Time, G, param_file, diag, CS%set_diff_CSp, diag_to_Z_CSp, CS%int_tide_CSp)
   CS%id_Kd_interface = register_diag_field('ocean_model', 'Kd_interface', diag%axesTi, Time, &
