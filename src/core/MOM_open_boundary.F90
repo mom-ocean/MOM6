@@ -2371,7 +2371,7 @@ subroutine fill_temp_salt_segments(G, OBC, tv)
 end subroutine fill_temp_salt_segments
 
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
-  type(hor_index_type), pointer, intent(in) :: HI
+  type(hor_index_type),             intent(in) :: HI
   type(verticalGrid_type), pointer, intent(in) :: GV
   type(ocean_OBC_type), pointer, intent(inout) :: OBC_CS !< OBC data structure
   type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp
