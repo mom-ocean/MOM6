@@ -1239,14 +1239,14 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
     if (.not. segment%on_pe) cycle
-    if (segment%is_E_or_W) then
+    if (segment%is_E_or_W .and. segment%radiation) then
       do k=1,G%ke
         I=segment%HI%IscB
         do j=segment%HI%jsc,segment%HI%jec
           segment%rx_normal(I,j,k) = OBC%rx_normal(I,j,k)
         enddo
       enddo
-    elseif (segment%is_N_or_S) then
+    elseif (segment%is_N_or_S .and. segment%radiation) then
       do k=1,G%ke
         J=segment%HI%JscB
         do i=segment%HI%isc,segment%HI%iec
