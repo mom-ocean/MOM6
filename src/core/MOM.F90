@@ -3190,7 +3190,7 @@ subroutine write_static_fields(G, diag)
         'Surface area of tracer (T) cells', 'm2',                    &
         cmor_field_name='areacello', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',      &
-        x_cell_method='sum', y_cell_method='sum')
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
     call diag_register_area_ids(diag, id_area_t=id)
@@ -3200,7 +3200,7 @@ subroutine write_static_fields(G, diag)
         'Surface area of x-direction flow (U) cells', 'm2',             &
         cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
-        x_cell_method='sum', y_cell_method='sum')
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
   endif
@@ -3209,7 +3209,7 @@ subroutine write_static_fields(G, diag)
         'Surface area of y-direction flow (V) cells', 'm2',             &
         cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
-        x_cell_method='sum', y_cell_method='sum')
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
   endif
@@ -3218,7 +3218,7 @@ subroutine write_static_fields(G, diag)
         'Surface area of B-grid flow (Q) cells', 'm2',                  &
         cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
         cmor_long_name='Ocean Grid-Cell Area',         &
-        x_cell_method='sum', y_cell_method='sum')
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
     call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
   endif
@@ -3228,7 +3228,8 @@ subroutine write_static_fields(G, diag)
         standard_name='sea_floor_depth_below_geoid',                     &
         cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
         cmor_standard_name='sea_floor_depth_below_geoid',&
-        area=diag%axesT1%id_area, x_cell_method='mean', y_cell_method='mean')
+        area=diag%axesT1%id_area, &
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
 
   id = register_static_field('ocean_model', 'wet', diag%axesT1, &
@@ -3281,7 +3282,7 @@ subroutine write_static_fields(G, diag)
         'Percentage of cell area covered by ocean', '%', &
         cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
         cmor_long_name='Sea Area Fraction', &
-        x_cell_method='mean', y_cell_method='mean')
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) then
     tmp_h(:,:) = 0.
     tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
