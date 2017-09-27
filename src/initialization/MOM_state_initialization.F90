@@ -25,6 +25,7 @@ use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query, set_tracer_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
+use MOM_open_boundary, only : fill_temp_salt_segments
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, determine_is_new_run, MOM_restart_CS
@@ -74,6 +75,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
+use dyed_obcs_initialization, only : dyed_obcs_set_OBC_data
 use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
 use soliton_initialization, only : soliton_initialize_thickness
@@ -104,6 +106,8 @@ character(len=40)  :: mdl = "MOM_state_initialization" ! This module's name.
 contains
 
 ! -----------------------------------------------------------------------------
+!> Initialize temporally evolving fields, either as initial
+!! conditions or by reading them from a restart (or saves) file.
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
                                 ALE_sponge_CSp, OBC, Time_in)
@@ -134,23 +138,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   type(ocean_OBC_type),       pointer       :: OBC
   type(time_type), optional,  intent(in)    :: Time_in !< Time at the start of the run segment.
                                                      !! Time_in overrides any value set for Time.
-! Arguments: u  - Zonal velocity, in m s-1.
-!  (out)     v  - Meridional velocity, in m s-1.
-!  (out)     h  - Layer thickness, in m.
-!  (out)     tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (out)     Time    - Time at the start of the run segment.
-!  (inout)   G       - The ocean's grid structure.
-!  (in)      GV      - The ocean's vertical grid structure.
-!  (in)      PF      - A structure indicating the open file to parse for
-!                      model parameter values.
-!  (in)      dirs    - A structure containing several relevant directory paths.
-!  (inout)   restart_CS - A pointer to the restart control structure.
-!  (inout)   CS      - A structure of pointers to be exchanged with MOM.F90.
-!  (in)      Time_in - Time at the start of the run segment. Time_in overrides
-!                      any value set for Time.
 
+! Local variables
   character(len=200) :: filename   ! The name of an input file.
   character(len=200) :: filename2  ! The name of an input files.
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
@@ -158,7 +147,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   logical :: from_Z_file, useALE
   logical :: new_sim
   integer :: write_geom
-  logical :: use_temperature, use_sponge
+  logical :: use_temperature, use_sponge, use_OBC
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
@@ -201,6 +190,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
   use_temperature = ASSOCIATED(tv%T)
   useALE = associated(ALE_CSp)
   use_EOS = associated(tv%eqn_of_state)
+  use_OBC = associated(OBC)
   if (use_EOS) eos => tv%eqn_of_state
 
 !====================================================================
@@ -374,6 +364,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       end select
     endif
   endif  ! not from_Z_file.
+  if (use_temperature .and. use_OBC) &
+    call fill_temp_salt_segments(G, OBC, tv)
 
   ! The thicknesses in halo points might be needed to initialize the velocities.
   if (new_sim) call pass_var(h, G%Domain)
@@ -540,20 +532,23 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "A string that sets how the user code is invoked to set open\n"//&
                  " boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
-                 "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
-                 "   supercritical - now only needed here for the allocations\n"//&
+                 "   dyed_obcs - circle_obcs with dyes on the open boundaries\n"//&
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
                  "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
+                 "   supercritical - now only needed here for the allocations\n"//&
+                 "   tidal_bay - Flather with tidal forcing on eastern boundary\n"//&
                  "   USER - user specified", default="none")
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
-    elseif (lowercase(trim(config)) == "supercritical") then
-      call supercritical_set_OBC_data(OBC, G, PF)
-    elseif (trim(config) == "tidal_bay") then
-      OBC%update_OBC = .true.
+    elseif (trim(config) == "dyed_obcs") then
+      call dyed_obcs_set_OBC_data(OBC, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "Kelvin") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "shelfwave") then
+      OBC%update_OBC = .true.
+    elseif (lowercase(trim(config)) == "supercritical") then
+      call supercritical_set_OBC_data(OBC, G, PF)
+    elseif (trim(config) == "tidal_bay") then
       OBC%update_OBC = .true.
     elseif (trim(config) == "USER") then
       call user_set_OBC_data(OBC, tv, G, PF, tracer_Reg)
@@ -1628,38 +1623,17 @@ end subroutine initialize_temp_salt_linear
 subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, ALE_CSp, Time)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
-  logical,                 intent(in) :: use_temperature
+  logical,                 intent(in) :: use_temperature !< If true, T & S are state variables.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic
                                               !! variables.
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
-  type(sponge_CS),         pointer    :: CSp  !! A pointer that is set to point to the control
+  type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
                                               !! structure for this module (in layered mode).
-  type(ALE_sponge_CS),         pointer    :: ALE_CSp  !! A pointer that is set to point to the control
+  type(ALE_sponge_CS),         pointer    :: ALE_CSp  !< A pointer that is set to point to the control
                                                       !! structure for this module (in ALE mode).
   type(time_type),         intent(in) :: Time
-!   This subroutine sets the inverse restoration time (Idamp), and   !
-! the values towards which the interface heights and an arbitrary    !
-! number of tracers should be restored within each sponge. The       !
-! interface height is always subject to damping, and must always be  !
-! the first registered field.                                        !
 
-! Arguments: from_file - .true. if the variables that are used here are to
-!                        be read from a file; .false. to be set internally.
-!  (in)      filename - The name of the file to read for all fields
-!                       except the inverse damping rate.
-!  (in)      damp_file - The name of the file from which to read the
-!                        inverse damping rate.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      use_temperature - If true, T & S are state variables.
-!  (in)      tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CSp - A pointer that is set to point to the control structure
-!                  for this module
-
+! Local variables
   real, allocatable, dimension(:,:,:) :: eta ! The target interface heights, in m.
   real, allocatable, dimension(:,:,:) :: h   ! The target interface thicknesses, in m.
 
@@ -1828,10 +1802,10 @@ end subroutine initialize_sponges_file
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the 4 bottom depths at velocity points to be the
+!! maximum of the adjacent depths.
 subroutine set_velocity_depth_max(G)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  ! This subroutine sets the 4 bottom depths at velocity points to be the
-  ! maximum of the adjacent depths.
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
@@ -1846,10 +1820,10 @@ end subroutine set_velocity_depth_max
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+!> Subroutine to pre-compute global integrals of grid quantities for
+!! later use in reporting diagnostics
 subroutine compute_global_grid_integrals(G)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  ! Subroutine to pre-compute global integrals of grid quantities for
-  ! later use in reporting diagnostics
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming
   integer :: i,j
 
@@ -1863,10 +1837,10 @@ subroutine compute_global_grid_integrals(G)
 end subroutine compute_global_grid_integrals
 
 ! -----------------------------------------------------------------------------
+!> This subroutine sets the 4 bottom depths at velocity points to be the
+!! minimum of the adjacent depths.
 subroutine set_velocity_depth_min(G)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  ! This subroutine sets the 4 bottom depths at velocity points to be the
-  ! minimum of the adjacent depths.
   integer :: i, j
 
   do I=G%isd,G%ied-1 ; do j=G%jsd,G%jed
@@ -1887,16 +1861,6 @@ end subroutine set_velocity_depth_min
 subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 ! This subroutine was written by M. Harrison, with input from R. Hallberg & A. Adcroft.
 !
-! Arguments:
-!  (out)     h  - Layer thickness, in m.
-!  (out)     tv - A structure containing pointers to any available
-!                 thermodynamic fields, including potential temperature and
-!                 salinity or mixed layer density. Absent fields have NULL ptrs.
-!  (inout)   G       - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      PF      - A structure indicating the open file to parse for
-!                      model parameter values.
-
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                            intent(out)   :: h    !< Layer thicknesses being initialized, in m

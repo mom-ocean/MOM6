@@ -2,16 +2,6 @@ module MOM_tracer_flow_control
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Will Cooke, April 2003                                          *
-!*                                                                     *
-!*    This module contains two subroutines into which calls to other   *
-!*  tracer initialization (call_tracer_init_fns) and column physics    *
-!*  routines (call_tracer_column_fns) can be inserted.                 *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
@@ -54,6 +44,9 @@ use oil_tracer, only : oil_stock, oil_tracer_end, oil_tracer_CS
 use advection_test_tracer, only : register_advection_test_tracer, initialize_advection_test_tracer
 use advection_test_tracer, only : advection_test_tracer_column_physics, advection_test_tracer_surface_state
 use advection_test_tracer, only : advection_test_stock, advection_test_tracer_end, advection_test_tracer_CS
+use dyed_obc_tracer, only : register_dyed_obc_tracer, initialize_dyed_obc_tracer
+use dyed_obc_tracer, only : dyed_obc_tracer_column_physics
+use dyed_obc_tracer, only : dyed_obc_tracer_end, dyed_obc_tracer_CS
 #ifdef _USE_GENERIC_TRACER
 use MOM_generic_tracer, only : register_MOM_generic_tracer, initialize_MOM_generic_tracer
 use MOM_generic_tracer, only : MOM_generic_tracer_column_physics, MOM_generic_tracer_surface_state
@@ -86,6 +79,7 @@ type, public :: tracer_flow_control_CS ; private
   logical :: use_MOM_generic_tracer = .false.
   logical :: use_pseudo_salt_tracer = .false.
   logical :: use_boundary_impulse_tracer = .false.
+  logical :: use_dyed_obc_tracer = .false.
   type(USER_tracer_example_CS), pointer :: USER_tracer_example_CSp => NULL()
   type(DOME_tracer_CS), pointer :: DOME_tracer_CSp => NULL()
   type(ISOMIP_tracer_CS), pointer :: ISOMIP_tracer_CSp => NULL()
@@ -99,6 +93,7 @@ type, public :: tracer_flow_control_CS ; private
 #endif
   type(pseudo_salt_tracer_CS), pointer :: pseudo_salt_tracer_CSp => NULL()
   type(boundary_impulse_tracer_CS), pointer :: boundary_impulse_tracer_CSp => NULL()
+  type(dyed_obc_tracer_CS), pointer :: dyed_obc_tracer_CSp => NULL()
 end type tracer_flow_control_CS
 
 contains
@@ -212,6 +207,9 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "USE_BOUNDARY_IMPULSE_TRACER", CS%use_boundary_impulse_tracer, &
                  "If true, use the boundary impulse tracer.", &
                  default=.false.)
+  call get_param(param_file, mdl, "USE_DYED_OBC_TRACER", CS%use_dyed_obc_tracer, &
+                 "If true, use the dyed_obc_tracer tracer package.", &
+                 default=.false.)
 
 #ifndef _USE_GENERIC_TRACER
   if (CS%use_MOM_generic_tracer) call MOM_error(FATAL, &
@@ -253,10 +251,13 @@ subroutine call_tracer_register(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #endif
   if (CS%use_pseudo_salt_tracer) CS%use_pseudo_salt_tracer = &
     register_pseudo_salt_tracer(HI, GV, param_file,  CS%pseudo_salt_tracer_CSp, &
-                        tr_Reg, restart_CS)
+                                tr_Reg, restart_CS)
   if (CS%use_boundary_impulse_tracer) CS%use_boundary_impulse_tracer = &
     register_boundary_impulse_tracer(HI, GV, param_file,  CS%boundary_impulse_tracer_CSp, &
-                        tr_Reg, restart_CS)
+                                     tr_Reg, restart_CS)
+  if (CS%use_dyed_obc_tracer) CS%use_dyed_obc_tracer = &
+    register_dyed_obc_tracer(HI, GV, param_file, CS%dyed_obc_tracer_CSp, &
+                             tr_Reg, restart_CS)
 
 
 end subroutine call_tracer_register
@@ -264,7 +265,7 @@ end subroutine call_tracer_register
 !> This subroutine calls all registered tracer initialization
 !! subroutines.
 subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OBC, &
-                                CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
+                                    CS, sponge_CSp, ALE_sponge_CSp, diag_to_Z_CSp, tv)
   logical,                               intent(in)    :: restart !< 1 if the fields have already
                                                                   !! been read from a restart file.
   type(time_type), target,               intent(in)    :: day     !< Time of the start of the run.
@@ -353,6 +354,9 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
   if (CS%use_boundary_impulse_tracer) &
     call initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC, CS%boundary_impulse_tracer_CSp, &
                                 sponge_CSp, diag_to_Z_CSp, tv)
+  if (CS%use_dyed_obc_tracer) &
+    call initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS%dyed_obc_tracer_CSp, &
+                                diag_to_Z_CSp)
 
 end subroutine tracer_flow_control_init
 
@@ -555,6 +559,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
                                      G, GV, CS%boundary_impulse_tracer_CSp, tv, debug,&
                                      evap_CFL_limit=evap_CFL_limit, &
                                      minimum_forcing_depth=minimum_forcing_depth)
+    if (CS%use_dyed_obc_tracer) &
+      call dyed_obc_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%dyed_obc_tracer_CSp, &
+                                      evap_CFL_limit=evap_CFL_limit, &
+                                      minimum_forcing_depth=minimum_forcing_depth)
 
 
   else ! Apply tracer surface fluxes using ea on the first layer
@@ -593,6 +602,9 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, Hml, dt, G, GV, 
     if (CS%use_boundary_impulse_tracer) &
       call boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                      G, GV, CS%boundary_impulse_tracer_CSp, tv, debug)
+    if (CS%use_dyed_obc_tracer) &
+      call dyed_obc_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
+                                      G, GV, CS%dyed_obc_tracer_CSp)
 
 
   endif
@@ -853,8 +865,17 @@ subroutine tracer_flow_control_end(CS)
 #endif
   if (CS%use_pseudo_salt_tracer) call pseudo_salt_tracer_end(CS%pseudo_salt_tracer_CSp)
   if (CS%use_boundary_impulse_tracer) call boundary_impulse_tracer_end(CS%boundary_impulse_tracer_CSp)
+  if (CS%use_dyed_obc_tracer) call dyed_obc_tracer_end(CS%dyed_obc_tracer_CSp)
 
   if (associated(CS)) deallocate(CS)
 end subroutine tracer_flow_control_end
 
+!> \namespace MOM_tracer_flow_control
+!!
+!!  By Will Cooke, April 2003
+!!
+!!    This module contains two subroutines into which calls to other
+!!  tracer initialization (call_tracer_init_fns) and column physics
+!!  routines (call_tracer_column_fns) can be inserted.
+!!
 end module MOM_tracer_flow_control

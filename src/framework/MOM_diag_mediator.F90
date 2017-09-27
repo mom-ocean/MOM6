@@ -56,7 +56,8 @@ public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public define_axes_group, diag_masks_set
 public diag_register_area_ids
-public diag_register_volume_ids
+public diag_associate_volume_cell_measure
+public diag_get_volume_cell_measure_dm_id
 public diag_set_state_ptrs, diag_update_remap_grids
 
 interface post_data
@@ -176,6 +177,9 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: S => null()
   type(EOS_type),  pointer :: eqn_of_state => null()
   type(ocean_grid_type), pointer :: G => null()
+
+  ! The volume cell measure (special diagnostic) manager id
+  integer :: volume_cell_measure_dm_id = -1
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   ! Keep a copy of h so that we know whether it has changed. If it has then
@@ -380,7 +384,7 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesTL%id_area = fms_id
     do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesTL(i)%id_area = fms_id
-      ! Note to AJA: why am I not doing TZi too?
+      diag_cs%remap_axesTi(i)%id_area = fms_id
     enddo
   endif
   if (present(id_area_q)) then
@@ -390,21 +394,40 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesBL%id_area = fms_id
     do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesBL(i)%id_area = fms_id
+      diag_cs%remap_axesBi(i)%id_area = fms_id
     enddo
   endif
 end subroutine diag_register_area_ids
 
 !> Attaches the id of cell volumes to axes groups for use with cell_measures
-subroutine diag_register_volume_ids(diag_cs, id_vol_t)
-  type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
-  integer, optional, intent(in)    :: id_vol_t !< Diag_manager id for volume of h-cells
+subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
+  type(diag_ctrl),   intent(inout) :: diag_cs     !< Diagnostics control structure
+  integer,           intent(in)    :: id_h_volume !< Diag_manager id for volume of h-cells
   ! Local variables
-  integer :: fms_id
-  if (present(id_vol_t)) then
-    fms_id = diag_cs%diags(id_vol_t)%fms_diag_id
-    call MOM_error(FATAL,"diag_register_volume_ids: not implemented yet!")
-  endif
-end subroutine diag_register_volume_ids
+  type(diag_type), pointer :: tmp
+
+  if (id_h_volume<=0) return ! Do nothing
+  diag_cs%volume_cell_measure_dm_id = id_h_volume ! Record for diag_get_volume_cell_measure_dm_id()
+
+  ! Set the cell measure for this axes group to the FMS id in this coordinate system
+  diag_cs%diags(id_h_volume)%axes%id_volume = diag_cs%diags(id_h_volume)%fms_diag_id
+
+  tmp => diag_cs%diags(id_h_volume)%next ! First item in the list, if any
+  do while (associated(tmp))
+    ! Set the cell measure for this axes group to the FMS id in this coordinate system
+    tmp%axes%id_volume = tmp%fms_diag_id
+    tmp => tmp%next ! Move to next axes group for this field
+  enddo
+
+end subroutine diag_associate_volume_cell_measure
+
+!> Returns diag_manager id for cell measure of h-cells
+integer function diag_get_volume_cell_measure_dm_id(diag_cs)
+  type(diag_ctrl),   intent(in) :: diag_cs   !< Diagnostics control structure
+
+  diag_get_volume_cell_measure_dm_id = diag_cs%volume_cell_measure_dm_id
+
+end function diag_get_volume_cell_measure_dm_id
 
 !> Defines a group of "axes" from list of handles
 subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_number, &
@@ -615,7 +638,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:), pointer :: locfield => NULL()
   logical :: used, is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, i, j
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -651,6 +674,13 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%conversion_factor/=0.) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
+    do j=jsv,jev ; do i=isv,iev
+      if (field(i,j) == diag_cs%missing_value) then
+        locfield(i,j) = diag_cs%missing_value
+      else
+        locfield(i,j) = field(i,j) * diag%conversion_factor
+      endif
+    enddo ; enddo
     locfield(isv:iev,jsv:jev) = field(isv:iev,jsv:jev) * diag%conversion_factor
   else
     locfield => field
@@ -830,7 +860,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -865,9 +895,15 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag%conversion_factor/=0.) then
-    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), &
-                        lbound(field,3):ubound(field,3) ) )
-    locfield(isv:iev,jsv:jev,:) = field(isv:iev,jsv:jev,:) * diag%conversion_factor
+    ks = lbound(field,3) ; ke = ubound(field,3)
+    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
+    do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
+      if (field(i,j,k) == diag_cs%missing_value) then
+        locfield(i,j,k) = diag_cs%missing_value
+      else
+        locfield(i,j,k) = field(i,j,k) * diag%conversion_factor
+      endif
+    enddo ; enddo ; enddo
   else
     locfield => field
   endif
@@ -1306,41 +1342,74 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   ! Local variables
-  integer :: fms_id, area_id
+  integer :: fms_id, area_id, volume_id
 
   ! This gets the cell area associated with the grid location of this variable
   area_id = axes%id_area
+  volume_id = axes%id_volume
 
   ! Get the FMS diagnostic id
   if (present(interp_method) .or. axes%is_h_point) then
     ! If interp_method is provided we must use it
     if (area_id>0) then
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count, area=area_id, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, area=area_id)
+      endif
     else
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count)
+      endif
     endif
   else
     ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
     if (area_id>0) then
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count, area=area_id, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, area=area_id)
+      endif
     else
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count)
+      endif
     endif
   endif
 
