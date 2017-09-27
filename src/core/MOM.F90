@@ -363,13 +363,6 @@ type, public :: MOM_control_struct
   integer :: id_T_vardec = -1
   integer :: id_S_vardec = -1
 
-  ! diagnostic for fields prior to applying ALE remapping
-  integer :: id_u_preale = -1
-  integer :: id_v_preale = -1
-  integer :: id_h_preale = -1
-  integer :: id_T_preale = -1
-  integer :: id_S_preale = -1
-  integer :: id_e_preale = -1
 
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = 1
@@ -1070,7 +1063,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
   type(time_type),          intent(in)    :: end_time !< The model time at the end of this step.
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
 
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: do_pass_kv_bbl_thick
@@ -1131,15 +1123,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
-    if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,    CS%diag)
-    if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,    CS%diag)
-    if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,    CS%diag)
-    if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
-    if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
-    if (CS%id_e_preale > 0) then
-      call find_eta(h, tv, GV%g_Earth, G, GV, eta_preale)
-      call post_data(CS%id_e_preale, eta_preale, CS%diag)
-    endif
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
 
@@ -2177,7 +2160,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call register_diags(Time, G, GV, CS, CS%ADp)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
-    call ALE_register_diags(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
+    call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif
 
 
@@ -2496,22 +2479,6 @@ subroutine register_diags(Time, G, GV, CS, ADp)
       call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
       call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
     endif
-  endif
-
-  ! diagnostics for values prior to diabatic and prior to ALE
-  if (.not. CS%adiabatic) then
-    CS%id_u_preale = register_diag_field('ocean_model', 'u_preale', diag%axesCuL, Time, &
-        'Zonal velocity before remapping', 'meter second-1')
-    CS%id_v_preale = register_diag_field('ocean_model', 'v_preale', diag%axesCvL, Time, &
-        'Meridional velocity before remapping', 'meter second-1')
-    CS%id_h_preale = register_diag_field('ocean_model', 'h_preale', diag%axesTL, Time, &
-        'Layer Thickness before remapping', thickness_units, v_extensive=.true.)
-    CS%id_T_preale = register_diag_field('ocean_model', 'T_preale', diag%axesTL, Time, &
-        'Temperature before remapping', 'degC')
-    CS%id_S_preale = register_diag_field('ocean_model', 'S_preale', diag%axesTL, Time, &
-        'Salinity before remapping', 'ppt')
-    CS%id_e_preale = register_diag_field('ocean_model', 'e_preale', diag%axesTi, Time, &
-        'Interface Heights before remapping', 'meter')
   endif
 
   ! Diagnostics related to tracer transport
