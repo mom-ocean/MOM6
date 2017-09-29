@@ -447,7 +447,8 @@ subroutine geothermal_init(Time, G, param_file, diag, CS)
         'Geothermal heat flux into ocean', 'W m-2',                    &
         cmor_field_name='hfgeou', cmor_units='W m-2',                  &
         cmor_standard_name='upward_geothermal_heat_flux_at_sea_floor', &
-        cmor_long_name='Upward geothermal heat flux at sea floor')
+        cmor_long_name='Upward geothermal heat flux at sea floor', &
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
 
 end subroutine geothermal_init
