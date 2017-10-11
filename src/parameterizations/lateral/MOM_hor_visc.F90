@@ -420,10 +420,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
     do j=js-2,je+2 ; do I=Isq-1,Ieq+1
-      h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
+      h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
     enddo ; enddo
     do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
-      h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+      h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
     enddo ; enddo
 
     ! Adjust contributions to shearing strain and interpolated values of
