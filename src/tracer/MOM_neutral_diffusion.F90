@@ -385,6 +385,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     CS%S_i(:,:,:,:) = 0.
     CS%dRdT_i(:,:,:,:) = 0.
     CS%dRdS_i(:,:,:,:) = 0.
+    CS%ns(:,:) = 0.
+    CS%stable_cell(:,:,:) = .true.
   endif
 
   ! Calculate pressure at interfaces and layer averaged alpha/beta
@@ -429,15 +431,16 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     else ! Discontinuous reconstruction
       do k = 1, G%ke
         if (CS%ref_pres<0) ref_pres(:) = CS%Pint(:,j,k)
-        call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
-                                      CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, EOS)
+        if (CS%stable_cell(i,j,k)) &
+          call calculate_density_derivs(CS%T_i(:,j,k,1), CS%S_i(:,j,k,1), ref_pres, &
+                                        CS%dRdT_i(:,j,k,1), CS%dRdS_i(:,j,k,1), G%isc-1, G%iec-G%isc+3, EOS)
         if (CS%ref_pres<0) then
           ref_pres(:) = CS%Pint(:,j,k+1)
         endif
-        call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
-                                         CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
+        if (CS%stable_cell(i,j,k)) &
+          call calculate_density_derivs(CS%T_i(:,j,k,2), CS%S_i(:,j,k,2), ref_pres, &
+                                        CS%dRdT_i(:,j,k,2), CS%dRdS_i(:,j,k,2), G%isc-1, G%iec-G%isc+3, EOS)
       enddo
-      call mark_unstable_cells_i( G%ke, CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%stable_cell(i,j,:), CS%ns(i,j) )
     endif
   enddo
 
@@ -1125,15 +1128,15 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
   logical :: refine_pos             ! Use rootfinding to find the true neutral surface position
   integer :: k, kl_left_0, kl_right_0
   real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
-  integer :: lastK_left, lastK_right, maxK_left, maxK_right
-  real    :: lastP_left, lastP_right
+  integer :: lastK_left, lastK_right, maxP_r
+  real    :: lastP_left, lastP_right, maxP_l
   real    :: min_bound
   logical, dimension(nk) :: top_connected_l, top_connected_r
   logical, dimension(nk) :: bot_connected_l, bot_connected_r
+  logical :: search_layer_l, search_layer_r
 
   top_connected_l(:) = .false. ; top_connected_r(:) = .false.
   bot_connected_l(:) = .false. ; bot_connected_r(:) = .false.
-  maxK_left = -1 ; maxK_right = -1
   ! Vectors with all the values of the discontinuous reconstruction.
   ! Dimensions are [number of layers x number of interfaces]. Second dimension = 1 for top interface, = 2 for bottom
 !  real, dimension(nk,2) :: Sl, Sr, Tl, Tr, dRdT_l, dRdS_l, dRdT_r, dRdS_r
@@ -1209,7 +1212,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       dRhoBot = 0.5 * &
         ( ( dRdT_l(kl_left,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left,2) - Tr(kl_right,ki_right) ) &
         + ( dRdS_l(kl_left,2) + dRdS_r(kl_right,ki_right) ) * ( Sl(kl_left,2) - Sr(kl_right,ki_right) ) )
-      if (kl_left>kl_left_0) then
+      if (.not. search_layer_l .and. kl_left>kl_left_0) then
         if (stable_l(kl_left-1) ) then ! Calculate the density difference at top of discontinuity
           dRhoTopm1 = 0.5 * &
             ( ( dRdT_l(kl_left-1,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left-1,2) - Tr(kl_right,ki_right) ) &
@@ -1229,7 +1232,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
 
       ! Set the position within the starting column
       PoR(k_surface) = REAL(ki_right-1)
-      KoR(k_surface) = REAL(kl_right)
+      KoR(k_surface) = kl_right
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_l(kl_left), Pres_l(kl_left+1), &
@@ -1278,7 +1281,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       endif
       ! Set the position within the starting column
       PoL(k_surface) = REAL(ki_left-1)
-      KoL(k_surface) = REAL(kl_left)
+      KoL(k_surface) = kl_left
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_r(kl_right), Pres_r(kl_right+1),        &
@@ -1307,8 +1310,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
 
     if (debug_this_module)  write(*,'(A,I3,A,ES16.6,A,I2,A,ES16.6)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
       KoR(k_surface), " PoR:", PoR(k_surface)
-    maxK_left= MAX(KoL(k_surface), maxK_left)
-    maxK_right= MAX(KoR(k_surface), maxK_right)
     ! Effective thickness
     ! NOTE: This would be better expressed in terms of the layers thicknesses rather
     ! than as differences of position - AJA
@@ -1369,10 +1370,10 @@ subroutine increment_interface(nk, kl, ki, stable, reached_bottom, searching_thi
   if (ki == 1) then
     ki = 2
   elseif ((ki == 2) .and. (kl < nk) ) then
-    ki = 1
     do k = kl+1,nk
       if (stable(kl)) then
         kl = k
+        ki = 1
         exit
       endif
       ! If we did not find another stable cell, then the current cell is essentially the bottom
@@ -1412,61 +1413,146 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   ! Local variables
   logical :: search_layer
 
-  search_layer = .true.
-  ! Bad values to make sure that the particular setup has been processed
-  out_P = -1. ; out_K = -1
-  ! Check if everything in this layer is denser than neutral surface or if at the top of the water column
-  if ((kl==kl_0 .and. ki==1)) then
-    if (debug_this_module)  write(*,*) "At surface"
-    out_P = 0. ; out_K = kl
-    search_layer = .false.
-  ! Deal with the case where reconstruction is continuous
-  elseif ( kl>kl_0 .and. lastK<kl ) then
-    if (dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
-      out_P = 1. ; out_K = kl-1;
-      search_layer = .false.
-    elseif ( (dRhoTopm1<dRhoTop .and. dRhoTop > 0.)) then
-      out_P = 1. ; out_K = kl-1
-      search_layer = .false.
-    endif
-  endif
 
-  if (search_layer) then
-    if (dRhoTop > 0.) then
-      if (debug_this_module)  write(*,*) "dRhoTop > 0."
-      if (lastK < kl) then
-        out_P = 0. ; out_K = kl
-      elseif (lastK == kl) then
-        out_P = lastP ; out_K = lastK
+  if (kl > kl_0) then ! Away from top cell
+    if (kl == lastK) then ! Searching in the same layer
+      if (dRhoTop > 0.) then
+        out_P = lastP ; out_K = kl
+      elseif (dRhoTop == dRhoBot) then
+        if (top_connected(kl)) then
+          out_P = 1. ; out_K = kl
+        else
+          out_P = 0. ; out_K = kl
+        endif
+      elseif (dRhoTop >= dRhoBot) then
+        out_P = 1. ; out_K = kl
+      else
+        out_K = kl
+        out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
       endif
-    elseif ( dRhoTop == 0. .and. (.not. top_connected(kl)) ) then
-     if (debug_this_module)  write(*,*) "dRhoTop == 0. .and. not top_connected"
-!    if ( dRhoTop == 0. .and. (.not. top_connected(kl)) ) then
-      if (lastK < kl) then
-        out_P = 0. ; out_K = kl
-      elseif (lastK == kl) then
-        out_P = lastP ; out_K = lastK
+    else ! Searching across the interface
+      if (.not. bot_connected(kl-1) ) then
+        out_K = kl-1
+        out_P = 1.
+      else
+        out_K = kl
+        out_P = 0.
+      endif
+    endif
+  else ! At the top cell
+    if (ki == 1) then
+      out_P = 0. ; out_K = kl
+    elseif (dRhoTop > 0.) then
+      out_P = max(0.,lastP) ; out_K = kl
+    elseif (dRhoTop == dRhoBot) then
+      if (top_connected(kl)) then
+        out_P = 1. ; out_K = kl
+      else
+        out_P = max(0.,lastP) ; out_K = kl
       endif
     elseif (dRhoTop >= dRhoBot) then
-     if (debug_this_module)  write(*,*) "dRhoTop >= dRhoBot"
-      out_P = 1. ; out_K = kl
-    elseif ( (dRhoTop < 0.) .and. (dRhoBot < 0.) ) then
-     if (debug_this_module)  write(*,*) "dRhoTop < 0. .and. dRhoBot < 0."
-      out_P = 1. ; out_K = kl
+      out_P = lastP ; out_K = kl
     else
-      if (debug_this_module)  write(*,*) "Zero crossing point within layer"
-      out_P = interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot)
       out_K = kl
+      out_P = interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot )
     endif
   endif
 
-  if ( (out_P < 0.) .and. (out_K < 0) ) then
-    call MOM_error(WARNING, "Unanticipated case in search_other_column_discontinuous")
-  endif
-  ! Check to make sure that the layer index is always increasing
-  if ( (out_K < lastK) .and. lastP==0. .and. out_P == 1. ) then
-!    out_K = lastK ; out_P = 0.
-  endif
+!  ! Because we are looking left, the right surface, kr, is lighter than klm1+1 and should be denser than klm1
+!  ! unless we are still at the top of the left column (kl=1)
+!  if (dRhoTop > 0. .or. kr+kl==2) then
+!    PoL(k_surface) = 0. ! The right surface is lighter than anything in layer klm1
+!  elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
+!    PoL(k_surface) = 1.
+!  else
+!    ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
+!    ! between right and left is zero.
+!    PoL(k_surface) = interpolate_for_nondim_position( dRhoTop, Pl(klm1), dRhoBot, Pl(klm1+1) )
+!  endif
+!  if (PoL(k_surface)>=1. .and. klm1<nk) then ! >= is really ==, when PoL==1 we point to the bottom of the cell
+!    klm1 = klm1 + 1
+!    PoL(k_surface) = PoL(k_surface) - 1.
+!  endif
+!  if (real(klm1-lastK_left)+(PoL(k_surface)-lastP_left)<0.) then
+!    PoL(k_surface) = lastP_left
+!    klm1 = lastK_left
+!  endif
+!  if (kl == kl_0 .and. ki == 1) then
+!    out_P = 0.
+!    out_K = kl
+!  elseif (dR
+!    out_P = 0. ! The surface is lighter than anything in layer kl
+!  elseif (dRhoTop >= dRhoBot) then ! Left layer is unstratified
+!    out_P = 1.
+!  else
+!    ! Linearly interpolate for the position between Pl(kl-1) and Pl(kl) where the density difference
+!    ! between right and left is zero.
+!    out_P = interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot )
+!  endif
+!  out_K = kl
+!
+!  if (out_P == 0. .and. kl>kl_0) then
+!    if (.not. bot_connected(kl-1)) then
+!      out_P = 1.
+!      out_K = kl-1
+!    endif
+!  endif
+
+!  search_layer = .true.
+!  ! Bad values to make sure that the particular setup has been processed
+!  out_P = -1. ; out_K = -1
+!  ! Check if everything in this layer is denser than neutral surface or if at the top of the water column
+!  if ((kl==kl_0 .and. ki==1)) then
+!    if (debug_this_module)  write(*,*) "At surface"
+!    out_P = 0. ; out_K = kl
+!    search_layer = .false.
+!  ! Deal with the case where reconstruction is continuous
+!  elseif ( kl>kl_0 .and. lastK<kl ) then
+!    if (dRhoTopm1==dRhoTop .and. dRhoTopm1 == 0. .and. (.not.bot_connected(kl-1)) ) then
+!      out_P = 1. ; out_K = kl-1;
+!      search_layer = .false.
+!    elseif ( (dRhoTopm1<dRhoTop .and. dRhoTop > 0.)) then
+!      out_P = 0. ; out_K = kl
+!      search_layer = .false.
+!    endif
+!  endif
+!
+!  if (search_layer) then
+!    if (dRhoTop > 0.) then
+!      if (debug_this_module)  write(*,*) "dRhoTop > 0."
+!      if (lastK < kl) then
+!        out_P = 0. ; out_K = kl
+!      elseif (lastK == kl) then
+!        out_P = lastP ; out_K = lastK
+!      endif
+!    elseif ( dRhoTop == 0. .and. (.not. top_connected(kl)) ) then
+!     if (debug_this_module)  write(*,*) "dRhoTop == 0. .and. not top_connected"
+!!    if ( dRhoTop == 0. .and. (.not. top_connected(kl)) ) then
+!      if (lastK < kl) then
+!        out_P = 0. ; out_K = kl
+!      elseif (lastK == kl) then
+!        out_P = lastP ; out_K = lastK
+!      endif
+!    elseif (dRhoTop >= dRhoBot) then
+!     if (debug_this_module)  write(*,*) "dRhoTop >= dRhoBot"
+!      out_P = 1. ; out_K = kl
+!    elseif ( (dRhoTop < 0.) .and. (dRhoBot < 0.) ) then
+!     if (debug_this_module)  write(*,*) "dRhoTop < 0. .and. dRhoBot < 0."
+!      out_P = 1. ; out_K = kl
+!    else
+!      if (debug_this_module)  write(*,*) "Zero crossing point within layer"
+!      out_P = interpolate_for_nondim_position(dRhoTop, Ptop, dRhoBot, Pbot)
+!      out_K = kl
+!    endif
+!  endif
+!
+!  if ( (out_P < 0.) .and. (out_K < 0) ) then
+!    call MOM_error(WARNING, "Unanticipated case in search_other_column_discontinuous")
+!  endif
+!  ! Check to make sure that the layer index is always increasing
+!  if ( (out_K < lastK) .and. lastP==0. .and. out_P == 1. ) then
+!!    out_K = lastK ; out_P = 0.
+!  endif
 
 end subroutine search_other_column_discontinuous
 !> Converts non-dimensional position within a layer to absolute position (for debugging)
@@ -2063,9 +2149,9 @@ logical function ndiff_unit_tests_discontinuous(verbose)
             Pres_r, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 10, KoL, KoR, PoL, PoR, hEff, &
                                    (/1,1,1,1,2,2,2,3,3,3/), & ! KoL
-                                   (/2,2,2,2,2,2,3,3,3,3/), & ! KoR
+                                   (/2,2,2,3,3,3,3,3,3,3/), & ! KoR
                                    (/0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, .75, 1.0/), & ! pL
-                                   (/0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, .25, 1.0, 1.0/), & ! pR
+                                   (/0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, .25, 1.0, 1.0/), & ! pR
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 7.5, 0.0/), & ! hEff
                                    'Left mixed layer, right unstable mixed layer')
 
