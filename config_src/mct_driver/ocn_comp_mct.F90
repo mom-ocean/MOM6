@@ -29,36 +29,36 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_setLogUnit, shr_file_setLogLevel
 
 ! MOM6 modules
-use MOM_coms,            only : reproducing_sum
-use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock,       only : CLOCK_SUBCOMPONENT
-use MOM,                 only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-use MOM,                 only: calculate_surface_state, allocate_surface_state
-use MOM,                 only: finish_MOM_initialization, step_offline
-use MOM_forcing_type,    only: forcing, forcing_diags, register_forcing_type_diags
-use MOM_forcing_type,    only: allocate_forcing_type, deallocate_forcing_type
-use MOM_forcing_type,    only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
-use MOM_restart,         only: save_restart
-use MOM_domains,         only: MOM_infra_init, num_pes, root_pe, pe_here
-use MOM_domains,         only: pass_vector, BGRID_NE, CGRID_NE, To_All
-use MOM_domains,         only: pass_var, AGRID, fill_symmetric_edges
-use MOM_grid,            only: ocean_grid_type, get_global_grid_size
-use MOM_verticalGrid,    only: verticalGrid_type
-use MOM_variables,       only: surface
-use MOM_error_handler,   only: MOM_error, FATAL, is_root_pe, WARNING
-use MOM_error_handler,   only: callTree_enter, callTree_leave
-use MOM_time_manager,    only: time_type, set_date, set_time, set_calendar_type, NOLEAP, get_date
-use MOM_time_manager,    only: operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,    only: operator(/=), operator(>), get_time
-use MOM_file_parser,     only: get_param, log_version, param_file_type, close_param_file
-use MOM_get_input,       only: Get_MOM_Input, directories
-use MOM_diag_mediator,   only: diag_ctrl, enable_averaging, disable_averaging
-use MOM_diag_mediator,   only: diag_mediator_close_registration, diag_mediator_end
-use MOM_diag_mediator,   only: safe_alloc_ptr
-use MOM_ice_shelf,       only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
-use MOM_ice_shelf,       only: ice_shelf_end, ice_shelf_save_restart
-use MOM_sum_output,      only: MOM_sum_output_init, sum_output_CS
-use MOM_sum_output,      only: write_energy, accumulate_net_input
+use MOM_coms,             only : reproducing_sum
+use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
+use MOM,                  only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+use MOM,                  only: calculate_surface_state, allocate_surface_state
+use MOM,                  only: finish_MOM_initialization, step_offline
+use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
+use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
+use MOM_forcing_type,     only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
+use MOM_restart,          only: save_restart
+use MOM_domains,          only: MOM_infra_init, num_pes, root_pe, pe_here
+use MOM_domains,          only: pass_vector, BGRID_NE, CGRID_NE, To_All
+use MOM_domains,          only: pass_var, AGRID, fill_symmetric_edges
+use MOM_grid,             only: ocean_grid_type, get_global_grid_size
+use MOM_verticalGrid,     only: verticalGrid_type
+use MOM_variables,        only: surface
+use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
+use MOM_error_handler,    only: callTree_enter, callTree_leave
+use MOM_time_manager,     only: time_type, set_date, set_time, set_calendar_type, NOLEAP, get_date
+use MOM_time_manager,     only: operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager,     only: operator(/=), operator(>), get_time
+use MOM_file_parser,      only: get_param, log_version, param_file_type, close_param_file
+use MOM_get_input,        only: Get_MOM_Input, directories
+use MOM_diag_mediator,    only: diag_ctrl, enable_averaging, disable_averaging
+use MOM_diag_mediator,    only: diag_mediator_close_registration, diag_mediator_end
+use MOM_diag_mediator,    only: safe_alloc_ptr
+use MOM_ice_shelf,        only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
+use MOM_ice_shelf,        only: ice_shelf_end, ice_shelf_save_restart
+use MOM_sum_output,       only: MOM_sum_output_init, sum_output_CS
+use MOM_sum_output,       only: write_energy, accumulate_net_input
 use MOM_string_functions, only: uppercase
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET, hlf, hlv
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
@@ -70,347 +70,297 @@ use data_override_mod,    only : data_override_init, data_override
 use MOM_io,               only : slasher, write_version_number
 use MOM_spatial_means,    only : adjust_area_mean_to_zero
 
-! FMS
-use mpp_domains_mod, only : domain2d, mpp_get_layout, mpp_get_global_domain
-use mpp_domains_mod, only : mpp_define_domains, mpp_get_compute_domain
+! FMS modules
+use mpp_domains_mod,          only : domain2d, mpp_get_layout, mpp_get_global_domain
+use mpp_domains_mod,          only : mpp_define_domains, mpp_get_compute_domain
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
 use fms_mod,                  only : read_data
 
-! GFDL coupler
+! GFDL coupler modules
 use coupler_types_mod,   only : coupler_1d_bc_type, coupler_2d_bc_type
-use coupler_types_mod, only : coupler_type_spawn
-use coupler_types_mod, only : coupler_type_initialized, coupler_type_copy_data
+use coupler_types_mod,   only : coupler_type_spawn
+use coupler_types_mod,   only : coupler_type_initialized, coupler_type_copy_data
 
 ! By default make data private
 implicit none; private
 
 #include <MOM_memory.h>
 
-  ! Public member functions
-  public :: ocn_init_mct
-  public :: ocn_run_mct
-  public :: ocn_final_mct
-  ! Flag for debugging
-  logical, parameter :: debug=.true.
+! Public member functions
+public :: ocn_init_mct
+public :: ocn_run_mct
+public :: ocn_final_mct
+! Flag for debugging
+logical, parameter :: debug=.true.
 
-  !> Structure with MCT attribute vectors and indices
-  type cpl_indices
+!> Structure with MCT attribute vectors and indices
+type cpl_indices
 
-    ! ocean to coupler
-    integer :: o2x_So_t         !< Surface potential temperature (deg C)
-    integer :: o2x_So_u         !< Surface zonal velocity (m/s)
-    integer :: o2x_So_v         !< Surface meridional velocity (m/s)
-    integer :: o2x_So_s         !< Surface salinity (PSU)
-    integer :: o2x_So_dhdx      !< Zonal slope in the sea surface height
-    integer :: o2x_So_dhdy      !< Meridional lope in the sea surface height
-    integer :: o2x_So_bldepth   !< Boundary layer depth (m)
-    integer :: o2x_Fioo_q       !< Heat flux?
-    integer :: o2x_Faoo_fco2_ocn!< CO2 flux
-    integer :: o2x_Faoo_fdms_ocn!< DMS flux
+  ! ocean to coupler
+  integer :: o2x_So_t         !< Surface potential temperature (deg C)
+  integer :: o2x_So_u         !< Surface zonal velocity (m/s)
+  integer :: o2x_So_v         !< Surface meridional velocity (m/s)
+  integer :: o2x_So_s         !< Surface salinity (PSU)
+  integer :: o2x_So_dhdx      !< Zonal slope in the sea surface height
+  integer :: o2x_So_dhdy      !< Meridional lope in the sea surface height
+  integer :: o2x_So_bldepth   !< Boundary layer depth (m)
+  integer :: o2x_Fioo_q       !< Heat flux?
+  integer :: o2x_Faoo_fco2_ocn!< CO2 flux
+  integer :: o2x_Faoo_fdms_ocn!< DMS flux
 
-    ! coupler to ocean
-    integer :: x2o_Si_ifrac        !< Fractional ice wrt ocean
-    integer :: x2o_So_duu10n       !< 10m wind speed squared (m^2/s^2)
-    integer :: x2o_Sa_pslv         !< Sea-level pressure (Pa)
-    integer :: x2o_Sa_co2prog      !< Bottom atm level prognostic CO2
-    integer :: x2o_Sa_co2diag      !< Bottom atm level diagnostic CO2
-    integer :: x2o_Sw_lamult       !< Wave model langmuir multiplier
-    integer :: x2o_Sw_ustokes      !< Surface Stokes drift, x-component
-    integer :: x2o_Sw_vstokes      !< Surface Stokes drift, y-component
-    integer :: x2o_Foxx_taux       !< Zonal wind stress (W/m2)
-    integer :: x2o_Foxx_tauy       !< Meridonal wind stress (W/m2)
-    integer :: x2o_Foxx_swnet      !< Net short-wave heat flux (W/m2)
-    integer :: x2o_Foxx_sen        !< Sensible heat flux (W/m2)
-    integer :: x2o_Foxx_lat        !< Latent heat flux  (W/m2)
-    integer :: x2o_Foxx_lwup       !< Longwave radiation, up (W/m2)
-    integer :: x2o_Faxa_lwdn       !< Longwave radiation, down (W/m2)
-    integer :: x2o_Fioi_melth      !< Heat flux from snow & ice melt (W/m2)
-    integer :: x2o_Fioi_meltw      !< Snow melt flux (kg/m2/s)
-    integer :: x2o_Fioi_bcpho      !< Black Carbon hydrophobic release
-                                   !! from sea ice component
-    integer :: x2o_Fioi_bcphi      !< Black Carbon hydrophilic release from
-                                   !! sea ice component
-    integer :: x2o_Fioi_flxdst     !< Dust release from sea ice component
-    integer :: x2o_Fioi_salt       !< Salt flux    (kg(salt)/m2/s)
-    integer :: x2o_Foxx_evap       !< Evaporation flux  (kg/m2/s)
-    integer :: x2o_Faxa_prec       !< Total precipitation flux (kg/m2/s)
-    integer :: x2o_Faxa_snow       !< Water flux due to snow (kg/m2/s)
-    integer :: x2o_Faxa_rain       !< Water flux due to rain (kg/m2/s)
-    integer :: x2o_Faxa_bcphidry   !< Black   Carbon hydrophilic dry deposition
-    integer :: x2o_Faxa_bcphodry   !< Black   Carbon hydrophobic dry deposition
-    integer :: x2o_Faxa_bcphiwet   !< Black   Carbon hydrophilic wet deposition
-    integer :: x2o_Faxa_ocphidry   !< Organic Carbon hydrophilic dry deposition
-    integer :: x2o_Faxa_ocphodry   !< Organic Carbon hydrophobic dry deposition
-    integer :: x2o_Faxa_ocphiwet   !< Organic Carbon hydrophilic dry deposition
-    integer :: x2o_Faxa_dstwet1    !< Size 1 dust -- wet deposition
-    integer :: x2o_Faxa_dstwet2    !< Size 2 dust -- wet deposition
-    integer :: x2o_Faxa_dstwet3    !< Size 3 dust -- wet deposition
-    integer :: x2o_Faxa_dstwet4    !< Size 4 dust -- wet deposition
-    integer :: x2o_Faxa_dstdry1    !< Size 1 dust -- dry deposition
-    integer :: x2o_Faxa_dstdry2    !< Size 2 dust -- dry deposition
-    integer :: x2o_Faxa_dstdry3    !< Size 3 dust -- dry deposition
-    integer :: x2o_Faxa_dstdry4    !< Size 4 dust -- dry deposition
-    integer :: x2o_Foxx_rofl       !< River runoff flux (kg/m2/s)
-    integer :: x2o_Foxx_rofi       !< Ice runoff flux (kg/m2/s)
+  ! coupler to ocean
+  integer :: x2o_Si_ifrac        !< Fractional ice wrt ocean
+  integer :: x2o_So_duu10n       !< 10m wind speed squared (m^2/s^2)
+  integer :: x2o_Sa_pslv         !< Sea-level pressure (Pa)
+  integer :: x2o_Sa_co2prog      !< Bottom atm level prognostic CO2
+  integer :: x2o_Sa_co2diag      !< Bottom atm level diagnostic CO2
+  integer :: x2o_Sw_lamult       !< Wave model langmuir multiplier
+  integer :: x2o_Sw_ustokes      !< Surface Stokes drift, x-component
+  integer :: x2o_Sw_vstokes      !< Surface Stokes drift, y-component
+  integer :: x2o_Foxx_taux       !< Zonal wind stress (W/m2)
+  integer :: x2o_Foxx_tauy       !< Meridonal wind stress (W/m2)
+  integer :: x2o_Foxx_swnet      !< Net short-wave heat flux (W/m2)
+  integer :: x2o_Foxx_sen        !< Sensible heat flux (W/m2)
+  integer :: x2o_Foxx_lat        !< Latent heat flux  (W/m2)
+  integer :: x2o_Foxx_lwup       !< Longwave radiation, up (W/m2)
+  integer :: x2o_Faxa_lwdn       !< Longwave radiation, down (W/m2)
+  integer :: x2o_Fioi_melth      !< Heat flux from snow & ice melt (W/m2)
+  integer :: x2o_Fioi_meltw      !< Snow melt flux (kg/m2/s)
+  integer :: x2o_Fioi_bcpho      !< Black Carbon hydrophobic release
+                                 !! from sea ice component
+  integer :: x2o_Fioi_bcphi      !< Black Carbon hydrophilic release from
+                                 !! sea ice component
+  integer :: x2o_Fioi_flxdst     !< Dust release from sea ice component
+  integer :: x2o_Fioi_salt       !< Salt flux    (kg(salt)/m2/s)
+  integer :: x2o_Foxx_evap       !< Evaporation flux  (kg/m2/s)
+  integer :: x2o_Faxa_prec       !< Total precipitation flux (kg/m2/s)
+  integer :: x2o_Faxa_snow       !< Water flux due to snow (kg/m2/s)
+  integer :: x2o_Faxa_rain       !< Water flux due to rain (kg/m2/s)
+  integer :: x2o_Faxa_bcphidry   !< Black   Carbon hydrophilic dry deposition
+  integer :: x2o_Faxa_bcphodry   !< Black   Carbon hydrophobic dry deposition
+  integer :: x2o_Faxa_bcphiwet   !< Black   Carbon hydrophilic wet deposition
+  integer :: x2o_Faxa_ocphidry   !< Organic Carbon hydrophilic dry deposition
+  integer :: x2o_Faxa_ocphodry   !< Organic Carbon hydrophobic dry deposition
+  integer :: x2o_Faxa_ocphiwet   !< Organic Carbon hydrophilic dry deposition
+  integer :: x2o_Faxa_dstwet1    !< Size 1 dust -- wet deposition
+  integer :: x2o_Faxa_dstwet2    !< Size 2 dust -- wet deposition
+  integer :: x2o_Faxa_dstwet3    !< Size 3 dust -- wet deposition
+  integer :: x2o_Faxa_dstwet4    !< Size 4 dust -- wet deposition
+  integer :: x2o_Faxa_dstdry1    !< Size 1 dust -- dry deposition
+  integer :: x2o_Faxa_dstdry2    !< Size 2 dust -- dry deposition
+  integer :: x2o_Faxa_dstdry3    !< Size 3 dust -- dry deposition
+  integer :: x2o_Faxa_dstdry4    !< Size 4 dust -- dry deposition
+  integer :: x2o_Foxx_rofl       !< River runoff flux (kg/m2/s)
+  integer :: x2o_Foxx_rofi       !< Ice runoff flux (kg/m2/s)
 
-    ! optional per thickness category fields
-
-    integer, dimension(:), allocatable :: x2o_frac_col !< Fraction of ocean cell,
-                                                       !! per column
-    integer, dimension(:), allocatable :: x2o_fracr_col!< Fraction of ocean cell used
-                                                       !! in radiation computations,
-                                                       !! per column
-    integer, dimension(:), allocatable :: x2o_qsw_fracr_col !< qsw * fracr, per column
-
+  ! optional per thickness category fields
+  integer, dimension(:), allocatable :: x2o_frac_col !< Fraction of ocean cell,
+                                                     !! per column
+  integer, dimension(:), allocatable :: x2o_fracr_col!< Fraction of ocean cell used
+                                                     !! in radiation computations,
+                                                     !! per column
+  integer, dimension(:), allocatable :: x2o_qsw_fracr_col !< qsw * fracr, per column
   end type cpl_indices
 
-  !> This type is used for communication with other components via the FMS coupler.
-  ! The element names and types can be changed only with great deliberation, hence
-  ! the persistnce of things like the cutsy element name "avg_kount".
-  type, public ::  ocean_public_type
-    type(domain2d) :: Domain    ! The domain for the surface fields.
-    logical :: is_ocean_pe      ! .true. on processors that run the ocean model.
-    character(len=32) :: instance_name = '' ! A name that can be used to identify
-                                 ! this instance of an ocean model, for example
-                                 ! in ensembles when writing messages.
-    integer, pointer, dimension(:) :: pelist => NULL()   ! The list of ocean PEs.
-    logical, pointer, dimension(:,:) :: maskmap =>NULL() ! A pointer to an array
-                    ! indicating which logical processors are actually used for
-                    ! the ocean code. The other logical processors would be all
-                    ! land points and are not assigned to actual processors.
-                    ! This need not be assigned if all logical processors are used.
+!> This type is used for communication with other components via the FMS coupler.
+! The element names and types can be changed only with great deliberation, hence
+! the persistnce of things like the cutsy element name "avg_kount".
+type, public ::  ocean_public_type
+  type(domain2d) :: Domain    !< The domain for the surface fields.
+  logical :: is_ocean_pe      !! .true. on processors that run the ocean model.
+  character(len=32) :: instance_name = '' !< A name that can be used to identify
+                              !! this instance of an ocean model, for example
+                              !! in ensembles when writing messages.
+  integer, pointer, dimension(:) :: pelist => NULL()   !< The list of ocean PEs.
+  logical, pointer, dimension(:,:) :: maskmap =>NULL() !< A pointer to an array
+                              !! indicating which logical processors are actually
+                              !! used for the ocean code. The other logical
+                              !! processors would be all land points and are not
+                              !! assigned to actual processors. This need not be
+                              !! assigned if all logical processors are used.
 
-    integer :: stagger = -999   ! The staggering relative to the tracer points
-                    ! points of the two velocity components. Valid entries
-                    ! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
-                    ! corresponding to the community-standard Arakawa notation.
-                    ! (These are named integers taken from mpp_parameter_mod.)
-                    ! Following MOM, this is BGRID_NE by default when the ocean
-                    ! is initialized, but here it is set to -999 so that a
-                    ! global max across ocean and non-ocean processors  can be
-                    ! used to determine its value.
-    real, pointer, dimension(:,:)  :: &
-      t_surf => NULL(), & ! SST on t-cell (degrees Kelvin)
-      s_surf => NULL(), & ! SSS on t-cell (psu)
-      u_surf => NULL(), & ! i-velocity at the locations indicated by stagger, m/s.
-      v_surf => NULL(), & ! j-velocity at the locations indicated by stagger, m/s.
-      sea_lev => NULL(), & ! Sea level in m after correction for surface pressure,
-                        ! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
-      frazil =>NULL(), &  ! Accumulated heating (in Joules/m^2) from frazil
-                        ! formation in the ocean.
-      area => NULL()      ! cell area of the ocean surface, in m2.
-    type(coupler_2d_bc_type) :: fields    ! A structure that may contain an
-                                        ! array of named tracer-related fields.
-    integer                  :: avg_kount ! Used for accumulating averages of this type.
-    integer, dimension(2)    :: axes = 0  ! Axis numbers that are available
+  integer :: stagger = -999 !< The staggering relative to the tracer points
+                            !! of the two velocity components. Valid entries
+                    !! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
+                    !! corresponding to the community-standard Arakawa notation.
+                    !! (These are named integers taken from mpp_parameter_mod.)
+                    !! Following MOM, this is BGRID_NE by default when the ocean
+                    !! is initialized, but here it is set to -999 so that a
+                    !! global max across ocean and non-ocean processors  can be
+                    !! used to determine its value.
+  real, pointer, dimension(:,:)  :: &
+    t_surf => NULL(), &  !< SST on t-cell (degrees Kelvin)
+    s_surf => NULL(), &  !< SSS on t-cell (psu)
+    u_surf => NULL(), &  !< i-velocity at the locations indicated by stagger, m/s.
+    v_surf => NULL(), &  !< j-velocity at the locations indicated by stagger, m/s.
+    sea_lev => NULL(), & !< Sea level in m after correction for surface pressure,
+                         !! i.e. dzt(1) + eta_t + patm/rho0/grav (m)
+    frazil =>NULL(), &   !< Accumulated heating (in Joules/m^2) from frazil
+                         !! formation in the ocean.
+    area => NULL()       !< cell area of the ocean surface, in m2.
+  type(coupler_2d_bc_type) :: fields    !< A structure that may contain an
+                                        !! array of named tracer-related fields.
+  integer                  :: avg_kount !< Used for accumulating averages of this type.
+  integer, dimension(2)    :: axes = 0  !< Axis numbers that are available
                                         ! for I/O using this surface data.
-  end type ocean_public_type
+end type ocean_public_type
 
-  !> This type contains pointers to the forcing fields which may be used to drive MOM.
-  !! All fluxes are positive downward.
-  type, public :: surface_forcing_CS ; private
-    integer :: wind_stagger       ! AGRID, BGRID_NE, or CGRID_NE (integer values
-                                  ! from MOM_domains) to indicate the staggering of
-                                  ! the winds that are being provided in calls to
-                                  ! update_ocean_model.
-    logical :: use_temperature    ! If true, temp and saln used as state variables
-    real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress (nondim).
+!> Contains pointers to the forcing fields which may be used to drive MOM.
+!! All fluxes are positive downward.
+type, public :: surface_forcing_CS ; private
+  integer :: wind_stagger       !< AGRID, BGRID_NE, or CGRID_NE (integer values
+                                !! from MOM_domains) to indicate the staggering of
+                                !! the winds that are being provided in calls to
+                                !! update_ocean_model. CIME uses AGRID, so this option
+                                !! is being hard coded for now.
+  logical :: use_temperature    !< If true, temp and saln used as state variables
+  real :: wind_stress_multiplier!< A multiplier applied to incoming wind stress (nondim).
+  ! smg: remove when have A=B code reconciled
+  logical :: bulkmixedlayer     !< If true, model based on bulk mixed layer code
+  real :: Rho0                  !< Boussinesq reference density (kg/m^3)
+  real :: area_surf = -1.0      !< total ocean surface area (m^2)
+  real :: latent_heat_fusion    !< latent heat of fusion (J/kg)
+  real :: latent_heat_vapor     !< latent heat of vaporization (J/kg)
+  real :: max_p_surf            !< maximum surface pressure that can be
+                                !! exerted by the atmosphere and floating sea-ice,
+                                !! in Pa.  This is needed because the FMS coupling
+                                !! structure does not limit the water that can be
+                                !! frozen out of the ocean and the ice-ocean heat
+                                !! fluxes are treated explicitly.
+  logical :: use_limited_P_SSH  !< If true, return the sea surface height with
+                                !! the correction for the atmospheric (and sea-ice)
+                                !! pressure limited by max_p_surf instead of the
+                                !! full atmospheric pressure.  The default is true.
+  real :: gust_const            !< constant unresolved background gustiness for ustar (Pa)
+  logical :: read_gust_2d       !< If true, use a 2-dimensional gustiness supplied
+                                !! from an input file.
+  real, pointer, dimension(:,:) :: &
+    TKE_tidal => NULL(), &      !< turbulent kinetic energy introduced to the
+                                !! bottom boundary layer by drag on the tidal flows,
+                                !! in W m-2.
+    gust => NULL(), &           !< spatially varying unresolved background
+                                !! gustiness that contributes to ustar (Pa).
+                                !! gust is used when read_gust_2d is true.
+    ustar_tidal => NULL()     !< tidal contribution to the bottom friction velocity (m/s)
+  real :: cd_tides            !< drag coefficient that applies to the tides (nondimensional)
+  real :: utide               !< constant tidal velocity to use if read_tideamp
+                              !! is false, in m s-1.
+  logical :: read_tideamp     !< If true, spatially varying tidal amplitude read from a file.
+  logical :: rigid_sea_ice    !< If true, sea-ice exerts a rigidity that acts
+                              !! to damp surface deflections (especially surface
+                              !! gravity waves).  The default is false.
+  real    :: Kv_sea_ice       !< viscosity in sea-ice that resists sheared vertical motions (m^2/s)
+  real    :: density_sea_ice  !< typical density of sea-ice (kg/m^3). The value is
+                              !! only used to convert the ice pressure into
+                              !! appropriate units for use with Kv_sea_ice.
+  real    :: rigid_sea_ice_mass !< A mass per unit area of sea-ice beyond which
+                                !! sea-ice viscosity becomes effective, in kg m-2,
+                                !! typically of order 1000 kg m-2.
+  logical :: allow_flux_adjustments !< If true, use data_override to obtain flux adjustments
+  real    :: Flux_const             !< piston velocity for surface restoring (m/s)
+  logical :: salt_restore_as_sflux  !< If true, SSS restore as salt flux instead of water flux
+  logical :: adjust_net_srestore_to_zero !< adjust srestore to zero (for both salt_flux or vprec)
+  logical :: adjust_net_srestore_by_scaling !< adjust srestore w/o moving zero contour
+  logical :: adjust_net_fresh_water_to_zero !< adjust net surface fresh-water (w/ restoring) to zero
+  logical :: adjust_net_fresh_water_by_scaling !< adjust net surface fresh-water  w/o moving zero contour
+  logical :: mask_srestore_under_ice        !< If true, use an ice mask defined by frazil
+                                            !! criteria for salinity restoring.
+  real    :: ice_salt_concentration         !< salt concentration for sea ice (kg/kg)
+  logical :: mask_srestore_marginal_seas    !< if true, then mask SSS restoring in marginal seas
+  real    :: max_delta_srestore             !< maximum delta salinity used for restoring
+  real    :: max_delta_trestore             !< maximum delta sst used for restoring
+  real, pointer, dimension(:,:) :: basin_mask => NULL() !< mask for SSS restoring
+  type(diag_ctrl), pointer :: diag          !< structure to regulate diagnostic output timing
+  character(len=200)       :: inputdir      !< directory where NetCDF input files are
+  character(len=200)       :: salt_restore_file !< filename for salt restoring data
+  character(len=30)        :: salt_restore_var_name !< name of surface salinity in salt_restore_file
+  character(len=200)       :: temp_restore_file     !< filename for sst restoring data
+  character(len=30)        :: temp_restore_var_name !< name of surface temperature in temp_restore_file
+  integer :: id_srestore = -1     !< id number for time_interp_external.
+  integer :: id_trestore = -1     !< id number for time_interp_external.
+  type(forcing_diags), public :: handles !< diagnostics handles
+  !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL()   !< restart pointer
+  type(user_revise_forcing_CS), pointer :: urf_CS => NULL()!< user revise pointer
+end type surface_forcing_CS
 
-    ! smg: remove when have A=B code reconciled
-    logical :: bulkmixedlayer     ! If true, model based on bulk mixed layer code
+!> Contains information about the ocean state, although it is not necessary that
+!! this is implemented with all models. This type is private, and can therefore vary
+!! between different ocean models.
+type, public :: ocean_state_type ; private
+  logical :: is_ocean_PE = .false. !< True if this is an ocean PE.
+  type(time_type) :: Time          !< The ocean model's time and master clock.
+  integer :: Restart_control !< An integer that is bit-tested to determine whether
+                             !! incremental restart files are saved and whether they
+                             !! have a time stamped name.  +1 (bit 0) for generic
+                             !! files and +2 (bit 1) for time-stamped files.  A
+                             !! restart file is saved at the end of a run segment
+                             !! unless Restart_control is negative.
+  type(time_type) :: energysavedays  !< The interval between writing the energies
+                                     !! and other integral quantities of the run.
+  type(time_type) :: write_energy_time !< The next time to write to the energy file.
+  integer :: nstep = 0        !< The number of calls to update_ocean.
+  logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
+  logical :: icebergs_apply_rigid_boundary !< If true, the icebergs can change ocean bd condition.
+  real :: kv_iceberg          !< The viscosity of the icebergs in m2/s (for ice rigidity)
+  real :: berg_area_threshold !< Fraction of grid cell which iceberg must occupy
+                              !! so that fluxes below are set to zero. (0.5 is a
+                              !! good value to use. Not applied for negative values.
+  real :: latent_heat_fusion  !< Latent heat of fusion
+  real :: density_iceberg     !< A typical density of icebergs in kg/m3 (for ice rigidity)
+  type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL() !< ice shelf structure.
+  logical :: restore_salinity !< If true, the coupled MOM driver adds a term to
+                              !! restore salinity to a specified value.
+  logical :: restore_temp     !< If true, the coupled MOM driver adds a term to
+                              !! restore sst to a specified value.
+  real :: press_to_z          !< A conversion factor between pressure and ocean
+                              !! depth in m, usually 1/(rho_0*g), in m Pa-1.
+  real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
+  type(directories) :: dirs   !< A structure containing several relevant directory paths.
+  type(forcing)   :: fluxes   !< A structure containing pointers to
+                              !! the ocean forcing fields.
+  type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
+                              !! ocean forcing fields for when multiple coupled
+                              !! timesteps are taken per thermodynamic step.
+  type(surface)   :: state    !< A structure containing pointers to
+                              !! the ocean surface state fields.
+  type(ocean_grid_type), pointer :: grid => NULL() !< A pointer to a grid structure
+                              !! containing metrics and related information.
+  type(verticalGrid_type), pointer :: GV => NULL() !< A pointer to a vertical grid
+                              !! structure containing metrics and related information.
+  type(MOM_control_struct), pointer :: MOM_CSp => NULL()
+  type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
+  type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
+end type ocean_state_type
 
-    real :: Rho0                  ! Boussinesq reference density (kg/m^3)
-    real :: area_surf = -1.0      ! total ocean surface area (m^2)
-    real :: latent_heat_fusion    ! latent heat of fusion (J/kg)
-    real :: latent_heat_vapor     ! latent heat of vaporization (J/kg)
+!> Control structure for this module
+type MCT_MOM_Data
 
-    real :: max_p_surf            ! maximum surface pressure that can be
-                                  ! exerted by the atmosphere and floating sea-ice,
-                                  ! in Pa.  This is needed because the FMS coupling
-                                  ! structure does not limit the water that can be
-                                  ! frozen out of the ocean and the ice-ocean heat
-                                  ! fluxes are treated explicitly.
-    logical :: use_limited_P_SSH  ! If true, return the sea surface height with
-                                  ! the correction for the atmospheric (and sea-ice)
-                                  ! pressure limited by max_p_surf instead of the
-                                  ! full atmospheric pressure.  The default is true.
+  type(ocean_state_type), pointer  :: ocn_state => NULL()   !< The private state of ocean
+  type(ocean_public_type), pointer :: ocn_public => NULL()  !< The public state of ocean
+  type(ocean_grid_type), pointer   :: grid => NULL()        !< The grid structure
+  type(surface), pointer           :: ocn_surface => NULL() !< The ocean surface state
+  type(forcing)                    :: fluxes                !< Structure that contains pointers to the
+                                                            !! boundary forcing used to drive the liquid
+                                                            !! ocean simulated by MOM.
+  type(seq_infodata_type), pointer :: infodata              !< The input info type
+  type(cpl_indices), public        :: ind                   !< Variable IDs
+  ! runtime params
+  logical :: sw_decomp   !< Controls whether shortwave is decomposed into four components
+  real    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  ! i/o
+  character(len=384) :: pointer_filename !< Name of the ascii file that contains the path
+                                         !! and filename of the latest restart file.
+  integer :: stdout !< standard output unit. (by default, it should point to ocn.log.* file)
+end type MCT_MOM_Data
 
-    real :: gust_const            ! constant unresolved background gustiness for ustar (Pa)
-    logical :: read_gust_2d       ! If true, use a 2-dimensional gustiness supplied
-                                  ! from an input file.
-    real, pointer, dimension(:,:) :: &
-      TKE_tidal => NULL(), &      ! turbulent kinetic energy introduced to the
-                                  ! bottom boundary layer by drag on the tidal flows,
-                                  ! in W m-2.
-      gust => NULL(), &           ! spatially varying unresolved background
-                                  ! gustiness that contributes to ustar (Pa).
-                                  ! gust is used when read_gust_2d is true.
-      ustar_tidal => NULL()       ! tidal contribution to the bottom friction velocity (m/s)
-    real :: cd_tides              ! drag coefficient that applies to the tides (nondimensional)
-    real :: utide                 ! constant tidal velocity to use if read_tideamp
-                                  ! is false, in m s-1.
-    logical :: read_tideamp       ! If true, spatially varying tidal amplitude read from a file.
-
-    logical :: rigid_sea_ice      ! If true, sea-ice exerts a rigidity that acts
-                                  ! to damp surface deflections (especially surface
-                                  ! gravity waves).  The default is false.
-    real    :: Kv_sea_ice         ! viscosity in sea-ice that resists sheared vertical motions (m^2/s)
-    real    :: density_sea_ice    ! typical density of sea-ice (kg/m^3). The value is
-                                  ! only used to convert the ice pressure into
-                                  ! appropriate units for use with Kv_sea_ice.
-    real    :: rigid_sea_ice_mass ! A mass per unit area of sea-ice beyond which
-                                  ! sea-ice viscosity becomes effective, in kg m-2,
-                                  ! typically of order 1000 kg m-2.
-    logical :: allow_flux_adjustments ! If true, use data_override to obtain flux adjustments
-
-    real    :: Flux_const                     ! piston velocity for surface restoring (m/s)
-    logical :: salt_restore_as_sflux          ! If true, SSS restore as salt flux instead of water flux
-    logical :: adjust_net_srestore_to_zero    ! adjust srestore to zero (for both salt_flux or vprec)
-    logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
-    logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
-    logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
-    logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil
-                                              ! criteria for salinity restoring.
-    real    :: ice_salt_concentration         ! salt concentration for sea ice (kg/kg)
-    logical :: mask_srestore_marginal_seas    ! if true, then mask SSS restoring in marginal seas
-    real    :: max_delta_srestore             ! maximum delta salinity used for restoring
-    real    :: max_delta_trestore             ! maximum delta sst used for restoring
-    real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring
-
-    type(diag_ctrl), pointer :: diag                  ! structure to regulate diagnostic output timing
-    character(len=200)       :: inputdir              ! directory where NetCDF input files are
-    character(len=200)       :: salt_restore_file     ! filename for salt restoring data
-    character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
-    character(len=200)       :: temp_restore_file     ! filename for sst restoring data
-    character(len=30)        :: temp_restore_var_name ! name of surface temperature in temp_restore_file
-
-    integer :: id_srestore = -1     ! id number for time_interp_external.
-    integer :: id_trestore = -1     ! id number for time_interp_external.
-
-    ! Diagnostics handles
-    type(forcing_diags), public :: handles
-
-    !###  type(ctrl_forcing_CS), pointer :: ctrl_forcing_CSp => NULL()
-    type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-    type(user_revise_forcing_CS), pointer :: urf_CS => NULL()
-  end type surface_forcing_CS
-
-  !> Contains information about the ocean state, although it is not necessary that
-  !! this is implemented with all models. This type is private, and can therefore vary
-  !! between different ocean models.
-  type, public :: ocean_state_type ; private
-    logical :: is_ocean_PE = .false. !< True if this is an ocean PE.
-    type(time_type) :: Time          !< The ocean model's time and master clock.
-    integer :: Restart_control !< An integer that is bit-tested to determine whether
-                               !! incremental restart files are saved and whether they
-                               !! have a time stamped name.  +1 (bit 0) for generic
-                               !! files and +2 (bit 1) for time-stamped files.  A
-                               !! restart file is saved at the end of a run segment
-                               !! unless Restart_control is negative.
-    type(time_type) :: energysavedays  ! The interval between writing the energies
-                                     ! and other integral quantities of the run.
-    type(time_type) :: write_energy_time ! The next time to write to the energy file.
-
-    integer :: nstep = 0        ! The number of calls to update_ocean.
-    logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
-    logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
-    real :: kv_iceberg          ! The viscosity of the icebergs in m2/s (for ice rigidity)
-    real :: berg_area_threshold ! Fraction of grid cell which iceberg must occupy
-                              !so that fluxes below are set to zero. (0.5 is a
-                              !good value to use. Not applied for negative values.
-    real :: latent_heat_fusion  ! Latent heat of fusion
-    real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity)
-    type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
-    logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
-                              ! restore salinity to a specified value.
-    logical :: restore_temp     ! If true, the coupled MOM driver adds a term to
-                              ! restore sst to a specified value.
-    real :: press_to_z          ! A conversion factor between pressure and ocean
-                              ! depth in m, usually 1/(rho_0*g), in m Pa-1.
-    real :: C_p                 ! The heat capacity of seawater, in J K-1 kg-1.
-
-    type(directories) :: dirs   ! A structure containing several relevant directory paths.
-    type(forcing)   :: fluxes   ! A structure containing pointers to
-                              ! the ocean forcing fields.
-    type(forcing)   :: flux_tmp ! A secondary structure containing pointers to the
-                              ! ocean forcing fields for when multiple coupled
-                              ! timesteps are taken per thermodynamic step.
-    type(surface)   :: state    ! A structure containing pointers to
-                              ! the ocean surface state fields.
-    type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
-                              ! containing metrics and related information.
-    type(verticalGrid_type), pointer :: GV => NULL() ! A pointer to a vertical grid
-                              ! structure containing metrics and related information.
-    type(MOM_control_struct), pointer :: MOM_CSp => NULL()
-    type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
-    type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
-  end type ocean_state_type
-
-  !> Control structure corresponding to forcing, but with
-  !! the elements, units, and conventions that exactly conform to the use for
-  !! MOM-based coupled models.
-  type, public :: ice_ocean_boundary_type
-    real, pointer, dimension(:,:) :: u_flux               =>NULL() ! i-direction wind stress (Pa)
-    real, pointer, dimension(:,:) :: v_flux               =>NULL() ! j-direction wind stress (Pa)
-    real, pointer, dimension(:,:) :: t_flux               =>NULL() ! sensible heat flux (W/m2)
-    real, pointer, dimension(:,:) :: q_flux               =>NULL() ! specific humidity flux (kg/m2/s)
-    real, pointer, dimension(:,:) :: salt_flux            =>NULL() ! salt flux (kg/m2/s)
-    real, pointer, dimension(:,:) :: lw_flux              =>NULL() ! long wave radiation (W/m2)
-    real, pointer, dimension(:,:) :: sw_flux_vis_dir      =>NULL() ! direct visible sw radiation (W/m2)
-    real, pointer, dimension(:,:) :: sw_flux_vis_dif      =>NULL() ! diffuse visible sw radiation (W/m2)
-    real, pointer, dimension(:,:) :: sw_flux_nir_dir      =>NULL() ! direct Near InfraRed sw radiation (W/m2)
-    real, pointer, dimension(:,:) :: sw_flux_nir_dif      =>NULL() ! diffuse Near InfraRed sw radiation (W/m2)
-    real, pointer, dimension(:,:) :: latent               =>NULL() ! latent heat flux (W/m2)
-    real, pointer, dimension(:,:) :: lprec                =>NULL() ! mass flux of liquid precip (kg/m2/s)
-    real, pointer, dimension(:,:) :: fprec                =>NULL() ! mass flux of frozen precip (kg/m2/s)
-    real, pointer, dimension(:,:) :: runoff               =>NULL() ! mass flux of liquid runoff (kg/m2/s)
-    real, pointer, dimension(:,:) :: calving              =>NULL() ! mass flux of frozen runoff (kg/m2/s)
-    real, pointer, dimension(:,:) :: ustar_berg           =>NULL() ! frictional velocity beneath icebergs (m/s)
-    real, pointer, dimension(:,:) :: area_berg            =>NULL() ! area covered by icebergs(m2/m2)
-    real, pointer, dimension(:,:) :: mass_berg            =>NULL() ! mass of icebergs(kg/m2)
-    real, pointer, dimension(:,:) :: runoff_hflx          =>NULL() ! heat content of liquid runoff (W/m2)
-    real, pointer, dimension(:,:) :: calving_hflx         =>NULL() ! heat content of frozen runoff (W/m2)
-    real, pointer, dimension(:,:) :: p                    =>NULL() ! pressure of overlying ice and atmosphere
-                                                                 ! on ocean surface (Pa)
-    real, pointer, dimension(:,:) :: mi                   =>NULL() ! mass of ice (kg/m2)
-    integer :: xtype                                   ! REGRID, REDIST or DIRECT
-    type(coupler_2d_bc_type)      :: fluxes            ! A structure that may contain an
-                                                     ! array of named fields used for
-                                                     ! passive tracer fluxes.
-    integer :: wind_stagger = -999                     ! A flag indicating the spatial discretization of
-                                                     ! wind stresses.  This flag may be set by the
-                                                     ! flux-exchange code, based on what the sea-ice
-                                                     ! model is providing.  Otherwise, the value from
-                                                     ! the surface_forcing_CS is used.
-  end type ice_ocean_boundary_type
-
-  !> Control structure for this module
-  type MCT_MOM_Data
-
-    type(ocean_state_type), pointer  :: ocn_state => NULL()   !< The private state of ocean
-    type(ocean_public_type), pointer :: ocn_public => NULL()  !< The public state of ocean
-    type(ocean_grid_type), pointer   :: grid => NULL()        !< The grid structure
-    type(surface), pointer           :: ocn_surface => NULL() !< The ocean surface state
-    type(ice_ocean_boundary_type)    :: ice_ocean_boundary    !< The ice ocean boundary type
-    type(seq_infodata_type), pointer :: infodata              !< The input info type
-    type(cpl_indices), public        :: ind                   !< Variable IDs
-    ! runtime params
-    logical :: sw_decomp   !< Controls whether shortwave is decomposed into four components
-    real    :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-    ! i/o
-    character(len=384) :: pointer_filename !< Name of the ascii file that contains the path
-                                           !! and filename of the latest restart file.
-    integer :: stdout !< standard output unit. (by default, it should point to ocn.log.* file)
-  end type MCT_MOM_Data
-
-  type(MCT_MOM_Data) :: glb                                   !< global structure
-
-  integer :: id_clock_forcing
+type(MCT_MOM_Data) :: glb               !< global structure
+integer :: id_clock_forcing
 
 contains
 
-!> Initializes MOM6
+!> This subroutine initializes MOM6.
 subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(ESMF_Clock),             intent(inout) :: EClock      !< Time and time step ? \todo Why must this
                                                              !! be intent(inout)?
@@ -461,13 +411,11 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
       seconds_in_day    = 86400.0d0, &
       minutes_in_hour   =    60.0d0
 
-  ! ocn model input namelist filename
-  character(len=99) :: ocn_modelio_name
-  integer           :: shrlogunit ! original log file unit
-  integer           :: shrloglev  ! original log level
+  character(len=99) :: ocn_modelio_name !< ocn model input namelist filename
+  integer           :: shrlogunit       !< original log file unit
+  integer           :: shrloglev        !< original log level
 
-  ! instance control vars (these are local for now)
-  integer(kind=4)     :: inst_index
+  integer(kind=4)     :: inst_index     !< instance control vars (these are local for now)
   character(len=16)   :: inst_name
   character(len=16)   :: inst_suffix
 
@@ -704,39 +652,12 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   ! Size of global domain
   call get_global_grid_size(glb%grid, ni, nj)
 
-  ! Allocate ice_ocean_boundary using global indexing without halos
-  isc = glb%grid%isc + glb%grid%idg_offset
-  iec = glb%grid%iec + glb%grid%idg_offset
-  jsc = glb%grid%jsc + glb%grid%jdg_offset
-  jec = glb%grid%jec + glb%grid%jdg_offset
-  allocate(glb%ice_ocean_boundary%u_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%u_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%v_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%v_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%t_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%t_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%q_flux(isc:iec,jsc:jec));          glb%ice_ocean_boundary%q_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%latent(isc:iec,jsc:jec));          glb%ice_ocean_boundary%latent(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%salt_flux(isc:iec,jsc:jec));       glb%ice_ocean_boundary%salt_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%lw_flux(isc:iec,jsc:jec));         glb%ice_ocean_boundary%lw_flux(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%sw_flux_vis_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dir(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%sw_flux_vis_dif(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_vis_dif(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%sw_flux_nir_dir(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_nir_dir(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%sw_flux_nir_dif(isc:iec,jsc:jec)); glb%ice_ocean_boundary%sw_flux_nir_dif(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%lprec(isc:iec,jsc:jec));           glb%ice_ocean_boundary%lprec(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%fprec(isc:iec,jsc:jec));           glb%ice_ocean_boundary%fprec(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%runoff(isc:iec,jsc:jec));          glb%ice_ocean_boundary%runoff(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%calving(isc:iec,jsc:jec));         glb%ice_ocean_boundary%calving(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%runoff_hflx(isc:iec,jsc:jec));     glb%ice_ocean_boundary%runoff_hflx(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%calving_hflx(isc:iec,jsc:jec));    glb%ice_ocean_boundary%calving_hflx(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%p(isc:iec,jsc:jec));               glb%ice_ocean_boundary%p(:,:) = 0.0
-  allocate(glb%ice_ocean_boundary%mi(isc:iec,jsc:jec));              glb%ice_ocean_boundary%mi(:,:) = 0.0
-
-
   if (debug .and. root_pe().eq.pe_here()) print *, "calling seq_infodata_putdata"
 
    call seq_infodata_PutData( glb%infodata, &
         ocn_nx = ni , ocn_ny = nj)
    call seq_infodata_PutData( glb%infodata, &
         ocn_prognostic=.true., ocnrof_prognostic=.true.)
-
 
   if (debug .and. root_pe().eq.pe_here()) print *, "leaving ocean_init_mct"
 
@@ -877,23 +798,16 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                                               !! internal variables in the ice model.
   character(len=*), optional, intent(in) :: input_restart_file !< If present, name of restart file to read
 
-!   This subroutine initializes both the ocean state and the ocean surface type.
+! This subroutine initializes both the ocean state and the ocean surface type.
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
 
-! Arguments: Ocean_sfc - A structure containing various publicly visible ocean
-!                    surface properties after initialization, this is intent(out).
-!  (out,private) OS - A structure whose internal contents are private
-!                    to ocean_model_mod that may be used to contain all
-!                    information about the ocean's interior state.
-!  (in)      Time_init - The start time for the coupled model's calendar.
-!  (in)      Time_in - The time at which to initialize the ocean model.
-  real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
-  real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
-  real :: G_Earth     ! The gravitational acceleration in m s-2.
-! This include declares and sets the variable "version".
+  real :: Time_unit   !< The time unit in seconds for ENERGYSAVEDAYS.
+  real :: Rho0        !< The Boussinesq ocean density, in kg m-3.
+  real :: G_Earth     !< The gravitational acceleration in m s-2.
+                      !! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mdl = "ocean_model_init"  ! This module's name.
+  character(len=40)  :: mdl = "ocean_model_init"  !< This module's name.
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
@@ -1041,7 +955,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call callTree_leave("ocean_model_init(")
 end subroutine ocean_model_init
 
-!> This subroutine extracts the surface properties from the ocean's internal
+!> Extracts the surface properties from the ocean's internal
 !! state and stores them in the ocean type returned to the calling ice model.
 !! It has to be separate from the ocean_initialization call because the coupler
 !! module allocates the space for some of these variables.
@@ -1064,7 +978,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
 
 end subroutine ocean_model_init_sfc
 
-!> Initialize surface forcing: get relevant parameters and allocate arrays
+!> Initializes surface forcing: get relevant parameters and allocate arrays.
 subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, restore_temp)
   type(time_type),          intent(in)    :: Time !< The current model time
   type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
@@ -1377,21 +1291,21 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   call cpu_clock_end(id_clock_forcing)
 end subroutine surface_forcing_init
 
+!> Initializes domain and state variables contained in the ocean public type.
 subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
                                         gas_fields_ocn)
-  type(domain2D), intent(in)             :: input_domain
-  type(ocean_public_type), intent(inout) :: Ocean_sfc
-  type(diag_ctrl), intent(in)            :: diag
-  logical, intent(in), optional          :: maskmap(:,:)
+  type(domain2D), intent(in)             :: input_domain !< The FMS domain for the input structure
+  type(ocean_public_type), intent(inout) :: Ocean_sfc    !< Ocean surface state
+  type(diag_ctrl), intent(in)            :: diag         !< A structure used to control diagnostics.
+  logical, intent(in), optional          :: maskmap(:,:) !< A pointer to an array indicating which
+                                         !! logical processors are actually used for the ocean code.
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
-                                              !! ocean and surface-ice fields that will participate
-                                              !! in the calculation of additional gas or other
-                                              !! tracer fluxes.
-
+                                         !! ocean and surface-ice fields that will participate
+                                         !! in the calculation of additional gas or other
+                                         !! tracer fluxes.
+  ! local variables
   integer :: xsz, ysz, layout(2)
-  ! ice-ocean-boundary fields are always allocated using absolute indicies
-  ! and have no halos.
   integer :: isc, iec, jsc, jec
 
   call mpp_get_layout(input_domain,layout)
@@ -1429,17 +1343,17 @@ end subroutine initialize_ocean_public_type
 
 !> Translates the coupler's ocean_data_type into MOM6's surface state variable.
 !! This may eventually be folded into the MOM6's code that calculates the
-!! surface state in the first place. Note the offset in the arrays because
-!! the ocean_data_type has no halo points in its arrays and always uses
-!! absolute indicies.
+!! surface state in the first place.
 subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
                                        patm, press_to_z)
   type(surface),           intent(inout) :: state
-  type(ocean_public_type), target, intent(inout) :: Ocean_sfc
-  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  logical,                 intent(in)    :: use_conT_absS
-  real,          optional, intent(in)    :: patm(:,:)
-  real,          optional, intent(in)    :: press_to_z
+  type(ocean_public_type), target, intent(inout) :: Ocean_sfc !< Ocean surface state
+  type(ocean_grid_type),   intent(inout) :: G                 !< The ocean's grid structure
+  logical,                 intent(in)    :: use_conT_absS     !< If true, , the prognostics
+                                         !! T&S are the conservative temperature
+  real,          optional, intent(in)    :: patm(:,:)         !< Atmospheric pressure.
+  real,          optional, intent(in)    :: press_to_z        !< Factor to tranform atmospheric
+                                         !! pressure to z?
 
   ! local variables
   real :: IgR0
@@ -1526,7 +1440,9 @@ subroutine get_state_pointers(OS, grid, surf)
 
 end subroutine get_state_pointers
 
-!> Maps outgoing ocean data to MCT buffer
+!> Maps outgoing ocean data to MCT buffer.
+!! See \ref section_ocn_export for a summary of the data
+!! that is transferred from MOM6 to MCT.
 subroutine ocn_export(ind, ocn_public, grid, o2x)
   type(cpl_indices),       intent(inout) :: ind        !< Structure with coupler
                                                        !! indices and vectors
@@ -1618,123 +1534,6 @@ subroutine ocn_export(ind, ocn_public, grid, o2x)
 
 end subroutine ocn_export
 
-!> Fills the ice ocean boundary type
-subroutine fill_ice_ocean_bnd(ice_ocean_boundary, grid, x2o_o, ind, &
-                             sw_decomp, c1, c2, c3, c4)
-
-  type(ice_ocean_boundary_type), intent(inout) :: ice_ocean_boundary !< A type for the ice ocean boundary
-  type(ocean_grid_type),  intent(in)    :: grid      !<
-  !type(mct_aVect),       intent(in)    :: x2o_o
-  real(kind=8),           intent(in)    :: x2o_o(:,:)
-  type(cpl_indices),      intent(inout) :: ind
-  logical,                intent(in)    :: sw_decomp !< controls if shortwave is
-                                                     !!decomposed into four components
-  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
-
-  ! local variables
-  integer               :: i, j, k, ig, jg !< grid indices
-
-  ! /TODO The following comments summarizes the mismatches between MCT and MOM6 in terms
-  ! of ice ocean fluxes.
-
-  ! Redundancies:
-  ! x2o_Foxx_lat, x2o_Faxa_prec, x2o_Faxa_evap - **latent from MOM6 and coupler are different**
-  ! x2o_Faxa_prec = x2o_Faxa_rain + x2o_Faxa_snow
-
-  ! Variables that **could not** be verified so far:
-  ! x2o_Foxx_rofl
-  ! x2o_Foxx_rof
-
-  ! Variables in IOB that are **NOT** filled by the coupler:
-  ! ustar_berg, frictional velocity beneath icebergs (m/s)
-  ! area_berg, area covered by icebergs(m2/m2)
-  ! mass_berg, mass of icebergs(kg/m2)
-  ! runoff_hflx, heat content of liquid runoff (W/m2)
-  ! calving_hflx, heat content of frozen runoff (W/m2)
-  ! mi, mass of ice (kg/m2)
-
-  ! Variables in the coupler that are **NOT** used in MOM6 (i.e., no corresponding field in IOB):
-  ! x2o_Fioi_melth, heat flux from snow & ice melt (W/m2)
-  ! x2o_Fioi_meltw, snow melt flux (kg/m2/s)
-  ! x2o_Si_ifrac, fractional ice wrt ocean
-  ! x2o_So_duu10n, 10m wind speed squared (m^2/s^2)
-  ! x2o_Sa_co2prog, bottom atm level prognostic CO2
-  ! x2o_Sa_co2diag, bottom atm level diagnostic CO2
-  ! x2o_Foxx_lat, latent heat flux  (W/m2)
-
-  ! Langmuir related fields:
-  ! surface Stokes drift, x-comp. (x2o_Sw_ustokes)
-  ! surface Stokes drift, y-comp. (x2o_Sw_vstokes)
-  ! wave model langmuir multiplier (x2o_Sw_lamult)
-
-  ! Biogeochemistry:
-  ! x2o_Fioi_bcpho, Black Carbon hydrophobic release from sea ice component
-  ! x2o_Fioi_bcphi, Black Carbon hydrophilic release from sea ice component
-  ! x2o_Fioi_flxdst, Dust release from sea ice component
-  ! x2o_Faxa_bcphidry, Black Carbon hydrophilic dry deposition
-  ! x2o_Faxa_bcphodry, Black Carbon hydrophobic dry deposition
-  ! x2o_Faxa_bcphiwet, Black Carbon hydrophobic wet deposition
-  ! x2o_Faxa_ocphidry, Organic Carbon hydrophilic dry deposition
-  ! x2o_Faxa_ocphodry, Organic Carbon hydrophobic dry deposition
-  ! x2o_Faxa_ocphiwet, Organic Carbon hydrophilic dry deposition
-  ! x2o_Faxa_dstwet, Sizes 1 to 4 dust - wet deposition
-  ! x2o_Faxa_dstdry, Sizes 1 to 4 dust - dry depositi
-
-  k = 0
-  do j = grid%jsc, grid%jec
-    jg = j + grid%jdg_offset
-    do i = grid%isc, grid%iec
-      k = k + 1 ! Increment position within gindex
-      ig = i + grid%idg_offset
-      ! sea-level pressure (Pa)
-      ice_ocean_boundary%p(ig,jg) = x2o_o(ind%x2o_Sa_pslv,k)
-      ! zonal wind stress (taux)
-      ice_ocean_boundary%u_flux(ig,jg) = x2o_o(ind%x2o_Foxx_taux,k)
-      ! meridional wind stress (tauy)
-      ice_ocean_boundary%v_flux(ig,jg) = x2o_o(ind%x2o_Foxx_tauy,k)
-      ! sensible heat flux (W/m2)
-      ice_ocean_boundary%t_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_sen,k)
-      ! latent heat flux (W/m^2)
-      ice_ocean_boundary%latent(ig,jg) = x2o_o(ind%x2o_Foxx_lat,k)
-      ! salt flux
-      ice_ocean_boundary%salt_flux(ig,jg) = -x2o_o(ind%x2o_Fioi_salt,k)
-      ! heat content from frozen runoff
-      ice_ocean_boundary%calving_hflx(ig,jg) = 0.0
-      ! snow melt flux
-      !ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Fioi_meltw,k)
-      ! river runoff flux
-      ice_ocean_boundary%runoff(ig,jg) = x2o_o(ind%x2o_Foxx_rofl,k)
-      ! ice runoff flux
-      ice_ocean_boundary%calving(ig,jg) = x2o_o(ind%x2o_Foxx_rofi,k)
-      ! liquid precipitation (rain)
-      ice_ocean_boundary%lprec(ig,jg) = x2o_o(ind%x2o_Faxa_rain,k)
-      ! frozen precipitation (snow)
-      ice_ocean_boundary%fprec(ig,jg) = x2o_o(ind%x2o_Faxa_snow,k)
-      ! evaporation flux, MOM6 calls q_flux specific humidity (kg/m2/s)
-      ice_ocean_boundary%q_flux(ig,jg) = -x2o_o(ind%x2o_Foxx_evap,k)
-      ! longwave radiation, sum up and down (W/m2)
-      ice_ocean_boundary%lw_flux(ig,jg) = x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)
-      if (sw_decomp) then
-        ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
-        ! 1) visible, direct shortwave (W/m2)
-        ice_ocean_boundary%sw_flux_vis_dir(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c1
-        ! 2) visible, diffuse shortwave (W/m2)
-        ice_ocean_boundary%sw_flux_vis_dif(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c2
-        ! 3) near-IR, direct shortwave (W/m2)
-        ice_ocean_boundary%sw_flux_nir_dir(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c3
-        ! 4) near-IR, diffuse shortwave (W/m2)
-        ice_ocean_boundary%sw_flux_nir_dif(ig,jg) = x2o_o(ind%x2o_Foxx_swnet,k)*c4
-      else
-        call MOM_error(FATAL,"fill_ice_ocean_bnd: this option has not been implemented yet."// &
-                       "Shortwave must be decomposed using coeffs. c1, c2, c3, c4.");
-      endif
-    enddo
-  enddo
-
-  ice_ocean_boundary%wind_stagger = AGRID
-
-end subroutine fill_ice_ocean_bnd
-
 !> Step forward ocean model for coupling interval
 subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(ESMF_Clock), intent(inout) :: EClock  !< Time and time step ? \todo Why must this be intent(inout)?
@@ -1797,14 +1596,11 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
 
   ! set (actually, get from mct) the cdata pointers:
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
+  ! GMM, check if  this is needed!
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
 
-  ! fill ice ocean boundary
-  call fill_ice_ocean_bnd(glb%ice_ocean_boundary, glb%grid, x2o_o%rattr, glb%ind, glb%sw_decomp, &
-                          glb%c1, glb%c2, glb%c3, glb%c4)
-
-  call update_ocean_model(glb%ice_ocean_boundary, glb%ocn_state, glb%ocn_public, &
-                          time_start, coupling_timestep)
+  call update_ocean_model(glb%ocn_state, glb%ocn_public, time_start, coupling_timestep, &
+                         x2o_o%rattr, glb%ind, glb%sw_decomp, glb%c1, glb%c2, glb%c3, glb%c4)
 
   ! return export state to driver
   call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr)
@@ -1878,39 +1674,32 @@ subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
 end subroutine forcing_save_restart
 
 !> Updates the ocean model fields.  This code wraps the call to step_MOM with MOM6's call.
-!! It uses the forcing in Ice_ocean_boundary to advance the ocean model's state from the
+!! It uses the forcing to advance the ocean model's state from the
 !! input value of Ocean_state (which must be for time time_start_update) for a time interval
-!! of Ocean_coupling_time_step, eturning the publicly visible ocean surface properties in
+!! of Ocean_coupling_time_step, returning the publicly visible ocean surface properties in
 !! Ocean_sfc and storing the new ocean properties in Ocean_state.
-subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
-                              time_start_update, Ocean_coupling_time_step)
-  type(ice_ocean_boundary_type), intent(inout) :: Ice_ocean_boundary
-  type(ocean_state_type),        pointer       :: OS
-  type(ocean_public_type),       intent(inout) :: Ocean_sfc
-  type(time_type), intent(in)                  :: time_start_update
-  type(time_type), intent(in)                  :: Ocean_coupling_time_step
+subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
+                              Ocean_coupling_time_step, x2o_o, ind, sw_decomp,      &
+                              c1, c2, c3, c4)
+  type(ocean_state_type),        pointer       :: OS !< Structure containing the internal ocean state
+  type(ocean_public_type),       intent(inout) :: Ocean_sfc !< Structure containing all the publicly
+                                               !! visible ocean surface fields after a coupling time step
+  type(time_type), intent(in)                  :: time_start_update !< Time at the beginning of the update step
+  type(time_type), intent(in)                  :: Ocean_coupling_time_step !< Amount of time over which to
+                                               !! advance the ocean
+  real(kind=8),           intent(in)    :: x2o_o(:,:) !< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),      intent(inout) :: ind !< Structure with MCT attribute vectors and indices
+  logical,                intent(in)    :: sw_decomp !< controls if shortwave is
+                                                     !!decomposed into four components
+  real(kind=8),           intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
 
-! Arguments: Ice_ocean_boundary - A structure containing the various forcing
-!                                 fields coming from the ice. It is intent in.
-!  (inout)   Ocean_state - A structure containing the internal ocean state.
-!  (out)     Ocean_sfc - A structure containing all the publicly visible ocean
-!                        surface fields after a coupling time step.
-!  (in)      time_start_update - The time at the beginning of the update step.
-!  (in)      Ocean_coupling_time_step - The amount of time over which to advance
-!                                       the ocean.
-
-! Note: although several types are declared intent(inout), this is to allow for
-!   the possibility of halo updates and to keep previously allocated memory.
-!   In practice, Ice_ocean_boundary is intent in, Ocean_state is private to
-!   this module and intent inout, and Ocean_sfc is intent out.
-  type(time_type) :: Master_time ! This allows step_MOM to temporarily change
-                                 ! the time that is seen by internal modules.
-  type(time_type) :: Time1       ! The value of the ocean model's time at the
-                                 ! start of a call to step_MOM.
-  integer :: index_bnds(4)       ! The computational domain index bounds in the
-                                 ! ice-ocean boundary type.
-  real :: weight            ! Flux accumulation weight
-  real :: time_step         ! The time step of a call to step_MOM in seconds.
+  ! local variables
+  type(time_type) :: Master_time !< This allows step_MOM to temporarily change
+                                 !! the time that is seen by internal modules.
+  type(time_type) :: Time1       !< The value of the ocean model's time at the
+                                 !! start of a call to step_MOM.
+  real :: weight                 !< Flux accumulation weight
+  real :: time_step              !< The time step of a call to step_MOM in seconds.
   integer :: secs, days
   integer :: is, ie, js, je
 
@@ -1936,16 +1725,13 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-!  Translate Ice_ocean_boundary into fluxes.
-  call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
-                              index_bnds(3), index_bnds(4))
-
   weight = 1.0
 
   if (OS%fluxes%fluxes_used) then
-    call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%fluxes, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
+    ! GMM, is enable_averaging needed now?
+    call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag)
+    call ocn_import(OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
+                    c1, c2, c3, c4, OS%restore_salinity,OS%restore_temp)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
@@ -1966,8 +1752,11 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     OS%fluxes%dt_buoy_accum = time_step
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
-    call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%flux_tmp, index_bnds, OS%Time, &
-                               OS%grid, OS%forcing_CSp, OS%state, OS%restore_salinity,OS%restore_temp)
+    ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
+    call ocn_import(OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
+                       OS%state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
+                       OS%restore_salinity,OS%restore_temp)
+
     if (OS%use_ice_shelf) then
       call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
@@ -1978,6 +1767,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     ! call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
     !endif
 
+    ! Accumulate the forcing over time steps
     call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
@@ -2036,35 +1826,30 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
 
-subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, restore_salt, restore_temp)
-  type(ice_ocean_boundary_type), intent(in), target :: IOB
-  type(forcing),              intent(inout)         :: fluxes
-  integer, dimension(4),      intent(in)            :: index_bounds
-  type(time_type),            intent(in)            :: Time
-  type(ocean_grid_type),      intent(inout)         :: G    !< The ocean's grid structure
-  type(surface_forcing_CS),   pointer               :: CS
-  type(surface),              intent(in)            :: state
-  logical, optional,          intent(in)            :: restore_salt, restore_temp
+!> This function has a few purposes: 1) it allocates and initializes the data
+!! in the fluxes structure; 2) it imports surface fluxes using data from
+!! the coupler; and 3) it can apply restoring in SST and SSS.
+!! See \ref section_ocn_import for a summary of the surface fluxes that are
+!! passed from MCT to MOM6, including fluxes that need to be included in
+!! the future.
+subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
+                             c1, c2, c3, c4, restore_salt, restore_temp)
+  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes structure
+  type(time_type),            intent(in)           :: Time !< Model time structure
+  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid structure
+  type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
+                                                   !! a previous call to surface_forcing_init
+  type(surface),              intent(in)           :: state !< control structure to ocean
+                                                   !! surface state fields.
+  real(kind=8),               intent(in)           :: x2o_o(:,:)!< Fluxes from coupler to ocean, computed by ocean
+  type(cpl_indices),          intent(inout)        :: ind !< Structure with MCT attribute vectors and indices
+  logical,                    intent(in)           :: sw_decomp !< controls if shortwave is
+                                                   !!decomposed into four components
+  real(kind=8),               intent(in), optional :: c1, c2, c3, c4 !< Coeffs. used in the shortwave decomposition
+  logical, optional,          intent(in)            :: restore_salt, restore_temp !< Controls if salt and temp are
+                                                   !! restored
 
-! This subroutine translates the Ice_ocean_boundary_type into a
-! MOM forcing type, including changes of units, sign conventions,
-! and puting the fields into arrays with MOM-standard halos.
-
-! Arguments:
-!   IOB  ice-ocean boundary type w/ fluxes to drive ocean in a coupled model
-!  (out) fluxes - A structure containing pointers to any possible
-!                 forcing fields.  Unused fields have NULL ptrs.
-!  (in)  index_bounds - the i- and j- size of the arrays in IOB.
-!  (in)  Time - The time of the fluxes, used for interpolating the salinity
-!               to the right time, when it is being restored.
-!  (in)  G - The ocean's grid structure.
-!  (in)  CS - A pointer to the control structure returned by a previous
-!             call to surface_forcing_init.
-!  (in)  state - A structure containing fields that describe the
-!                surface state of the ocean.
-!  (in)  restore_salt - if true, salinity is restored to a target value.
-!  (in)  restore_temp - if true, temperature is restored to a target value.
-
+  ! local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     taux_at_q, &     ! Zonal wind stresses at q points (Pa)
     tauy_at_q        ! Meridional wind stresses at q points (Pa)
@@ -2095,7 +1880,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   real :: mass_eff      ! effective mass of sea ice for rigidity (kg/m^2)
 
   integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, isr, ier, jsr, jer
   integer :: isc_bnd, iec_bnd, jsc_bnd, jec_bnd
 
@@ -2110,8 +1895,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
   call cpu_clock_begin(id_clock_forcing)
 
-  isc_bnd = index_bounds(1) ; iec_bnd = index_bounds(2)
-  jsc_bnd = index_bounds(3) ; jec_bnd = index_bounds(4)
   is   = G%isc   ; ie   = G%iec    ; js   = G%jsc   ; je   = G%jec
   Isq  = G%IscB  ; Ieq  = G%IecB   ; Jsq  = G%JscB  ; Jeq  = G%JecB
   isd  = G%isd   ; ied  = G%ied    ; jsd  = G%jsd   ; jed  = G%jed
@@ -2134,8 +1917,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   restore_sst = .false.
   if (present(restore_temp)) restore_sst = restore_temp
 
-  ! allocation and initialization if this is the first time that this
-  ! flux type has been used.
+  ! if true, allocation and initialization
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true., &
                                water=.true., heat=.true.)
@@ -2147,6 +1929,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
 
     call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%p_surf_SSH,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
@@ -2175,21 +1958,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     fluxes%dt_buoy_accum = 0.0
   endif   ! endif for allocation and initialization
 
-  if ((.not.coupler_type_initialized(fluxes%tr_fluxes)) .and. &
-      coupler_type_initialized(IOB%fluxes)) &
-    call coupler_type_spawn(IOB%fluxes, fluxes%tr_fluxes, &
-                            (/is,is,ie,ie/), (/js,js,je,je/))
-  !   It might prove valuable to use the same array extents as the rest of the
-  ! ocean model, rather than using haloless arrays, in which case the last line
-  ! would be: (             (/isd,is,ie,ied/), (/jsd,js,je,jed/))
-
-
   if (CS%allow_flux_adjustments) then
    fluxes%heat_added(:,:)=0.0
    fluxes%salt_flux_added(:,:)=0.0
   endif
 
-  ! allocation and initialization on first call to this routine
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
       work_sum(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
@@ -2265,9 +2038,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo; enddo
   endif
 
-  wind_stagger = CS%wind_stagger
-  if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
-      (IOB%wind_stagger == CGRID_NE)) wind_stagger = IOB%wind_stagger
+  ! GMM, CIME uses AGRID. All the BGRID_NE code can be cleaned later
+  wind_stagger = AGRID
+
   if (wind_stagger == BGRID_NE) then
     ! This is necessary to fill in the halo points.
     taux_at_q(:,:) = 0.0 ; tauy_at_q(:,:) = 0.0
@@ -2277,113 +2050,124 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     taux_at_h(:,:) = 0.0 ; tauy_at_h(:,:) = 0.0
   endif
 
-
-  ! obtain fluxes from IOB; note the staggering of indices
-  i0 = is - isc_bnd ; j0 = js - jsc_bnd
+  k = 0
   do j=js,je ; do i=is,ie
+    k = k + 1 ! Increment position within gindex
 
     if (wind_stagger == BGRID_NE) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_q(I,J) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_q(I,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      taux_at_q(I,J) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
+      tauy_at_q(I,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+    ! GMM, cime uses AGRID
     elseif (wind_stagger == AGRID) then
-      if (ASSOCIATED(IOB%u_flux)) taux_at_h(i,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) tauy_at_h(i,j) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      taux_at_h(i,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
+      tauy_at_h(i,j) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      if (ASSOCIATED(IOB%u_flux)) fluxes%taux(I,j) = IOB%u_flux(i-i0,j-j0) * CS%wind_stress_multiplier
-      if (ASSOCIATED(IOB%v_flux)) fluxes%tauy(i,J) = IOB%v_flux(i-i0,j-j0) * CS%wind_stress_multiplier
+      fluxes%taux(I,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
+      fluxes%tauy(i,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     endif
 
-    if (ASSOCIATED(IOB%lprec)) &
-      fluxes%lprec(i,j) =  IOB%lprec(i-i0,j-j0) * G%mask2dT(i,j)
+    ! liquid precipitation (rain)
+    if (ASSOCIATED(fluxes%lprec)) &
+      fluxes%lprec(i,j) = x2o_o(ind%x2o_Faxa_rain,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%fprec)) &
-      fluxes%fprec(i,j) = IOB%fprec(i-i0,j-j0) * G%mask2dT(i,j)
+    ! frozen precipitation (snow)
+    if (ASSOCIATED(fluxes%fprec)) &
+      fluxes%fprec(i,j) = x2o_o(ind%x2o_Faxa_snow,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%q_flux)) &
-      fluxes%evap(i,j) = - IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    ! evaporation
+    if (ASSOCIATED(fluxes%evap)) &
+      fluxes%evap(i,j) = x2o_o(ind%x2o_Foxx_evap,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%runoff)) &
-      fluxes%lrunoff(i,j) = IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
+    ! river runoff flux
+    if (ASSOCIATED(fluxes%lrunoff)) &
+      fluxes%lrunoff(i,j) = x2o_o(ind%x2o_Foxx_rofl,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%calving)) &
-      fluxes%frunoff(i,j) = IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
+    ! ice runoff flux
+    if (ASSOCIATED(fluxes%frunoff)) &
+      fluxes%frunoff(i,j) = x2o_o(ind%x2o_Foxx_rofi,k) * G%mask2dT(i,j)
 
-    if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
-      .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
-      .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
-      call allocate_forcing_type(G, fluxes, iceberg=.true.)
+    ! GMM, we don't have an icebergs yet so the following is not needed
+    !if (((ASSOCIATED(IOB%ustar_berg) .and. (.not. ASSOCIATED(fluxes%ustar_berg)))   &
+    !  .or. (ASSOCIATED(IOB%area_berg) .and. (.not. ASSOCIATED(fluxes%area_berg)))) &
+    !  .or. (ASSOCIATED(IOB%mass_berg) .and. (.not. ASSOCIATED(fluxes%mass_berg)))) &
+    !  call allocate_forcing_type(G, fluxes, iceberg=.true.)
+    !if (ASSOCIATED(IOB%ustar_berg)) &
+    !  fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    !if (ASSOCIATED(IOB%area_berg)) &
+    !  fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    !if (ASSOCIATED(IOB%mass_berg)) &
+    !  fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%ustar_berg)) &
-      fluxes%ustar_berg(i,j) = IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    ! GMM, cime does not not have an equivalent for heat_content_lrunoff and
+    ! heat_content_frunoff. I am seeting these to zero for now.
+    if (ASSOCIATED(fluxes%heat_content_lrunoff)) &
+      fluxes%heat_content_lrunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%area_berg)) &
-      fluxes%area_berg(i,j) = IOB%area_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    if (ASSOCIATED(fluxes%heat_content_frunoff)) &
+      fluxes%heat_content_frunoff(i,j) = 0.0 * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%mass_berg)) &
-      fluxes%mass_berg(i,j) = IOB%mass_berg(i-i0,j-j0) * G%mask2dT(i,j)
+    ! longwave radiation, sum up and down (W/m2)
+    if (ASSOCIATED(fluxes%LW)) &
+      fluxes%LW(i,j) = (x2o_o(ind%x2o_Faxa_lwdn,k) + x2o_o(ind%x2o_Foxx_lwup,k)) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%runoff_hflx)) &
-      fluxes%heat_content_lrunoff(i,j) = IOB%runoff_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    ! sensible heat flux (W/m2)
+    if (ASSOCIATED(fluxes%sens)) &
+      fluxes%sens(i,j) =  x2o_o(ind%x2o_Foxx_sen,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%calving_hflx)) &
-      fluxes%heat_content_frunoff(i,j) = IOB%calving_hflx(i-i0,j-j0) * G%mask2dT(i,j)
+    ! latent heat flux (W/m^2)
+    if (ASSOCIATED(fluxes%latent)) &
+      fluxes%latent(i,j) = x2o_o(ind%x2o_Foxx_lat,k) * G%mask2dT(i,j)
 
-    if (ASSOCIATED(IOB%lw_flux)) &
-      fluxes%LW(i,j) = IOB%lw_flux(i-i0,j-j0) * G%mask2dT(i,j)
+    if (sw_decomp) then
+      ! Use runtime coefficients to decompose net short-wave heat flux into 4 components
+      ! 1) visible, direct shortwave (W/m2)
+      if (ASSOCIATED(fluxes%sw_vis_dir)) &
+        fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c1
+      ! 2) visible, diffuse shortwave (W/m2)
+      if (ASSOCIATED(fluxes%sw_vis_dif)) &
+        fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c2
+      ! 3) near-IR, direct shortwave (W/m2)
+      if (ASSOCIATED(fluxes%sw_nir_dir)) &
+        fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c3
+      ! 4) near-IR, diffuse shortwave (W/m2)
+      if (ASSOCIATED(fluxes%sw_nir_dif)) &
+        fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Foxx_swnet,k)*c4
 
-    if (ASSOCIATED(IOB%t_flux)) &
-      fluxes%sens(i,j) = - IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
-
-    fluxes%latent(i,j) = 0.0
-    if (ASSOCIATED(IOB%latent)) then
-      fluxes%latent(i,j) = IOB%latent(i-i0,j-j0)
-    else
-      if (ASSOCIATED(IOB%fprec)) then
-        fluxes%latent(i,j)            = fluxes%latent(i,j) - IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-        fluxes%latent_fprec_diag(i,j) = -G%mask2dT(i,j) * IOB%fprec(i-i0,j-j0)*CS%latent_heat_fusion
-      endif
-      if (ASSOCIATED(IOB%calving)) then
-        fluxes%latent(i,j)              = fluxes%latent(i,j) - IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-        fluxes%latent_frunoff_diag(i,j) = -G%mask2dT(i,j) * IOB%calving(i-i0,j-j0)*CS%latent_heat_fusion
-      endif
-      if (ASSOCIATED(IOB%q_flux)) then
-        fluxes%latent(i,j)           = fluxes%latent(i,j) - IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-        fluxes%latent_evap_diag(i,j) = -G%mask2dT(i,j) * IOB%q_flux(i-i0,j-j0)*CS%latent_heat_vapor
-      endif
-    endif
-
-    fluxes%latent(i,j) = G%mask2dT(i,j) * fluxes%latent(i,j)
-
-    if (ASSOCIATED(IOB%sw_flux_vis_dir)) &
-      fluxes%sw_vis_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dir(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_vis_dif)) &
-      fluxes%sw_vis_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_vis_dif(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_nir_dir)) &
-      fluxes%sw_nir_dir(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dir(i-i0,j-j0)
-    if (ASSOCIATED(IOB%sw_flux_nir_dif)) &
-      fluxes%sw_nir_dif(i,j) = G%mask2dT(i,j) * IOB%sw_flux_nir_dif(i-i0,j-j0)
-    fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
+      fluxes%sw(i,j) = fluxes%sw_vis_dir(i,j) + fluxes%sw_vis_dif(i,j) + &
                      fluxes%sw_nir_dir(i,j) + fluxes%sw_nir_dif(i,j)
+    else
+        call MOM_error(FATAL,"fill_ice_ocean_bnd: this option has not been implemented yet."// &
+                       "Shortwave must be decomposed using coeffs. c1, c2, c3, c4.");
+    endif
+
+    ! applied surface pressure from atmosphere and cryosphere
+    ! sea-level pressure (Pa)
+    if (ASSOCIATED(fluxes%p_surf_full) .and. ASSOCIATED(fluxes%p_surf)) then
+      fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
+      if (CS%max_p_surf >= 0.0) then
+          fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
+      else
+          fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
+      endif
+
+      if (CS%use_limited_P_SSH) then
+        fluxes%p_surf_SSH(i,j) = fluxes%p_surf(i,j)
+      else
+        fluxes%p_surf_SSH(i,j) = fluxes%p_surf_full(i,j)
+      endif
+
+    endif
+
+    ! salt flux
+    ! more salt restoring logic
+    if (ASSOCIATED(fluxes%salt_flux)) &
+      fluxes%salt_flux(i,j) = G%mask2dT(i,j)*(x2o_o(ind%x2o_Fioi_salt,k) + fluxes%salt_flux(i,j))
+
+    if (ASSOCIATED(fluxes%salt_flux_in)) &
+      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*x2o_o(ind%x2o_Fioi_salt,k)
 
   enddo ; enddo
-
-  ! more salt restoring logic
-  if (ASSOCIATED(IOB%salt_flux)) then
-    do j=js,je ; do i=is,ie
-      fluxes%salt_flux(i,j)    = G%mask2dT(i,j)*(fluxes%salt_flux(i,j) - IOB%salt_flux(i-i0,j-j0))
-      fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -IOB%salt_flux(i-i0,j-j0) )
-    enddo ; enddo
-  endif
-
-!### if (associated(CS%ctrl_forcing_CSp)) then
-!###   do j=js,je ; do i=is,ie
-!###     SST_anom(i,j) = state%SST(i,j) - CS%T_Restore(i,j)
-!###     SSS_anom(i,j) = state%SSS(i,j) - CS%S_Restore(i,j)
-!###     SSS_mean(i,j) = 0.5*(state%SSS(i,j) + CS%S_Restore(i,j))
-!###   enddo ; enddo
-!###   call apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, fluxes%heat_restore, &
-!###                           fluxes%vprec, day, dt, G, CS%ctrl_forcing_CSp)
-!### endif
+  ! ############################ END OF MCT to MOM ##############################
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
@@ -2397,9 +2181,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       !   Bob thinks this is trying ensure the net fresh-water of the ocean + sea-ice system
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
-      if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
+      if (ASSOCIATED(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
         net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
-                     (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
+                     (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j)
     enddo ; enddo
 
@@ -2415,26 +2199,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
       enddo; enddo
     endif
 
-  endif
-
-  ! applied surface pressure from atmosphere and cryosphere
-  if (ASSOCIATED(IOB%p)) then
-    if (CS%max_p_surf >= 0.0) then
-      do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
-        fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
-      enddo ; enddo
-    else
-      do j=js,je ; do i=is,ie
-        fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * IOB%p(i-i0,j-j0)
-        fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
-      enddo ; enddo
-    endif
-    if (CS%use_limited_P_SSH) then
-      fluxes%p_surf_SSH => fluxes%p_surf
-    else
-      fluxes%p_surf_SSH => fluxes%p_surf_full
-    endif
   endif
 
   ! surface momentum stress related fields as function of staggering
@@ -2559,10 +2323,6 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
     enddo ; enddo
   endif
 
-  if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
-      coupler_type_initialized(IOB%fluxes)) &
-    call coupler_type_copy_data(IOB%fluxes, fluxes%tr_fluxes)
-
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to fluxes
     call apply_flux_adjustments(G, CS, Time, fluxes)
@@ -2572,7 +2332,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, G, CS, state, 
   call user_alter_forcing(state, fluxes, Time, G, CS%urf_CS)
 
   call cpu_clock_end(id_clock_forcing)
-end subroutine convert_IOB_to_fluxes
+
+end subroutine  ocn_import
 
 !> Adds flux adjustments obtained via data_override
 !! Component name is 'OCN'
@@ -2584,6 +2345,7 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
   type(time_type),          intent(in)    :: Time !< Model time structure
   type(forcing), optional,  intent(inout) :: fluxes !< Surface fluxes structure
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: tempx_at_h ! Delta to zonal wind stress at h points (Pa)
   real, dimension(SZI_(G),SZJ_(G)) :: tempy_at_h ! Delta to meridional wind stress at h points (Pa)
@@ -2689,12 +2451,12 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                  !                        !! ocean state to be deallocated upon termination.
   type(time_type),             intent(in)    :: Time      !< The model time, used for writing restarts.
 
-  if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
+  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
   !GMM call save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
-  if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
+  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
 
 end subroutine ocean_model_end
 
@@ -2825,5 +2587,70 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   deallocate(idata)
 
 end subroutine ocn_domain_mct
+
+!> \namespace ocn_comp_mct
+!!
+!! \section section_ocn_import Fluxes imported from the coupler (MCT) to MOM6
+!! The following summarizes the mismatches between MCT and MOM6 in terms
+!! of ice ocean fluxes.
+!!
+!! Redundancies:
+!! x2o_Faxa_prec = x2o_Faxa_rain + x2o_Faxa_snow
+!!
+!! Variables whose units and sign  **could not** be verified so far:
+!! x2o_Foxx_rofl
+!! x2o_Foxx_rof
+!!
+!! Variables in MOM6 fluxes that are **NOT** filled by the coupler:
+!! ustar_berg, frictional velocity beneath icebergs (m/s)
+!! area_berg, area covered by icebergs(m2/m2)
+!! mass_berg, mass of icebergs(kg/m2)
+!! runoff_hflx, heat content of liquid runoff (W/m2)
+!! calving_hflx, heat content of frozen runoff (W/m2)
+!! mi, mass of ice (kg/m2)
+!!
+!! Variables in the coupler that are **NOT** used in MOM6 (i.e., no corresponding field in fluxes):
+!! x2o_Fioi_melth, heat flux from snow & ice melt (W/m2)
+!! x2o_Fioi_meltw, snow melt flux (kg/m2/s)
+!! x2o_Si_ifrac, fractional ice wrt ocean
+!! x2o_So_duu10n, 10m wind speed squared (m^2/s^2)
+!! x2o_Sa_co2prog, bottom atm level prognostic CO2
+!! x2o_Sa_co2diag, bottom atm level diagnostic CO2
+!!
+!! \TODO Langmuir related fields:
+!! surface Stokes drift, x-comp. (x2o_Sw_ustokes)
+!! surface Stokes drift, y-comp. (x2o_Sw_vstokes)
+!! wave model langmuir multiplier (x2o_Sw_lamult)
+!!
+!! \TODO Biogeochemistry:
+!! x2o_Fioi_bcpho, Black Carbon hydrophobic release from sea ice component
+!! x2o_Fioi_bcphi, Black Carbon hydrophilic release from sea ice component
+!! x2o_Fioi_flxdst, Dust release from sea ice component
+!! x2o_Faxa_bcphidry, Black Carbon hydrophilic dry deposition
+!! x2o_Faxa_bcphodry, Black Carbon hydrophobic dry deposition
+!! x2o_Faxa_bcphiwet, Black Carbon hydrophobic wet deposition
+!! x2o_Faxa_ocphidry, Organic Carbon hydrophilic dry deposition
+!! x2o_Faxa_ocphodry, Organic Carbon hydrophobic dry deposition
+!! x2o_Faxa_ocphiwet, Organic Carbon hydrophilic dry deposition
+!! x2o_Faxa_dstwet, Sizes 1 to 4 dust - wet deposition
+!! x2o_Faxa_dstdry, Sizes 1 to 4 dust - dry deposition
+!!
+!! \section section_ocn_export Fluxes exported from MOM6 to the coupler (MCT)
+!!
+!! Variables that are currently being exported:
+!!
+!! Surface temperature (Kelvin)
+!! Surface salinity (psu)
+!! Surface eastward velocity (m/s)
+!! Surface northward velocity (m/s)
+!! Zonal slope in the sea surface height
+!! Meridional slope in the sea surface height
+!!
+!! \TODO Variables that **are not** currently being exported:
+!!
+!! Boundary layer depth
+!! CO2
+!! DMS
+!! o2x_Fioo_q       !< Heat flux?
 
 end module ocn_comp_mct
