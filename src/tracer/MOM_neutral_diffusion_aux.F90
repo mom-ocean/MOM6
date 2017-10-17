@@ -418,7 +418,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     refine_nondim_position = MAX(x0,min_bound)
   endif
 
-  if (refine_nondim_position<0.) then
+  if (refine_nondim_position<min_bound) then
     if (debug) then
       write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
       write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
@@ -428,7 +428,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       write (*,*) "x0: ", x0
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
-    call MOM_error(WARNING, "refine_nondim_position<0.")
+!    call MOM_error(WARNING, "refine_nondim_position<0.")
     refine_nondim_position = MAX(x0,min_bound)
   endif
 
