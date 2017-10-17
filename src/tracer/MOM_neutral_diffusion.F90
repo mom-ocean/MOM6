@@ -1212,7 +1212,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       dRhoBot = 0.5 * &
         ( ( dRdT_l(kl_left,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left,2) - Tr(kl_right,ki_right) ) &
         + ( dRdS_l(kl_left,2) + dRdS_r(kl_right,ki_right) ) * ( Sl(kl_left,2) - Sr(kl_right,ki_right) ) )
-      if (.not. search_layer_l .and. kl_left>kl_left_0) then
+      if (lastK_left /= kl_left .and. kl_left>kl_left_0) then
         if (stable_l(kl_left-1) ) then ! Calculate the density difference at top of discontinuity
           dRhoTopm1 = 0.5 * &
             ( ( dRdT_l(kl_left-1,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left-1,2) - Tr(kl_right,ki_right) ) &
@@ -1262,7 +1262,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       dRhoBot = 0.5 * &
         ( ( dRdT_r(kl_right,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,2) - Tl(kl_left,ki_left) ) &
         + ( dRdS_r(kl_right,2) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,2) - Sl(kl_left,ki_left) ) )
-      if (kl_right>kl_right_0) then
+      if (lastK_right /= kl_right .and. kl_right>kl_right_0) then
         if(stable_r(kl_right-1)) then
           dRhoTopm1 = 0.5 * &
             ( ( dRdT_r(kl_right-1,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right-1,2) - Tl(kl_left,ki_left) ) &
@@ -1417,12 +1417,12 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   if (kl > kl_0) then ! Away from top cell
     if (kl == lastK) then ! Searching in the same layer
       if (dRhoTop > 0.) then
-        out_P = lastP ; out_K = kl
+        out_P = max(0.,lastP) ; out_K = kl
       elseif (dRhoTop == dRhoBot) then
         if (top_connected(kl)) then
           out_P = 1. ; out_K = kl
         else
-          out_P = 0. ; out_K = kl
+          out_P = max(0.,lastP) ; out_K = kl
         endif
       elseif (dRhoTop >= dRhoBot) then
         out_P = 1. ; out_K = kl
@@ -1451,10 +1451,10 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
         out_P = max(0.,lastP) ; out_K = kl
       endif
     elseif (dRhoTop >= dRhoBot) then
-      out_P = lastP ; out_K = kl
+      out_P = 1. ; out_K = kl
     else
       out_K = kl
-      out_P = interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot )
+      out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
     endif
   endif
 

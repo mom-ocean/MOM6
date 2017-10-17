@@ -39,7 +39,8 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
     ns = 2
     return
   endif
-
+  first_stable = 1
+  prev_stable = 1
   ! First sweep down and find the first place where the column is stable
   do k=1,nk-1
     delta_rho = ( (dRdT(k) + dRdT(k+1))*(T(k)-T(k+1)) ) + ( (dRdS(k) + dRdS(k+1))*(S(k)-S(k+1)) )
