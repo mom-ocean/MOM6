@@ -889,7 +889,7 @@ subroutine restore_state(filename, directory, day, G, CS)
 !                 restart_init.
 
   character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
-  character(len=200) :: fname     ! The name of the current file.
+  character(len=80) :: fname     ! The name of the current file.
   character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
                                   ! additional restart files.
   character(len=256) :: mesg      ! A message for warnings.
