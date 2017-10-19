@@ -14,6 +14,7 @@ public mark_unstable_cells_i
 public calc_delta_rho
 public refine_nondim_position
 public check_neutral_positions
+public kahan_sum
 
 contains
 
@@ -195,20 +196,20 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
 
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
   real :: P_int, P_min, P_ref ! Interpolated pressure
-  real :: delta_rho_init, delta_rho_final, x_init
+  real :: delta_rho_init, delta_rho_final
   real :: T, S, alpha, beta, alpha_avg, beta_avg
-  ! Newton's Method variables
+  ! Newton's Method with variables
   real :: dT_dP, dS_dP, delta_T, delta_S, delta_P
   real :: dbeta_dS, dbeta_dT, dalpha_dT, dalpha_dS, dbeta_dP, dalpha_dP
-  ! Brent's Method variables
-  real :: a, b, c, d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
+  real :: a, b, c, b_last
+  ! Extra Brent's Method variables
+  real :: d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
 
   real :: P_last
   logical :: debug = .false.
   if (ref_pres>=0.) P_ref = ref_pres
   delta_P = P_bot-P_top
   refine_nondim_position = min_bound
-  x_init = refine_nondim_position
 
   call extract_member_EOS(EOS, form_of_EOS = form_of_EOS)
   do_newton = (form_of_EOS == EOS_LINEAR) .or. (form_of_EOS == EOS_TEOS10) .or. (form_of_EOS == EOS_WRIGHT)
@@ -218,23 +219,18 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     do_brent = force_brent
   endif
 
-  ! Check to make sure that a root exists between the minimum bound and the bottom of the layer
-  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, refine_nondim_position, &
-                      ref_pres, EOS, delta_rho)
+  ! Calculate the initial values
+  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, min_bound, &
+                      ref_pres, EOS, delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
   delta_rho_init = delta_rho
-!  if ( SIGN(1.,delta_rho) == SIGN(1.,drho_bot) ) then
-!    ! Return the position of min_bound if closer to 0 than drho_bot
-!    if (ABS(delta_rho) < ABS(drho_bot)) then
-!      refine_nondim_position = min_bound
-!    else
-!      refine_nondim_position = 1.
-!    endif
-!    do_newton = .false. ; do_brent = .false.
-!  endif
+  if ( ABS(delta_rho_init) < tolerance ) then
+    refine_nondim_position = min_bound
+    return
+  endif
 
   if (debug) then
     write (*,*) "------"
-    write (*,*) "Starting delta_rho: ", delta_rho
+    write (*,*) "Starting x0, delta_rho: ", min_bound, delta_rho
   endif
 
   ! For now only linear, Wright, and TEOS-10 equations of state have functions providing second derivatives and
@@ -243,17 +239,12 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     refine_nondim_position = min_bound
     ! Set lower bound of pressure
     P_min = P_top*(1.-min_bound) + P_bot*(min_bound)
+    fa = delta_rho_init ; a = min_bound
+    fb = delta_rho_init ; b = min_bound
+    fc = drho_bot       ; c = 1.
     ! Iterate over Newton's method for the function: x0 = x0 - delta_rho/d_delta_rho_dP
     do iter = 1, max_iter
-      ! Evaluate delta_rho(x0)
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
-                          refine_nondim_position, ref_pres, EOS, delta_rho, P_int, T, S, alpha_avg, &
-                          beta_avg, delta_T, delta_S)
-      ! Check for convergence
-      if (ABS(delta_rho) <= tolerance) then
-        do_brent = .false.
-        exit
-      endif
+      P_int = P_top*(1. - b) + P_bot*b
       ! Evaluate total derivative of delta_rho
       if (ref_pres<0.) P_ref = P_int
       call calculate_density_second_derivs( T, S, P_ref, dbeta_dS, dbeta_dT, dalpha_dT, dbeta_dP, dalpha_dP, EOS )
@@ -269,63 +260,45 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
                              ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
                              dS_dP*beta_avg + dT_dP*alpha_avg
+      ! This probably won't happen, but if it does nudge the value a little for the next iteration
       if (d_delta_rho_dP == 0.) then
-        do_brent = .true.
+        b = b + 2*EPSILON(b)*b
+      else
+        ! Newton step update
+        P_int = P_int - (fb / d_delta_rho_dP)
+        ! This line is equivalent to the next
+        ! refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
+        b_last = b
+        b = (P_int-P_top)/delta_P
+        ! Test to see if it fell out of the bracketing interval. If so, take a bisection step
+        if (b < a .or. b > c) b = 0.5*(a + c)
+      endif
+      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
+                          b, ref_pres, EOS, fb, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+      if (ABS(fb) <= tolerance .or. (b-b_last) <= tolerance ) then
+        refine_nondim_position = P_int/delta_P
         exit
       endif
-      ! Newton step update
-      P_last = P_int
-      P_int = P_int - (delta_rho / d_delta_rho_dP)
-      if (P_int < P_min .or. P_int > P_bot) then
-        if (debug) then
-          write (*,*) "Iteration: ", iter
-          write (*,*) "delta_rho, d_delta_rho_dP: ", delta_rho, d_delta_rho_dP
-          write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
-          write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
-          write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
-          write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
-          write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
-          write (*,*) "dRhoTop, dRhoBot:", drho_top, drho_bot
-          write (*,*) "x0: ", x0
-          write (*,*) "refine_nondim_position: ", refine_nondim_position
-          write (*,*)
-        endif
-!        call MOM_error(WARNING, "Step went out of bounds")
-        ! Switch to Brent's method by setting the converged flag to false
-        do_brent = .true.
-        ! Reset to first guess if already diverged
-!        if (ABS(delta_rho_init)<ABS(delta_rho)) then
-!          refine_nondim_position = x_init
-!        endif
-        exit
+
+      ! Update the bracket
+      if (SIGN(1.,fa)*SIGN(1.,fb)<0.) then
+        c = b
+        fc = delta_rho
+      else
+        a = b
+        fa = delta_rho
       endif
-      refine_nondim_position = (P_top-P_int)/(P_top-P_bot)
-      ! Check to see if the updated position is too small
-!      if ( ABS(P_last-P_int) < 2*EPSILON(P_int)*MAX(P_last,P_int) ) exit
     enddo
+    refine_nondim_position = b
+    delta_rho = fb
   endif
-  ! Do Brent if Newton's method kicked out or if second derivatives don't exist
+
+  ! Do Brent if analytic second derivatives don't exist
   if (do_brent) then
-    machep = EPSILON(sa)
-    ! Find the bracketing interval based on where the sign changes
-    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
-                        refine_nondim_position, ref_pres, EOS, delta_rho)
-      sa = max(refine_nondim_position,min_bound) ; fa = delta_rho
-      sb = 1. ; fb = drho_bot
-      if (debug) print *, "Brent: bracketed between x0 and 1."
-    ! Bracketed between min_bound and 1.
-!    if ( SIGN(1.,delta_rho)*SIGN(1.,drho_bot)==-1. ) then
-!      sa = refine_nondim_position ; fa = delta_rho
-!      sb = 1. ; fb = drho_bot
-!      if (debug) print *, "Brent: bracketed between x0 and 1."
-!    elseif ( SIGN(1.,delta_rho)*SIGN(1.,drho_top)==-1. ) then
-!      sa = 0. ; fa = drho_top
-!      sb = refine_nondim_position ; fb = delta_rho
-!      if (debug) print *, "Brent: bracketed between 0. and x0."
-!    else
-!      call MOM_error(FATAL, "refine_nondim_position: No root exists in Brent's method interval")
-!    endif
+    sa = max(refine_nondim_position,min_bound) ; fa = delta_rho
+    sb = 1. ; fb = drho_bot
     c = sa ; fc = fa ; e = sb - sa; d = e
+
 
     ! This is from https://people.sc.fsu.edu/~jburkardt/f_src/brent/brent.f90
     do iter = 1,max_iter
@@ -341,7 +314,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       m = 0.5 * ( c - sb )
       if ( abs ( m ) <= tol .or. fb == 0. ) then
         exit
-      end if
+      endif
       if ( abs ( e ) < tol .or. abs ( fa ) <= abs ( fb ) ) then
         e = m
         d = e
@@ -428,7 +401,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       write (*,*) "x0: ", x0
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
-!    call MOM_error(WARNING, "refine_nondim_position<0.")
+    call MOM_error(WARNING, "refine_nondim_position<min_bound.")
     refine_nondim_position = MAX(x0,min_bound)
   endif
 
@@ -482,9 +455,21 @@ logical function check_neutral_positions(deg, EOS, x_l, T_poly_l, S_poly_l, P_l,
   check_neutral_positions = ABS(delta_rho)>tolerance
 
   if (check_neutral_positions) then
-    print *, "Density difference of", delta_rho
+    write (*,*) "Density difference of", delta_rho
   endif
 
 end function check_neutral_positions
+!> Do a compensated sum to account for roundoff level
+subroutine kahan_sum(sum, summand, c)
+  real, intent(inout) :: sum      !< Running sum
+  real, intent(in   ) :: summand  !< Term to be added
+  real ,intent(inout) :: c        !< Keep track of roundoff
+  real :: y, t
+  y = summand - c
+  t = sum + y
+  c = (t-sum) - y
+  sum = t
+
+end subroutine kahan_sum
 
 end module MOM_neutral_diffusion_aux
