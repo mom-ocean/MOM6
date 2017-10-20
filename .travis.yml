@@ -41,7 +41,7 @@ script:
  - ./house_cleaning/trailer.py -e TEOS10 src config_src
  - bash MOM6-examples/tools/tests/Travis-MOM6/build_ocean_only.sh
  - bash MOM6-examples/tools/tests/Travis-MOM6/build_symmetric_ocean_only.sh
- - bash MOM6-examples/tools/tests/Travis-MOM6/run_tests.sh
+ - travis_wait bash MOM6-examples/tools/tests/Travis-MOM6/run_tests.sh
 
 before_cache:
 - rm -rf build/ocn build/symocn
