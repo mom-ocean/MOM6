@@ -23,6 +23,7 @@ use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
 use MOM_verticalGrid,         only : verticalGrid_type
+use mpp_domains_mod,          only : mpp_global_field
 
 implicit none ; private
 
@@ -246,12 +247,12 @@ contains
 !> later call to update_open_boundary_data
 
 subroutine open_boundary_config(G, param_file, OBC)
-  type(dyn_horgrid_type),  intent(in)    :: G !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(inout) :: G !< Ocean grid structure
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary control structure
   ! Local variables
   integer :: l ! For looping over segments
-  logical :: debug_OBC, debug
+  logical :: debug_OBC, debug, mask_outside
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
@@ -303,6 +304,9 @@ subroutine open_boundary_config(G, param_file, OBC)
     call get_param(param_file, mdl, "OBC_ZERO_BIHARMONIC", OBC%zero_biharmonic, &
          "If true, zeros the Laplacian of flow on open boundaries in the biharmonic\n"//&
          "viscosity term.", default=.false.)
+    call get_param(param_file, mdl, "MASK_OUTSIDE_OBCS", mask_outside, &
+         "If true, set the areas outside open boundaries to be land.", &
+         default=.false.)
 
     call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
     call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
@@ -383,6 +387,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                    units="nondim",  default=0.2)
     endif
   endif
+
+  if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
 
     ! Safety check
   if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
@@ -2343,6 +2349,139 @@ subroutine fill_temp_salt_segments(G, OBC, tv)
     endif
   enddo
 end subroutine fill_temp_salt_segments
+
+!> Find the region outside of all open boundary segments and
+!! make sure it is set to land mask. Gonna need to know global land
+!! mask as well to get it right...
+subroutine mask_outside_OBCs(G, param_file, OBC)
+  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
+  type(param_file_type),   intent(in)    :: param_file !< Parameter file handle
+  type(ocean_OBC_type),    pointer       :: OBC        !< Open boundary structure
+
+! Local variables
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
+  integer :: isg, ieg, IsgB, IegB, jsg, jeg, JsgB, JegB
+  integer :: i, j
+  real    :: min_depth
+  integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
+  type(OBC_segment_type), pointer :: segment ! pointer to segment type list
+  integer ALLOCABLE_, dimension(:,:)  :: color     ! For sorting inside from outside
+  real ALLOCABLE_, dimension(:,:)     :: depth     ! Global T-point land mask
+
+  if (.not. associated(OBC)) return
+
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
+                 default=0.0, do_not_log=.true.)
+
+  allocate(color(G%isg-1:G%ieg+1, G%jsg-1:G%jeg+1)) ; color = 0
+  allocate(depth(G%isg:G%ieg, G%jsg:G%jeg))         ; depth = 0
+
+  ! Note that this is before the land mask has been initialized, set
+  ! mask values based on depth.
+  call mpp_global_field(G%Domain%mpp_domain, G%bathyT, depth)
+
+  ! Paint a frame around the outside.
+  do j=G%jsg-1,G%jeg+1
+    color(G%isg-1,j) = cedge
+    color(G%ieg+1,j) = cedge
+  enddo
+  do i=G%isg-1,G%ieg+1
+    color(i,G%jsg-1) = cedge
+    color(i,G%jeg+1) = cedge
+  enddo
+
+  ! Set color to cland in the land.
+  do j=G%jsg,G%jeg
+    do i=G%isg,G%ieg
+      if (depth(i,j) <= min_depth) color(i,j) = cland
+    enddo
+  enddo
+  deallocate(depth)
+
+  do n=1, OBC%number_of_segments
+    segment => OBC%segment(n)
+    isg = segment%HI%isg ; ieg = segment%HI%ieg
+    jsg = segment%HI%jsg ; jeg = segment%HI%jeg
+    IsgB = segment%HI%IsgB ; IegB = segment%HI%IegB
+    JsgB = segment%HI%JsgB ; JegB = segment%HI%JegB
+
+    ! Can't use is_E_or_W because that is only true on the PE
+    ! and this is working globally.
+    if (segment%direction == OBC_DIRECTION_W .or. &
+        segment%direction == OBC_DIRECTION_E) then
+      I=segment%HI%IsgB
+      do j=segment%HI%jsg,segment%HI%jeg
+        if (segment%direction == OBC_DIRECTION_W) then
+          if (color(i,j) == 0) color(i,j) = cout
+          if (color(i+1,j) == 0) color(i+1,j) = cin
+        else
+          if (color(i,j) == 0) color(i,j) = cin
+          if (color(i+1,j) == 0) color(i+1,j) = cout
+        endif
+      enddo
+    else
+      J=segment%HI%JsgB
+      do i=segment%HI%isg,segment%HI%ieg
+        if (segment%direction == OBC_DIRECTION_S) then
+          if (color(i,j) == 0) color(i,j) = cout
+          if (color(i,j+1) == 0) color(i,j+1) = cin
+        else
+          if (color(i,j) == 0) color(i,j) = cin
+          if (color(i,j+1) == 0) color(i,j+1) = cout
+        endif
+      enddo
+    endif
+  enddo
+
+  ! Do the flood fill until there are no more uncolored cells.
+  call flood_fill(G, color, cin, cout, cland)
+
+  ! Use the color to set outside to min_depth on this process.
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    if (color(i + G%idg_offset,j + G%jdg_offset) == cout) G%bathyT(i,j) = min_depth
+  enddo ; enddo
+
+  deallocate(color)
+end subroutine mask_outside_OBCs
+
+!> flood the cin, cout values
+subroutine flood_fill(G, color, cin, cout, cland)
+  type(dyn_horgrid_type),   intent(in)    :: G          !< Ocean grid structure
+  integer, dimension(0:,0:), intent(inout) :: color      ! For sorting inside from outside
+  integer, intent(in) :: cin    !< color for inside the domain
+  integer, intent(in) :: cout   !< color for outside the domain
+  integer, intent(in) :: cland  !< color for inside the land mask
+
+! Local variables
+  integer :: i, j, ncount
+
+  ncount = 1
+  do while (ncount > 0)
+    ncount = 0
+    do j=G%jsg,G%jeg
+      do i=G%isg,G%ieg
+        if (color(i,j) == 0 .and. color(i-1,j) > 0) then
+          color(i,j) = color(i-1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0 .and. color(i+1,j) > 0) then
+          color(i,j) = color(i+1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0 .and. color(i,j-1) > 0) then
+          color(i,j) = color(i,j-1)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0 .and. color(i,j+1) > 0) then
+          color(i,j) = color(i,j+1)
+          ncount = ncount + 1
+        endif
+      enddo
+    enddo
+  enddo
+
+end subroutine flood_fill
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
