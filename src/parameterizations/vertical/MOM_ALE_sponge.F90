@@ -18,7 +18,7 @@ use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
-use MOM_time_manager, only : time_type, init_external_field, get_external_field_size
+use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 
@@ -543,6 +543,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
   if (.not.associated(CS)) return
+
+  ! Call this in case it was not previously done.
+  call time_interp_external_init()
 
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
   CS%fldno = CS%fldno + 1
