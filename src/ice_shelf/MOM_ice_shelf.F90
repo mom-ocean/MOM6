@@ -1905,9 +1905,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
      'salinity in the boundary layer minus salinity at the ice-ocean interface.', 'PPT')
   CS%id_Sbdry = register_diag_field('ocean_model', 'sbdry', CS%diag%axesT1, CS%Time, &
      'salinity at the ice-ocean interface.', 'PPT')
-  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesT1, CS%Time, &
+  CS%id_u_ml = register_diag_field('ocean_model', 'u_ml', CS%diag%axesCu1, CS%Time, &
      'Eastward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
-  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesT1, CS%Time, &
+  CS%id_v_ml = register_diag_field('ocean_model', 'v_ml', CS%diag%axesCv1, CS%Time, &
      'Northward vel. in the boundary layer (used to compute ustar)', 'meter second-1')
   CS%id_exch_vel_s = register_diag_field('ocean_model', 'exch_vel_s', CS%diag%axesT1, CS%Time, &
      'Sub-shelf salinity exchange velocity', 'meter second-1')
@@ -1921,13 +1921,13 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, fluxes, Ti
      'Fric vel under shelf', 'm/s')
 
   if (CS%shelf_mass_is_dynamic .and. .not.CS%override_shelf_movement) then
-    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesB1,CS%Time, &
+    CS%id_u_shelf = register_diag_field('ocean_model','u_shelf',CS%diag%axesCu1,CS%Time, &
        'x-velocity of ice', 'm year')
-    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesB1,CS%Time, &
+    CS%id_v_shelf = register_diag_field('ocean_model','v_shelf',CS%diag%axesCv1,CS%Time, &
        'y-velocity of ice', 'm year')
-    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesB1,CS%Time, &
+    CS%id_u_mask = register_diag_field('ocean_model','u_mask',CS%diag%axesCu1,CS%Time, &
        'mask for u-nodes', 'none')
-    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesB1,CS%Time, &
+    CS%id_v_mask = register_diag_field('ocean_model','v_mask',CS%diag%axesCv1,CS%Time, &
        'mask for v-nodes', 'none')
     CS%id_h_mask = register_diag_field('ocean_model','h_mask',CS%diag%axesT1,CS%Time, &
        'ice shelf thickness', 'none')
