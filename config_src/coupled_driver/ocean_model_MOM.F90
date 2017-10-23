@@ -28,7 +28,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type, only : forcing, forcing_diagnostics, mech_forcing_diags, forcing_accumulate
-use MOM_get_input, only : Get_MOM_Input, directories
+use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : save_restart
@@ -76,7 +76,6 @@ public ocean_model_restart
 public ice_ocn_bnd_type_chksum
 public ocean_public_type_chksum
 public ocean_model_data_get
-public get_state_pointers
 
 interface ocean_model_data_get
   module procedure ocean_model_data1D_get
@@ -1078,16 +1077,5 @@ subroutine ocean_public_type_chksum(id, timestep, ocn)
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 
 end subroutine ocean_public_type_chksum
-
-!> Returns pointers to objects within ocean_state_type
-subroutine get_state_pointers(OS, grid, surf)
-  type(ocean_state_type),          pointer :: OS !< Ocean state type
-  type(ocean_grid_type), optional, pointer :: grid !< Ocean grid
-  type(surface), optional, pointer         :: surf !< Ocean surface state
-
-  if (present(grid)) grid => OS%grid
-  if (present(surf)) surf=> OS%state
-
-end subroutine get_state_pointers
 
 end module ocean_model_mod
