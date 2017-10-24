@@ -105,7 +105,7 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   !
   use MOM_coms, only : sum_across_PEs
 
-  type(ocean_grid_type),            intent(in)    :: G    !< The ocean's grid structure.
+  type(ocean_grid_type),            intent(inout)    :: G    !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: aout
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: good !< Valid data mask for incoming array
                                                           !! (1==good data; 0==missing data).
@@ -266,7 +266,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   character(len=*),      intent(in)    :: varnam     !< Name of tracer in filee.
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
   integer,               intent(in)    :: recnum     !< Record number of tracer to be read.
-  type(ocean_grid_type), intent(in)    :: G          !< Grid object
+  type(ocean_grid_type), intent(inout)    :: G          !< Grid object
   real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
                                                      !! model grid and native vertical levels.
   real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
@@ -581,7 +581,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer,               intent(in)    :: fms_id         !< A unique id used by the FMS time interpolator
   type(time_type),       intent(in)    :: Time       !< A FMS time type
   real,                  intent(in)    :: conversion !< Conversion factor for tracer.
-  type(ocean_grid_type), intent(in)    :: G          !< Grid object
+  type(ocean_grid_type), intent(inout)    :: G          !< Grid object
   real, allocatable, dimension(:,:,:)  :: tr_z       !< pointer to allocatable tracer array on local
                                                      !! model grid and native vertical levels.
   real, allocatable, dimension(:,:,:)  :: mask_z     !< pointer to allocatable tracer mask array on
