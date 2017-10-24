@@ -2290,9 +2290,9 @@ subroutine register_temp_salt_segments(GV, OBC, tv, vd_T, vd_S, param_file)
 end subroutine register_temp_salt_segments
 
 subroutine fill_temp_salt_segments(G, OBC, tv)
-  type(ocean_grid_type),      intent(in)    :: G          !< Ocean grid structure
+  type(ocean_grid_type),      intent(inout)    :: G          !< Ocean grid structure
   type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
-  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
+  type(thermo_var_ptrs),      intent(inout)    :: tv         !< Thermodynamics structure
 
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz
