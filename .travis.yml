@@ -22,6 +22,7 @@ cache:
 # Install tools and clone the configurations repository
 before_install:
  - git clone https://github.com/adcroft/house_cleaning.git
+ - rm -rf MOM6-examples/
  # This line clones MOM6-examples when there is no cache
  - test -f MOM6-examples/README.md || (rm -rf MOM6-examples && git clone https://github.com/NOAA-GFDL/MOM6-examples.git)
 
