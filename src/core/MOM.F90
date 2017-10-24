@@ -1438,7 +1438,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 end subroutine step_offline
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mode)
+subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mode, input_restart_file)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
@@ -1446,6 +1446,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
   logical,         optional, intent(out)   :: offline_tracer_mode !< True if tracers are being run offline
+  character(len=*),optional, intent(in)    :: input_restart_file !< If present, name of restart file to read
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -1515,7 +1516,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   Start_time = Time ; if (present(Time_in)) Start_time = Time_in
 
-  call Get_MOM_Input(param_file, dirs)
+  ! Read paths and filenames from namelist and store in "dirs".
+  ! Also open the parsed input parameter file(s) and setup param_file.
+  call get_MOM_input(param_file, dirs, default_input_filename=input_restart_file)
 
   verbosity = 2 ; call read_param(param_file, "VERBOSITY", verbosity)
   call MOM_set_verbosity(verbosity)
