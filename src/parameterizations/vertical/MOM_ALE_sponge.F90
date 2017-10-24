@@ -669,17 +669,16 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 !> This subroutine stores the reference profile at uand v points for the variable
 ! whose address is given by u_ptr and v_ptr.
 subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v,fieldname_v, Time, G, CS, u_ptr, v_ptr)
-  character(len=*), intent(in) :: filename_u
-  character(len=*),  intent(in) :: fieldname_u
-  character(len=*), intent(in) :: filename_v
-  character(len=*),  intent(in) :: fieldname_v
-  type(time_type),    intent(inout) :: Time
-  type(ocean_grid_type), intent(inout)  :: G !< Ocean grid (in)
+  character(len=*), intent(in)    :: filename_u  !< File name for u field
+  character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
+  character(len=*), intent(in)    :: filename_v  !< File name for v field
+  character(len=*), intent(in)    :: fieldname_v !< Name of v variable in file
+  type(time_type),  intent(inout) :: Time        !< Model time
+  type(ocean_grid_type), intent(inout) :: G      !< Ocean grid (in)
+  type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
-  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
-
-
+  ! Local variables
   real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge.
   real, allocatable, dimension(:,:,:) :: mask_u !< U field mask for the sponge data.
   real, allocatable, dimension(:,:,:) :: v_val !< V field to be used in the sponge.
