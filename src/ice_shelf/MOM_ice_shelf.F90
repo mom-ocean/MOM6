@@ -1327,8 +1327,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
                   units="nondim.", fail_if_missing=.true.)
 
   call get_param(param_file, mdl, "ICE_SHELF_MASS_FROM_FILE", &
-                CS%mass_from_file, "Read the mass of the &
-                ice shelf (every time step) from a file.", default=.false.)
+                 CS%mass_from_file, "Read the mass of the "//&
+                 "ice shelf (every time step) from a file.", default=.false.)
 
   if (CS%threeeq) &
     call get_param(param_file, mdl, "SHELF_S_ROOT", CS%find_salt_root, &

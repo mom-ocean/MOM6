@@ -593,7 +593,7 @@ end subroutine update_ocean_model
 subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice, kv_ice, &
                                   latent_heat_fusion, sfc_state, time_step, berg_area_threshold)
   type(ocean_grid_type), intent(inout) :: G    !< The ocean's grid structure
-  type(mech_forcing),    intent(in)    :: forces  !< A structure with the driving mechanical forces
+  type(mech_forcing),    intent(inout) :: forces  !< A structure with the driving mechanical forces
   type(forcing),         intent(inout) :: fluxes
   type(surface),         intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.

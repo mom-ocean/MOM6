@@ -456,7 +456,7 @@ contains
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
 subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
-  type(mech_forcing), intent(in)     :: forces        !< A structure with the driving mechanical forces
+  type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: sfc_state     !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
