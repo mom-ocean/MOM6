@@ -1045,6 +1045,15 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       endif
       call cpu_clock_begin(id_clock_tridiag)
 
+      !  Keep salinity from falling below a small but positive threshold.
+      !  This constraint is needed for SIS1 ice model, which can extract
+      !  more salt than is present in the ocean. SIS2 does not suffer
+      !  from this limitation, in which case we can let salinity=0 and still
+      !  have salt conserved with SIS2 ice. So for SIS2, we can run with
+      !  BOUND_SALINITY=False in MOM.F90.
+      if (ASSOCIATED(tv%S) .and. ASSOCIATED(tv%salt_deficit)) &
+        call adjust_salt(h, tv, G, GV, CS%diabatic_aux_CSp)
+
       if(CS%diabatic_diff_tendency_diag) then
         do k=1,nz ; do j=js,je ; do i=is,ie
           temp_diag(i,j,k) = tv%T(i,j,k)

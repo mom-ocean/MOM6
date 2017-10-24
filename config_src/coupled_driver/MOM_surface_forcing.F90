@@ -119,15 +119,22 @@ type, public :: surface_forcing_CS ; private
   logical :: mask_srestore_marginal_seas    ! if true, then mask SSS restoring in marginal seas
   real    :: max_delta_srestore             ! maximum delta salinity used for restoring
   real    :: max_delta_trestore             ! maximum delta sst used for restoring
-  real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring
+  real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring by basin
 
   type(diag_ctrl), pointer :: diag                  ! structure to regulate diagnostic output timing
   character(len=200)       :: inputdir              ! directory where NetCDF input files are
   character(len=200)       :: salt_restore_file     ! filename for salt restoring data
   character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
+  logical                  :: mask_srestore         ! if true, apply a 2-dimensional mask to the surface
+                                                    ! salinity restoring fluxes. The masking file should be
+                                                    ! in inputdir/salt_restore_mask.nc and the field should be name 'mask'
+  real, pointer, dimension(:,:) :: srestore_mask => NULL() ! mask for SSS restoring
   character(len=200)       :: temp_restore_file     ! filename for sst restoring data
   character(len=30)        :: temp_restore_var_name ! name of surface temperature in temp_restore_file
-
+  logical                  :: mask_trestore         ! if true, apply a 2-dimensional mask to the surface
+                                                    ! temperature restoring fluxes. The masking file should be
+                                                    ! in inputdir/temp_restore_mask.nc and the field should be name 'mask'
+  real, pointer, dimension(:,:) :: trestore_mask => NULL() ! mask for SST restoring
   integer :: id_srestore = -1     ! id number for time_interp_external.
   integer :: id_trestore = -1     ! id number for time_interp_external.
 
@@ -376,7 +383,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
-                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
+                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
       enddo; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
@@ -394,7 +401,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
         if (G%mask2dT(i,j) > 0.5) then
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-          fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
+          fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
@@ -420,7 +427,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     do j=js,je ; do i=is,ie
        delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
        delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
-       fluxes%heat_added(i,j) = G%mask2dT(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
     enddo; enddo
   endif
 
@@ -862,6 +869,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
+  character(len=48)  :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
@@ -1000,6 +1008,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
         else ; CS%basin_mask(i,j) = 1.0 ; endif
       enddo ; enddo
     endif
+    call get_param(param_file, mdl, "MASK_SRESTORE", CS%mask_srestore, &
+                 "If true, read a file (salt_restore_mask) containing \n"//&
+                 "a mask for SSS restoring.", default=.false.)
   endif
 
   if (restore_temp) then
@@ -1021,6 +1032,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
                  units="degC ", default=999.0)
+    call get_param(param_file, mdl, "MASK_TRESTORE", CS%mask_trestore, &
+                 "If true, read a file (temp_restore_mask) containing \n"//&
+                 "a mask for SST restoring.", default=.false.)
 
   endif
 
@@ -1122,11 +1136,21 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   if (present(restore_salt)) then ; if (restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
     CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
+    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
+    if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
+       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
+       call read_data(flnam,'mask',CS%srestore_mask,domain=G%domain%mpp_domain,timelevel=1)
+    endif
   endif ; endif
 
   if (present(restore_temp)) then ; if (restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
     CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
+    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
+    if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
+       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
+       call read_data(flnam,'mask',CS%trestore_mask,domain=G%domain%mpp_domain,timelevel=1)
+    endif
   endif ; endif
 
   ! Set up any restart fields associated with the forcing.
