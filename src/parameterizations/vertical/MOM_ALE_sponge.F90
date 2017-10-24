@@ -673,7 +673,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v
   character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
   character(len=*), intent(in)    :: filename_v  !< File name for v field
   character(len=*), intent(in)    :: fieldname_v !< Name of v variable in file
-  type(time_type),  intent(inout) :: Time        !< Model time
+  type(time_type),  intent(in)    :: Time        !< Model time
   type(ocean_grid_type), intent(inout) :: G      !< Ocean grid (in)
   type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
