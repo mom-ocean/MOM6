@@ -283,20 +283,21 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                  "The time unit for ENERGYSAVEDAYS.", &
                  units="s", default=86400.0)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS",OS%energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"&
-                 "energies of the run and other globally summed diagnostics.", &
+                 "The interval in units of TIMEUNIT between saves of the \n"//&
+                 "energies of the run and other globally summed diagnostics.",&
                  default=set_time(0,days=1), timeunit=Time_unit)
-
-  call get_param(param_file, mdl, "ENERGYSAVE_GEOMETRIC",OS%energysave_geometric,&
-                 "If true, globally summed diagnostics will be computed for \n"&
-                 "timestep intervals that increase in a geometric progession \n"&
-                 "until the first ENERGYSAVEDAYS interval is reached.", &
-                 default=.true.)
   call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",OS%energysavedays_geometric, &
-                 "The starting interval in units of TIMEUNIT for the first call \n"&
-                 "to save the energies of the run and other globally summed diagnostics. \n"&
+                 "The starting interval in units of TIMEUNIT for the first call \n"//&
+                 "to save the energies of the run and other globally summed diagnostics. \n"//&
                  "The interval increases by a factor of 2. after each call to write_energy.",&
-                 default=set_time(seconds=43200), timeunit=Time_unit)  ! 12 hours
+                 default=set_time(seconds=0), timeunit=Time_unit)
+
+  if ((time_type_to_real(OS%energysavedays_geometric) > 0.) .and. &
+     (OS%energysavedays_geometric < OS%energysavedays)) then
+         OS%energysave_geometric = .true.
+  else
+         OS%energysave_geometric = .false.
+  endif
 
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
@@ -377,6 +378,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   ! write_energy_time is the next integral multiple of energysavedays.
   if (OS%energysave_geometric) then
     if (OS%energysavedays_geometric < OS%energysavedays) then
+
       OS%write_energy_time = Time_init + OS%energysavedays_geometric * &
         (1 + (OS%Time - Time_init) / OS%energysavedays_geometric)
 
