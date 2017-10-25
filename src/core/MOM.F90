@@ -3247,7 +3247,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',      &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
+    call post_data(id, G%areaT, diag, .true.)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
@@ -3257,7 +3257,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
+    call post_data(id, G%areaCu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
@@ -3266,7 +3266,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
+    call post_data(id, G%areaCv, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
@@ -3275,7 +3275,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
+    call post_data(id, G%areaBu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
