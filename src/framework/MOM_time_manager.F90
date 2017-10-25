@@ -14,7 +14,7 @@ use time_manager_mod, only : days_in_month, month_name
 use time_manager_mod, only : set_calendar_type, get_calendar_type
 use time_manager_mod, only : JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN
 use time_manager_mod, only : NO_CALENDAR
-use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : init_external_field, time_interp_external, time_interp_external_init
 use time_interp_external_mod, only : get_external_field_size
 use time_interp_external_mod, only : get_external_field_axes, get_external_field_missing
 
@@ -30,6 +30,7 @@ public :: JULIAN, NOLEAP, THIRTY_DAY_MONTHS, GREGORIAN, NO_CALENDAR
 public :: set_calendar_type, get_calendar_type
 public :: init_external_field
 public :: time_interp_external
+public :: time_interp_external_init
 public :: get_external_field_size
 public :: get_external_field_axes
 public :: get_external_field_missing
