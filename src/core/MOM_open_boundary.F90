@@ -1393,7 +1393,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J-1,k)) / (1.0+ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
-           OBC%rx_normal(i,J,k) = segment%rx_normal(i,J,k)
+           OBC%ry_normal(i,J,k) = segment%rx_normal(i,J,k)
          elseif (segment%oblique) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
@@ -1447,7 +1447,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            segment%normal_vel(i,J,k) = (v_new(i,J,k) + ry_avg*v_new(i,J+1,k)) / (1.0+ry_avg)
            ! Copy restart fields into 3-d arrays. This is an inefficient and temporary issues
            ! implemented as a work-around to limitations in restart capability
-           OBC%rx_normal(i,J,k) = segment%rx_normal(i,J,k)
+           OBC%ry_normal(i,J,k) = segment%rx_normal(i,J,k)
          elseif (segment%oblique) then
            dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
            dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
@@ -2412,9 +2412,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
 
   if (rx_normal_associated) then
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
+    OBC_CS%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')
     call register_restart_field(OBC_CS%rx_normal, vd, .true., restart_CSp)
     allocate(OBC_CS%ry_normal(HI%isd:HI%ied,HI%jsdB:HI%jedB,GV%ke))
+    OBC_CS%ry_normal(:,:,:) = 0.0
     vd = var_desc("ry_normal","m s-1", "Normal Phase Speed for NS OBCs",'v','L')
     call register_restart_field(OBC_CS%ry_normal, vd, .true., restart_CSp)
   endif
