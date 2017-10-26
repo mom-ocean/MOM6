@@ -2374,8 +2374,8 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
   real    :: min_depth
   integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
-  integer ALLOCABLE_, dimension(:,:)  :: color     ! For sorting inside from outside
-  real ALLOCABLE_, dimension(:,:)     :: depth     ! Global T-point land mask
+  integer, allocatable, dimension(:,:)  :: color     ! For sorting inside from outside
+  real, allocatable, dimension(:,:)     :: depth     ! Global T-point land mask
 
   if (.not. associated(OBC)) return
 
