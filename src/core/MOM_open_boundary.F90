@@ -1114,7 +1114,6 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
     endif
   enddo
 
-
 end subroutine open_boundary_impose_normal_slope
 
 !> Reconcile masks and open boundaries, deallocate OBC on PEs where it is not needed.
@@ -1145,6 +1144,13 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
           G%mask2dT(i+1,j) = 0
         endif
       enddo
+      do J=segment%HI%JsdB+1,segment%HI%JedB-1
+        if (segment%direction == OBC_DIRECTION_W) then
+          G%mask2dCv(i,J) = 0
+        else
+          G%mask2dCv(i+1,J) = 0
+        endif
+      enddo
     else
       ! Sweep along v-segments and delete the OBC for blocked points.
       J=segment%HI%JsdB
@@ -1154,6 +1160,13 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
           G%mask2dT(i,j) = 0
         else
           G%mask2dT(i,j+1) = 0
+        endif
+      enddo
+      do I=segment%HI%IsdB+1,segment%HI%IedB-1
+        if (segment%direction == OBC_DIRECTION_S) then
+          G%mask2dCu(I,j) = 0
+        else
+          G%mask2dCu(I,j+1) = 0
         endif
       enddo
     endif
@@ -1168,10 +1181,8 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
       do j=segment%HI%jsd,segment%HI%jed
         if (segment%direction == OBC_DIRECTION_E) then
           areaCu(I,j) = G%areaT(i,j)
-         !G%IareaCu(I,j) = G%IareaT(i,j) ?
         else   ! West
           areaCu(I,j) = G%areaT(i+1,j)
-         !G%IareaCu(I,j) = G%IareaT(i+1,j) ?
         endif
       enddo
     else
@@ -1180,10 +1191,8 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
       do i=segment%HI%isd,segment%HI%ied
         if (segment%direction == OBC_DIRECTION_S) then
           areaCv(i,J) = G%areaT(i,j+1)
-         !G%IareaCv(i,J) = G%IareaT(i,j+1) ?
         else      ! North
           areaCu(i,J) = G%areaT(i,j)
-         !G%IareaCu(i,J) = G%IareaT(i,j) ?
         endif
       enddo
     endif
