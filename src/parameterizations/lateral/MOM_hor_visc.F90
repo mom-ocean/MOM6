@@ -80,7 +80,7 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_io,                    only : read_data, slasher
+use MOM_io,                    only : MOM_read_data, slasher
 
 implicit none ; private
 
@@ -1275,8 +1275,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  default='KH_background_2d.nc')
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
-    call read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-                   domain=G%domain%mpp_domain, timelevel=1)
+    call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+                       G%domain, timelevel=1)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
 

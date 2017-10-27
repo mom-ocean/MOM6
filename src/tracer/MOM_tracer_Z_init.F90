@@ -27,7 +27,7 @@ use MOM_diag_to_Z, only : find_overlap, find_limited_slope
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 ! use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : read_data
+use MOM_io, only : MOM_read_data
 
 use netcdf
 
@@ -111,7 +111,7 @@ function tracer_Z_init(tr, h, filename, tr_name, G, missing_val, land_val)
 
   allocate(tr_in(G%isd:G%ied,G%jsd:G%jed,nz_in)) ; tr_in(:,:,:) = 0.0
   allocate(tr_1d(nz_in)) ; tr_1d(:) = 0.0
-  call read_data(filename, tr_name, tr_in(:,:,:), domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, tr_name, tr_in(:,:,:), G%Domain)
 
   ! Fill missing values from above?  Use a "close" test to avoid problems
   ! from type-conversion rounoff.

@@ -68,6 +68,7 @@ interface file_exists
 end interface
 
 interface MOM_read_data
+  module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d
   module procedure MOM_read_data_1d
@@ -795,11 +796,12 @@ end function MOM_file_exists
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data)
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel)
   character(len=*),                 intent(in)    :: filename, fieldname
   real, dimension(:),               intent(inout) :: data ! 1 dimensional data
+  integer,                optional, intent(in)    :: timelevel
 
-  call read_data(filename, fieldname, data)
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 
 end subroutine MOM_read_data_1d
 
@@ -821,7 +823,7 @@ end subroutine MOM_read_data_2d
 
 
 !> This function uses the fms_io function read_data to read a distributed
-!! 2-D data field named "fieldname" from file "filename".  Valid values for
+!! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
@@ -834,6 +836,22 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                  timelevel=timelevel, position=position)
 
 end subroutine MOM_read_data_3d
+
+
+!> This function uses the fms_io function read_data to read a distributed
+!! 4-D data field named "fieldname" from file "filename".  Valid values for
+!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
+subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position)
+  character(len=*),                 intent(in)    :: filename, fieldname
+  real, dimension(:,:,:,:),         intent(inout) :: data ! 2 dimensional data
+  type(MOM_domain_type),            intent(in)    :: MOM_Domain
+  integer,                optional, intent(in)    :: timelevel, position
+
+  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=position)
+
+end subroutine MOM_read_data_4d
 
 
 !> Initialize the MOM_io module

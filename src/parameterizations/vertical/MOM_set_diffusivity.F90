@@ -39,7 +39,7 @@ use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
-use MOM_io,                  only : slasher, vardesc, var_desc
+use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_CS
 use MOM_string_functions,    only : uppercase
@@ -50,7 +50,6 @@ use MOM_verticalGrid, only : verticalGrid_type
 use user_change_diffusivity, only : user_change_diff, user_change_diff_init
 use user_change_diffusivity, only : user_change_diff_end, user_change_diff_CS
 
-use fms_mod,                 only : read_data
 
 implicit none ; private
 
@@ -2984,8 +2983,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call read_data(filename, 'tideamp', CS%tideamp, &
-                     domain=G%domain%mpp_domain, timelevel=1)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2994,8 +2992,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  fail_if_missing=.true.)
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call read_data(filename, 'h2', CS%h2, domain=G%domain%mpp_domain, &
-                   timelevel=1)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
 
     do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
@@ -3033,8 +3030,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je); CS%TKE_Niku(:,:) = 0.0
-    call read_data(filename, 'TKE_input', CS%TKE_Niku, &
-                   domain=G%domain%mpp_domain, timelevel=1 ) ! ??? timelevel -aja
+    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1 ) ! ??? timelevel -aja
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
