@@ -378,20 +378,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   ! write_energy_time is the next integral multiple of energysavedays.
   if (OS%energysave_geometric) then
     if (OS%energysavedays_geometric < OS%energysavedays) then
-
-      OS%write_energy_time = Time_init + OS%energysavedays_geometric * &
-        (1 + (OS%Time - Time_init) / OS%energysavedays_geometric)
-
-      ! This line below, which patterns the way write_energy_time was originally coded,
-      ! yields inconsistent results depending on the case. Dividing by OS%energysavedays
-      ! introduces decimal values but the operators from FMS time manager are integer ops.
-
-      ! OS%geometric_end_time = Time_init + OS%energysavedays * &
-      !  (1 + (OS%Time - Time_init) / OS%energysavedays)
-
-      ! Algebraically equivalent statement below that yields consistent results
-      OS%geometric_end_time = OS%Time + OS%energysavedays
-
+      OS%write_energy_time = OS%Time + OS%energysavedays_geometric
+      OS%geometric_end_time = Time_init + OS%energysavedays * &
+       (1 + (OS%Time - Time_init) / OS%energysavedays)
     else
       OS%write_energy_time = Time_init + OS%energysavedays * &
         (1 + (OS%Time - Time_init) / OS%energysavedays)
