@@ -51,7 +51,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher
+use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -240,16 +240,16 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     call alloc_if_needed(CS%PmE, isd, ied, jsd, jed)
     call alloc_if_needed(CS%Solar, isd, ied, jsd, jed)
 
-    call read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "SST", &
-             CS%T_Restore(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SAL", &
-             CS%S_Restore(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%heating_file), "Heat", &
-             CS%Heat(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%PmE_file), "PmE", &
-             CS%PmE(:,:), domain=G%Domain%mpp_domain)
-    call read_data(trim(CS%inputdir)//trim(CS%Solar_file), "NET_SOL", &
-             CS%Solar(:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(trim(CS%inputdir)//trim(CS%SSTrestore_file), "SST", &
+             CS%T_Restore(:,:), G%Domain)
+    call MOM_read_data(trim(CS%inputdir)//trim(CS%salinityrestore_file), "SAL", &
+             CS%S_Restore(:,:), G%Domain)
+    call MOM_read_data(trim(CS%inputdir)//trim(CS%heating_file), "Heat", &
+             CS%Heat(:,:), G%Domain)
+    call MOM_read_data(trim(CS%inputdir)//trim(CS%PmE_file), "PmE", &
+             CS%PmE(:,:), G%Domain)
+    call MOM_read_data(trim(CS%inputdir)//trim(CS%Solar_file), "NET_SOL", &
+             CS%Solar(:,:), G%Domain)
     first_call = .false.
   endif
 

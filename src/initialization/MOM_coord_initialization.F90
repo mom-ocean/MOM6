@@ -10,7 +10,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
 use MOM_file_parser, only : log_version
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 use MOM_variables, only : thermo_var_ptrs
@@ -309,8 +309,8 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
   filename = trim(slasher(inputdir))//trim(coord_file)
   call log_param(param_file, mdl, "INPUTDIR/COORD_FILE", filename)
 
-  call read_data(filename,"PTEMP",T0(:))
-  call read_data(filename,"SALT",S0(:))
+  call MOM_read_data(filename,"PTEMP",T0(:))
+  call MOM_read_data(filename,"SALT",S0(:))
 
   if (.not.file_exists(filename)) call MOM_error(FATAL, &
       " set_coord_from_TS_profile: Unable to open " //trim(filename))

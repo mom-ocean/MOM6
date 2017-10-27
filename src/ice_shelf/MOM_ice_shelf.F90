@@ -20,7 +20,7 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_fixed_initialization, only : MOM_initialize_rotation
 use user_initialization, only : user_initialize_topography
-use MOM_io, only : field_exists, file_exists, read_data, write_version_number
+use MOM_io, only : field_exists, file_exists, MOM_read_data, write_version_number
 use MOM_io, only : slasher, vardesc, var_desc, fieldtype
 use MOM_io, only : write_field, close_file, SINGLE_FILE, MULTIPLE
 use MOM_restart, only : register_restart_field, query_initialized, save_restart
@@ -1421,7 +1421,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
     TideAmp_file = trim(inputdir) // trim(TideAmp_file)
-    call read_data(TideAmp_file,'tideamp',CS%utide,domain=G%domain%mpp_domain,timelevel=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%utide,G%domain,timelevel=1)
   else
     call get_param(param_file, mdl, "UTIDE", utide, &
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
@@ -1856,7 +1856,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces, fl
     if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " calving mask file: Unable to open "//trim(filename))
 
-    call read_data(filename,trim(var_name),CS%calve_mask,domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename,trim(var_name),CS%calve_mask,G%Domain)
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
         if (CS%calve_mask(i,j) > 0.0) CS%calve_mask(i,j) = 1.0

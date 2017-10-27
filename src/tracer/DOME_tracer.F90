@@ -10,7 +10,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -209,8 +209,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                         CS%tracer_IC_file)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-        call read_data(CS%tracer_IC_file, trim(name), &
-                       CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
       do m=1,NTR

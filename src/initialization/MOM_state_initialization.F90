@@ -18,7 +18,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
 use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
@@ -632,7 +632,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
 
   if (file_has_thickness) then
     if (just_read) return ! All run-time parameters have been read, so return.
-    call read_data(filename,"h",h(:,:,:),domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, "h", h(:,:,:), G%Domain)
   else
     call get_param(param_file, mdl, "ADJUST_THICKNESS", correct_thickness, &
                  "If true, all mass below the bottom removed if the \n"//&
@@ -640,7 +640,7 @@ subroutine initialize_thickness_from_file(h, G, GV, param_file, file_has_thickne
                  "would indicate.", default=.false., do_not_log=just_read)
     if (just_read) return ! All run-time parameters have been read, so return.
 
-    call read_data(filename,"eta",eta(:,:,:),domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, "eta", eta(:,:,:), G%Domain)
 
     if (correct_thickness) then
       call adjustEtaToFitBathymetry(G, GV, eta, h)
@@ -941,7 +941,7 @@ subroutine depress_surface(h, G, GV, param_file, tv, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call read_data(filename,eta_srf_var,eta_sfc,domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, eta_srf_var, eta_sfc, G%Domain)
 
   if (scale_factor /= 1.0) then ; do j=js,je ; do i=is,ie
     eta_sfc(i,j) = eta_sfc(i,j) * scale_factor
@@ -1029,7 +1029,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  call read_data(filename, p_surf_var, p_surf, domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, p_surf_var, p_surf, G%Domain)
   if (scale_factor /= 1.) p_surf(:,:) = scale_factor * p_surf(:,:)
 
   if (use_remapping) then
@@ -1180,8 +1180,8 @@ subroutine initialize_velocity_from_file(u, v, G, param_file, just_read_params)
          " initialize_velocity_from_file: Unable to open "//trim(filename))
 
   !  Read the velocities from a netcdf file.
-  call read_data(filename,"u",u(:,:,:),domain=G%Domain%mpp_domain,position=EAST_FACE)
-  call read_data(filename,"v",v(:,:,:),domain=G%Domain%mpp_domain,position=NORTH_FACE)
+  call MOM_read_data(filename,"u",u(:,:,:),G%Domain,position=EAST_FACE)
+  call MOM_read_data(filename,"v",v(:,:,:),G%Domain,position=NORTH_FACE)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_velocity_from_file
@@ -1383,13 +1383,13 @@ subroutine initialize_temp_salt_from_file(T, S, G, param_file, just_read_params)
      " initialize_temp_salt_from_file: Unable to open "//trim(filename))
 
 ! Read the temperatures and salinities from netcdf files.           !
-  call read_data(filename, temp_var, T(:,:,:), domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
 
   salt_filename = trim(inputdir)//trim(salt_file)
   if (.not.file_exists(salt_filename, G%Domain)) call MOM_error(FATAL, &
      " initialize_temp_salt_from_file: Unable to open "//trim(salt_filename))
 
-  call read_data(salt_filename, salt_var, S(:,:,:), domain=G%Domain%mpp_domain)
+  call MOM_read_data(salt_filename, salt_var, S(:,:,:), G%Domain)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_temp_salt_from_file
@@ -1437,8 +1437,8 @@ subroutine initialize_temp_salt_from_profile(T, S, G, param_file, just_read_para
      " initialize_temp_salt_from_profile: Unable to open "//trim(filename))
 
 ! Read the temperatures and salinities from a netcdf file.           !
-  call read_data(filename,"PTEMP",T0(:),domain=G%Domain%mpp_domain)
-  call read_data(filename,"SALT", S0(:),domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, "PTEMP", T0(:))
+  call MOM_read_data(filename, "SALT",  S0(:))
 
   do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
     T(i,j,k) = T0(k) ; S(i,j,k) = S0(k)
@@ -1705,7 +1705,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
   if (new_sponges .and. .not. use_ALE) &
     call MOM_error(FATAL, " initialize_sponges: Newer sponges are currently unavailable in layered mode ")
 
-  call read_data(filename,"Idamp",Idamp(:,:), domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, "Idamp", Idamp(:,:), G%Domain)
 
 ! Now register all of the fields which are damped in the sponge.     !
 ! By default, momentum is advected vertically within the sponge, but !
@@ -1720,7 +1720,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 !  The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
-    call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1744,7 +1744,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
     allocate(eta(isd:ied,jsd:jed,nz_data+1))
     allocate(h(isd:ied,jsd:jed,nz_data))
 
-    call read_data(filename, eta_var, eta(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
       eta(i,j,nz+1) = -G%bathyT(i,j)
@@ -1775,8 +1775,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 ! inflated without causing static instabilities.
     do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
 
-    call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
-    call read_data(filename, salin_var, tmp2(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
+    call MOM_read_data(filename, salin_var, tmp2(:,:,:), G%Domain)
 
     do j=js,je
       call calculate_density(tmp(:,j,1), tmp2(:,j,1), pres, tmp_2d(:,j), &
@@ -1788,9 +1788,9 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 
 !  The remaining calls to set_up_sponge_field can be in any order.   !
   if ( use_temperature .and. .not. new_sponges) then
-    call read_data(filename, potemp_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%T, G, nz, CSp)
-    call read_data(filename, salin_var, tmp(:,:,:), domain=G%Domain%mpp_domain)
+    call MOM_read_data(filename, salin_var, tmp(:,:,:), G%Domain)
     call set_up_sponge_field(tmp, tv%S, G, nz, CSp)
   else if (use_temperature) then
     call set_up_ALE_sponge_field(filename, potemp_var, Time, G, tv%T, ALE_CSp)
@@ -2089,7 +2089,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     if (.not.file_exists(shelf_file, G%Domain)) call MOM_error(FATAL, &
       "MOM_temp_salt_initialize_from_Z: Unable to open shelf file "//trim(shelf_file))
 
-    call read_data(shelf_file,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+    call MOM_read_data(shelf_file, trim(area_varname), area_shelf_h, G%Domain)
 
     ! initialize frac_shelf_h with zeros (open water everywhere)
     frac_shelf_h(:,:) = 0.0

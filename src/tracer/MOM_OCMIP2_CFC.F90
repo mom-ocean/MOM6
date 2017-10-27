@@ -55,7 +55,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -530,7 +530,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
                 trim(CS%IC_file)//".")
       endif
     else
-      call read_data(CS%IC_file, trim(name), tr, domain=G%Domain%mpp_domain)
+      call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
