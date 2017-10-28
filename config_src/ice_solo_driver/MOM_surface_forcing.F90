@@ -66,7 +66,7 @@ use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_ty
 use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_grid,                only : ocean_grid_type
-use MOM_io,                  only : file_exists, MOM_read_data, slasher
+use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
 use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
@@ -566,10 +566,9 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
     select case ( uppercase(CS%wind_stagger(1:1)) )
     case ("A")
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
-      call MOM_read_data(filename,CS%stress_x_var,temp_x(:,:), &
-                     G%Domain,timelevel=time_lev)
-      call MOM_read_data(filename,CS%stress_y_var,temp_y(:,:), &
-                     G%Domain,timelevel=time_lev)
+      call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
+                           temp_x(:,:), temp_y(:,:), G%Domain, stagger=AGRID, &
+                           timelevel=time_lev)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
       do j=js,je ; do I=Isq,Ieq
@@ -591,10 +590,9 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
         enddo ; enddo
       endif
     case ("C")
-      call MOM_read_data(filename,CS%stress_x_var,forces%taux(:,:), &
-                     G%Domain,timelevel=time_lev)
-      call MOM_read_data(filename,CS%stress_y_var,forces%tauy(:,:), &
-                     G%Domain,timelevel=time_lev)
+      call MOM_read_vector(filename,CS%stress_x_var, CS%stress_y_var, &
+                     forces%taux(:,:), forces%tauy(:,:), &
+                     G%Domain, timelevel=time_lev)
       if (CS%wind_scale /= 1.0) then
         do j=js,je ; do I=Isq,Ieq
           forces%taux(I,j) = CS%wind_scale * forces%taux(I,j)

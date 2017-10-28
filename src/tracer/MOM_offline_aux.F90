@@ -12,7 +12,7 @@ use MOM_domains,          only : pass_var, pass_vector, To_All
 use MOM_diag_vkernels,    only : reintegrate_column
 use MOM_error_handler,    only : callTree_enter, callTree_leave, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : MOM_read_data
+use MOM_io,               only : MOM_read_data, MOM_read_vector
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_file_parser,      only : get_param, log_version, param_file_type
 use astronomy_mod,        only : orbital_time, diurnal_solar, daily_mean_solar
@@ -637,16 +637,14 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     uhtr(:,:,:) = 0.0
     vhtr(:,:,:) = 0.0
     ! Time-summed fields
-    call MOM_read_data(sum_file, 'uhtr_sum', uhtr(:,:,1:nk_input), G%Domain, &
-      timelevel=ridx_sum, position=EAST)
-    call MOM_read_data(sum_file, 'vhtr_sum', vhtr(:,:,1:nk_input), G%Domain, &
-      timelevel=ridx_sum, position=NORTH)
+    call MOM_read_vector(sum_file, 'uhtr_sum', 'vhtr_sum', uhtr(:,:,1:nk_input), &
+                         vhtr(:,:,1:nk_input), G%Domain, timelevel=ridx_sum)
     call MOM_read_data(snap_file, 'h_end', h_end(:,:,1:nk_input), G%Domain, &
-      timelevel=ridx_snap,position=CENTER)
+                       timelevel=ridx_snap,position=CENTER)
     call MOM_read_data(mean_file, 'temp', temp_mean(:,:,1:nk_input), G%Domain, &
-      timelevel=ridx_sum,position=CENTER)
+                       timelevel=ridx_sum,position=CENTER)
     call MOM_read_data(mean_file, 'salt', salt_mean(:,:,1:nk_input), G%Domain, &
-      timelevel=ridx_sum,position=CENTER)
+                       timelevel=ridx_sum,position=CENTER)
   endif
 
   do j=js,je ; do i=is,ie
