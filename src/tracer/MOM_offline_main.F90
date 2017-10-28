@@ -20,7 +20,7 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_io,                   only : MOM_read_data
+use MOM_io,                   only : MOM_read_data, MOM_read_vector
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
 use MOM_offline_aux,          only : update_h_horizontal_flux, update_h_vertical_flux, limit_mass_flux_3d
@@ -1412,10 +1412,8 @@ subroutine read_all_input(CS)
 
     if (is_root_pe()) write (0,*) "Reading in uhtr, vhtr, h_start, h_end, temp, salt"
     do t = 1,ntime
-      call MOM_read_data(CS%sum_file, 'uhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        timelevel=t, position=EAST)
-      call MOM_read_data(CS%sum_file, 'vhtr_sum', CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
-        timelevel=t, position=NORTH)
+      call MOM_read_vector(CS%snap_file, 'uhtr_sum', 'vhtr_sum', CS%uhtr_all(:,:,1:CS%nk_input,t), &
+                       CS%vhtr_all(:,:,1:CS%nk_input,t), CS%G%Domain, timelevel=t)
       call MOM_read_data(CS%snap_file,'h_end', CS%hend_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
         timelevel=t, position=CENTER)
       call MOM_read_data(CS%mean_file,'temp', CS%temp_all(:,:,1:CS%nk_input,t), CS%G%Domain, &
