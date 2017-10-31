@@ -23,6 +23,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
 use MOM_diag_remap,       only : diag_remap_update
+use MOM_diag_remap,       only : diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
@@ -46,6 +47,7 @@ implicit none ; private
 #define IMPLIES(A, B) ((.not. (A)) .or. (B))
 
 public set_axes_info, post_data, register_diag_field, time_type
+public set_masks_for_axes
 public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
@@ -96,6 +98,9 @@ type, public :: axes_grp
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
+  ! For masking
+  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
+  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
 end type axes_grp
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
@@ -370,6 +375,104 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
 end subroutine set_axes_info
 
+!> set_masks_for_axes sets up the 2d and 3d masks for diagnostics using the current grid
+!! recorded after calling diag_update_remap_grids()
+subroutine set_masks_for_axes(G, diag_cs)
+  type(ocean_grid_type), target, intent(in) :: G !< The ocean grid type.
+  type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
+                                                       !! used for diagnostics
+  ! Local variables
+  integer :: c, nk, i, j, k
+  type(axes_grp), pointer :: axes, h_axes ! Current axes, for convenience
+
+  do c=1, diag_cs%num_diag_coords
+    ! This vertical coordinate has been configured so can be used.
+    if (diag_remap_axes_configured(diag_cs%diag_remap_cs(c))) then
+
+      ! Level/layer h-points in diagnostic coordinate
+      axes => diag_cs%remap_axesTL(c)
+      nk = axes%nz
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      call diag_remap_calc_hmask(diag_cs%diag_remap_cs(c), G, axes%mask3d)
+
+      h_axes => diag_cs%remap_axesTL(c) ! Use the h-point masks to generate the u-, v- and q- masks
+
+      ! Level/layer u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCuL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Level/layer v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Level/layer q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
+            h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface h-points in diagnostic coordinate (w-point)
+      axes => diag_cs%remap_axesTi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at h-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,1) > 0.) axes%mask3d(i,J,1) = 1.
+        do K = 2, nk
+          if (h_axes%mask3d(i,j,k-1) + h_axes%mask3d(i,j,k) > 0.) axes%mask3d(i,J,k) = 1.
+        enddo
+        if (h_axes%mask3d(i,j,nk) > 0.) axes%mask3d(i,J,nk+1) = 1.
+      enddo ; enddo
+
+      h_axes => diag_cs%remap_axesTi(c) ! Use the w-point masks to generate the u-, v- and q- masks
+
+      ! Interface u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCui(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk+1 ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk+1 ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
+            h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
+      enddo ; enddo ; enddo
+
+    endif
+  enddo
+
+end subroutine set_masks_for_axes
+
 !> Attaches the id of cell areas to axes groups for use with cell_measures
 subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
   type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
@@ -499,6 +602,31 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   if (present(needs_remapping)) axes%needs_remapping = needs_remapping
   if (present(needs_interpolating)) axes%needs_interpolating = needs_interpolating
   if (present(xyave_axes)) axes%xyave_axes => xyave_axes
+
+  ! Setup masks for this axes group
+  axes%mask2d => null()
+  if (axes%rank==2) then
+    if (axes%is_h_point) axes%mask2d => diag_cs%mask2dT
+    if (axes%is_u_point) axes%mask2d => diag_cs%mask2dCu
+    if (axes%is_v_point) axes%mask2d => diag_cs%mask2dCv
+    if (axes%is_q_point) axes%mask2d => diag_cs%mask2dBu
+  endif
+  ! A static 3d mask for non-native coordinates can only be setup when a grid is available
+  axes%mask3d => null()
+  if (axes%rank==3 .and. axes%is_native) then
+    ! Native variables can/should use the native masks copied into diag_cs
+    if (axes%is_layer) then
+      if (axes%is_h_point) axes%mask3d => diag_cs%mask3dTL
+      if (axes%is_u_point) axes%mask3d => diag_cs%mask3dCuL
+      if (axes%is_v_point) axes%mask3d => diag_cs%mask3dCvL
+      if (axes%is_q_point) axes%mask3d => diag_cs%mask3dBL
+    elseif (axes%is_interface) then
+      if (axes%is_h_point) axes%mask3d => diag_cs%mask3dTi
+      if (axes%is_u_point) axes%mask3d => diag_cs%mask3dCui
+      if (axes%is_v_point) axes%mask3d => diag_cs%mask3dCvi
+      if (axes%is_q_point) axes%mask3d => diag_cs%mask3dBi
+    endif
+  endif
 
 end subroutine define_axes_group
 
@@ -692,9 +820,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
           'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
       used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-   !elseif(associated(diag%mask2d)) then
+   !elseif(associated(diag%axes%mask2d)) then
    !  used = send_data(diag%fms_diag_id, locfield, &
-   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
     else
       used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -706,10 +834,10 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=mask)
-    elseif(associated(diag%mask2d)) then
+    elseif(associated(diag%axes%mask2d)) then
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=diag%mask2d)
+                       weight=diag_cs%time_int, rmask=diag%axes%mask2d)
     else
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -773,13 +901,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_reintegrate_diag_field( &
               diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -797,13 +925,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -821,13 +949,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz+1))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -915,9 +1043,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
             'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-     !elseif(associated(diag%mask3d)) then
+     !elseif(associated(diag%axes%mask3d)) then
      !  used = send_data(diag_field_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask3d)
+     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
       else
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -929,12 +1057,12 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=mask)
-      elseif(associated(diag%mask3d)) then
-        call assert(size(locfield) == size(diag%mask3d), &
+      elseif(associated(diag%axes%mask3d)) then
+        call assert(size(locfield) == size(diag%axes%mask3d), &
             'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=diag%mask3d)
+                         weight=diag_cs%time_int, rmask=diag%axes%mask3d)
       else
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -2105,16 +2233,20 @@ subroutine diag_masks_set(G, nz, diag_cs)
   ! Local variables
   integer :: k
 
-  diag_cs%mask2dT => G%mask2dT
-  diag_cs%mask2dBu=> G%mask2dBu
-  diag_cs%mask2dCu=> G%mask2dCu
-  diag_cs%mask2dCv=> G%mask2dCv
+  ! 2d masks point to the model masks since they are identical
+  diag_cs%mask2dT  => G%mask2dT
+  diag_cs%mask2dBu => G%mask2dBu
+  diag_cs%mask2dCu => G%mask2dCu
+  diag_cs%mask2dCv => G%mask2dCv
+
+  ! 3d native masks are needed by diag_manager but the native variables
+  ! can only be masked 2d - for ocean points, all layers exists.
   allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:nz))
   allocate(diag_cs%mask3dBL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz))
   allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:nz))
   allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:nz))
   do k=1,nz
-    diag_cs%mask3dTL(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dTL(:,:,k) = diag_cs%mask2dT(:,:)
     diag_cs%mask3dBL(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
@@ -2124,7 +2256,7 @@ subroutine diag_masks_set(G, nz, diag_cs)
   allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:nz+1))
   allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:nz+1))
   do k=1,nz+1
-    diag_cs%mask3dTi(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dTi(:,:,k) = diag_cs%mask2dT(:,:)
     diag_cs%mask3dBi(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
