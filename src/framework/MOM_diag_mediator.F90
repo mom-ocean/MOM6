@@ -2096,13 +2096,12 @@ subroutine diag_update_remap_grids(diag_cs, alt_h)
 
 end subroutine diag_update_remap_grids
 
-!> diag_masks_set sets up the 2d and 3d masks for diagnostics
-subroutine diag_masks_set(G, nz, missing_value, diag_cs)
+!> Sets up the 2d and 3d masks for native diagnostics
+subroutine diag_masks_set(G, nz, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
   integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
-  real,                          intent(in) :: missing_value !< A value to use for masked points.
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
-                                                  !! used for diagnostics
+                                                       !! used for diagnostics
   ! Local variables
   integer :: k
 
@@ -2130,8 +2129,6 @@ subroutine diag_masks_set(G, nz, missing_value, diag_cs)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
-
-!  diag_cs%missing_value = missing_value
 
 end subroutine diag_masks_set
 

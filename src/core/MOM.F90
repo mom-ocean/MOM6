@@ -2086,14 +2086,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
 
-   diag    => CS%diag
+  diag => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
-  ! Initialize the diagnostics mask arrays.
+  ! Initialize the diagnostics masks for native arrays.
   ! This step has to be done after call to MOM_initialize_state
   ! and before MOM_diagnostics_init
-  call diag_masks_set(G, GV%ke, CS%missing, diag)
+  call diag_masks_set(G, GV%ke, diag)
 
   ! Set up pointers within diag mediator control structure,
   ! this needs to occur _after_ CS%h etc. have been allocated.
