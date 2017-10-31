@@ -45,6 +45,7 @@ implicit none ; private
 public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
 public diag_remap_configure_axes, diag_remap_axes_configured
+public diag_remap_calc_hmask
 public diag_remap_get_axes_info, diag_remap_set_active
 public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
@@ -366,6 +367,49 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
   endif
 
 end subroutine diag_remap_do_remap
+
+!> Calculate masks for target grid
+subroutine diag_remap_calc_hmask(remap_cs, G, mask)
+  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
+  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
+  real, dimension(:,:,:), intent(out) :: mask !< h-point mask for target grid
+  ! Local variables
+  real, dimension(remap_cs%nz) :: h_dest
+  integer :: i, j, k
+  logical :: mask_vanished_layers
+  real :: h_tot, h_err
+
+  call assert(remap_cs%initialized, 'diag_remap_calc_hmask: remap_cs not initialized.')
+
+  ! Only z*-like diagnostic coordinates should have a 3d mask
+  mask_vanished_layers = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+  mask(:,:,:) = 0.
+
+  do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+      if (mask_vanished_layers) then
+        h_dest(:) = remap_cs%h(i,j,:)
+        h_tot = 0.
+        h_err = 0.
+        do k=1, remap_cs%nz
+          h_tot = h_tot + h_dest(k)
+          ! This is an overestimate of how thick a vanished layer might be, that
+          ! appears due to round-off.
+          h_err = h_err + epsilon(h_tot) * h_tot
+          ! Mask out vanished layers
+          if (h_dest(k)<=8.*h_err) then
+            mask(i,j,k) = 0.
+          else
+            mask(i,j,k) = 1.
+          endif
+        enddo
+      else ! all layers might contain data
+        mask(i,j,:) = 1.
+      endif
+    endif
+  enddo ; enddo
+
+end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
 subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
