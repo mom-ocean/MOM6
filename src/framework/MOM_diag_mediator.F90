@@ -115,8 +115,6 @@ type, private :: diag_type
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
   character(32) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null()
-  real, pointer, dimension(:,:)   :: mask2d => null()
-  real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated). False for intensive (concentrations).
@@ -1564,7 +1562,6 @@ subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name
   ! Record FMS id, masks and conversion factor, in diag_type
   this_diag%fms_diag_id = fms_id
   this_diag%debug_str = trim(module_name)//"-"//trim(field_name)
-  call set_diag_mask(this_diag, diag_cs, axes)
   this_diag%axes => axes
 
 end subroutine add_diag_to_list
@@ -2336,58 +2333,6 @@ function i2s(a,n_in)
     i2s = adjustl(i2s)
 end function i2s
 
-!> Associates the mask pointers within diag with the appropriate mask based on the axes group.
-subroutine set_diag_mask(diag, diag_cs, axes)
-  type(diag_ctrl), target, intent(in) :: diag_cs !< Diag_mediator control structure
-  type(diag_type), pointer, intent(inout) :: diag !< This diag type
-  type(axes_grp),  intent(in) :: axes !< Axes group
-
-  diag%mask2d => null()
-  diag%mask3d => null()
-
-  if (axes%rank .eq. 3) then
-    if (axes%is_layer) then
-      if (axes%is_h_point) then
-        diag%mask3d => diag_cs%mask3dTL
-      elseif (axes%is_q_point) then
-        diag%mask3d => diag_cs%mask3dBL
-      elseif (axes%is_u_point) then
-        diag%mask3d => diag_cs%mask3dCuL
-      elseif (axes%is_v_point) then
-        diag%mask3d => diag_cs%mask3dCvL
-      endif
-    elseif (axes%is_interface) then
-      if (axes%is_h_point) then
-        diag%mask3d => diag_cs%mask3dTi
-      elseif (axes%is_q_point) then
-        diag%mask3d => diag_cs%mask3dBi
-      elseif (axes%is_u_point) then
-        diag%mask3d => diag_cs%mask3dCui
-      elseif (axes%is_v_point) then
-        diag%mask3d => diag_cs%mask3dCvi
-      endif
-    endif
-
-    !call assert(associated(diag%mask3d), "set_diag_mask: Invalid 3d axes id."// &
-    !                                     " diag:"//diag%debug_str)
-  elseif(axes%rank .eq. 2) then
-
-    if (axes%is_h_point) then
-      diag%mask2d =>  diag_cs%mask2dT
-    elseif (axes%is_q_point) then
-      diag%mask2d =>  diag_cs%mask2dBu
-    elseif (axes%is_u_point) then
-        diag%mask2d =>  diag_cs%mask2dCu
-    elseif (axes%is_v_point) then
-        diag%mask2d =>  diag_cs%mask2dCv
-    endif
-
-    !call assert(associated(diag%mask2d), "set_diag_mask.F90: Invalid 2d axes id."// &
-    !                                     " diag:"//diag%debug_str)
-  endif
-
-end subroutine set_diag_mask
-
 !> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.
 integer function get_new_diag_id(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
@@ -2426,8 +2371,6 @@ subroutine initialize_diag_type(diag)
   diag%in_use = .false.
   diag%fms_diag_id = -1
   diag%axes => null()
-  diag%mask2d => null()
-  diag%mask3d => null()
   diag%next => null()
   diag%conversion_factor = 0.
 
