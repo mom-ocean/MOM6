@@ -43,7 +43,7 @@ use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
 implicit none ; private
 
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 #define IMPLIES(A, B) ((.not. (A)) .or. (B))
 
 public set_axes_info, post_data, register_diag_field, time_type
