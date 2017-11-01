@@ -1312,7 +1312,7 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      call build_rho_column(CS%rho_CS, remapCS, nz, nominalDepth, h(i, j, :), &
+      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
                             tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
 
       if (CS%integrate_downward_for_e) then

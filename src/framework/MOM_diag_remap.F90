@@ -263,7 +263,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
         call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
                                 G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-        call build_rho_column(get_rho_CS(remap_cs%regrid_cs), remap_cs%remap_cs, nz, &
+        call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
                               G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
                               eqn_of_state, zInterfaces)
       elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
