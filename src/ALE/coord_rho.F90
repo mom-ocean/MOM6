@@ -110,14 +110,11 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
   ! Local variables
   integer   :: k, m
   integer   :: map_index
-  integer   :: k_found
   integer   :: count_nonzero_layers
   real      :: deviation            ! When iterating to determine the final
                                     ! grid, this is the deviation between two
                                     ! successive grids.
   real      :: threshold
-  real      :: max_thickness
-  real      :: correction
   real, dimension(nz) :: p, densities, T_tmp, S_tmp, Tmp
   integer, dimension(nz) :: mapping
   real :: dh
@@ -136,43 +133,12 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
   do while ( ( m <= NB_REGRIDDING_ITERATIONS ) .and. &
              ( deviation > DEVIATION_TOLERANCE ) )
 
-    ! Count number of nonzero layers within current water column
-    count_nonzero_layers = 0
-    do k = 1,nz
-      if ( h0(k) > threshold ) then
-        count_nonzero_layers = count_nonzero_layers + 1
-      end if
-    end do
-
-    ! If there is at most one nonzero layer, stop here (no regridding)
+    ! Construct column with vanished layers removed
+    call copy_finite_thicknesses(nz, h0, threshold, count_nonzero_layers, hTmp, mapping)
     if ( count_nonzero_layers <= 1 ) then
       h1(:) = h0(:)
       exit  ! stop iterations here
     end if
-
-    ! Build new grid containing only nonzero layers
-    map_index = 1
-    correction = 0.0
-    do k = 1,nz
-      if ( h0(k) > threshold ) then
-        mapping(map_index) = k
-        hTmp(map_index) = h0(k)
-        map_index = map_index + 1
-      else
-        correction = correction + h0(k)
-      end if
-    end do
-
-    max_thickness = hTmp(1)
-    k_found = 1
-    do k = 1,count_nonzero_layers
-      if ( hTmp(k) > max_thickness ) then
-        max_thickness = hTmp(k)
-        k_found = k
-      end if
-    end do
-
-    hTmp(k_found) = hTmp(k_found) + correction
 
     xTmp(1) = 0.0
     do k = 1,count_nonzero_layers
@@ -242,6 +208,49 @@ subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInte
   endif
 
 end subroutine build_rho_column
+
+!> Copy column thicknesses with vanished layers removed
+subroutine copy_finite_thicknesses(nk, h_in, threshold, nout, h_out, mapping)
+  integer,                intent(in)  :: nk !< Number of layer for h_in, T_in, S_in
+  real, dimension(nk),    intent(in)  :: h_in !< Thickness of input column
+  real,                   intent(in)  :: threshold !< Thickness threshold defining vanished layers
+  integer,                intent(out) :: nout !< Number of non-vanished layers
+  real, dimension(nk),    intent(out) :: h_out !< Thickness of output column
+  integer, dimension(nk), intent(out) :: mapping !< Index of k-out corresponding to k-in
+  ! Local variables
+  integer :: k, k_thickest
+  real :: thickness_in_vanished, thickest_h_out
+
+  ! Build up new grid
+  nout = 0
+  thickness_in_vanished = 0.0
+  thickest_h_out = h_in(1)
+  k_thickest = 1
+  do k = 1, nk
+    mapping(k) = nout ! Note k>=nout always
+    h_out(k) = 0.  ! Make sure h_out is set everywhere
+    if (h_in(k) > threshold) then
+      ! For non-vanished layers
+      nout = nout + 1
+      mapping(nout) = k
+      h_out(nout) = h_in(k)
+      if (h_out(nout) > thickest_h_out) then
+        thickest_h_out = h_out(nout)
+        k_thickest = nout
+      end if
+    else
+      ! Add up mass in vanished layers
+      thickness_in_vanished = thickness_in_vanished + h_in(k)
+    end if
+  end do
+
+  ! No finite layers
+  if (nout <= 1) return
+
+  ! Adjust for any lost volume in vanished layers
+  h_out(k_thickest) = h_out(k_thickest) + thickness_in_vanished
+
+end subroutine copy_finite_thicknesses
 
 !------------------------------------------------------------------------------
 ! Inflate vanished layers to finite (nonzero) width
