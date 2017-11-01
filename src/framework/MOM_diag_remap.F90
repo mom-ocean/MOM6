@@ -45,6 +45,7 @@ implicit none ; private
 public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
 public diag_remap_configure_axes, diag_remap_axes_configured
+public diag_remap_calc_hmask
 public diag_remap_get_axes_info, diag_remap_set_active
 public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
@@ -295,7 +296,6 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
   ! Local variables
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
-  logical :: mask_vanished_layers
   integer :: nz_src, nz_dest
   integer :: i, j, k
 
@@ -305,8 +305,7 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
 
   nz_src = size(field,3)
   nz_dest = remap_cs%nz
-  mask_vanished_layers = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
-  remapped_field(:,:,:) = missing_value
+  remapped_field(:,:,:) = 0.
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -319,11 +318,6 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
                               nz_dest, h_dest(:), remapped_field(I,j,:))
-        if (mask_vanished_layers) then ! This only works for z-like output
-          do k=1, nz_dest
-            if (h_dest(k) == 0.) remapped_field(i, j, k:nz_dest) = missing_value
-          enddo
-        endif
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -337,11 +331,6 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
                               nz_dest, h_dest(:), remapped_field(i,J,:))
-        if (mask_vanished_layers) then ! This only works for z-like output
-          do k=1, nz_dest
-            if (h_dest(k) == 0.) remapped_field(i,j,k) = missing_value
-          enddo
-        endif
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -351,14 +340,10 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         if (associated(mask)) then
           if (mask(i,j, 1) == 0.) cycle
         endif
+        h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
         call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
                               nz_dest, h_dest(:), remapped_field(i,j,:))
-        if (mask_vanished_layers) then ! This only works for z-like output
-          do k=1, nz_dest
-            if (h_dest(k)==0.) remapped_field(i,j,k) = missing_value
-          enddo
-        endif
       enddo
     enddo
   else
@@ -366,6 +351,49 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
   endif
 
 end subroutine diag_remap_do_remap
+
+!> Calculate masks for target grid
+subroutine diag_remap_calc_hmask(remap_cs, G, mask)
+  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
+  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
+  real, dimension(:,:,:), intent(out) :: mask !< h-point mask for target grid
+  ! Local variables
+  real, dimension(remap_cs%nz) :: h_dest
+  integer :: i, j, k
+  logical :: mask_vanished_layers
+  real :: h_tot, h_err
+
+  call assert(remap_cs%initialized, 'diag_remap_calc_hmask: remap_cs not initialized.')
+
+  ! Only z*-like diagnostic coordinates should have a 3d mask
+  mask_vanished_layers = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
+  mask(:,:,:) = 0.
+
+  do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
+    if (G%mask2dT(i,j)>0.) then
+      if (mask_vanished_layers) then
+        h_dest(:) = remap_cs%h(i,j,:)
+        h_tot = 0.
+        h_err = 0.
+        do k=1, remap_cs%nz
+          h_tot = h_tot + h_dest(k)
+          ! This is an overestimate of how thick a vanished layer might be, that
+          ! appears due to round-off.
+          h_err = h_err + epsilon(h_tot) * h_tot
+          ! Mask out vanished layers
+          if (h_dest(k)<=8.*h_err) then
+            mask(i,j,k) = 0.
+          else
+            mask(i,j,k) = 1.
+          endif
+        enddo
+      else ! all layers might contain data
+        mask(i,j,:) = 1.
+      endif
+    endif
+  enddo ; enddo
+
+end subroutine diag_remap_calc_hmask
 
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
 subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
@@ -391,7 +419,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
 
   nz_src = size(field,3)
   nz_dest = remap_cs%nz
-  reintegrated_field(:,:,:) = missing_value
+  reintegrated_field(:,:,:) = 0.
 
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
@@ -403,7 +431,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
         call reintegrate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, missing_value, reintegrated_field(I,j,:))
+                                nz_dest, h_dest, 0., reintegrated_field(I,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -416,7 +444,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
         call reintegrate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, missing_value, reintegrated_field(i,J,:))
+                                nz_dest, h_dest, 0., reintegrated_field(i,J,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -429,7 +457,7 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
         call reintegrate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, missing_value, reintegrated_field(i,j,:))
+                                nz_dest, h_dest, 0., reintegrated_field(i,j,:))
       enddo
     enddo
   else
@@ -460,7 +488,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
   call assert(size(field, 3) == size(h, 3)+1, &
               'vertically_interpolate_diag_field: Remap field and thickness z-axes do not match.')
 
-  interpolated_field(:,:,:) = missing_value
+  interpolated_field(:,:,:) = 0.
 
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
@@ -475,7 +503,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:) )
         call interpolate_column(nz_src, h_src, field(I,j,:), &
-                                nz_dest, h_dest, missing_value, interpolated_field(I,j,:))
+                                nz_dest, h_dest, 0., interpolated_field(I,j,:))
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -488,7 +516,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * ( remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
         call interpolate_column(nz_src, h_src, field(i,J,:), &
-                                nz_dest, h_dest, missing_value, interpolated_field(i,J,:))
+                                nz_dest, h_dest, 0., interpolated_field(i,J,:))
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -501,7 +529,7 @@ subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
         call interpolate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, missing_value, interpolated_field(i,j,:))
+                                nz_dest, h_dest, 0., interpolated_field(i,j,:))
       enddo
     enddo
   else
