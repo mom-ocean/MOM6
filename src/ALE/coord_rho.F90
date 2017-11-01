@@ -18,14 +18,14 @@ type, public :: rho_CS
   integer :: nk
 
   !> Minimum thickness allowed for layers
-  real :: min_thickness
+  real :: min_thickness = 0.
 
   !> Reference pressure for density calculations
   real :: ref_pressure
 
   !> If true, integrate for interface positions from the top downward.
   !! If false, integrate from the bottom upward, as does the rest of the model.
-  logical :: integrate_downward_for_e
+  logical :: integrate_downward_for_e = .false.
 
   !> Nominal density of interfaces
   real, allocatable, dimension(:) :: target_density
