@@ -88,9 +88,8 @@ end subroutine set_rho_params
 !!
 !! 1. Density profiles are calculated on the source grid.
 !! 2. Positions of target densities (for interfaces) are found by interpolation.
-subroutine build_rho_column(CS, remapCS, nz, depth, h, T, S, eqn_of_state, z_interface)
+subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface)
   type(rho_CS),             intent(in)    :: CS !< coord_rho control structure
-  type(remapping_CS),       intent(in)    :: remapCS !< Remapping parameters and options
   integer,                  intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m)
   real, dimension(nz),      intent(in)    :: h  !< Layer thicknesses, in m
