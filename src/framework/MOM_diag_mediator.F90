@@ -2063,26 +2063,41 @@ end subroutine
 !> Build/update vertical grids for diagnostic remapping.
 !! \note The target grids need to be updated whenever sea surface
 !! height changes.
-subroutine diag_update_remap_grids(diag_cs, alt_h)
+subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
   type(diag_ctrl),        intent(inout) :: diag_cs      !< Diagnostics control structure
-  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be
-                                                        !! something other than the current
-                                                        !! thicknesses
+  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current thicknesses
+  real, target, optional, intent(in   ) :: alt_T(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current temperatures
+  real, target, optional, intent(in   ) :: alt_S(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current salinity
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag
+  real, dimension(:,:,:), pointer :: h_diag, T_diag, S_diag
 
-  if(present(alt_h)) then
+  if (present(alt_h)) then
     h_diag => alt_h
   else
     h_diag => diag_cs%h
+  endif
+
+  if (present(alt_T)) then
+    T_diag => alt_T
+  else
+    T_diag => diag_CS%T
+  endif
+
+  if (present(alt_S)) then
+    S_diag => alt_S
+  else
+    S_diag => diag_CS%S
   endif
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, h_diag, diag_cs%T, diag_cs%S, &
+                           diag_cs%G, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 

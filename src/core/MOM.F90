@@ -506,9 +506,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
-  ! Store the layer thicknesses before any changes by the dynamics. This is necessary for remapped
-  ! mass transport diagnostics
+  ! Store the layer thicknesses, temperature, and salinity before any changes by the dynamics.
+  ! This is necessary for remapped mass transport diagnostics
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_pre_dyn
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: T_pre_dyn
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: S_pre_dyn
   real :: tot_wt_ssh, Itot_wt_ssh
 
   type(time_type) :: Time_local
@@ -812,6 +814,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     ! Store pre-dynamics layer thicknesses so that mass fluxes are remapped correctly
     do k=1,nz ; do j=jsd,jed ; do i=isd,ied
       h_pre_dyn(i,j,k) = h(i,j,k)
+      T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
+      S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
     enddo ; enddo ; enddo
 
     if (G%nonblocking_updates) then ; if (do_calc_bbl) then
@@ -953,7 +957,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
       call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn)
+      call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn, T_pre_dyn, S_pre_dyn)
       ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
       ! from before the dynamics calls
       call diag_update_remap_grids(CS%diag)
@@ -2743,7 +2747,7 @@ end subroutine MOM_timing_init
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
+subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T_pre_dyn, S_pre_dyn)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(MOM_control_struct), intent(in)    :: CS  !< control structure
@@ -2753,6 +2757,10 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
                             intent(in)    :: h   !< The updated layer thicknesses, in H
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: T_pre_dyn !< Temperature before the transports, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: S_pre_dyn !< Salinity before the transports, in H.
 
   real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
   real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
@@ -2769,7 +2777,7 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
 
   ! Post mass transports, including SGS
   ! Build the remap grids using the layer thicknesses from before the dynamics
-  call diag_update_remap_grids(diag, alt_h = h_pre_dyn)
+  call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
 
   H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
   if (CS%id_umo_2d > 0) then
