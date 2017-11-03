@@ -811,12 +811,14 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       enddo ; enddo ; enddo
     endif
 
-    ! Store pre-dynamics layer thicknesses so that mass fluxes are remapped correctly
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      h_pre_dyn(i,j,k) = h(i,j,k)
-      T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
-      S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
-    enddo ; enddo ; enddo
+    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
+    if (CS%id_uhtr > 0 .or. CS%id_vhtr > 0 .or. CS%id_umo > 0 .or. CS%id_vmo > 0) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        h_pre_dyn(i,j,k) = h(i,j,k)
+        if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
+        if (associated(CS%tv%S)) S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
+      enddo ; enddo ; enddo
+    endif
 
     if (G%nonblocking_updates) then ; if (do_calc_bbl) then
       if (do_pass_Ray) &
