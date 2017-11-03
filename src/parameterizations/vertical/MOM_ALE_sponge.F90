@@ -18,7 +18,7 @@ use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
-use MOM_time_manager, only : time_type, init_external_field, get_external_field_size
+use MOM_time_manager, only : time_type, init_external_field, get_external_field_size, time_interp_external_init
 use MOM_remapping, only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 
@@ -544,6 +544,9 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, f_ptr, 
 
   if (.not.associated(CS)) return
 
+  ! Call this in case it was not previously done.
+  call time_interp_external_init()
+
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
   CS%fldno = CS%fldno + 1
 
@@ -666,17 +669,16 @@ end subroutine set_up_ALE_sponge_vel_field_fixed
 !> This subroutine stores the reference profile at uand v points for the variable
 ! whose address is given by u_ptr and v_ptr.
 subroutine set_up_ALE_sponge_vel_field_varying(filename_u,fieldname_u,filename_v,fieldname_v, Time, G, CS, u_ptr, v_ptr)
-  character(len=*), intent(in) :: filename_u
-  character(len=*),  intent(in) :: fieldname_u
-  character(len=*), intent(in) :: filename_v
-  character(len=*),  intent(in) :: fieldname_v
-  type(time_type),    intent(in) :: Time
-  type(ocean_grid_type), intent(in)  :: G !< Ocean grid (in)
+  character(len=*), intent(in)    :: filename_u  !< File name for u field
+  character(len=*), intent(in)    :: fieldname_u !< Name of u variable in file
+  character(len=*), intent(in)    :: filename_v  !< File name for v field
+  character(len=*), intent(in)    :: fieldname_v !< Name of v variable in file
+  type(time_type),  intent(in)    :: Time        !< Model time
+  type(ocean_grid_type), intent(inout) :: G      !< Ocean grid (in)
+  type(ALE_sponge_CS), pointer    :: CS          !< Sponge structure (in/out).
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(in) :: u_ptr !< u pointer to the field to be damped (in).
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(in) :: v_ptr !< v pointer to the field to be damped (in).
-  type(ALE_sponge_CS),                     pointer  :: CS !< Sponge structure (in/out).
-
-
+  ! Local variables
   real, allocatable, dimension(:,:,:) :: u_val !< U field to be used in the sponge.
   real, allocatable, dimension(:,:,:) :: mask_u !< U field mask for the sponge data.
   real, allocatable, dimension(:,:,:) :: v_val !< V field to be used in the sponge.

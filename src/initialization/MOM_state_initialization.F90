@@ -1629,9 +1629,10 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
   type(param_file_type),   intent(in) :: param_file !< A structure to parse for run-time parameters.
   type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
                                               !! structure for this module (in layered mode).
-  type(ALE_sponge_CS),         pointer    :: ALE_CSp  !< A pointer that is set to point to the control
-                                                      !! structure for this module (in ALE mode).
-  type(time_type),         intent(in) :: Time
+  type(ALE_sponge_CS),     pointer    :: ALE_CSp  !< A pointer that is set to point to the control
+                                                  !! structure for this module (in ALE mode).
+  type(time_type),         intent(in) :: Time !< Time at the start of the run segment. Time_in
+                                              !! overrides any value set for Time.
 
 ! Local variables
   real, allocatable, dimension(:,:,:) :: eta ! The target interface heights, in m.
