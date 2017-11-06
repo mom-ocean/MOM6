@@ -407,7 +407,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
 
     if (CS%frazil_tendency_diag) then
-      call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, GV, CS)
+      call diagnose_frazil_tendency(tv, h, temp_diag, 0.5*dt, G, GV, CS)
     endif
     call disable_averaging(CS%diag)
   endif
@@ -1425,7 +1425,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     endif
 
     if (CS%frazil_tendency_diag) then
-      call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, GV, CS)
+      call diagnose_frazil_tendency(tv, h, temp_diag, 0.5*dt, G, GV, CS)
     endif
 
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
