@@ -47,16 +47,13 @@ type, public :: DOME_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  real, pointer :: tr_aux(:,:,:,:) => NULL() ! The masked tracer concentration
-                                             ! for output, in g m-3.
   type(p3d), dimension(NTR) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
-  logical :: use_sponge
+  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
 
   integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
              ! if it is used and the surface tracer concentrations are to be
@@ -120,9 +117,6 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
-  endif
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
@@ -401,26 +395,9 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
     enddo
   endif
 
-  if (CS%mask_tracers) then
-    do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-          CS%tr_aux(i,j,k,m) = CS%land_val(m)
-        else
-          CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
-        endif
-      enddo ; enddo ; enddo
-    endif ; enddo
-  endif
-
   do m=1,NTR
-    if (CS%mask_tracers) then
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr_aux(:,:,:,m),CS%diag)
-    else
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    endif
+    if (CS%id_tracer(m)>0) &
+      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
     if (CS%id_tr_ady(m)>0) &
@@ -473,7 +450,6 @@ subroutine DOME_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    if (associated(CS%tr_aux)) deallocate(CS%tr_aux)
     do m=1,NTR
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)

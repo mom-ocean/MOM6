@@ -92,7 +92,6 @@ type, public :: pseudo_salt_tracer_CS ; private
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
-  logical :: mask_tracers  ! If true, pseudo_salt is masked out in massless layers.
   logical :: pseudo_salt_may_reinit = .true. ! Hard coding since this should not matter
   integer, dimension(NTR_MAX) :: &
     ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
@@ -374,19 +373,9 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
   do m=1,1
     if (CS%id_tracer(m)>0) then
-      if (CS%mask_tracers) then
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-            local_tr(i,j,k) = CS%land_val(m)
-          else
-            local_tr(i,j,k) = CS%diff(i,j,k,m)
-          endif
-        enddo ; enddo ; enddo
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          local_tr(i,j,k) = CS%tr(i,j,k,m)-tv%S(i,j,k)
-        enddo ; enddo ; enddo
-      endif ! CS%mask_tracers
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        local_tr(i,j,k) = CS%tr(i,j,k,m)-tv%S(i,j,k)
+      enddo ; enddo ; enddo
       call post_data(CS%id_tracer(m),local_tr,CS%diag)
     endif ! CS%id_tracer(m)>0
     if (CS%id_tr_adx(m)>0) &
