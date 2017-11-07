@@ -474,6 +474,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
+  type(time_type) :: Time_end_thermo ! Time at end of the thermodynamics step for diagnostic averaging
   real :: dt              ! baroclinic time step (sec)
   real :: dtth            ! time step for thickness diffusion (sec)
   real :: dtdia           ! time step for diabatic processes (sec)
@@ -686,8 +687,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
       ! The end-time of the diagnostic interval needs to be set ahead if there
       ! are multiple dynamic time steps worth of thermodynamics applied here.
-      call enable_averaging(dtdia, Time_local + &
-                                   set_time(int(floor(dtdia-dt+0.5))), CS%diag)
+      Time_end_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       if (CS%debug) then
         call uvchksum("Pre set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
@@ -712,14 +712,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call cpu_clock_begin(id_clock_thermo)
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_end_thermo)
       do_pass_kv_turb = associated(CS%visc%Kv_turb)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
-      call disable_averaging(CS%diag)
       call cpu_clock_end(id_clock_thermo)
 
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
@@ -988,15 +987,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
           call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                          "before call to diabatic.")
         endif
-
-        call enable_averaging(CS%t_dyn_rel_thermo, Time_local, CS%diag)
-
         ! Apply diabatic forcing, do mixing, and regrid.
-        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia)
+        Time_end_thermo = Time_local ! Redundant, but here for clarity
+        call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_end_thermo)
         do_pass_kv_turb = associated(CS%visc%Kv_turb)
-
-        call disable_averaging(CS%diag)
-
       endif
 
       if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
@@ -1092,7 +1086,7 @@ end subroutine step_MOM
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1105,6 +1099,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
+  type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta_predia, eta_preale
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
@@ -1119,7 +1114,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
   if (.not.CS%adiabatic) then
-
+    call enable_averaging(dtdia, Time_end_thermo, CS%diag)
     if (CS%debug) then
       call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
       call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1140,13 +1135,15 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
       call find_eta(h, CS%tv, GV%g_Earth, G, GV, eta_predia)
       call post_data(CS%id_e_predia, eta_predia, CS%diag)
     endif
+    call disable_averaging(CS%diag)
 
     call cpu_clock_begin(id_clock_diabatic)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, G, GV, CS%diabatic_CSp)
+                  dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
+    call enable_averaging(dtdia, Time_end_thermo, CS%diag)
     if (CS%id_u_preale > 0) call post_data(CS%id_u_preale, u,    CS%diag)
     if (CS%id_v_preale > 0) call post_data(CS%id_v_preale, v,    CS%diag)
     if (CS%id_h_preale > 0) call post_data(CS%id_h_preale, h,    CS%diag)
@@ -1207,7 +1204,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
     call diag_update_remap_grids(CS%diag)
 
     call post_diags_TS_vardec(G, CS, dtdia)
-
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
       call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1224,7 +1220,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia)
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G)
       call check_redundant("Post-diabatic ", u, v, G)
     endif
-
+    call disable_averaging(CS%diag)
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_diabatic)
