@@ -119,6 +119,7 @@ use MOM_tracer_advect,         only : tracer_advect_end, tracer_advect_CS
 use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
+use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
 use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_type
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
@@ -925,6 +926,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp, &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, G, GV, CS%diagnostics_CSp)
+      call post_tracer_diagnostics(CS%Tracer_reg, CS%diag, G, GV)
       call post_TS_diagnostics(CS, G, GV, CS%tv, CS%diag, CS%t_dyn_rel_diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -2164,12 +2166,11 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! now register some diagnostics since tracer registry is locked
   call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
+  call register_tracer_diagnostics(CS%tracer_Reg, Time, diag, G, GV)
   call register_diags_TS_tendency(Time, G, CS)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif
-
-
 
   ! If need a diagnostic field, then would have been allocated in register_diags.
   if (CS%use_temperature) then
