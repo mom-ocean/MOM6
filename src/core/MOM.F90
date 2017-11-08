@@ -442,7 +442,7 @@ contains
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
 subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
-  type(mech_forcing), intent(in)     :: forces        !< A structure with the driving mechanical forces
+  type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
   type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
   type(surface),    intent(inout)    :: sfc_state     !< surface ocean state
   type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
@@ -1050,7 +1050,7 @@ end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, update_BBL)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1063,7 +1063,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(forcing),            intent(inout) :: fluxes !< pointers to forcing fields
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
-  type(time_type),          intent(in)    :: end_time !< The model time at the end of this step.
+  type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
 
   integer :: i, j, k, is, ie, js, je, nz! , Isq, Ieq, Jsq, Jeq, n
@@ -1078,7 +1078,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
   use_ice_shelf = .false.
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
-  call enable_averaging(dtdia, end_time, CS%diag)
+  call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 
   if (update_BBL) then
     if (CS%debug) then
@@ -1108,7 +1108,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
 
   call cpu_clock_begin(id_clock_thermo)
   if (.not.CS%adiabatic) then
-
+    call enable_averaging(dtdia, Time_end_thermo, CS%diag)
     if (CS%debug) then
       call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
       call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1122,10 +1122,9 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
 
     call cpu_clock_begin(id_clock_diabatic)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, G, GV, CS%diabatic_CSp)
+                  dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
-
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
 
@@ -1177,7 +1176,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
     call diag_update_remap_grids(CS%diag)
 
     call post_diags_TS_vardec(G, CS, dtdia)
-
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
       call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1194,7 +1192,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, end_time, upda
     ! call MOM_thermo_chksum("Post-diabatic ", tv, G)
       call check_redundant("Post-diabatic ", u, v, G)
     endif
-
+    call disable_averaging(CS%diag)
   else   ! complement of "if (.not.CS%adiabatic)"
 
     call cpu_clock_begin(id_clock_diabatic)
@@ -1411,7 +1409,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 end subroutine step_offline
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mode)
+subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mode, input_restart_file)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
@@ -1419,6 +1417,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
   logical,         optional, intent(out)   :: offline_tracer_mode !< True if tracers are being run offline
+  character(len=*),optional, intent(in)    :: input_restart_file !< If present, name of restart file to read
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -1489,7 +1488,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   Start_time = Time ; if (present(Time_in)) Start_time = Time_in
 
-  call Get_MOM_Input(param_file, dirs)
+  ! Read paths and filenames from namelist and store in "dirs".
+  ! Also open the parsed input parameter file(s) and setup param_file.
+  call get_MOM_input(param_file, dirs, default_input_filename=input_restart_file)
 
   verbosity = 2 ; call read_param(param_file, "VERBOSITY", verbosity)
   call MOM_set_verbosity(verbosity)

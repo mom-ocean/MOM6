@@ -1393,12 +1393,12 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
 
   P_b = P_t + dp ! Anomalous pressure at bottom of cell
 
-  if (P_tgt < P_t ) then
+  if (P_tgt <= P_t ) then
     z_out = z_t
     return
   endif
 
-  if (P_tgt > P_b) then
+  if (P_tgt >= P_b) then
     z_out = z_b
     return
   endif

@@ -15,7 +15,7 @@ use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, diff
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
-use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled
+use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_averaging, disable_averaging
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
@@ -54,6 +54,7 @@ use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_shortwave_abs,       only : absorbRemainingSW, optics_type
 use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
+use MOM_time_manager,        only : operator(-), set_time
 use MOM_time_manager,        only : operator(<=), time_type ! for testing itides (BDM)
 use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
 use MOM_tracer_diabatic,     only : tracer_vertdiff
@@ -238,21 +239,25 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
-  type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u      !< zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v      !< meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< thickness (m for Bouss / kg/m2 for non-Bouss)
-  type(thermo_var_ptrs),                     intent(inout) :: tv     !< points to thermodynamic fields; unused have NULL ptrs
-  real, dimension(:,:),                      pointer       :: Hml    !< active mixed layer depth
-  type(forcing),                             intent(inout) :: fluxes !< points to forcing fields; unused fields have NULL ptrs
-  type(vertvisc_type),                       intent(inout) :: visc   !< vertical viscosities, BBL properies, and related
-  type(accel_diag_ptrs),                     intent(inout) :: ADp    !< points to accelerations in momentum equations,
-                                                                     !! to enable the later derived diagn, like energy budgets
-  type(cont_diag_ptrs),                      intent(inout) :: CDp    !< points to terms in continuity equations
-  real,                                      intent(in)    :: dt     !< time increment (seconds)
-  type(diabatic_CS),                         pointer       :: CS     !< module control structure
+subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, GV, CS)
+  type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity (m/s)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: v         !< meridional velocity (m/s)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h         !< thickness (m for Bouss / kg/m2 for non-Bouss)
+  type(thermo_var_ptrs),                     intent(inout) :: tv        !< points to thermodynamic fields;
+                                                                        !! unused have NULL ptrs
+  real, dimension(:,:),                      pointer       :: Hml       !< active mixed layer depth
+  type(forcing),                             intent(inout) :: fluxes    !< points to forcing fields
+                                                                        !! unused fields have NULL ptrs
+  type(vertvisc_type),                       intent(inout) :: visc      !< vertical viscosities, BBL properies, and
+  type(accel_diag_ptrs),                     intent(inout) :: ADp       !< related points to accelerations in momentum
+                                                                        !! equations, to enable the later derived
+                                                                        !! diagnostics, like energy budgets
+  type(cont_diag_ptrs),                      intent(inout) :: CDp       !< points to terms in continuity equations
+  real,                                      intent(in)    :: dt        !< time increment (seconds)
+  type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
+  type(diabatic_CS),                         pointer       :: CS        !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
@@ -408,7 +413,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-
+    ! For frazil diagnostic, the first call covers the first half of the time step
+    call enable_averaging(0.5*dt, Time_end - set_time(int(floor(0.5*dt+0.5))), CS%diag)
     if(CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
@@ -423,11 +429,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     if (showCallTree) call callTree_waypoint("done with 1st make_frazil (diabatic)")
 
     if (CS%frazil_tendency_diag) then
-      call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, GV, CS, 1)
+      call diagnose_frazil_tendency(tv, h, temp_diag, 0.5*dt, G, GV, CS)
     endif
-
+    call disable_averaging(CS%diag)
   endif
-
+  ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
+  call enable_averaging(dt, Time_end, CS%diag)
   if (CS%debugConservation) call MOM_state_stats('1st make_frazil', u, v, h, tv%T, tv%S, G)
 
   if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
@@ -1410,11 +1417,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
   endif ! useALEalgorithm
 
+  call disable_averaging(CS%diag)
   ! Frazil formation keeps temperature above the freezing point.
   ! make_frazil is deliberately called at both the beginning and at
   ! the end of the diabatic processes.
   if (ASSOCIATED(tv%T) .AND. ASSOCIATED(tv%frazil)) then
-
+    call enable_averaging(0.5*dt, Time_end, CS%diag)
     if(CS%frazil_tendency_diag) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         temp_diag(i,j,k) = tv%T(i,j,k)
@@ -1428,16 +1436,18 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
     endif
 
     if (CS%frazil_tendency_diag) then
-      call diagnose_frazil_tendency(tv, h, temp_diag, dt, G, GV, CS, 2)
+      call diagnose_frazil_tendency(tv, h, temp_diag, 0.5*dt, G, GV, CS)
     endif
 
     if (showCallTree) call callTree_waypoint("done with 2nd make_frazil (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('2nd make_frazil', u, v, h, tv%T, tv%S, G)
+    call disable_averaging(CS%diag)
 
   endif  ! endif for frazil
 
-
   ! Diagnose the diapycnal diffusivities and other related quantities.
+  call enable_averaging(dt, Time_end, CS%diag)
+
   if (CS%id_Kd_interface > 0) call post_data(CS%id_Kd_interface, Kd_int,  CS%diag)
   if (CS%id_Kd_heat      > 0) call post_data(CS%id_Kd_heat,      Kd_heat, CS%diag)
   if (CS%id_Kd_salt      > 0) call post_data(CS%id_Kd_salt,      Kd_salt, CS%diag)
@@ -1471,6 +1481,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, G, GV, CS)
       if (CS%id_cn(m) > 0) call post_data(CS%id_cn(m),cn(:,:,m),CS%diag)
     enddo
   endif
+
+  call disable_averaging(CS%diag)
 
   num_z_diags = 0
   if (CS%id_Kd_z > 0) then
@@ -1712,15 +1724,14 @@ end subroutine diagnose_boundary_forcing_tendency
 !! This routine is called twice from within subroutine diabatic; at start and at
 !! end of the diabatic processes. The impacts from frazil are generally a function
 !! of depth.  Hence, when checking heat budget, be sure to remove HFSIFRAZIL from HFDS in k=1.
-subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
+subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS)
   type(ocean_grid_type),                    intent(in) :: G        !< ocean grid structure
   type(verticalGrid_type),                  intent(in) :: GV       !< ocean vertical grid structure
+  type(diabatic_CS),                        pointer    :: CS       !< module control structure
   type(thermo_var_ptrs),                    intent(in) :: tv       !< points to updated thermodynamic fields
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h        !< thickness (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: temp_old !< temperature prior to frazil formation
   real,                                     intent(in) :: dt       !< time step (sec)
-  integer,                                  intent(in) :: ncall    !< the first or second call of this routine
-  type(diabatic_CS),                        pointer    :: CS       !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G))         :: work_2d
   real    :: Idt
@@ -1728,37 +1739,25 @@ subroutine diagnose_frazil_tendency(tv, h, temp_old, dt, G, GV, CS, ncall)
 
   is  = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Idt = 1/dt
-  work_2d(:,:) = 0.0
-
-  ! zero the tendencies at start of first call
-  if (ncall == 1) then
-    CS%frazil_heat_diag(:,:,:) = 0.0
-    CS%frazil_temp_diag(:,:,:) = 0.0
-  endif
 
   ! temperature tendency
   if (CS%id_frazil_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%frazil_temp_diag(i,j,k) = CS%frazil_temp_diag(i,j,k) + Idt * (tv%T(i,j,k)-temp_old(i,j,k))
+      CS%frazil_temp_diag(i,j,k) = Idt * (tv%T(i,j,k)-temp_old(i,j,k))
     enddo ; enddo ; enddo
-    if(ncall == 2) then
-      call post_data(CS%id_frazil_temp_tend, CS%frazil_temp_diag(:,:,:), CS%diag)
-    endif
+    call post_data(CS%id_frazil_temp_tend, CS%frazil_temp_diag(:,:,:), CS%diag)
   endif
 
   ! heat tendency
   if (CS%id_frazil_heat_tend > 0 .or. CS%id_frazil_heat_tend_2d > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%frazil_heat_diag(i,j,k) = CS%frazil_heat_diag(i,j,k) + &
-                                   GV%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
+      CS%frazil_heat_diag(i,j,k) = GV%H_to_kg_m2 * tv%C_p * h(i,j,k) * Idt * (tv%T(i,j,k)-temp_old(i,j,k))
     enddo ; enddo ; enddo
-    if(CS%id_frazil_heat_tend  > 0 .and. ncall == 2) then
-      call post_data(CS%id_frazil_heat_tend, CS%frazil_heat_diag(:,:,:), CS%diag)
-    endif
+    if (CS%id_frazil_heat_tend > 0) call post_data(CS%id_frazil_heat_tend, CS%frazil_heat_diag(:,:,:), CS%diag)
 
     ! As a consistency check, we must have
     ! FRAZIL_HEAT_TENDENCY_2d = HFSIFRAZIL
-    if(CS%id_frazil_heat_tend_2d > 0 .and. ncall == 2) then
+    if(CS%id_frazil_heat_tend_2d > 0) then
       do j=js,je ; do i=is,ie
         work_2d(i,j) = 0.0
         do k=1,nz
@@ -2267,7 +2266,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   ! diagnostic for tendency of heat due to frazil
   CS%id_frazil_heat_tend = register_diag_field('ocean_model',&
       'frazil_heat_tendency', diag%axesTL, Time,             &
-      'Heat tendency due to frazil formation','W m-2')
+      'Heat tendency due to frazil formation','W m-2', v_extensive = .true.)
   if (CS%id_frazil_heat_tend > 0) then
     CS%frazil_tendency_diag = .true.
   endif
