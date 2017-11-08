@@ -898,6 +898,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 !  (in/out)  CS - The control structure returned by a previous call to
 !                 restart_init.
 
+  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=80) :: fname     ! The name of the current file.
+  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
+                                  ! additional restart files.
   character(len=256) :: mesg      ! A message for warnings.
   character(len=80) :: varname    ! A variable's name.
   integer :: num_file        ! The number of files (restart files and others
