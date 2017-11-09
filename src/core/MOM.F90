@@ -2113,6 +2113,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
+  call write_parameter_fields(G, CS)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -3349,6 +3350,26 @@ subroutine write_static_fields(G, diag)
 
 end subroutine write_static_fields
 
+subroutine write_parameter_fields(G, CS)
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(MOM_control_struct),pointer       :: CS     !< pointer set in this routine to MOM control structure
+  ! Local variables
+  integer :: id
+
+  id = register_static_field('ocean_model','Rho_0', CS%diag%axesNull, &
+       'mean ocean density used with the Boussinesq approximation', &
+       'kg m-3', cmor_field_name='rhozero', &
+       cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
+       cmor_long_name='reference sea water density for boussinesq approximation')
+  if (id > 0) call post_data(id, CS%GV%Rho0, CS%diag, .true.)
+
+  id = register_static_field('ocean_model','C_p', CS%diag%axesNull, &
+       'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
+       cmor_standard_name='specific_heat_capacity_of_sea_water', &
+       cmor_long_name='specific_heat_capacity_of_sea_water')
+  if (id > 0) call post_data(id, CS%tv%C_p, CS%diag, .true.)
+
+end subroutine write_parameter_fields
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here

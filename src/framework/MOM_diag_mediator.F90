@@ -31,6 +31,7 @@ use MOM_diag_remap,       only : diag_remap_diag_registration_closed
 use MOM_diag_remap,       only : horizontally_average_diag_field
 
 use diag_axis_mod, only : get_diag_axis_name
+use diag_data_mod, only : null_axis_id
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
 ! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
@@ -136,7 +137,7 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
-  type(axes_grp) :: axesZi, axesZL
+  type(axes_grp) :: axesZi, axesZL, axesNull
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -283,6 +284,9 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
        x_cell_method='point', y_cell_method='mean', is_u_point=.true.)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
+
+  ! Axis group for special null axis from diag manager
+  call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
 
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_cs%remap_axesZL(diag_cs%num_diag_coords))
