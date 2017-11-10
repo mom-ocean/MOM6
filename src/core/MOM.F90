@@ -107,6 +107,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
+use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -1969,6 +1970,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
+  if (associated(CS%OBC)) &
+    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%restart_CSp)
+
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! Initialize dynamically evolving fields, perhaps from restart files.
@@ -2109,6 +2113,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
+  call write_parameter_fields(G, CS)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -3345,6 +3350,26 @@ subroutine write_static_fields(G, diag)
 
 end subroutine write_static_fields
 
+subroutine write_parameter_fields(G, CS)
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(MOM_control_struct),pointer       :: CS     !< pointer set in this routine to MOM control structure
+  ! Local variables
+  integer :: id
+
+  id = register_static_field('ocean_model','Rho_0', CS%diag%axesNull, &
+       'mean ocean density used with the Boussinesq approximation', &
+       'kg m-3', cmor_field_name='rhozero', &
+       cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
+       cmor_long_name='reference sea water density for boussinesq approximation')
+  if (id > 0) call post_data(id, CS%GV%Rho0, CS%diag, .true.)
+
+  id = register_static_field('ocean_model','C_p', CS%diag%axesNull, &
+       'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
+       cmor_standard_name='specific_heat_capacity_of_sea_water', &
+       cmor_long_name='specific_heat_capacity_of_sea_water')
+  if (id > 0) call post_data(id, CS%tv%C_p, CS%diag, .true.)
+
+end subroutine write_parameter_fields
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here
