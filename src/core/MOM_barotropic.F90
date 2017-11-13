@@ -1305,7 +1305,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       if (GV%Boussinesq) &
         Htot = Htot + 0.5*GV%m_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
       bt_rem_u(I,j) = bt_rem_u(I,j) * (Htot / (Htot + CS%lin_drag_u(I,j) * dtbt))
-      
+
       Rayleigh_u(I,j) = CS%lin_drag_u(I,j) / Htot
     endif ; enddo ; enddo
     !$OMP do
