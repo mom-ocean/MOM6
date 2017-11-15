@@ -3,6 +3,7 @@ module MOM_open_boundary
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coms,                 only : sum_across_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
@@ -24,7 +25,6 @@ use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
 use MOM_verticalGrid,         only : verticalGrid_type
-use mpp_domains_mod,          only : mpp_global_field
 
 implicit none ; private
 
@@ -389,9 +389,8 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.2)
     endif
+    if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
   endif
-
-  if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
 
     ! Safety check
   if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
@@ -2410,95 +2409,102 @@ subroutine mask_outside_OBCs(G, param_file, OBC)
 
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n
-  integer :: isg, ieg, IsgB, IegB, jsg, jeg, JsgB, JegB
   integer :: i, j
   real    :: min_depth
   integer, parameter  :: cin = 3, cout = 4, cland = -1, cedge = -2
   type(OBC_segment_type), pointer :: segment ! pointer to segment type list
-  integer, allocatable, dimension(:,:)  :: color     ! For sorting inside from outside
-  real, allocatable, dimension(:,:)     :: depth     ! Global T-point land mask
+  real, allocatable, dimension(:,:) :: color, color2  ! For sorting inside from outside,
+                                                      ! two different ways
 
   if (.not. associated(OBC)) return
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  default=0.0, do_not_log=.true.)
 
-  allocate(color(G%isg-1:G%ieg+1, G%jsg-1:G%jeg+1)) ; color = 0
-  allocate(depth(G%isg:G%ieg, G%jsg:G%jeg))         ; depth = 0
+  allocate(color(G%isd:G%ied, G%jsd:G%jed)) ; color = 0
+  allocate(color2(G%isd:G%ied, G%jsd:G%jed)) ; color2 = 0
 
-  ! Note that this is before the land mask has been initialized, set
-  ! mask values based on depth.
-  call mpp_global_field(G%Domain%mpp_domain, G%bathyT, depth)
 
   ! Paint a frame around the outside.
-  do j=G%jsg-1,G%jeg+1
-    color(G%isg-1,j) = cedge
-    color(G%ieg+1,j) = cedge
+  do j=G%jsd,G%jed
+    color(G%isd,j) = cedge
+    color(G%ied,j) = cedge
+    color2(G%isd,j) = cedge
+    color2(G%ied,j) = cedge
   enddo
-  do i=G%isg-1,G%ieg+1
-    color(i,G%jsg-1) = cedge
-    color(i,G%jeg+1) = cedge
+  do i=G%isd,G%ied
+    color(i,G%jsd) = cedge
+    color(i,G%jed) = cedge
+    color2(i,G%jsd) = cedge
+    color2(i,G%jed) = cedge
   enddo
 
-  ! Set color to cland in the land.
-  do j=G%jsg,G%jeg
-    do i=G%isg,G%ieg
-      if (depth(i,j) <= min_depth) color(i,j) = cland
+  ! Set color to cland in the land. Note that this is before the land
+  ! mask has been initialized, set mask values based on depth.
+  do j=G%jsd,G%jed
+    do i=G%isd,G%ied
+      if (G%bathyT(i,j) <= min_depth) color(i,j) = cland
+      if (G%bathyT(i,j) <= min_depth) color2(i,j) = cland
     enddo
   enddo
-  deallocate(depth)
 
-  do n=1, OBC%number_of_segments
-    segment => OBC%segment(n)
-    isg = segment%HI%isg ; ieg = segment%HI%ieg
-    jsg = segment%HI%jsg ; jeg = segment%HI%jeg
-    IsgB = segment%HI%IsgB ; IegB = segment%HI%IegB
-    JsgB = segment%HI%JsgB ; JegB = segment%HI%JegB
-
-    ! Can't use is_E_or_W because that is only true on the PE
-    ! and this is working globally.
-    if (segment%direction == OBC_DIRECTION_W .or. &
-        segment%direction == OBC_DIRECTION_E) then
-      I=segment%HI%IsgB
-      do j=segment%HI%jsg,segment%HI%jeg
-        if (segment%direction == OBC_DIRECTION_W) then
-          if (color(i,j) == 0) color(i,j) = cout
-          if (color(i+1,j) == 0) color(i+1,j) = cin
-        else
-          if (color(i,j) == 0) color(i,j) = cin
-          if (color(i+1,j) == 0) color(i+1,j) = cout
-        endif
-      enddo
-    else
-      J=segment%HI%JsgB
-      do i=segment%HI%isg,segment%HI%ieg
-        if (segment%direction == OBC_DIRECTION_S) then
-          if (color(i,j) == 0) color(i,j) = cout
-          if (color(i,j+1) == 0) color(i,j+1) = cin
-        else
-          if (color(i,j) == 0) color(i,j) = cin
-          if (color(i,j+1) == 0) color(i,j+1) = cout
-        endif
-      enddo
+  do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
+    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+      if (color(i,j) == 0.0) color(i,j) = cout
+      if (color(i+1,j) == 0.0) color(i+1,j) = cin
+    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+      if (color(i,j) == 0.0) color(i,j) = cin
+      if (color(i+1,j) == 0.0) color(i+1,j) = cout
     endif
-  enddo
+  enddo ; enddo
+  do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
+    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+      if (color(i,j) == 0.0) color(i,j) = cout
+      if (color(i,j+1) == 0.0) color(i,j+1) = cin
+    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+      if (color(i,j) == 0.0) color(i,j) = cin
+      if (color(i,j+1) == 0.0) color(i,j+1) = cout
+    endif
+  enddo ; enddo
+
+  do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
+    if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+      if (color2(i,j) == 0.0) color2(i,j) = cout
+      if (color2(i,j+1) == 0.0) color2(i,j+1) = cin
+    elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+      if (color2(i,j) == 0.0) color2(i,j) = cin
+      if (color2(i,j+1) == 0.0) color2(i,j+1) = cout
+    endif
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
+    if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+      if (color2(i,j) == 0.0) color2(i,j) = cout
+      if (color2(i+1,j) == 0.0) color2(i+1,j) = cin
+    elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+      if (color2(i,j) == 0.0) color2(i,j) = cin
+      if (color2(i+1,j) == 0.0) color2(i+1,j) = cout
+    endif
+  enddo ; enddo
 
   ! Do the flood fill until there are no more uncolored cells.
   call flood_fill(G, color, cin, cout, cland)
+  call flood_fill2(G, color2, cin, cout, cland)
 
   ! Use the color to set outside to min_depth on this process.
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    if (color(i + G%idg_offset,j + G%jdg_offset) == cout) G%bathyT(i,j) = min_depth
+  do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    if (color(i,j) /= color2(i,j)) call MOM_error(FATAL, &
+        "MOM_open_boundary: inconsistent OBC segments.")
+    if (color(i,j) == cout) G%bathyT(i,j) = min_depth
   enddo ; enddo
 
   deallocate(color)
+  deallocate(color2)
 end subroutine mask_outside_OBCs
 
 !> flood the cin, cout values
 subroutine flood_fill(G, color, cin, cout, cland)
-  type(dyn_horgrid_type),   intent(in)    :: G          !< Ocean grid structure
-  integer, dimension(0:,0:), intent(inout) :: color      ! For sorting inside from outside
+  type(dyn_horgrid_type),  intent(in) :: G          !< Ocean grid structure
+  real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
   integer, intent(in) :: cin    !< color for inside the domain
   integer, intent(in) :: cout   !< color for outside the domain
   integer, intent(in) :: cland  !< color for inside the land mask
@@ -2509,29 +2515,111 @@ subroutine flood_fill(G, color, cin, cout, cland)
   ncount = 1
   do while (ncount > 0)
     ncount = 0
-    do j=G%jsg,G%jeg
-      do i=G%isg,G%ieg
-        if (color(i,j) == 0 .and. color(i-1,j) > 0) then
+    do j=G%jsd+1,G%jed-1
+      do i=G%isd+1,G%ied-1
+        if (color(i,j) == 0.0 .and. color(i-1,j) > 0.0) then
           color(i,j) = color(i-1,j)
           ncount = ncount + 1
         endif
-        if (color(i,j) == 0 .and. color(i+1,j) > 0) then
+        if (color(i,j) == 0.0 .and. color(i+1,j) > 0.0) then
           color(i,j) = color(i+1,j)
           ncount = ncount + 1
         endif
-        if (color(i,j) == 0 .and. color(i,j-1) > 0) then
+        if (color(i,j) == 0.0 .and. color(i,j-1) > 0.0) then
           color(i,j) = color(i,j-1)
           ncount = ncount + 1
         endif
-        if (color(i,j) == 0 .and. color(i,j+1) > 0) then
+        if (color(i,j) == 0.0 .and. color(i,j+1) > 0.0) then
           color(i,j) = color(i,j+1)
           ncount = ncount + 1
         endif
       enddo
     enddo
+    do j=G%jed-1,G%jsd+1,-1
+      do i=G%ied-1,G%isd+1,-1
+        if (color(i,j) == 0.0 .and. color(i-1,j) > 0.0) then
+          color(i,j) = color(i-1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i+1,j) > 0.0) then
+          color(i,j) = color(i+1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j-1) > 0.0) then
+          color(i,j) = color(i,j-1)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j+1) > 0.0) then
+          color(i,j) = color(i,j+1)
+          ncount = ncount + 1
+        endif
+      enddo
+    enddo
+    call pass_var(color, G%Domain)
+    call sum_across_PEs(ncount)
   enddo
 
 end subroutine flood_fill
+
+!> flood the cin, cout values
+subroutine flood_fill2(G, color, cin, cout, cland)
+  type(dyn_horgrid_type),  intent(in) :: G          !< Ocean grid structure
+  real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
+  integer, intent(in) :: cin    !< color for inside the domain
+  integer, intent(in) :: cout   !< color for outside the domain
+  integer, intent(in) :: cland  !< color for inside the land mask
+
+! Local variables
+  integer :: i, j, ncount
+
+  ncount = 1
+  do while (ncount > 0)
+    ncount = 0
+    do i=G%isd+1,G%ied-1
+      do j=G%jsd+1,G%jed-1
+        if (color(i,j) == 0.0 .and. color(i-1,j) > 0.0) then
+          color(i,j) = color(i-1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i+1,j) > 0.0) then
+          color(i,j) = color(i+1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j-1) > 0.0) then
+          color(i,j) = color(i,j-1)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j+1) > 0.0) then
+          color(i,j) = color(i,j+1)
+          ncount = ncount + 1
+        endif
+      enddo
+    enddo
+    do i=G%ied-1,G%isd+1,-1
+      do j=G%jed-1,G%jsd+1,-1
+        if (color(i,j) == 0.0 .and. color(i-1,j) > 0.0) then
+          color(i,j) = color(i-1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i+1,j) > 0.0) then
+          color(i,j) = color(i+1,j)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j-1) > 0.0) then
+          color(i,j) = color(i,j-1)
+          ncount = ncount + 1
+        endif
+        if (color(i,j) == 0.0 .and. color(i,j+1) > 0.0) then
+          color(i,j) = color(i,j+1)
+          ncount = ncount + 1
+        endif
+      enddo
+    enddo
+    call pass_var(color, G%Domain)
+    call sum_across_PEs(ncount)
+  enddo
+
+end subroutine flood_fill2
 
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
   type(hor_index_type), intent(in) :: HI

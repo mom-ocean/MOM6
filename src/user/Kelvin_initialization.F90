@@ -147,17 +147,6 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
         (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
          G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
              D(i,j)=0.5*min_depth
-! Comment these out and hope the land filling thing works
-!   ! Western side
-!   if ((G%geoLonT(i,j) - G%west_lon < coast_offset1) .AND. &
-!       (atan2(G%geoLatT(i,j) - G%south_lat + coast_offset2, &
-!        G%geoLonT(i,j) - G%west_lon - coast_offset1) > right_angle + coast_angle)) &
-!            D(i,j)=0.5*min_depth
-!   ! Eastern side
-!   if ((G%geoLonT(i,j) - G%west_lon > G%len_lon - coast_offset1) .AND. &
-!       (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
-!        G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) > right_angle + coast_angle)) &
-!            D(i,j)=0.5*min_depth
 
     if (D(i,j) > max_depth) D(i,j) = max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
