@@ -303,7 +303,7 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, param_file, &
                  default=GV%g_Earth)
   call get_param(param_file, mdl, "COORD_FILE", coord_file, &
                  "The file from which the coordinate temperatures and \n"//&
-                 "salnities are read.", fail_if_missing=.true.)
+                 "salinities are read.", fail_if_missing=.true.)
 
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   filename = trim(slasher(inputdir))//trim(coord_file)
@@ -348,7 +348,7 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, param_file, &
 ! This subroutine sets the layer densities (Rlay) and the interface  !
 ! reduced gravities (g).                                             !
   real, dimension(GV%ke) :: T0, S0,  Pref
-  real :: S_Ref, S_Light, S_Dense ! Salnity range parameters in PSU.
+  real :: S_Ref, S_Light, S_Dense ! Salinity range parameters in PSU.
   real :: T_Ref, T_Light, T_Dense ! Temperature range parameters in dec C.
   real :: res_rat ! The ratio of density space resolution in the denser part
                   ! of the range to that in the lighter part of the range.

@@ -39,6 +39,7 @@ use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_pt
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field, get_diag_time_end
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
+use MOM_diag_mediator,        only : set_masks_for_axes
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_domains,              only : To_North, To_East, To_South, To_West
@@ -107,6 +108,7 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
+use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
@@ -492,9 +494,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
 
-  ! Store the layer thicknesses before any changes by the dynamics. This is necessary for remapped
-  ! mass transport diagnostics
+  ! Store the layer thicknesses, temperature, and salinity before any changes by the dynamics.
+  ! This is necessary for remapped mass transport diagnostics
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_pre_dyn
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: T_pre_dyn
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: S_pre_dyn
   real :: tot_wt_ssh, Itot_wt_ssh
 
   type(time_type) :: Time_local, end_time_thermo
@@ -761,10 +765,14 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       enddo ; enddo ; enddo
     endif
 
-    ! Store pre-dynamics layer thicknesses so that mass fluxes are remapped correctly
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      h_pre_dyn(i,j,k) = h(i,j,k)
-    enddo ; enddo ; enddo
+    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
+    if (CS%id_uhtr > 0 .or. CS%id_vhtr > 0 .or. CS%id_umo > 0 .or. CS%id_vmo > 0) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        h_pre_dyn(i,j,k) = h(i,j,k)
+        if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
+        if (associated(CS%tv%S)) S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
+      enddo ; enddo ; enddo
+    endif
 
     if (G%nonblocking_updates) then ; if (do_calc_bbl) then
       if (do_pass_Ray) &
@@ -874,7 +882,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     endif
 
     if (do_advection) then ! Do advective transport and lateral tracer mixing.
-      call step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, CS%tv, Time_local)
+      call step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
+                               CS%tv, Time_local)
     endif
 
     !===========================================================================
@@ -984,7 +993,8 @@ end subroutine step_MOM
 !> step_MOM_tracer_dyn does tracer advection and lateral diffusion, bringing the
 !! tracers up to date with the changes in state due to the dynamics.  Surface
 !! sources and sinks and remapping are handled via step_MOM_thermo.
-subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, tv, Time_local)
+subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
+                               tv, Time_local)
   type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
@@ -992,6 +1002,10 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, tv, Time_local)
                             intent(in)    :: h      !< layer thicknesses after the transports (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: T_pre_dyn !< The temperatures before the transports, in deg C.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: S_pre_dyn !< The salinities before the transports, in psu.
   type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
@@ -1024,7 +1038,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, tv, Time_local)
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-  call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, h_pre_dyn)
+  call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, &
+                                  h_pre_dyn, T_pre_dyn, S_pre_dyn)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -1945,6 +1960,9 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
   call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
 
+  if (associated(CS%OBC)) &
+    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%restart_CSp)
+
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
   ! Initialize dynamically evolving fields, perhaps from restart files.
@@ -2061,14 +2079,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
 
-   diag    => CS%diag
+  diag => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
-  ! Initialize the diagnostics mask arrays.
+  ! Initialize the diagnostics masks for native arrays.
   ! This step has to be done after call to MOM_initialize_state
   ! and before MOM_diagnostics_init
-  call diag_masks_set(G, GV%ke, CS%missing, diag)
+  call diag_masks_set(G, GV%ke, diag)
 
   ! Set up pointers within diag mediator control structure,
   ! this needs to occur _after_ CS%h etc. have been allocated.
@@ -2083,8 +2101,15 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   ! FIXME: are h, T, S updated at the same time? Review these for T, S updates.
   call diag_update_remap_grids(diag)
 
+  ! Calculate masks for diagnostics arrays in non-native coordinates
+  ! This step has to be done after set_axes_info() because the axes needed
+  ! to be configured, and after diag_update_remap_grids() because the grids
+  ! must be defined.
+  call set_masks_for_axes(G, diag)
+
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
+  call write_parameter_fields(G, CS)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -2687,7 +2712,7 @@ end subroutine MOM_timing_init
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
+subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T_pre_dyn, S_pre_dyn)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(MOM_control_struct), intent(in)    :: CS  !< control structure
@@ -2697,6 +2722,10 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
                             intent(in)    :: h   !< The updated layer thicknesses, in H
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: T_pre_dyn !< Temperature before the transports, in H.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                            intent(in)    :: S_pre_dyn !< Salinity before the transports, in H.
 
   real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
   real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
@@ -2713,7 +2742,7 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn)
 
   ! Post mass transports, including SGS
   ! Build the remap grids using the layer thicknesses from before the dynamics
-  call diag_update_remap_grids(diag, alt_h = h_pre_dyn)
+  call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
 
   H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
   if (CS%id_umo_2d > 0) then
@@ -3194,7 +3223,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',      &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
+    call post_data(id, G%areaT, diag, .true.)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
@@ -3204,7 +3233,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
+    call post_data(id, G%areaCu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
@@ -3213,7 +3242,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
+    call post_data(id, G%areaCv, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
@@ -3222,7 +3251,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
+    call post_data(id, G%areaBu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
@@ -3293,6 +3322,26 @@ subroutine write_static_fields(G, diag)
 
 end subroutine write_static_fields
 
+subroutine write_parameter_fields(G, CS)
+  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
+  type(MOM_control_struct),pointer       :: CS     !< pointer set in this routine to MOM control structure
+  ! Local variables
+  integer :: id
+
+  id = register_static_field('ocean_model','Rho_0', CS%diag%axesNull, &
+       'mean ocean density used with the Boussinesq approximation', &
+       'kg m-3', cmor_field_name='rhozero', &
+       cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
+       cmor_long_name='reference sea water density for boussinesq approximation')
+  if (id > 0) call post_data(id, CS%GV%Rho0, CS%diag, .true.)
+
+  id = register_static_field('ocean_model','C_p', CS%diag%axesNull, &
+       'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
+       cmor_standard_name='specific_heat_capacity_of_sea_water', &
+       cmor_long_name='specific_heat_capacity_of_sea_water')
+  if (id > 0) call post_data(id, CS%tv%C_p, CS%diag, .true.)
+
+end subroutine write_parameter_fields
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here
