@@ -39,6 +39,7 @@ use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_pt
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
 use MOM_diag_mediator,        only : register_scalar_field, get_diag_time_end
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
+use MOM_diag_mediator,        only : set_masks_for_axes
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_domains,              only : To_North, To_East, To_South, To_West
@@ -2095,14 +2096,14 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
   if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
 
-   diag    => CS%diag
+  diag => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
-  ! Initialize the diagnostics mask arrays.
+  ! Initialize the diagnostics masks for native arrays.
   ! This step has to be done after call to MOM_initialize_state
   ! and before MOM_diagnostics_init
-  call diag_masks_set(G, GV%ke, CS%missing, diag)
+  call diag_masks_set(G, GV%ke, diag)
 
   ! Set up pointers within diag mediator control structure,
   ! this needs to occur _after_ CS%h etc. have been allocated.
@@ -2116,6 +2117,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   ! for vertical remapping may need to be regenerated.
   ! FIXME: are h, T, S updated at the same time? Review these for T, S updates.
   call diag_update_remap_grids(diag)
+
+  ! Calculate masks for diagnostics arrays in non-native coordinates
+  ! This step has to be done after set_axes_info() because the axes needed
+  ! to be configured, and after diag_update_remap_grids() because the grids
+  ! must be defined.
+  call set_masks_for_axes(G, diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
   call write_static_fields(G, CS%diag)
@@ -3261,7 +3268,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',      &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaT, diag, .true., mask=G%mask2dT)
+    call post_data(id, G%areaT, diag, .true.)
     call diag_register_area_ids(diag, id_area_t=id)
   endif
 
@@ -3271,7 +3278,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCu, diag, .true., mask=G%mask2dCu)
+    call post_data(id, G%areaCu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
@@ -3280,7 +3287,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaCv, diag, .true., mask=G%mask2dCv)
+    call post_data(id, G%areaCv, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
@@ -3289,7 +3296,7 @@ subroutine write_static_fields(G, diag)
         cmor_long_name='Ocean Grid-Cell Area',         &
         x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
   if (id > 0) then
-    call post_data(id, G%areaBu, diag, .true., mask=G%mask2dBu)
+    call post_data(id, G%areaBu, diag, .true.)
   endif
 
   id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
