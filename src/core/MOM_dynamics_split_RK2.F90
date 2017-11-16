@@ -6,7 +6,7 @@ module MOM_dynamics_split_RK2
 use MOM_variables,    only : vertvisc_type, thermo_var_ptrs
 use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type
 use MOM_variables,    only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
@@ -20,7 +20,7 @@ use MOM_domains,           only : MOM_domains_init
 use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_domains,           only : To_North, To_East, Omit_Corners
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
-use MOM_domains,           only : start_group_pass, complete_group_pass
+use MOM_domains,           only : start_group_pass, complete_group_pass, pass_var
 use MOM_debugging,         only : hchksum, uvchksum
 use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
@@ -29,7 +29,7 @@ use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_get_input,         only : directories
 use MOM_io,                only : MOM_io_init, vardesc, var_desc
 use MOM_restart,           only : register_restart_field, query_initialized, save_restart
-use MOM_restart,           only : restart_init, MOM_restart_CS
+use MOM_restart,           only : restart_init, is_new_run, MOM_restart_CS
 use MOM_time_manager,      only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,      only : operator(-), operator(>), operator(*), operator(/)
 
@@ -40,7 +40,6 @@ use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_continuity,            only : continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_index,             only : hor_index_type
@@ -94,7 +93,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                   !! that were fed into the barotopic calculation, in m s-2.
 
   ! The following variables are only used with the split time stepping scheme.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height, in m.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height (in Boussinesq mode)
+                                                                   !! or column mass anomaly (in non-Boussinesq mode),
+                                                                   !! in units of H (m or kg m-2)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av    !< layer x-velocity with vertical mean replaced by
                                                                    !! time-mean barotropic velocity over a baroclinic timestep (m s-1)
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av    !< layer y-velocity with vertical mean replaced by
@@ -132,6 +133,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! is forward-backward (0) or simulated backward
                      !! Euler (1).  0 is almost always used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
+  logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
 
   logical :: module_is_initialized = .false.
 
@@ -200,7 +202,7 @@ contains
 
 !> RK2 splitting for time stepping MOM adiabatic dynamics
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
-                 Time_local, dt, fluxes, p_surf_begin, p_surf_end, &
+                 Time_local, dt, forces, p_surf_begin, p_surf_end, &
                  dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
   type(ocean_grid_type),                     intent(inout) :: G             !< ocean grid structure
@@ -212,7 +214,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(vertvisc_type),                       intent(inout) :: visc          !< vertical visc, bottom drag, and related
   type(time_type),                           intent(in)    :: Time_local    !< model time at end of time step
   real,                                      intent(in)    :: dt            !< time step (sec)
-  type(forcing),                             intent(in)    :: fluxes        !< forcing fields
+  type(mech_forcing),                        intent(in)    :: forces        !< A structure with the driving mechanical forces
   real, dimension(:,:),                      pointer       :: p_surf_begin  !< surf pressure at start of this dynamic time step (Pa)
   real, dimension(:,:),                      pointer       :: p_surf_end    !< surf pressure at end   of this dynamic time step (Pa)
   real,                                      intent(in)    :: dt_since_flux !< elapsed time since fluxes were applied (sec)
@@ -318,11 +320,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     call safe_alloc_ptr(eta_PF_start,G%isd,G%ied,G%jsd,G%jed)
     eta_PF_start(:,:) = 0.0
   else
-    p_surf => fluxes%p_surf
+    p_surf => forces%p_surf
   endif
 
   if (associated(CS%OBC)) then
-!   call open_boundary_test_extern_h(G, CS%OBC, h)
+    if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
+
     do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
@@ -341,10 +344,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
   !--- begin set up for group halo pass
 
-  call cpu_clock_begin(id_clock_pass)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   !### Apart from circle_OBCs halo for eta could be 1, but halo>=3 is required
   !### to match circle_OBCs solutions. Why?
+  call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_eta, eta, G%Domain) !### , halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
@@ -382,12 +385,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then; if (CS%OBC%update_OBC) then
     call update_OBC_data(CS%OBC, G, GV, tv, h, CS%update_OBC_CSp, Time_local)
   endif; endif
+  if (associated(CS%OBC) .and. CS%debug_OBC) &
+    call open_boundary_zero_normal_flow(CS%OBC, G, CS%PFu, CS%PFv)
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call start_group_pass(CS%pass_eta, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call start_group_pass(CS%pass_eta, G%Domain, clock=id_clock_pass)
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
@@ -434,14 +436,14 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   enddo
 
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, &
+  call set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
     call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym)
   endif
-  call vertvisc_coef(up, vp, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc_coef(up, vp, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   if (showCallTree) call callTree_wayPoint("done with vertvisc_coef (step_MOM_dyn_split_RK2)")
@@ -461,15 +463,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
-  call bt_mass_source(h, eta, fluxes, .true., dt_therm, dt_since_flux, &
+  call bt_mass_source(h, eta, forces, .true., dt_therm, dt_since_flux, &
                       G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_visc_rem, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call complete_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
 
 ! u_accel_bt = layer accelerations due to barotropic solver
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
@@ -495,7 +494,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
-              fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
+              forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, CS%barotropic_CSp,&
               CS%visc_rem_u, CS%visc_rem_v, OBC=CS%OBC, &
               BT_cont = CS%BT_cont, eta_PF_start=eta_PF_start, &
@@ -541,27 +540,25 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (CS%debug) then
     call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym)
   endif
-  call vertvisc_coef(up, vp, h, fluxes, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
+  call vertvisc_coef(up, vp, h, forces, visc, dt_pred, G, GV, CS%vertvisc_CSp, &
                      CS%OBC)
-  call vertvisc(up, vp, h, fluxes, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
+  call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
                 GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
   if (G%nonblocking_updates) then
-    call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
-    call start_group_pass(CS%pass_uvp, G%Domain)
-    call cpu_clock_end(id_clock_pass) ; call cpu_clock_begin(id_clock_vertvisc)
+    call cpu_clock_end(id_clock_vertvisc)
+    call start_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
+    call cpu_clock_begin(id_clock_vertvisc)
   endif
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt_pred, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
 
-  call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(CS%pass_visc_rem, G%Domain)
+  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
-    call complete_group_pass(CS%pass_uvp, G%Domain)
+    call complete_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
   else
-    call do_group_pass(CS%pass_uvp, G%Domain)
+    call do_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
   endif
-  call cpu_clock_end(id_clock_pass)
 
   ! uh = u_av * h
   ! hp = h + dt * div . uh
@@ -574,20 +571,22 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
 
   if (associated(CS%OBC)) then
-    call cpu_clock_begin(id_clock_pass)
     ! These should be done with a pass that excludes uh & vh.
-    call do_group_pass(CS%pass_hp_uv, G%Domain)
-    call cpu_clock_end(id_clock_pass)
+    call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
+
+    if (CS%debug) &
+      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
 
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, dt_pred)
+
+    if (CS%debug) &
+      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
   endif
 
-  call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(CS%pass_hp_uv, G%Domain)
+  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
-    call start_group_pass(CS%pass_av_uvh, G%Domain)
+    call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   endif
-  call cpu_clock_end(id_clock_pass)
 
   ! h_av = (h + hp)/2
   !$OMP parallel do default(shared)
@@ -603,7 +602,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  call bt_mass_source(hp, eta_pred, fluxes, .false., dt_therm, &
+  call bt_mass_source(hp, eta_pred, forces, .false., dt_therm, &
                       dt_since_flux+dt, G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
@@ -626,11 +625,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_av_uvh, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
 
   if (BT_cont_BT_thick) then
     call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
@@ -699,7 +695,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
   call btstep(u, v, eta, dt, u_bc_accel, v_bc_accel, &
-              fluxes, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
+              forces, CS%pbce, CS%eta_PF, u_av, v_av, CS%u_accel_bt, &
               CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, &
               etaav=eta_av, OBC=CS%OBC, &
@@ -743,13 +739,13 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! u <- u + dt d/dz visc d/dz u
   ! u_av <- u_av + dt d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(u, v, h, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
+  call vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc(u, v, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, &
                 CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   if (G%nonblocking_updates) then
-    call cpu_clock_end(id_clock_vertvisc) ; call cpu_clock_begin(id_clock_pass)
-    call start_group_pass(CS%pass_uv, G%Domain)
-    call cpu_clock_end(id_clock_pass) ; call cpu_clock_begin(id_clock_vertvisc)
+    call cpu_clock_end(id_clock_vertvisc)
+    call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    call cpu_clock_begin(id_clock_vertvisc)
   endif
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
@@ -761,14 +757,12 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     h_av(i,j,k) = h(i,j,k)
   enddo ; enddo ; enddo
 
-  call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(CS%pass_visc_rem, G%Domain)
+  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
-    call complete_group_pass(CS%pass_uv, G%Domain)
+    call complete_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
   else
-    call do_group_pass(CS%pass_uv, G%Domain)
+    call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
   endif
-  call cpu_clock_end(id_clock_pass)
 
   ! uh = u_av * h
   ! h  = h + dt * div . uh
@@ -778,21 +772,17 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                   CS%continuity_CSp, CS%uhbt, CS%vhbt, CS%OBC, &
                   CS%visc_rem_u, CS%visc_rem_v, u_av, v_av)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call do_group_pass(CS%pass_h, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
-  call cpu_clock_begin(id_clock_pass)
   if (G%nonblocking_updates) then
-    call start_group_pass(CS%pass_av_uvh, G%Domain)
+    call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   else
-    call do_group_pass(CS%pass_av_uvh, G%domain)
+    call do_group_pass(CS%pass_av_uvh, G%domain, clock=id_clock_pass)
   endif
-  call cpu_clock_end(id_clock_pass)
 
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u, u_old_rad_OBC, v, v_old_rad_OBC, G, dt)
@@ -804,11 +794,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
     h_av(i,j,k) = 0.5*(h_av(i,j,k) + h(i,j,k))
   enddo ; enddo ; enddo
 
-  if (G%nonblocking_updates) then
-    call cpu_clock_begin(id_clock_pass)
-    call complete_group_pass(CS%pass_av_uvh, G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (G%nonblocking_updates) &
+    call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
+
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=js-2,je+2 ; do I=Isq-2,Ieq+2
@@ -891,13 +879,17 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
-  vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  if (GV%Boussinesq) then
+    vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  else
+    vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
+  endif
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
-  vd = var_desc("u2","meter second-1","Auxiliary Zonal velocity",'u','L')
+  vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
   call register_restart_field(CS%u_av, vd, .false., restart_CS)
 
-  vd = var_desc("v2","meter second-1","Auxiliary Meridional velocity",'v','L')
+  vd = var_desc("v2","m s-1","Auxiliary Meridional velocity",'v','L')
   call register_restart_field(CS%v_av, vd, .false., restart_CS)
 
   vd = var_desc("h2",thickness_units,"Auxiliary Layer Thickness",'h','L')
@@ -909,10 +901,10 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   vd = var_desc("vh",flux_units,"Meridional thickness flux",'v','L')
   call register_restart_field(vh, vd, .false., restart_CS)
 
-  vd = var_desc("diffu","meter second-2","Zonal horizontal viscous acceleration",'u','L')
+  vd = var_desc("diffu","m s-2","Zonal horizontal viscous acceleration",'u','L')
   call register_restart_field(CS%diffu, vd, .false., restart_CS)
 
-  vd = var_desc("diffv","meter second-2","Meridional horizontal viscous acceleration",'v','L')
+  vd = var_desc("diffv","m s-2","Meridional horizontal viscous acceleration",'v','L')
   call register_restart_field(CS%diffv, vd, .false., restart_CS)
 
   call register_barotropic_restarts(HI, GV, param_file, CS%barotropic_CSp, &
@@ -956,8 +948,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
-  type(group_pass_type) :: pass_h_tmp, pass_av_h_uvh
+  character(len=48) :: thickness_units, flux_units, eta_rest_name
+  type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -1005,6 +997,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
                  "in the barotropic continuity equation.", default=.true.)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
+  call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
 
@@ -1057,15 +1050,15 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   if (.not.associated(setVisc_CSp)) call MOM_error(FATAL, &
     "initialize_dyn_split_RK2 called with setVisc_CSp unassociated.")
   CS%set_visc_CSp => setVisc_CSp
-  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, activate= &
-            ((dirs%input_filename(1:1) == 'n') .and. &
-             (LEN_TRIM(dirs%input_filename) == 1))   )
+  call updateCFLtruncationValue(Time, CS%vertvisc_CSp, &
+                                activate=is_new_run(restart_CS) )
 
   if (associated(ALE_CSp)) CS%ALE_CSp => ALE_CSp
   if (associated(OBC)) CS%OBC => OBC
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
-  if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
+  eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"
+  if (.not. query_initialized(CS%eta, trim(eta_rest_name), restart_CS)) then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq
     ! approximation, eta is the free surface height anomaly, while without it
     ! eta is the mass of ocean per unit area.  eta always has the same
@@ -1099,10 +1092,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
       .not. query_initialized(vh,"vh",restart_CS)) then
     h_tmp(:,:,:) = h(:,:,:)
     call continuity(u, v, h, h_tmp, uh, vh, dt, G, GV, CS%continuity_CSp, OBC=CS%OBC)
-    call cpu_clock_begin(id_clock_pass_init)
-    call create_group_pass(pass_h_tmp, h_tmp, G%Domain)
-    call do_group_pass(pass_h_tmp, G%Domain)
-    call cpu_clock_end(id_clock_pass_init)
+    call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
     CS%h_av(:,:,:) = 0.5*(h(:,:,:) + h_tmp(:,:,:))
   else
     if (.not. query_initialized(CS%h_av,"h2",restart_CS)) &
@@ -1123,23 +1113,23 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
       'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
-      'Zonal Coriolis and Advective Acceleration', 'meter second-2')
+      'Zonal Coriolis and Advective Acceleration', 'm s-2')
   CS%id_CAv = register_diag_field('ocean_model', 'CAv', diag%axesCvL, Time, &
-      'Meridional Coriolis and Advective Acceleration', 'meter second-2')
+      'Meridional Coriolis and Advective Acceleration', 'm s-2')
   CS%id_PFu = register_diag_field('ocean_model', 'PFu', diag%axesCuL, Time, &
-      'Zonal Pressure Force Acceleration', 'meter second-2')
+      'Zonal Pressure Force Acceleration', 'm s-2')
   CS%id_PFv = register_diag_field('ocean_model', 'PFv', diag%axesCvL, Time, &
-      'Meridional Pressure Force Acceleration', 'meter second-2')
+      'Meridional Pressure Force Acceleration', 'm s-2')
 
   CS%id_uav = register_diag_field('ocean_model', 'uav', diag%axesCuL, Time, &
-      'Barotropic-step Averaged Zonal Velocity', 'meter second-1')
+      'Barotropic-step Averaged Zonal Velocity', 'm s-1')
   CS%id_vav = register_diag_field('ocean_model', 'vav', diag%axesCvL, Time, &
-      'Barotropic-step Averaged Meridional Velocity', 'meter second-1')
+      'Barotropic-step Averaged Meridional Velocity', 'm s-1')
 
   CS%id_u_BT_accel = register_diag_field('ocean_model', 'u_BT_accel', diag%axesCuL, Time, &
-    'Barotropic Anomaly Zonal Acceleration', 'meter second-1')
+    'Barotropic Anomaly Zonal Acceleration', 'm s-1')
   CS%id_v_BT_accel = register_diag_field('ocean_model', 'v_BT_accel', diag%axesCvL, Time, &
-    'Barotropic Anomaly Meridional Acceleration', 'meter second-1')
+    'Barotropic Anomaly Meridional Acceleration', 'm s-1')
 
   id_clock_Cor        = cpu_clock_id('(Ocean Coriolis & mom advection)', grain=CLOCK_MODULE)
   id_clock_continuity = cpu_clock_id('(Ocean continuity equation)',      grain=CLOCK_MODULE)

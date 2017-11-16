@@ -380,10 +380,10 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
-      'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
+      'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
 
   CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
-       'Bottom Buoyancy Frequency', 'sec-1')
+       'Bottom Buoyancy Frequency', 's-1')
 
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')
