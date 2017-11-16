@@ -239,6 +239,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t coord - determined by ALE coordinate.\n"//&
              " \t uniform - uniform thickness layers evenly distributed \n"//&
              " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
+             " \t list - read a list of positive interface depths. \n"//&
              " \t DOME - use a slope and channel configuration for the \n"//&
              " \t\t DOME sill-overflow test case. \n"//&
              " \t ISOMIP - use a configuration for the \n"//&
@@ -267,6 +268,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                  "for THICKNESS_CONFIG of 'coord'")
          endif
        case ("uniform"); call initialize_thickness_uniform(h, G, GV, PF, &
+                                  just_read_params=just_read)
+       case ("list"); call initialize_thickness_list(h, G, GV, PF, &
                                   just_read_params=just_read)
        case ("DOME"); call DOME_initialize_thickness(h, G, GV, PF, &
                                just_read_params=just_read)
@@ -414,18 +417,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                "If true,  convert the thickness initial conditions from \n"//&
                "units of m to kg m-2 or vice versa, depending on whether \n"//&
                "BOUSSINESQ is defined. This does not apply if a restart \n"//&
-               "file is read.", default=.false., do_not_log=just_read)
+               "file is read.", default=.not.GV%Boussinesq, do_not_log=just_read)
   if (new_sim) then
-    if (convert .and. .not. GV%Boussinesq) then
+    if (convert .and. .not.GV%Boussinesq) then
       ! Convert h from m to kg m-2 then to thickness units (H)
       call convert_thickness(h, G, GV, tv)
     elseif (GV%Boussinesq) then
       ! Convert h from m to thickness units (H)
-      do k = 1, nz; do j = js, je; do i = is, ie
+      do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = h(i,j,k)*GV%m_to_H
       enddo ; enddo ; enddo
     else
-      do k = 1, nz; do j = js, je; do i = is, ie
+      do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = h(i,j,k)*GV%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
@@ -808,6 +811,92 @@ subroutine initialize_thickness_uniform(h, G, GV, param_file, just_read_params)
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_thickness_uniform
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+subroutine initialize_thickness_list(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+                                                      !! only read parameters without changing h.
+
+! Arguments: h - The thickness that is being initialized.
+!  (in)      G - The ocean's grid structure.
+!  (in)      GV - The ocean's vertical grid structure.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+
+!  This subroutine initializes the layer thicknesses to be uniform.
+  character(len=40)  :: mdl = "initialize_thickness_list" ! This subroutine's name.
+  real :: e0(SZK_(G)+1)   ! The resting interface heights, in m, usually !
+                          ! negative because it is positive upward.      !
+  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface !
+                          ! positive upward, in m.                       !
+  logical :: just_read    ! If true, just read parameters but set nothing.  character(len=20) :: verticalCoordinate
+  character(len=200) :: filename, eta_file, inputdir ! Strings for file/path
+  character(len=72)  :: eta_var
+  integer :: i, j, k, is, ie, js, je, nz
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+
+  call get_param(param_file, mdl, "INTERFACE_IC_FILE", eta_file, &
+                 "The file from which horizontal mean initial conditions \n"//&
+                 "for interface depths can be read.", fail_if_missing=.true.)
+  call get_param(param_file, mdl, "INTERFACE_IC_VAR", eta_var, &
+                 "The variable name for horizontal mean initial conditions \n"//&
+                 "for interface depths relative to mean sea level.", &
+                 default="eta")
+
+  if (just_read) return
+
+  call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
+
+  call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
+  filename = trim(slasher(inputdir))//trim(eta_file)
+  call log_param(param_file, mdl, "INPUTDIR/INTERFACE_IC_FILE", filename)
+
+  e0(:) = 0.0
+  call MOM_read_data(filename, eta_var, e0(:))
+
+  if ((abs(e0(1)) - 0.0) > 0.001) then
+    ! This list probably starts with the interior interface, so shift it up.
+    do k=nz+1,2,-1 ; e0(K) = e0(K-1) ; enddo
+    e0(1) = 0.0
+  endif
+
+  if (e0(2) > e0(1)) then
+    ! Switch to the convention for interface heights increasing upward.
+    do k=1,nz
+      e0(K) = -e0(K)
+    enddo
+  endif
+
+  do j=js,je ; do i=is,ie
+!    This sets the initial thickness (in m) of the layers.  The      !
+!  thicknesses are set to insure that: 1.  each layer is at least an !
+!  Angstrom thick, and 2.  the interfaces are where they should be   !
+!  based on the resting depths and interface height perturbations,   !
+!  as long at this doesn't interfere with 1.                         !
+    eta1D(nz+1) = -1.0*G%bathyT(i,j)
+    do k=nz,1,-1
+      eta1D(K) = e0(K)
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom_z
+      else
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
+      endif
+    enddo
+  enddo ; enddo
+
+  call callTree_leave(trim(mdl)//'()')
+end subroutine initialize_thickness_list
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
