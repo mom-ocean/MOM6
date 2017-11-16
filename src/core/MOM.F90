@@ -843,7 +843,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (CS%debug) then
         call hchksum(h,"Pre-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
         call uvchksum("Pre-mixedlayer_restrat uhtr", &
-                      CS%uhtr, CS%vhtr, G%HI, haloshift=0)
+                      CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
       endif
       call cpu_clock_begin(id_clock_ml_restrat)
       call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
@@ -853,7 +853,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (CS%debug) then
         call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
         call uvchksum("Post-mixedlayer_restrat [uv]htr", &
-                      CS%uhtr, CS%vhtr, G%HI, haloshift=0)
+                      CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
       endif
     endif
 
