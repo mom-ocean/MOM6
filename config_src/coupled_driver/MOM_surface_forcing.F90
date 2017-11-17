@@ -22,7 +22,7 @@ use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, write_version_number
+use MOM_io,               only : slasher, write_version_number, MOM_read_data
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -35,7 +35,7 @@ use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
 use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
 use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : read_data, stdout
+use fms_mod,              only : stdout
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -1002,7 +1002,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     basin_file = trim(CS%inputdir) // trim(basin_file)
     call safe_alloc_ptr(CS%basin_mask,isd,ied,jsd,jed) ; CS%basin_mask(:,:) = 1.0
     if (CS%mask_srestore_marginal_seas) then
-      call read_data(basin_file,'basin',CS%basin_mask,domain=G%domain%mpp_domain,timelevel=1)
+      call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, timelevel=1)
       do j=jsd,jed ; do i=isd,ied
         if (CS%basin_mask(i,j) >= 6.0) then ; CS%basin_mask(i,j) = 0.0
         else ; CS%basin_mask(i,j) = 1.0 ; endif
@@ -1065,7 +1065,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call read_data(TideAmp_file,'tideamp',CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
@@ -1097,8 +1097,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call read_data(gust_file,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
-                   timelevel=1) ! units should be Pa
+    call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
   endif
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
@@ -1138,8 +1137,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
     call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
-       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
-       call read_data(flnam,'mask',CS%srestore_mask,domain=G%domain%mpp_domain,timelevel=1)
+      flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
+      call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
     endif
   endif ; endif
 
@@ -1148,8 +1147,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
     call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
-       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
-       call read_data(flnam,'mask',CS%trestore_mask,domain=G%domain%mpp_domain,timelevel=1)
+      flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
+      call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
     endif
   endif ; endif
 

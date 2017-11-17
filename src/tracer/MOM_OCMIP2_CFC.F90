@@ -55,7 +55,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -95,9 +95,7 @@ type, public :: OCMIP2_CFC_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer, dimension(:,:,:) :: &
     CFC11 => NULL(), &     ! The CFC11 concentration in mol m-3.
-    CFC12 => NULL(), &     ! The CFC12 concentration in mol m-3.
-    CFC11_aux => NULL(), & ! The CFC11 and CFC12 concentrations, in mol m-3,
-    CFC12_aux => NULL()    ! with values of thin layers masked out.
+    CFC12 => NULL()        ! The CFC12 concentration in mol m-3.
   ! In the following variables a suffix of _11 refers to CFC11 and _12 to CFC12.
   real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
   real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
@@ -117,7 +115,6 @@ type, public :: OCMIP2_CFC_CS ; private
   real :: CFC12_IC_val = 0.0    ! The initial value assigned to CFC12.
   real :: CFC11_land_val = -1.0 ! The values of CFC11 and CFC12 used where
   real :: CFC12_land_val = -1.0 ! land is masked out.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
   logical :: tracers_may_reinit  ! If true, tracers may go through the
                            ! initialization code if they are not found in the
                            ! restart files.
@@ -207,9 +204,6 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
-                 "If true, the tracers are masked out in massless layer. \n"//&
-                 "This can be a problem with time-averages.", default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
@@ -224,10 +218,6 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%CFC11_aux(isd:ied,jsd:jed,nz)) ; CS%CFC11_aux(:,:,:) = 0.0
-    allocate(CS%CFC12_aux(isd:ied,jsd:jed,nz)) ; CS%CFC12_aux(:,:,:) = 0.0
-  endif
 
   ! This pointer assignment is needed to force the compiler not to do a copy in
   ! the registration calls.  Curses on the designers and implementers of F90.
@@ -530,7 +520,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
                 trim(CS%IC_file)//".")
       endif
     else
-      call read_data(CS%IC_file, trim(name), tr, domain=G%Domain%mpp_domain)
+      call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -645,22 +635,8 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   endif
 
   ! Write out any desired diagnostics.
-  if (CS%mask_tracers) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-        CS%CFC11_aux(i,j,k) = CS%CFC11_land_val
-        CS%CFC12_aux(i,j,k) = CS%CFC12_land_val
-      else
-        CS%CFC11_aux(i,j,k) = CFC11(i,j,k)
-        CS%CFC12_aux(i,j,k) = CFC12(i,j,k)
-      endif
-    enddo ; enddo ; enddo
-    if (CS%id_CFC11>0) call post_data(CS%id_CFC11, CS%CFC11_aux, CS%diag)
-    if (CS%id_CFC12>0) call post_data(CS%id_CFC12, CS%CFC12_aux, CS%diag)
-  else
-    if (CS%id_CFC11>0) call post_data(CS%id_CFC11, CFC11, CS%diag)
-    if (CS%id_CFC12>0) call post_data(CS%id_CFC12, CFC12, CS%diag)
-  endif
+  if (CS%id_CFC11>0) call post_data(CS%id_CFC11, CFC11, CS%diag)
+  if (CS%id_CFC12>0) call post_data(CS%id_CFC12, CFC12, CS%diag)
   do m=1,NTR
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
@@ -822,8 +798,6 @@ subroutine OCMIP2_CFC_end(CS)
   if (associated(CS)) then
     if (associated(CS%CFC11)) deallocate(CS%CFC11)
     if (associated(CS%CFC12)) deallocate(CS%CFC12)
-    if (associated(CS%CFC11_aux)) deallocate(CS%CFC11_aux)
-    if (associated(CS%CFC12_aux)) deallocate(CS%CFC12_aux)
     do m=1,NTR
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)

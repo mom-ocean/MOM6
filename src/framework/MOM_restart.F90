@@ -49,7 +49,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, read_data, get_filename_appendix
+use MOM_io, only : read_field, write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
@@ -1030,14 +1030,14 @@ subroutine restore_state(filename, directory, day, G, CS)
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
             if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
-              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                             G%Domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then ! Read 2d array...
-              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                             G%Domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then ! Read 4d array...
-              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             G%Domain, 1, position=pos)
             else
               call MOM_error(FATAL, "MOM_restart restore_state: "//&
                               "No pointers set for "//trim(varname))
