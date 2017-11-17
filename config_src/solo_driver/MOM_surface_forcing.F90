@@ -67,8 +67,8 @@ use MOM_forcing_type,        only : allocate_forcing_type, deallocate_forcing_ty
 use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
-use MOM_io,                  only : file_exists, read_data, slasher, num_timelevels
-use MOM_io,                  only : EAST_FACE, NORTH_FACE
+use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
+use MOM_io,                  only : EAST_FACE, NORTH_FACE, num_timelevels
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
 use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, set_time
@@ -624,10 +624,9 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
     select case ( uppercase(CS%wind_stagger(1:1)) )
     case ("A")
       temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
-      call read_data(filename,CS%stress_x_var,temp_x(:,:), &
-                     domain=G%Domain%mpp_domain,timelevel=time_lev)
-      call read_data(filename,CS%stress_y_var,temp_y(:,:), &
-                     domain=G%Domain%mpp_domain,timelevel=time_lev)
+      call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
+                         temp_x(:,:), temp_y(:,:), &
+                         G%Domain, stagger=AGRID, timelevel=time_lev)
 
       call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
       do j=js,je ; do I=is-1,Ieq
@@ -658,23 +657,18 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
         !   Read the data as though symmetric memory were not being used, and
         ! then translate it appropriately.
         temp_x(:,:) = 0.0 ; temp_y(:,:) = 0.0
-        call read_data(filename, CS%stress_x_var, temp_x(:,:), position=EAST_FACE, &
-                       domain=G%Domain_aux%mpp_domain, timelevel=time_lev)
-        call read_data(filename, CS%stress_y_var, temp_y(:,:), position=NORTH_FACE, &
-                       domain=G%Domain_aux%mpp_domain, timelevel=time_lev)
-
+        call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
+                             temp_x(:,:), temp_y(:,:), &
+                             G%Domain_aux, stagger=CGRID_NE, timelevel=time_lev)
         do j=js,je ; do i=is,ie
           forces%taux(I,j) = CS%wind_scale * temp_x(I,j)
           forces%tauy(i,J) = CS%wind_scale * temp_y(i,J)
         enddo ; enddo
         call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain, stagger=CGRID_NE)
       else
-        call read_data(filename, CS%stress_x_var, forces%taux(:,:), &
-                       domain=G%Domain%mpp_domain, position=EAST_FACE, &
-                       timelevel=time_lev)
-        call read_data(filename, CS%stress_y_var, forces%tauy(:,:), &
-                       domain=G%Domain%mpp_domain, position=NORTH_FACE, &
-                       timelevel=time_lev)
+        call MOM_read_vector(filename, CS%stress_x_var, CS%stress_y_var, &
+                             forces%taux(:,:), forces%tauy(:,:), &
+                             G%Domain, stagger=CGRID_NE, timelevel=time_lev)
 
         if (CS%wind_scale /= 1.0) then
           do j=js,je ; do I=Isq,Ieq
@@ -708,8 +702,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, CS)
     end select
 
     if (read_Ustar) then
-      call read_data(filename, CS%Ustar_var, forces%ustar(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(filename, CS%Ustar_var, forces%ustar(:,:), &
+                     G%Domain, timelevel=time_lev)
     endif
 
     CS%wind_last_lev = time_lev
@@ -871,11 +865,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call read_data(CS%longwave_file, CS%LW_var, fluxes%LW(:,:), &
-                   domain=G%Domain%mpp_domain, timelevel=time_lev)
+    call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%LW(:,:), &
+                   G%Domain, timelevel=time_lev)
     if (CS%archaic_OMIP_file) then
-      call read_data(CS%longwaveup_file, &
-       "lwup_sfc",temp(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%longwaveup_file, "lwup_sfc", temp(:,:), G%Domain, &
+                         timelevel=time_lev)
       do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
     endif
     CS%LW_last_lev = time_lev
@@ -887,16 +881,16 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%evaporation_file, CS%evap_var, temp(:,:), &
+                     G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%latent(i,j)           = -CS%latent_heat_vapor*temp(i,j)
         fluxes%evap(i,j)             = -temp(i,j)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     else
-      call read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
+                     G%Domain, timelevel=time_lev)
     endif
     CS%evap_last_lev = time_lev
 
@@ -906,8 +900,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case default ; time_lev = 1
     end select
     if (.not.CS%archaic_OMIP_file) then
-      call read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
+                     G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
@@ -920,12 +914,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call read_data(CS%sensibleheat_file, CS%sens_var, temp(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, temp(:,:), &
+                     G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie ; fluxes%sens(i,j) = -temp(i,j) ; enddo ; enddo
     else
-      call read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
+                     G%Domain, timelevel=time_lev)
     endif
     CS%sens_last_lev = time_lev
 
@@ -934,11 +928,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), &
-             domain=G%Domain%mpp_domain, timelevel=time_lev)
+    call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), &
+             G%Domain, timelevel=time_lev)
     if (CS%archaic_OMIP_file) then
-      call read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), &
-               domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%shortwaveup_file, "swup_sfc", temp(:,:), &
+               G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
       enddo ; enddo
@@ -950,10 +944,10 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case (365)   ; time_lev = time_lev_daily
       case default ; time_lev = 1
     end select
-    call read_data(CS%snow_file, CS%snow_var, &
-             fluxes%fprec(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev)
-    call read_data(CS%rain_file, CS%rain_var, &
-             fluxes%lprec(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev)
+    call MOM_read_data(CS%snow_file, CS%snow_var, &
+             fluxes%fprec(:,:), G%Domain, timelevel=time_lev)
+    call MOM_read_data(CS%rain_file, CS%rain_var, &
+             fluxes%lprec(:,:), G%Domain, timelevel=time_lev)
     if (CS%archaic_OMIP_file) then
       do j=js,je ; do i=is,ie
         fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
@@ -967,21 +961,21 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
       case default ; time_lev = 1
     end select
     if (CS%archaic_OMIP_file) then
-      call read_data(CS%runoff_file, CS%lrunoff_var, temp(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%runoff_file, CS%lrunoff_var, temp(:,:), &
+                     G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%lrunoff(i,j) = temp(i,j)*G%IareaT(i,j)
       enddo ; enddo
-      call read_data(CS%runoff_file, CS%frunoff_var, temp(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%runoff_file, CS%frunoff_var, temp(:,:), &
+                     G%Domain, timelevel=time_lev)
       do j=js,je ; do i=is,ie
         fluxes%frunoff(i,j) = temp(i,j)*G%IareaT(i,j)
       enddo ; enddo
     else
-      call read_data(CS%runoff_file, CS%lrunoff_var, fluxes%lrunoff(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
-      call read_data(CS%runoff_file, CS%frunoff_var, fluxes%frunoff(:,:), &
-                     domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%runoff_file, CS%lrunoff_var, fluxes%lrunoff(:,:), &
+                     G%Domain, timelevel=time_lev)
+      call MOM_read_data(CS%runoff_file, CS%frunoff_var, fluxes%frunoff(:,:), &
+                     G%Domain, timelevel=time_lev)
     endif
     CS%runoff_last_lev = time_lev
 
@@ -992,8 +986,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
         case (365)   ; time_lev = time_lev_daily
         case default ; time_lev = 1
       end select
-      call read_data(CS%SSTrestore_file, CS%SST_restore_var, &
-               CS%T_Restore(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%SSTrestore_file, CS%SST_restore_var, &
+               CS%T_Restore(:,:), G%Domain, timelevel=time_lev)
       CS%SST_last_lev = time_lev
 
       select case (CS%SSS_nlev)
@@ -1001,8 +995,8 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, CS)
         case (365)   ; time_lev = time_lev_daily
         case default ; time_lev = 1
       end select
-      call read_data(CS%salinityrestore_file, CS%SSS_restore_var, &
-               CS%S_Restore(:,:), domain=G%Domain%mpp_domain, timelevel=time_lev)
+      call MOM_read_data(CS%salinityrestore_file, CS%SSS_restore_var, &
+               CS%S_Restore(:,:), G%Domain, timelevel=time_lev)
       CS%SSS_last_lev = time_lev
     endif
     CS%buoy_last_lev_read = time_lev_daily
@@ -1797,7 +1791,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
                  "variable gustiness.", fail_if_missing=.true.)
     call safe_alloc_ptr(CS%gust,G%isd,G%ied,G%jsd,G%jed)
     filename = trim(CS%inputdir) // trim(gust_file)
-    call read_data(filename,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
+    call MOM_read_data(filename,'gustiness',CS%gust,G%domain, &
                    timelevel=1) ! units should be Pa
   endif
 

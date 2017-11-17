@@ -10,7 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
+use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -637,9 +637,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        filename = trim(inputdir)//trim(state_file)
        if (.not.file_exists(filename, G%Domain)) &
           call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-       call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
-       call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-       call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+       call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+       call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+       call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
        ! for debugging
        !i=G%iec; j=G%jec

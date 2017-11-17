@@ -57,7 +57,6 @@ type, public :: boundary_impulse_tracer_CS ; private
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
-  logical :: mask_tracers  ! If true, boundary_impulse is masked out in massless layers.
   logical :: tracers_may_reinit  ! If true, boundary_impulse can be initialized if
                                  ! not found in restart file
   integer, dimension(NTR_MAX) :: &
@@ -326,7 +325,6 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
   real :: year, h_total, scale, htot, Ih_limit
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
-  real, allocatable :: local_tr(:,:,:)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -361,23 +359,9 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 
   enddo
 
-  allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
   do m=1,1
     if (CS%id_tracer(m)>0) then
-      if (CS%mask_tracers) then
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-            local_tr(i,j,k) = CS%land_val(m)
-          else
-            local_tr(i,j,k) = CS%tr(i,j,k,m)
-          endif
-        enddo ; enddo ; enddo
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          local_tr(i,j,k) = CS%tr(i,j,k,m)
-        enddo ; enddo ; enddo
-      endif ! CS%mask_tracers
-      call post_data(CS%id_tracer(m),local_tr,CS%diag)
+      call post_data(CS%id_tracer(m), CS%tr(:,:,:,m), CS%diag)
     endif ! CS%id_tracer(m)>0
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
@@ -388,7 +372,6 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
     if (CS%id_tr_dfy(m)>0) &
       call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
   enddo
-  deallocate(local_tr)
 
 end subroutine boundary_impulse_tracer_column_physics
 

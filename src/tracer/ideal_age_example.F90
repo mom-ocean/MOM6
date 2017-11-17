@@ -45,7 +45,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -88,8 +88,6 @@ type, public :: ideal_age_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  real, pointer :: tr_aux(:,:,:,:) => NULL() ! The masked tracer concentration
-                                             ! for output, in g m-3.
   type(p3d), dimension(NTR_MAX) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
@@ -103,7 +101,6 @@ type, public :: ideal_age_tracer_CS ; private
                        ! in units of year-1.
     tracer_start_year  ! The year in which tracers start aging, or at which the
                        ! surface value equals young_val, in years.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
   logical :: tracers_may_reinit  ! If true, tracers may go through the
                            ! initialization code if they are not found in the
                            ! restart files.
@@ -191,9 +188,6 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "AGE_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, AGE_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
-                 "If true, the tracers are masked out in massless layer. \n"//&
-                 "This can be a problem with time-averages.", default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
@@ -231,9 +225,6 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   endif
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr_aux(:,:,:,:) = 0.0
-  endif
 
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
@@ -334,8 +325,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                     trim(CS%IC_file)//".")
           endif
         else
-          call read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), &
-                         domain=G%Domain%mpp_domain)
+          call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
         endif
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
@@ -488,26 +478,9 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
     enddo ; enddo ; enddo
   endif ; enddo
 
-  if (CS%mask_tracers) then
-    do m=1,CS%ntr ; if (CS%id_tracer(m) > 0) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-          CS%tr_aux(i,j,k,m) = CS%land_val(m)
-        else
-          CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
-        endif
-      enddo ; enddo ; enddo
-    endif ; enddo
-  endif
-
   do m=1,CS%ntr
-    if (CS%mask_tracers) then
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr_aux(:,:,:,m),CS%diag)
-    else
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    endif
+    if (CS%id_tracer(m)>0) &
+      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
     if (CS%id_tr_ady(m)>0) &
@@ -613,7 +586,6 @@ subroutine ideal_age_example_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    if (associated(CS%tr_aux)) deallocate(CS%tr_aux)
     do m=1,CS%ntr
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)

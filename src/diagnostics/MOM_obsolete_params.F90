@@ -113,6 +113,8 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "BT_COR_SLOW_RATE", 0.0)
   call obsolete_real(param_file, "BT_COR_FRAC", 1.0)
 
+  call obsolete_logical(param_file, "MASK_MASSLESS_TRACERS", .false.)
+
   call obsolete_logical(param_file, "BT_INCLUDE_UDHDT", .false.)
 
   call obsolete_logical(param_file, "RIGA_SET_DIFFUSIVITY", .false.)
