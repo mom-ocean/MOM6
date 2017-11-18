@@ -1123,7 +1123,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
 
   call cpu_clock_begin(id_clock_thermo)
   if (.not.CS%adiabatic) then
-    call enable_averaging(dtdia, Time_end_thermo, CS%diag)
     if (CS%debug) then
       call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2)
       call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1147,6 +1146,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
     ! (that may comprise several dynamical time steps)
     ! The routine 'ALE_main' can be found in 'MOM_ALE.F90'.
     if ( CS%use_ALE_algorithm ) then
+      call enable_averaging(dtdia, Time_end_thermo, CS%diag)
 !         call pass_vector(u, v, G%Domain)
       call do_group_pass(CS%pass_T_S_h, G%Domain)
 
