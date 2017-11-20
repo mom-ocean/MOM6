@@ -33,7 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
-use MOM_diag_mediator,        only : diag_associate_volume_cell_measure
+use MOM_diag_mediator,        only : register_cell_measure
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -2108,8 +2108,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_masks_for_axes(G, diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
-  call write_static_fields(G, CS%diag)
-  call write_parameter_fields(G, CS)
+  call write_static_fields(G, GV, CS%tv, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -3166,26 +3165,14 @@ subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
 
 end subroutine post_surface_diagnostics
 
-!> Sets a handle inside diagnostics mediator to associate 3d cell measures
-subroutine register_cell_measure(G, diag, Time)
-  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
-  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
-  type(time_type),         intent(in)    :: Time !< Model time
-  ! Local variables
-  integer :: id
-  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
-                           Time, 'Ocean grid-cell volume', 'm3', &
-                           standard_name='ocean_volume', v_extensive=.true., &
-                           x_cell_method='sum', y_cell_method='sum')
-  call diag_associate_volume_cell_measure(diag, id)
-
-end subroutine register_cell_measure
 
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
-subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
-  type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
+subroutine write_static_fields(G, GV, tv, diag)
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+  type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
   ! Local variables
   real    :: tmp_h(SZI_(G),SZJ_(G))
   integer :: id, i, j
@@ -3325,28 +3312,20 @@ subroutine write_static_fields(G, diag)
     call post_data(id, tmp_h, diag, .true.)
   endif
 
-end subroutine write_static_fields
-
-subroutine write_parameter_fields(G, CS)
-  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
-  type(MOM_control_struct),pointer       :: CS     !< pointer set in this routine to MOM control structure
-  ! Local variables
-  integer :: id
-
-  id = register_static_field('ocean_model','Rho_0', CS%diag%axesNull, &
+  id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
        'kg m-3', cmor_field_name='rhozero', &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
        cmor_long_name='reference sea water density for boussinesq approximation')
-  if (id > 0) call post_data(id, CS%GV%Rho0, CS%diag, .true.)
+  if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
 
-  id = register_static_field('ocean_model','C_p', CS%diag%axesNull, &
+  id = register_static_field('ocean_model','C_p', diag%axesNull, &
        'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
        cmor_standard_name='specific_heat_capacity_of_sea_water', &
        cmor_long_name='specific_heat_capacity_of_sea_water')
-  if (id > 0) call post_data(id, CS%tv%C_p, CS%diag, .true.)
+  if (id > 0) call post_data(id, tv%C_p, diag, .true.)
 
-end subroutine write_parameter_fields
+end subroutine write_static_fields
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here

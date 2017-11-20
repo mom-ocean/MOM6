@@ -59,7 +59,7 @@ public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public define_axes_group, diag_masks_set
 public diag_register_area_ids
-public diag_associate_volume_cell_measure
+public register_cell_measure, diag_associate_volume_cell_measure
 public diag_get_volume_cell_measure_dm_id
 public diag_set_state_ptrs, diag_update_remap_grids
 
@@ -503,6 +503,21 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     enddo
   endif
 end subroutine diag_register_area_ids
+
+!> Sets a handle inside diagnostics mediator to associate 3d cell measures
+subroutine register_cell_measure(G, diag, Time)
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
+  type(time_type),         intent(in)    :: Time !< Model time
+  ! Local variables
+  integer :: id
+  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
+                           Time, 'Ocean grid-cell volume', 'm3', &
+                           standard_name='ocean_volume', v_extensive=.true., &
+                           x_cell_method='sum', y_cell_method='sum')
+  call diag_associate_volume_cell_measure(diag, id)
+
+end subroutine register_cell_measure
 
 !> Attaches the id of cell volumes to axes groups for use with cell_measures
 subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
