@@ -2479,7 +2479,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
       'Diffusive Zonal Flux of Salt', S_flux_units, &
       v_extensive = .true., conversion = conv2salt)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
+      'Diffusive Meridional Flux of Salt', S_flux_units, v_extensive = .true.)
   if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
