@@ -718,9 +718,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (I_obc<G%HI%IsdB .or. I_obc>G%HI%IedB) return ! Boundary is not on tile
-    if (Js_obc<G%HI%JsdB .and. Je_obc<G%HI%JsdB) return ! Segment is not on tile
-    if (Js_obc>G%HI%JedB) return ! Segment is not on tile
+    if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
+    if (Js_obc<=G%HI%JsdB .and. Je_obc<=G%HI%JsdB) return ! Segment is not on tile
+    if (Js_obc>=G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
@@ -821,9 +821,9 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (J_obc<G%HI%JsdB .or. J_obc>G%HI%JedB) return ! Boundary is not on tile
-    if (Is_obc<G%HI%IsdB .and. Ie_obc<G%HI%IsdB) return ! Segment is not on tile
-    if (Is_obc>G%HI%IedB) return ! Segment is not on tile
+    if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
+    if (Is_obc<=G%HI%IsdB .and. Ie_obc<=G%HI%IsdB) return ! Segment is not on tile
+    if (Is_obc>=G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
