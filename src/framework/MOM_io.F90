@@ -5,7 +5,7 @@ module MOM_io
 
 
 use MOM_error_handler,    only : MOM_error, NOTE, FATAL, WARNING
-use MOM_domains,          only : MOM_domain_type
+use MOM_domains,          only : MOM_domain_type, AGRID, BGRID_NE, CGRID_NE
 use MOM_file_parser,      only : log_version, param_file_type
 use MOM_grid,             only : ocean_grid_type
 use MOM_dyn_horgrid,      only : dyn_horgrid_type
@@ -21,7 +21,7 @@ use mpp_domains_mod,      only : domain1d, mpp_get_domain_components
 use mpp_domains_mod,      only : CENTER, CORNER, NORTH_FACE=>NORTH, EAST_FACE=>EAST
 use mpp_io_mod,           only : open_file => mpp_open, close_file => mpp_close
 use mpp_io_mod,           only : mpp_write_meta, write_field => mpp_write, mpp_get_info
-use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, mpp_get_axis_data, axistype
+use mpp_io_mod,           only : mpp_get_atts, mpp_get_axes, get_axis_data=>mpp_get_axis_data, axistype
 use mpp_io_mod,           only : mpp_get_fields, fieldtype, axistype, flush_file => mpp_flush
 use mpp_io_mod,           only : APPEND_FILE=>MPP_APPEND, ASCII_FILE=>MPP_ASCII
 use mpp_io_mod,           only : MULTIPLE=>MPP_MULTI, NETCDF_FILE=>MPP_NETCDF
@@ -39,13 +39,14 @@ implicit none ; private
 public :: close_file, create_file, field_exists, field_size, fieldtype, get_filename_appendix
 public :: file_exists, flush_file, get_file_info, get_file_atts, get_file_fields
 public :: get_file_times, open_file, read_axis_data, read_data, read_field
-public :: num_timelevels, MOM_read_data, ensembler
+public :: num_timelevels, MOM_read_data, MOM_read_vector, ensembler
 public :: reopen_file, slasher, write_field, write_version_number, MOM_io_init
 public :: open_namelist_file, check_nml_error, io_infra_init, io_infra_end
 public :: APPEND_FILE, ASCII_FILE, MULTIPLE, NETCDF_FILE, OVERWRITE_FILE
 public :: READONLY_FILE, SINGLE_FILE, WRITEONLY_FILE
 public :: CENTER, CORNER, NORTH_FACE, EAST_FACE
 public :: var_desc, modify_vardesc, query_vardesc
+public :: get_axis_data
 
 !> Type for describing a variable, typically a tracer
 type, public :: vardesc
@@ -67,11 +68,16 @@ interface file_exists
 end interface
 
 interface MOM_read_data
+  module procedure MOM_read_data_4d
   module procedure MOM_read_data_3d
   module procedure MOM_read_data_2d
   module procedure MOM_read_data_1d
 end interface
 
+interface MOM_read_vector
+  module procedure MOM_read_vector_3d
+  module procedure MOM_read_vector_2d
+end interface
 
 contains
 
@@ -446,7 +452,7 @@ subroutine read_axis_data(filename, axis_name, var)
     call mpp_get_atts(axes(i), name=name,len=len,units=units)
     if (name == axis_name) then
       axis_found = .true.
-      call mpp_get_axis_data(axes(i),var)
+      call get_axis_data(axes(i),var)
       exit
     endif
   enddo
@@ -702,9 +708,10 @@ end subroutine query_vardesc
 
 !> Copies a string
 subroutine safe_string_copy(str1, str2, fieldnm, caller)
-  character(len=*),           intent(in)  :: str1
-  character(len=*),           intent(out) :: str2
-  character(len=*), optional, intent(in)  :: fieldnm, caller
+  character(len=*),           intent(in)  :: str1    !< The string being copied
+  character(len=*),           intent(out) :: str2    !< The string being copied into
+  character(len=*), optional, intent(in)  :: fieldnm !< The name of the field for error messages
+  character(len=*), optional, intent(in)  :: caller  !< The calling routine for error messages
 
   if (len(trim(str1)) > len(str2)) then
     if (present(fieldnm) .and. present(caller)) then
@@ -721,9 +728,9 @@ end subroutine safe_string_copy
 
 !> Returns a name with "%#E" or "%E" replaced with the ensemble member number.
 function ensembler(name, ens_no_in) result(en_nm)
-  character(len=*),  intent(in) :: name
-  integer, optional, intent(in) :: ens_no_in
-  character(len=len(name)) :: en_nm
+  character(len=*),  intent(in) :: name       !< The name to be modified
+  integer, optional, intent(in) :: ens_no_in  !< The number of the current ensemble member
+  character(len=len(name)) :: en_nm  !< The name encoded with the ensemble number
 
   ! This function replaces "%#E" or "%E" with the ensemble number anywhere it
   ! occurs in name, with %E using 4 or 6 digits (depending on the ensemble size)
@@ -778,61 +785,153 @@ end function ensembler
 
 
 !> Returns true if the named file or its domain-decomposed variant exists.
-function MOM_file_exists(file_name, MOM_Domain)
-  character(len=*),       intent(in) :: file_name
-  type(MOM_domain_type),  intent(in) :: MOM_domain
+function MOM_file_exists(filename, MOM_Domain)
+  character(len=*),       intent(in) :: filename   !< The name of the file being inquired about
+  type(MOM_domain_type),  intent(in) :: MOM_Domain !< The MOM_Domain that describes the decomposition
 
 ! This function uses the fms_io function file_exist to determine whether
 ! a named file (or its decomposed variant) exists.
 
   logical :: MOM_file_exists
 
-  MOM_file_exists = file_exist(file_name, MOM_Domain%mpp_domain)
+  MOM_file_exists = file_exist(filename, MOM_Domain%mpp_domain)
 
 end function MOM_file_exists
 
 
 !> This function uses the fms_io function read_data to read 1-D
 !! data field named "fieldname" from file "filename".
-subroutine MOM_read_data_1d(filename, fieldname, data)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:),               intent(inout) :: data ! 1 dimensional data
+subroutine MOM_read_data_1d(filename, fieldname, data, timelevel)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:),     intent(inout) :: data      !< The 1-dimensional array into which the data
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
 
-  call read_data(filename, fieldname, data)
+  call read_data(filename, fieldname, data, timelevel=timelevel, no_domain=.true.)
 
 end subroutine MOM_read_data_1d
-
 
 !> This function uses the fms_io function read_data to read a distributed
 !! 2-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:),             intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),            intent(in)    :: MOM_Domain
-  integer,                optional, intent(in)    :: timelevel, position
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:),   intent(inout) :: data      !< The 2-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
 end subroutine MOM_read_data_2d
 
-
 !> This function uses the fms_io function read_data to read a distributed
-!! 2-D data field named "fieldname" from file "filename".  Valid values for
+!! 3-D data field named "fieldname" from file "filename".  Valid values for
 !! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
 subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
                             timelevel, position)
-  character(len=*),                 intent(in)    :: filename, fieldname
-  real, dimension(:,:,:),           intent(inout) :: data ! 2 dimensional data
-  type(MOM_domain_type),            intent(in)    :: MOM_Domain
-  integer,                optional, intent(in)    :: timelevel, position
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:), intent(inout) :: data      !< The 3-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
 
   call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
                  timelevel=timelevel, position=position)
 
 end subroutine MOM_read_data_3d
+
+!> This function uses the fms_io function read_data to read a distributed
+!! 4-D data field named "fieldname" from file "filename".  Valid values for
+!! "position" include CORNER, CENTER, EAST_FACE and NORTH_FACE.
+subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
+                            timelevel, position)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:,:), intent(inout) :: data    !< The 4-dimensional array into which the data
+                                                     !! should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: position  !< A flag indicating where this data is located
+
+  call read_data(filename, fieldname, data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=position)
+
+end subroutine MOM_read_data_4d
+
+
+!> This function uses the fms_io function read_data to read a pair of distributed
+!! 2-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
+!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
+subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
+  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
+  real, dimension(:,:),   intent(inout) :: u_data    !< The 2 dimensional array into which the
+                                                     !! u-component of the data should be read
+  real, dimension(:,:),   intent(inout) :: v_data    !< The 2 dimensional array into which the
+                                                     !! v-component of the data should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
+  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
+
+  integer :: u_pos, v_pos
+
+  u_pos = EAST_FACE ; v_pos = NORTH_FACE
+  if (present(stagger)) then
+    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
+    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
+    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
+  endif
+
+  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=u_pos)
+  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=v_pos)
+
+end subroutine MOM_read_vector_2d
+
+
+!> This function uses the fms_io function read_data to read a pair of distributed
+!! 3-D data fields with names given by "[uv]_fieldname" from file "filename".  Valid values for
+!! "stagger" include CGRID_NE, BGRID_NE, and AGRID.
+subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
+                              timelevel, stagger, scalar_pair)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: u_fieldname !< The variable name of the u data in the file
+  character(len=*),       intent(in)    :: v_fieldname !< The variable name of the v data in the file
+  real, dimension(:,:,:), intent(inout) :: u_data    !< The 3 dimensional array into which the
+                                                     !! u-component of the data should be read
+  real, dimension(:,:,:), intent(inout) :: v_data    !< The 3 dimensional array into which the
+                                                     !! v-component of the data should be read
+  type(MOM_domain_type),  intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  integer,      optional, intent(in)    :: timelevel !< The time level in the file to read
+  integer,      optional, intent(in)    :: stagger   !< A flag indicating where this vector is discretized
+  logical,      optional, intent(in)    :: scalar_pair   !< If true, a pair of scalars are to be read.cretized
+
+  integer :: u_pos, v_pos
+
+  u_pos = EAST_FACE ; v_pos = NORTH_FACE
+  if (present(stagger)) then
+    if (stagger == CGRID_NE) then ; u_pos = EAST_FACE ; v_pos = NORTH_FACE
+    elseif (stagger == BGRID_NE) then ; u_pos = CORNER ; v_pos = CORNER
+    elseif (stagger == AGRID) then ; u_pos = CENTER ; v_pos = CENTER ; endif
+  endif
+
+  call read_data(filename, u_fieldname, u_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=u_pos)
+  call read_data(filename, v_fieldname, v_data, MOM_Domain%mpp_domain, &
+                 timelevel=timelevel, position=v_pos)
+
+end subroutine MOM_read_vector_3d
 
 
 !> Initialize the MOM_io module

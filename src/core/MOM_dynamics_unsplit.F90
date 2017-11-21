@@ -52,7 +52,7 @@ module MOM_dynamics_unsplit
 
 use MOM_variables, only : vertvisc_type, thermo_var_ptrs
 use MOM_variables, only : accel_diag_ptrs, ocean_internal_state, cont_diag_ptrs
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : mech_forcing
 use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock, only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
@@ -162,7 +162,7 @@ contains
 
 ! =============================================================================
 
-subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
+subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, CS, &
                   VarMix, MEKE)
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure.
@@ -181,8 +181,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   type(time_type),                  intent(in)    :: Time_local   !< The model time at the end
                                                                   !! of the time step.
   real,                             intent(in)    :: dt     !< The dynamics time step, in s.
-  type(forcing),                    intent(in)    :: fluxes !< A structure containing pointers to
-                                 !! any possible forcing fields.  Unused fields have NULL ptrs.
+  type(mech_forcing),               intent(in)    :: forces !< A structure with the driving mechanical forces
   real, dimension(:,:),             pointer       :: p_surf_begin !< A pointer (perhaps NULL) to the
                                  !! surface pressure at the beginning of this dynamic step, in Pa.
   real, dimension(:,:),             pointer       :: p_surf_end   !< A pointer (perhaps NULL) to the
@@ -258,7 +257,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   if (dyn_p_surf) then
     call safe_alloc_ptr(p_surf,G%isd,G%ied,G%jsd,G%jed) ; p_surf(:,:) = 0.0
   else
-    p_surf => fluxes%p_surf
+    p_surf => forces%p_surf
   endif
 
 ! Matsuno's third order accurate three step scheme is used to step
@@ -282,10 +281,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call continuity(u, v, h, hp, uh, vh, dt*0.5, G, GV, CS%continuity_CSp, &
                   OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(hp, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(hp, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
   call enable_averaging(0.5*dt,Time_local-set_time(int(0.5*dt)), CS%diag)
 !   Here the first half of the thickness fluxes are offered for averaging.
@@ -314,9 +311,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
     enddo ; enddo
   enddo
   call cpu_clock_end(id_clock_mom_update)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u, v, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
 ! CAu = -(f+zeta)/h_av vh + d/dx KE
   call cpu_clock_begin(id_clock_Cor)
@@ -362,17 +357,15 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
  ! up <- up + dt/2 d/dz visc d/dz up
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averaging(dt, Time_local, CS%diag)
-  call set_viscous_ML(u, v, h_av, tv, fluxes, visc, dt*0.5, G, GV, &
+  call set_viscous_ML(u, v, h_av, tv, forces, visc, dt*0.5, G, GV, &
                       CS%set_visc_CSp)
   call disable_averaging(CS%diag)
-  call vertvisc_coef(up, vp, h_av, fluxes, visc, dt*0.5, G, GV, &
+  call vertvisc_coef(up, vp, h_av, forces, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(up, vp, h_av, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc(up, vp, h_av, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(up, vp, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(up, vp, G%Domain, clock=id_clock_pass)
 
 ! uh = up * hp
 ! h_av = hp + dt/2 div . uh
@@ -380,10 +373,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call continuity(up, vp, hp, h_av, uh, vh, &
                   (0.5*dt), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(h_av, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(h_av, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
 ! h_av <- (hp + h_av)/2
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
@@ -433,14 +424,12 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, fluxes, visc, dt*0.5, G, GV, &
+  call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, &
                      CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(upp, vpp, hp, fluxes, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(upp, vpp, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(upp, vpp, G%Domain, clock=id_clock_pass)
 
 ! uh = upp * hp
 ! h = hp + dt/2 div . uh
@@ -448,10 +437,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
   call continuity(upp, vpp, hp, h, uh, vh, &
                   (dt*0.5), G, GV, CS%continuity_CSp, OBC=CS%OBC)
   call cpu_clock_end(id_clock_continuity)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_var(h, G%Domain)
-  call pass_vector(uh, vh, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_var(h, G%Domain, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
@@ -508,13 +495,11 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, fluxes, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, fluxes, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
-  call vertvisc(u, v, h_av, fluxes, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
+  call vertvisc_coef(u, v, h_av, forces, visc, dt, G, GV, CS%vertvisc_CSp, CS%OBC)
+  call vertvisc(u, v, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot)
   call cpu_clock_end(id_clock_vertvisc)
-  call cpu_clock_begin(id_clock_pass)
-  call pass_vector(u, v, G%Domain)
-  call cpu_clock_end(id_clock_pass)
+  call pass_vector(u, v, G%Domain, clock=id_clock_pass)
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector", u, v, h, uh, vh, G, GV)

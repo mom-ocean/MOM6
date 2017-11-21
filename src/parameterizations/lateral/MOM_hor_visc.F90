@@ -80,7 +80,7 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_io,                    only : read_data, slasher
+use MOM_io,                    only : MOM_read_data, slasher
 
 implicit none ; private
 
@@ -126,7 +126,11 @@ type, public :: hor_visc_CS ; private
   logical :: use_Kh_bg_2d    ! Read 2d background viscosity from a file.
   real    :: Kh_bg_min       ! The minimum value allowed for Laplacian horizontal
                              ! viscosity. The default is 0.0
-
+  logical :: use_land_mask   ! Use the land mask for the computation of thicknesses
+                             ! at velocity locations. This eliminates the dependence on
+                             ! arbitrary values over land or outside of the domain.
+                             ! Default is False to maintain answers with legacy experiments
+                             ! but should be changed to True for new experiments.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Kh_bg_xx,        &! The background Laplacian viscosity at h points, in units
                       ! of m2 s-1. The actual viscosity may be the larger of this
@@ -419,12 +423,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
-    do j=js-2,je+2 ; do I=Isq-1,Ieq+1
-      h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-    enddo ; enddo
-    do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
-      h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
-    enddo ; enddo
+    if (CS%use_land_mask) then
+      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+        h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
+      enddo ; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+        h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
+      enddo ; enddo
+    else
+      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+        h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
+      enddo; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+        h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+      enddo ; enddo
+    endif
 
     ! Adjust contributions to shearing strain and interpolated values of
     ! thicknesses on open boundaries.
@@ -1181,6 +1194,13 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
   endif
 
+  call get_param(param_file, mdl, "USE_LAND_MASK_FOR_HVISC", CS%use_land_mask, &
+                 "If true, use Use the land mask for the computation of thicknesses \n"//&
+                 "at velocity locations. This eliminates the dependence on arbitrary \n"//&
+                 "values over land or outside of the domain. Default is False in order to \n"//&
+                 "maintain answers with legacy experiments but should be changed to True \n"//&
+                 "for new experiments.", default=.false.)
+
   if (CS%better_bound_Ah .or. CS%better_bound_Kh .or. get_all) &
     call get_param(param_file, mdl, "HORVISC_BOUND_COEF", CS%bound_coef, &
                  "The nondimensional coefficient of the ratio of the \n"//&
@@ -1255,8 +1275,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  default='KH_background_2d.nc')
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
-    call read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
-                   domain=G%domain%mpp_domain, timelevel=1)
+    call MOM_read_data(trim(inputdir)//trim(filename), 'Kh', CS%Kh_bg_2d, &
+                       G%domain, timelevel=1)
     call pass_var(CS%Kh_bg_2d, G%domain)
   endif
 
@@ -1513,39 +1533,39 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   ! Register fields for output from this module.
 
   CS%id_diffu = register_diag_field('ocean_model', 'diffu', diag%axesCuL, Time, &
-      'Zonal Acceleration from Horizontal Viscosity', 'meter second-2')
+      'Zonal Acceleration from Horizontal Viscosity', 'm s-2')
 
   CS%id_diffv = register_diag_field('ocean_model', 'diffv', diag%axesCvL, Time, &
-      'Meridional Acceleration from Horizontal Viscosity', 'meter second-2')
+      'Meridional Acceleration from Horizontal Viscosity', 'm s-2')
 
   if (CS%biharmonic) then
     CS%id_Ah_h = register_diag_field('ocean_model', 'Ahh', diag%axesTL, Time,    &
-        'Biharmonic Horizontal Viscosity at h Points', 'meter4 second-1',        &
-        cmor_field_name='difmxybo', cmor_units='m4 s-1',                        &
+        'Biharmonic Horizontal Viscosity at h Points', 'm4 s-1',        &
+        cmor_field_name='difmxybo',                                             &
         cmor_long_name='Ocean lateral biharmonic viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_biharmonic_diffusivity')
 
     CS%id_Ah_q = register_diag_field('ocean_model', 'Ahq', diag%axesBL, Time, &
-        'Biharmonic Horizontal Viscosity at q Points', 'meter4 second-1')
+        'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1')
   endif
 
   if (CS%Laplacian) then
     CS%id_Kh_h = register_diag_field('ocean_model', 'Khh', diag%axesTL, Time,   &
-        'Laplacian Horizontal Viscosity at h Points', 'meter2 second-1',        &
-        cmor_field_name='difmxylo', cmor_units='m2 s-1',                        &
+        'Laplacian Horizontal Viscosity at h Points', 'm2 s-1',        &
+        cmor_field_name='difmxylo',                                             &
         cmor_long_name='Ocean lateral Laplacian viscosity',                     &
         cmor_standard_name='ocean_momentum_xy_laplacian_diffusivity')
 
     CS%id_Kh_q = register_diag_field('ocean_model', 'Khq', diag%axesBL, Time, &
-        'Laplacian Horizontal Viscosity at q Points', 'meter2 second-1')
+        'Laplacian Horizontal Viscosity at q Points', 'm2 s-1')
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&
-      'Integral work done by lateral friction terms', 'Watt meter-2')
+      'Integral work done by lateral friction terms', 'W m-2')
 
   CS%id_FrictWorkIntz = register_diag_field('ocean_model','FrictWorkIntz',diag%axesT1,Time,      &
-      'Depth integrated work done by lateral friction', 'Watt meter-2',                          &
-      cmor_field_name='dispkexyfo', cmor_units='W m-2',                                          &
+      'Depth integrated work done by lateral friction', 'W m-2',                          &
+      cmor_field_name='dispkexyfo',                                                              &
       cmor_long_name='Depth integrated ocean kinetic energy dissipation due to lateral friction',&
       cmor_standard_name='ocean_kinetic_energy_dissipation_per_unit_area_due_to_xy_friction')
 

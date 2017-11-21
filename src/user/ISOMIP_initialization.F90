@@ -10,7 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
+use MOM_io, only : open_file, MOM_read_data, read_axis_data, SINGLE_FILE
 use MOM_io, only : write_field, slasher, vardesc
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -579,7 +579,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     end select
     !  This call sets up the damping rates and interface heights.
     !  This sets the inverse damping timescale fields in the sponges.
-    call initialize_ALE_sponge(Idamp,h, nz, G, PF, ACSp)
+    call initialize_ALE_sponge(Idamp, G, PF, ACSp, h, nz)
 
     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
     T_range = T_range / G%max_depth ! Convert T_range into dT/dz
@@ -637,9 +637,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
        filename = trim(inputdir)//trim(state_file)
        if (.not.file_exists(filename, G%Domain)) &
           call MOM_error(FATAL, " ISOMIP_initialize_sponges: Unable to open "//trim(filename))
-       call read_data(filename,eta_var,eta(:,:,:), domain=G%Domain%mpp_domain)
-       call read_data(filename,temp_var,T(:,:,:), domain=G%Domain%mpp_domain)
-       call read_data(filename,salt_var,S(:,:,:), domain=G%Domain%mpp_domain)
+       call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
+       call MOM_read_data(filename, temp_var, T(:,:,:), G%Domain)
+       call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain)
 
        ! for debugging
        !i=G%iec; j=G%jec

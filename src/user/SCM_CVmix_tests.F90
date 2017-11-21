@@ -6,7 +6,7 @@ module SCM_CVmix_tests
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, allocate_forcing_type
+use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_verticalgrid, only: verticalGrid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
@@ -185,9 +185,9 @@ subroutine SCM_CVmix_tests_surface_forcing_init(Time, G, param_file, CS)
 
 end subroutine SCM_CVmix_tests_surface_forcing_init
 
-subroutine SCM_CVmix_tests_wind_forcing(state, fluxes, day, G, CS)
+subroutine SCM_CVmix_tests_wind_forcing(state, forces, day, G, CS)
   type(surface),                    intent(in)    :: state  !< Surface state structure
-  type(forcing),                    intent(inout) :: fluxes !< Surface fluxes structure
+  type(mech_forcing),               intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),                  intent(in)    :: day    !< Time in days
   type(ocean_grid_type),            intent(inout) :: G      !< Grid structure
   type(SCM_CVmix_tests_CS), pointer       :: CS     !< Container for SCM parameters
@@ -201,18 +201,15 @@ subroutine SCM_CVmix_tests_wind_forcing(state, fluxes, day, G, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true. )
-
   do j=js,je ; do I=Isq,Ieq
-    fluxes%taux(I,j) = CS%tau_x
+    forces%taux(I,j) = CS%tau_x
   enddo ; enddo
   do J=Jsq,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = CS%tau_y
+    forces%tauy(i,J) = CS%tau_y
   enddo ; enddo
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
-  if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
-    fluxes%ustar(i,j) = sqrt(  mag_tau / CS%Rho0 )
+  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
+    forces%ustar(i,j) = sqrt(  mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
 
 end subroutine SCM_CVmix_tests_wind_forcing
@@ -237,9 +234,6 @@ subroutine SCM_CVmix_tests_buoyancy_forcing(state, fluxes, day, G, CS)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, water=.true., heat=.true. )
 
   if (CS%UseHeatFlux) then
     ! Note CVmix test inputs give Heat flux in [m K/s]
