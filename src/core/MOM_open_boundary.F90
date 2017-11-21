@@ -2503,7 +2503,7 @@ end subroutine mask_outside_OBCs
 
 !> flood the cin, cout values
 subroutine flood_fill(G, color, cin, cout, cland)
-  type(dyn_horgrid_type),  intent(in) :: G          !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
   real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
   integer, intent(in) :: cin    !< color for inside the domain
   integer, intent(in) :: cout   !< color for outside the domain
@@ -2563,7 +2563,7 @@ end subroutine flood_fill
 
 !> flood the cin, cout values
 subroutine flood_fill2(G, color, cin, cout, cland)
-  type(dyn_horgrid_type),  intent(in) :: G          !< Ocean grid structure
+  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
   real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
   integer, intent(in) :: cin    !< color for inside the domain
   integer, intent(in) :: cout   !< color for outside the domain
