@@ -33,13 +33,11 @@ use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher, vardesc
+use MOM_io, only : slasher, vardesc, MOM_read_data
 use MOM_thickness_diffuse, only : vert_fill_TS
 use MOM_variables, only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
-
-use fms_mod, only : read_data
 
 implicit none ; private
 
@@ -351,8 +349,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    call read_data(filename, 'tideamp', itide%tideamp, &
-                   domain=G%domain%mpp_domain, timelevel=1)
+    call MOM_read_data(filename, 'tideamp', itide%tideamp, G%domain, timelevel=1)
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -361,8 +358,7 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
                fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call read_data(filename, 'h2', itide%h2, domain=G%domain%mpp_domain, &
-                 timelevel=1)
+  call MOM_read_data(filename, 'h2', itide%h2, G%domain, timelevel=1)
 
   do j=js,je ; do i=is,ie
     mask_itidal = 1.0
@@ -380,10 +376,10 @@ subroutine int_tide_input_init(Time, G, GV, param_file, diag, CS, itide)
 
 
   CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
-      'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
+      'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
 
   CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
-       'Bottom Buoyancy Frequency', 'sec-1')
+       'Bottom Buoyancy Frequency', 's-1')
 
   CS%id_N2_bot = register_diag_field('ocean_model','N2_b_itide',diag%axesT1,Time, &
        'Bottom Buoyancy frequency squared', 's-2')

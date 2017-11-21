@@ -9,6 +9,7 @@ module MOM_tracer_registry
 ! use MOM_diag_mediator, only : diag_ctrl
 use MOM_coms,          only : reproducing_sum
 use MOM_debugging,     only : hchksum
+use MOM_diag_mediator, only : diag_ctrl, register_diag_field, post_data, safe_alloc_ptr
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type
@@ -22,13 +23,10 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public register_tracer
-public tracer_registry_init
-public MOM_tracer_chksum
-public MOM_tracer_chkinv
-public add_tracer_diagnostics
-public add_tracer_OBC_values
-public lock_tracer_registry
-public tracer_registry_end
+public MOM_tracer_chksum, MOM_tracer_chkinv
+public register_tracer_diagnostics, post_tracer_diagnostics
+public add_tracer_diagnostics, add_tracer_OBC_values
+public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 
 !> The tracer type
 type, public :: tracer_type
@@ -56,9 +54,21 @@ type, public :: tracer_type
 
   real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
 
-  character(len=32)               :: name                     !< tracer name used for error messages
+  character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
-
+  logical                         :: registry_diags = .false. !< If true, use the registry to set up the
+                                                              !! diagnostics associated with this tracer.
+  character(len=32)               :: flux_nameroot = ""       !< Short tracer name snippet used construct the
+                                                              !! names of flux diagnostics.
+  character(len=64)               :: flux_longname = ""       !< A word or phrase used construct the long
+                                                              !! names of flux diagnostics.
+  real                            :: flux_conversion = 1.0    !< A scaling factor used to convert the fluxes
+                                                              !! of this tracer to its desired units.
+  character(len=48)               :: flux_units = ""          !< The units for fluxes of this variable.
+  integer :: id_tr = -1
+  integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
+  integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
+  integer :: id_adv_xy = -1, id_adv_xy_2d = -1
 end type tracer_type
 
 !> Type to carry basic tracer information
@@ -77,7 +87,8 @@ contains
 !> This subroutine registers a tracer to be advected and laterally diffused.
 subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
-                           ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy)
+                           ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
+                           flux_nameroot, flux_longname, flux_units, flux_conversion)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), target :: tr1    !< pointer to the tracer (concentration units)
@@ -108,9 +119,19 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   real, dimension(:,:),   pointer, optional     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
 
   real, pointer, dimension(:,:,:), optional     :: advection_xy !< convergence of lateral advective tracer fluxes
-
+  logical,              optional, intent(in)    :: registry_diags !< If present and true, use the registry for
+                                                                !! the diagnostics of this tracer.
+  character(len=*),     optional, intent(in)    :: flux_nameroot !< Short tracer name snippet used construct the
+                                                                !! names of flux diagnostics.
+  character(len=*),     optional, intent(in)    :: flux_longname !< A word or phrase used construct the long
+                                                                !! names of flux diagnostics.
+  character(len=*),     optional, intent(in)    :: flux_units   !< A scaling factor used to convert the fluxes
+                                                                !! of this tracer to its desired units.
+  real,                 optional, intent(in)    :: flux_conversion !< A scaling factor used to convert the fluxes
+                                                                !! of this tracer to its desired units.
   integer :: ntr
   type(tracer_type) :: temp
+  character(len=72) :: longname ! The long name of a variable.
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not. associated(Reg)) call tracer_registry_init(param_file, Reg)
@@ -129,11 +150,27 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
     allocate(Reg%Tr(ntr)%vd) ; Reg%Tr(ntr)%vd = tr_desc
   endif
 
-  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name)
+  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name, longname=longname)
 
   if (Reg%locked) call MOM_error(FATAL, &
       "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
       " with a locked tracer registry.")
+
+  Reg%Tr(ntr)%flux_nameroot = Reg%Tr(ntr)%name
+  if (present(flux_nameroot)) then
+    if (len_trim(flux_nameroot) > 0) Reg%Tr(ntr)%flux_nameroot = flux_nameroot
+  endif
+
+  Reg%Tr(ntr)%flux_longname = longname
+  if (present(flux_longname)) then
+    if (len_trim(flux_longname) > 0) Reg%Tr(ntr)%flux_longname = flux_longname
+  endif
+
+  Reg%Tr(ntr)%flux_units = ""
+  if (present(flux_units)) Reg%Tr(ntr)%flux_units = flux_units
+
+  Reg%Tr(ntr)%flux_conversion = 1.0
+  if (present(flux_conversion)) Reg%Tr(ntr)%flux_conversion = flux_conversion
 
   Reg%Tr(ntr)%t => tr1
 
@@ -151,6 +188,10 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(ntr)%df2d_x => df_2d_x ; endif
 
   if (present(advection_xy)) then ; if (associated(advection_xy)) Reg%Tr(ntr)%advection_xy => advection_xy ; endif
+
+  if (present(registry_diags)) then
+    Reg%Tr(ntr)%registry_diags = registry_diags
+  endif
 
 end subroutine register_tracer
 
@@ -248,6 +289,159 @@ subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
 
 end subroutine add_tracer_diagnostics
 
+!> register_tracer_diagnostics does a set of register_diag_field calls for any previously
+!! registered in a tracer registry with a value of registry_diags set to .true.
+subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  type(time_type),            intent(in) :: Time !< current model time
+  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+
+  character(len=24) :: name     ! A variable's name in a NetCDF file.
+  character(len=24) :: shortnm  ! A shortened version of a variable's name for
+                                ! creating additional diagnostics.
+  character(len=72) :: longname ! The long name of that tracer variable.
+  character(len=72) :: flux_longname ! The tracer name in the long names of fluxes.
+  character(len=48) :: units    ! The dimensions of the variable.
+  character(len=48) :: flux_units ! The units for fluxes, either
+                                ! [units] m3 s-1 or [units] kg s-1.
+  character(len=72) :: cmorname ! The CMOR name of that variable.
+  type(tracer_type), pointer :: Tr=>NULL()
+  integer :: m, form
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  form = 1
+
+  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
+       "register_tracer must be called before add_tracer_diagnostics")
+
+  do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
+    Tr => Reg%Tr(m)
+    call query_vardesc(Tr%vd, name, units=units, longname=longname, &
+                       cmor_field_name=cmorname, caller="register_tracer_diagnostics")
+    shortnm = Tr%flux_nameroot
+    flux_longname = Tr%flux_longname
+
+    if (len_trim(Tr%flux_units) > 0) then ; flux_units = Tr%flux_units
+    elseif (GV%Boussinesq) then ; flux_units = trim(units)//" m3 s-1"
+    else ; flux_units = trim(units)//" kg s-1" ; endif
+
+    if (len_trim(cmorname) == 0) then
+      Tr%id_tr = register_diag_field("ocean_model", trim(name), diag%axesTL, &
+        Time, trim(longname), trim(units))
+    else
+      Tr%id_tr = register_diag_field("ocean_model", trim(name), diag%axesTL, &
+        Time, trim(longname), trim(units), cmor_field_name=cmorname)
+    endif
+    if (form == 1) then
+      Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
+          diag%axesCuL, Time, trim(flux_longname)//" advective zonal flux" , &
+          trim(flux_units))
+      Tr%id_ady = register_diag_field("ocean_model", trim(shortnm)//"_ady", &
+          diag%axesCvL, Time, trim(flux_longname)//" advective meridional flux" , &
+          trim(flux_units))
+      Tr%id_dfx = register_diag_field("ocean_model", trim(shortnm)//"_dfx", &
+          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux" , &
+          trim(flux_units))
+      Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_dfy", &
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive zonal flux" , &
+          trim(flux_units))
+    else
+      Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
+          diag%axesCuL, Time, "Advective (by residual mean) Zonal Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+      Tr%id_ady = register_diag_field("ocean_model", trim(shortnm)//"_ady", &
+          diag%axesCvL, Time, "Advective (by residual mean) Meridional Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+      Tr%id_dfx = register_diag_field("ocean_model", trim(shortnm)//"_diffx", &
+          diag%axesCuL, Time, "Diffusive Zonal Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+      Tr%id_dfy = register_diag_field("ocean_model", trim(shortnm)//"_diffy", &
+          diag%axesCvL, Time, "Diffusive Meridional Flux of "//trim(flux_longname), &
+          flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+    endif
+    if (Tr%id_adx > 0) call safe_alloc_ptr(Tr%ad_x,IsdB,IedB,jsd,jed,nz)
+    if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
+    if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x,IsdB,IedB,jsd,jed,nz)
+    if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
+
+    Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
+        diag%axesCu1, Time, &
+        "Vertically Integrated Advective Zonal Flux of "//trim(flux_longname), &
+        flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+    Tr%id_ady_2d = register_diag_field("ocean_model", trim(shortnm)//"_ady_2d", &
+        diag%axesCv1, Time, &
+        "Vertically Integrated Advective Meridional Flux of "//trim(flux_longname), &
+        flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+    Tr%id_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_diffx_2d", &
+        diag%axesCu1, Time, &
+        "Vertically Integrated Diffusive Zonal Flux of "//trim(flux_longname), &
+        flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+    Tr%id_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_diffy_2d", &
+        diag%axesCv1, Time, &
+        "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
+        flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+
+    if (Tr%id_adx_2d > 0) call safe_alloc_ptr(Tr%ad2d_x,IsdB,IedB,jsd,jed)
+    if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
+    if (Tr%id_dfx_2d > 0) call safe_alloc_ptr(Tr%df2d_x,IsdB,IedB,jsd,jed)
+    if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y,isd,ied,JsdB,JedB)
+
+    Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
+        diag%axesTL, Time, &
+        'Horizontal convergence of residual mean advective fluxes of '//trim(flux_longname), &
+        flux_units, v_extensive=.true., conversion=Tr%flux_conversion)
+    Tr%id_adv_xy_2d = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy_2d", &
+        diag%axesT1, Time, &
+        'Vertical sum of horizontal convergence of residual mean advective fluxes of'//trim(flux_longname), &
+        flux_units, conversion=Tr%flux_conversion)
+    if ((Tr%id_adv_xy > 0) .or. (Tr%id_adv_xy_2d > 0)) &
+      call safe_alloc_ptr(Tr%advection_xy,isd,ied,jsd,jed,nz)
+
+!    call register_Z_tracer(Tr%t, name, longname, units, &
+!                           Time, G, diag_to_Z_CSp)
+  endif ; enddo
+
+end subroutine register_tracer_diagnostics
+
+!> post_tracer_diagnostics does post_data calls for any diagnostics that are
+!! being handled via the tracer registry.
+subroutine post_tracer_diagnostics(Reg, diag, G, GV)
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+
+  real    :: work2d(SZI_(G),SZJ_(G))
+  type(tracer_type), pointer :: Tr=>NULL()
+  integer :: i, j, k, is, ie, js, je, nz, m
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
+    Tr => Reg%Tr(m)
+    if (Tr%id_tr > 0) call post_data(Tr%id_tr, Tr%t, diag)
+    if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag)
+    if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag)
+    if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag)
+    if (Tr%id_dfy > 0) call post_data(Tr%id_dfy, Tr%df_y, diag)
+    if (Tr%id_adx_2d > 0) call post_data(Tr%id_adx_2d, Tr%ad2d_x, diag)
+    if (Tr%id_ady_2d > 0) call post_data(Tr%id_ady_2d, Tr%ad2d_y, diag)
+    if (Tr%id_dfx_2d > 0) call post_data(Tr%id_dfx_2d, Tr%df2d_x, diag)
+    if (Tr%id_dfy_2d > 0) call post_data(Tr%id_dfy_2d, Tr%df2d_y, diag)
+    if (Tr%id_adv_xy > 0) call post_data(Tr%id_adv_xy, Tr%advection_xy, diag)
+    if (Tr%id_adv_xy_2d > 0) then
+      work2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work2d(i,j) = work2d(i,j) + Tr%advection_xy(i,j,k)
+      enddo ; enddo ; enddo
+      call post_data(Tr%id_adv_xy_2d, Tr%advection_xy, diag)
+    endif
+  endif ; enddo
+end subroutine post_tracer_diagnostics
+
 !> This subroutine writes out chksums for tracers.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
   character(len=*),         intent(in) :: mesg   !< message that appears on the chksum lines
@@ -289,13 +483,14 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
 
 end subroutine MOM_tracer_chkinv
 
-!> This routine include declares and sets the variable "version".
+!> Initialize the tracer registry.
 subroutine tracer_registry_init(param_file, Reg)
   type(param_file_type),      intent(in) :: param_file !< open file to parse for model parameters
   type(tracer_registry_type), pointer    :: Reg        !< pointer to tracer registry
 
   integer, save :: init_calls = 0
 
+! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_registry" ! This module's name.
   character(len=256) :: mesg    ! Message for error messages.

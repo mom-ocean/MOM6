@@ -3805,35 +3805,35 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
                  default=.true.)
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'meter')
+      Time, 'Surface mixed layer depth', 'm')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_RiBulk = register_diag_field('ocean_model', 'TKE_RiBulk', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv = register_diag_field('ocean_model', 'TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_pen_SW = register_diag_field('ocean_model', 'TKE_pen_SW', diag%axesT1, &
-      Time, 'TKE consumed by mixing penetrative shortwave radation through the mixed layer', 'meter3 second-3')
+      Time, 'TKE consumed by mixing penetrative shortwave radation through the mixed layer', 'm3 s-3')
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'meter3 second-3')
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3')
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_s2 = register_diag_field('ocean_model', 'TKE_conv_s2', diag%axesT1, &
-      Time, 'Spurious source of mixed layer TKE from sigma2', 'meter3 second-3')
+      Time, 'Spurious source of mixed layer TKE from sigma2', 'm3 s-3')
   CS%id_PE_detrain = register_diag_field('ocean_model', 'PE_detrain', diag%axesT1, &
-      Time, 'Spurious source of potential energy from mixed layer detrainment', 'Watt meter-2')
+      Time, 'Spurious source of potential energy from mixed layer detrainment', 'W m-2')
   CS%id_PE_detrain2 = register_diag_field('ocean_model', 'PE_detrain2', diag%axesT1, &
-      Time, 'Spurious source of potential energy from mixed layer only detrainment', 'Watt meter-2')
+      Time, 'Spurious source of potential energy from mixed layer only detrainment', 'W m-2')
   CS%id_h_mismatch = register_diag_field('ocean_model', 'h_miss_ML', diag%axesT1, &
-      Time, 'Summed absolute mismatch in entrainment terms', 'meter')
+      Time, 'Summed absolute mismatch in entrainment terms', 'm')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'meter')
+      Time, 'Surface region thickness that is used', 'm')
   CS%id_Hsfc_max = register_diag_field('ocean_model', 'Hs_max', diag%axesT1, &
-      Time, 'Maximum surface region thickness', 'meter')
+      Time, 'Maximum surface region thickness', 'm')
   CS%id_Hsfc_min = register_diag_field('ocean_model', 'Hs_min', diag%axesT1, &
-      Time, 'Minimum surface region thickness', 'meter')
+      Time, 'Minimum surface region thickness', 'm')
  !CS%lim_det_dH_sfc = 0.5 ; CS%lim_det_dH_bathy = 0.2 ! Technically these should not get used if limit_det is false?
   if (CS%limit_det .or. (CS%id_Hsfc_min > 0)) then
     call get_param(param_file, mdl, "LIMIT_BUFFER_DET_DH_SFC", CS%lim_det_dH_sfc, &

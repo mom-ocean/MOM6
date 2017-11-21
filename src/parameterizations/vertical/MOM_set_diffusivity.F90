@@ -39,7 +39,7 @@ use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
-use MOM_io,                  only : slasher, vardesc, var_desc
+use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_CS
 use MOM_string_functions,    only : uppercase
@@ -50,7 +50,6 @@ use MOM_verticalGrid, only : verticalGrid_type
 use user_change_diffusivity, only : user_change_diff, user_change_diff_init
 use user_change_diffusivity, only : user_change_diff_end, user_change_diff_CS
 
-use fms_mod,                 only : read_data
 
 implicit none ; private
 
@@ -581,8 +580,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
- elseif (CS%useCVMix) then
-    !NOTE{BGR}: this needs cleaned up.  Works in 1D case, not tested outside.
+  elseif (CS%useCVMix) then
+    !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%CVMix_shear_CSp)
   elseif (associated(visc%Kv_turb)) then
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
@@ -2699,7 +2698,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     CS%use_LOTW_BBL_diffusivity = .false. ! This parameterization depends on a u* from viscous BBL
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model','Kd_BBL',diag%axesTi,Time, &
-       'Bottom Boundary Layer Diffusivity', 'meter2 sec-1')
+       'Bottom Boundary Layer Diffusivity', 'm2 s-1')
   call get_param(param_file, mdl, "SIMPLE_TKE_TO_KD", CS%simple_TKE_to_Kd, &
                  "If true, uses a simple estimate of Kd/TKE that will\n"//&
                  "work for arbitrary vertical coordinates. If false,\n"//&
@@ -2984,8 +2983,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
       filename = trim(CS%inputdir) // trim(tideamp_file)
       call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-      call read_data(filename, 'tideamp', CS%tideamp, &
-                     domain=G%domain%mpp_domain, timelevel=1)
+      call MOM_read_data(filename, 'tideamp', CS%tideamp, G%domain, timelevel=1)
     endif
 
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -2994,8 +2992,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  fail_if_missing=.true.)
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-    call read_data(filename, 'h2', CS%h2, domain=G%domain%mpp_domain, &
-                   timelevel=1)
+    call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
 
     do j=js,je ; do i=is,ie
       if (G%bathyT(i,j) < CS%min_zbot_itides) CS%mask_itidal(i,j) = 0.0
@@ -3016,7 +3013,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   endif
 
   CS%id_Kd_layer = register_diag_field('ocean_model', 'Kd_layer', diag%axesTL, Time, &
-      'Diapycnal diffusivity of layers (as set)', 'meter2 second-1')
+      'Diapycnal diffusivity of layers (as set)', 'm2 s-1')
 
   if (CS%Lee_wave_dissipation) then
 
@@ -3033,8 +3030,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call log_param(param_file, mdl, "INPUTDIR/NIKURASHIN_TKE_INPUT_FILE", &
                    filename)
     call safe_alloc_ptr(CS%TKE_Niku,is,ie,js,je); CS%TKE_Niku(:,:) = 0.0
-    call read_data(filename, 'TKE_input', CS%TKE_Niku, &
-                   domain=G%domain%mpp_domain, timelevel=1 ) ! ??? timelevel -aja
+    call MOM_read_data(filename, 'TKE_input', CS%TKE_Niku, G%domain, timelevel=1 ) ! ??? timelevel -aja
     CS%TKE_Niku(:,:) = Niku_scale * CS%TKE_Niku(:,:)
 
     call get_param(param_file, mdl, "GAMMA_NIKURASHIN",CS%Gamma_lee, &
@@ -3047,9 +3043,9 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  default=1.0)
 
     CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
-        'Lee wave Driven Turbulent Kinetic Energy', 'Watt meter-2')
+        'Lee wave Driven Turbulent Kinetic Energy', 'W m-2')
     CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
-         'Lee Wave Driven Diffusivity', 'meter2 sec-1')
+         'Lee Wave Driven Diffusivity', 'm2 s-1')
   else
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
@@ -3058,32 +3054,32 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
       CS%Lowmode_itidal_dissipation) then
 
     CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
-        'Internal Tide Driven Turbulent Kinetic Energy', 'Watt meter-2')
+        'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
     CS%id_maxTKE = register_diag_field('ocean_model','maxTKE',diag%axesTL,Time, &
-           'Maximum layer TKE', 'meter3 second-3')
+           'Maximum layer TKE', 'm3 s-3')
     CS%id_TKE_to_Kd = register_diag_field('ocean_model','TKE_to_Kd',diag%axesTL,Time, &
-           'Convert TKE to Kd', 'second2 meter')
+           'Convert TKE to Kd', 's2 m')
 
     CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
-         'Bottom Buoyancy Frequency', 'sec-1')
+         'Bottom Buoyancy Frequency', 's-1')
 
     CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
-         'Internal Tide Driven Diffusivity', 'meter2 sec-1')
+         'Internal Tide Driven Diffusivity', 'm2 s-1')
 
     CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
-         'Internal Tide Driven Diffusivity (from propagating low modes)', 'meter2 sec-1')
+         'Internal Tide Driven Diffusivity (from propagating low modes)', 'm2 s-1')
 
     CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
-        'Vertical flux of tidal turbulent dissipation', 'meter3 sec-3')
+        'Vertical flux of tidal turbulent dissipation', 'm3 s-3')
 
     CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
-         'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'meter3 sec-3')
+         'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'm3 s-3')
 
     CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
-         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'meter')
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
 
     CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'meter')
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
 
     CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
          'Bottom Buoyancy frequency squared', 's-2')
@@ -3092,40 +3088,40 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
          'Buoyancy frequency squared averaged over the water column', 's-2')
 
     CS%id_Kd_Work = register_diag_field('ocean_model','Kd_Work',diag%axesTL,Time, &
-         'Work done by Diapycnal Mixing', 'Watts m-2')
+         'Work done by Diapycnal Mixing', 'W m-2')
 
     CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
-         'Work done by Internal Tide Diapycnal Mixing', 'Watts m-2')
+         'Work done by Internal Tide Diapycnal Mixing', 'W m-2')
 
     CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
-         'Work done by Nikurashin Lee Wave Drag Scheme', 'Watts m-2')
+         'Work done by Nikurashin Lee Wave Drag Scheme', 'W m-2')
 
     CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
-         'Work done by Internal Tide Diapycnal Mixing (low modes)', 'Watts m-2')
+         'Work done by Internal Tide Diapycnal Mixing (low modes)', 'W m-2')
 
     CS%id_N2 = register_diag_field('ocean_model','N2',diag%axesTi,Time,            &
-         'Buoyancy frequency squared', 'sec-2', cmor_field_name='obvfsq',          &
-          cmor_units='s-2', cmor_long_name='Square of seawater buoyancy frequency',&
+         'Buoyancy frequency squared', 's-2', cmor_field_name='obvfsq',          &
+          cmor_long_name='Square of seawater buoyancy frequency',&
           cmor_standard_name='square_of_brunt_vaisala_frequency_in_sea_water')
 
     if (CS%user_change_diff) &
       CS%id_Kd_user = register_diag_field('ocean_model','Kd_user',diag%axesTi,Time, &
-           'User-specified Extra Diffusivity', 'meter2 sec-1')
+           'User-specified Extra Diffusivity', 'm2 s-1')
 
     if (associated(diag_to_Z_CSp)) then
-      vd = var_desc("N2", "second-2",&
+      vd = var_desc("N2", "s-2",&
                     "Buoyancy frequency, interpolated to z", z_grid='z')
       CS%id_N2_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-      vd = var_desc("Kd_itides","meter2 second-1", &
+      vd = var_desc("Kd_itides","m2 s-1", &
                     "Internal Tide Driven Diffusivity, interpolated to z", z_grid='z')
       CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
       if (CS%Lee_wave_dissipation) then
-         vd = var_desc("Kd_Nikurashin", "meter2 second-1", &
+         vd = var_desc("Kd_Nikurashin", "m2 s-1", &
                        "Lee Wave Driven Diffusivity, interpolated to z", z_grid='z')
          CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
       endif
       if (CS%Lowmode_itidal_dissipation) then
-        vd = var_desc("Kd_lowmode","meter2 second-1", &
+        vd = var_desc("Kd_lowmode","m2 s-1", &
                   "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
                   z_grid='z')
         CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
@@ -3152,21 +3148,21 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     ! The default molecular viscosity follows the CCSM4.0 and MOM4p1 defaults.
 
     CS%id_KT_extra = register_diag_field('ocean_model','KT_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for temperature', 'meter2 sec-1')
+         'Double-diffusive diffusivity for temperature', 'm2 s-1')
 
     CS%id_KS_extra = register_diag_field('ocean_model','KS_extra',diag%axesTi,Time, &
-         'Double-diffusive diffusivity for salinity', 'meter2 sec-1')
+         'Double-diffusive diffusivity for salinity', 'm2 s-1')
 
     if (associated(diag_to_Z_CSp)) then
-      vd = var_desc("KT_extra", "meter2 second-1", &
+      vd = var_desc("KT_extra", "m2 s-1", &
                     "Double-Diffusive Temperature Diffusivity, interpolated to z", &
                     z_grid='z')
       CS%id_KT_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-      vd = var_desc("KS_extra", "meter2 second-1", &
+      vd = var_desc("KS_extra", "m2 s-1", &
                     "Double-Diffusive Salinity Diffusivity, interpolated to z",&
                     z_grid='z')
       CS%id_KS_extra_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
-      vd = var_desc("Kd_BBL", "meter2 second-1", &
+      vd = var_desc("Kd_BBL", "m2 s-1", &
                     "Bottom Boundary Layer Diffusivity", z_grid='z')
       CS%id_Kd_BBL_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
     endif
