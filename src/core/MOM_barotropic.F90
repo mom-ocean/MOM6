@@ -88,7 +88,7 @@ use MOM_forcing_type, only : mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc, MOM_read_data, slasher
-use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_SIMPLE, OBC_NONE, open_boundary_query
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary, only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_segment_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
@@ -676,12 +676,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
       (CS%Nonlin_cont_update_period > 0)) stencil = 2
 
-  num_cycles = 1
-  if (CS%use_wide_halos) &
-    num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
-  isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
-  jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
-
   do_ave = query_averaging_enabled(CS%diag)
   find_etaav = present(etaav)
   find_PF = (do_ave .and. ((CS%id_PFu_bt > 0) .or. (CS%id_PFv_bt > 0)))
@@ -707,16 +701,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   if (present(OBC)) then ; if (associated(OBC)) then
     CS%BT_OBC%apply_u_OBCs = OBC%open_u_BCs_exist_globally .or. OBC%specified_u_BCs_exist_globally
     CS%BT_OBC%apply_v_OBCs = OBC%open_v_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally
-    apply_OBC_flather = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
-    apply_OBC_open = OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally
-    apply_OBCs = OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
+    apply_OBC_flather = open_boundary_query(OBC, apply_Flather_OBC=.true.)
+    apply_OBC_open = open_boundary_query(OBC, apply_open_OBC=.true.)
+    apply_OBCs = open_boundary_query(OBC, apply_specified_OBC=.true.) .or. &
            apply_OBC_flather .or. apply_OBC_open
-    if (.not.apply_OBC_flather .and. OBC%oblique_BCs_exist_globally) stencil = 2
+!   if (.not.apply_OBC_flather .and. OBC%oblique_BCs_exist_globally) stencil = 2
+    if (apply_OBC_flather .or. OBC%oblique_BCs_exist_globally) stencil = 2
 
     if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
       "btstep: Flather open boundary conditions have not yet been "// &
       "implemented for a non-Boussinesq model.")
   endif ; endif
+
+  num_cycles = 1
+  if (CS%use_wide_halos) &
+    num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
+  isvf = is - (num_cycles-1)*stencil ; ievf = ie + (num_cycles-1)*stencil
+  jsvf = js - (num_cycles-1)*stencil ; jevf = je + (num_cycles-1)*stencil
 
   nstep = CEILING(dt/CS%dtbt - 0.0001)
   if (is_root_PE() .and. (nstep /= CS%nstep_last)) then
@@ -773,13 +774,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   endif
   call create_group_pass(CS%pass_eta_bt_rem, eta_src, CS%BT_Domain)
   ! The following halo updates are not needed without wide halos.  RWH
-  if (ievf > ie) then
+  ! We do need them after all.
+! if (ievf > ie) then
     call create_group_pass(CS%pass_eta_bt_rem, bt_rem_u, bt_rem_v, &
                       CS%BT_Domain, To_All+Scalar_Pair)
     if (CS%linear_wave_drag) &
       call create_group_pass(CS%pass_eta_bt_rem, Rayleigh_u, Rayleigh_v, &
                       CS%BT_Domain, To_All+Scalar_Pair)
-  endif
+! endif
   ! The following halo update is not needed without wide halos.  RWH
   if (((G%isd > CS%isdw) .or. (G%jsd > CS%jsdw)) .or. (Isq <= is-1) .or. (Jsq <= js-1)) &
     call create_group_pass(CS%pass_force_hbt0_Cor_ref, BT_force_u, BT_force_v, CS%BT_Domain)
