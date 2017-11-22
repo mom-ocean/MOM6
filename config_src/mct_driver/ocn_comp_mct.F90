@@ -38,6 +38,8 @@ use MOM,                  only: finish_MOM_initialization, step_offline
 use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
+use MOM_forcing_type,     only: mech_forcing, allocate_mech_forcing, copy_back_forcing_fields
+use MOM_forcing_type,     only: set_net_mass_forcing, set_derived_forcing_fields
 use MOM_restart,          only: save_restart
 use MOM_domains,          only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_domains,          only: pass_vector, BGRID_NE, CGRID_NE, To_All
@@ -317,7 +319,8 @@ type, public :: ocean_state_type ; private
   real :: press_to_z          !< A conversion factor between pressure and ocean
                               !! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
-  type(directories) :: dirs   !< A structure containing several relevant directory paths.
+  type(directories)  :: dirs  !< A structure containing several relevant directory paths.
+  type(mech_forcing) :: forces!< A structure with the driving mechanical forces
   type(forcing)   :: fluxes   !< A structure containing pointers to
                               !! the ocean forcing fields.
   type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
@@ -907,7 +910,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%MOM_CSp%diag, OS%fluxes)
+                              OS%MOM_CSp%diag, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_apply_rigid_boundary)  then
     !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
@@ -1730,7 +1733,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   if (OS%fluxes%fluxes_used) then
     ! GMM, is enable_averaging needed now?
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag)
-    call ocn_import(OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
+    call ocn_import(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
                     c1, c2, c3, c4, OS%restore_salinity,OS%restore_temp)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
@@ -1738,7 +1741,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%State, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
@@ -1753,26 +1756,32 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call ocn_import(OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
+    call ocn_import(OS%forces, OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
                        OS%state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
                        OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%State, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
-    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
+    call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, time_step, OS%grid, weight)
+    ! Some of the fields that exist in both the forcing and mech_forcing types
+    ! are time-averages must be copied back to the forces type.
+    call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
+
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
+  call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
@@ -1786,16 +1795,16 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   else
-    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call mech_forcing_diags(OS%fluxes, time_step, OS%grid, &
+  call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
                           OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%MOM_CSp%diag)
 
@@ -1832,11 +1841,12 @@ end subroutine update_ocean_model
 !! See \ref section_ocn_import for a summary of the surface fluxes that are
 !! passed from MCT to MOM6, including fluxes that need to be included in
 !! the future.
-subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
+subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes structure
-  type(time_type),            intent(in)           :: Time !< Model time structure
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid structure
+  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)           :: Time !< Model time
+  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
   type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
                                                    !! a previous call to surface_forcing_init
   type(surface),              intent(in)           :: state !< control structure to ocean
@@ -1919,17 +1929,18 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
 
   ! if true, allocation and initialization
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true., &
-                               water=.true., heat=.true.)
-
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
+                               ustar=.true., press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
+                               press=.true.)
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%p_surf_SSH,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf_SSH,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
@@ -1949,8 +1960,8 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     enddo; enddo
 
     if (CS%rigid_sea_ice) then
-      call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
-      call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
+      call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
+      call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
 
     if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
@@ -2062,8 +2073,8 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
       taux_at_h(i,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
       tauy_at_h(i,j) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      fluxes%taux(I,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
-      fluxes%tauy(i,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+      forces%taux(I,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
+      forces%tauy(i,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     endif
 
     ! liquid precipitation (rain)
@@ -2142,18 +2153,18 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
 
     ! applied surface pressure from atmosphere and cryosphere
     ! sea-level pressure (Pa)
-    if (ASSOCIATED(fluxes%p_surf_full) .and. ASSOCIATED(fluxes%p_surf)) then
-      fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
+    if (ASSOCIATED(forces%p_surf_full) .and. ASSOCIATED(forces%p_surf)) then
+      forces%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
       if (CS%max_p_surf >= 0.0) then
-          fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
+          forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
       else
-          fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
+          forces%p_surf(i,j) = forces%p_surf_full(i,j)
       endif
 
       if (CS%use_limited_P_SSH) then
-        fluxes%p_surf_SSH(i,j) = fluxes%p_surf(i,j)
+        forces%p_surf_SSH(i,j) = forces%p_surf(i,j)
       else
-        fluxes%p_surf_SSH(i,j) = fluxes%p_surf_full(i,j)
+        forces%p_surf_SSH(i,j) = forces%p_surf_full(i,j)
       endif
 
     endif
@@ -2208,17 +2219,17 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
 
     do j=js,je ; do I=Isq,Ieq
-      fluxes%taux(I,j) = 0.0
+      forces%taux(I,j) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
-        fluxes%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
+        forces%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
                             G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%tauy(i,J) = 0.0
+      forces%tauy(i,J) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
-        fluxes%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
+        forces%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
                             G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo ; enddo
@@ -2238,24 +2249,24 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
           ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
-      fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo ; enddo
 
   elseif (wind_stagger == AGRID) then
     call pass_vector(taux_at_h, tauy_at_h, G%Domain,stagger=AGRID)
 
     do j=js,je ; do I=Isq,Ieq
-      fluxes%taux(I,j) = 0.0
+      forces%taux(I,j) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
-        fluxes%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
+        forces%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
                             G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i+1,j))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%tauy(i,J) = 0.0
+      forces%tauy(i,J) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
-        fluxes%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
+        forces%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
                             G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i,j+1))
     enddo ; enddo
@@ -2263,30 +2274,30 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-      fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
 
   else ! C-grid wind stresses.
     if (G%symmetric) &
-      call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain)
-    call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
+      call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
+    call pass_vector(forces%taux, forces%tauy, G%Domain)
 
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+        taux2 = (G%mask2dCu(I-1,j)*forces%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*forces%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
 
       tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+        tauy2 = (G%mask2dCv(i,J-1)*forces%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
-        fluxes%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
       else
-        fluxes%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
       endif
     enddo ; enddo
 
@@ -2298,11 +2309,11 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     ! The commented out code here and in the following lines is the correct
     ! version, but the incorrect version is being retained temporarily to avoid
     ! changing answers.
-    call pass_var(fluxes%p_surf_full, G%Domain)
+    call pass_var(forces%p_surf_full, G%Domain)
     I_GEarth = 1.0 / G%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=isd,ied-1 ; do j=jsd,jed
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
+      mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
@@ -2310,22 +2321,22 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
-      fluxes%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
+      mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      fluxes%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to fluxes
-    call apply_flux_adjustments(G, CS, Time, fluxes)
+    call apply_flux_adjustments(G, CS, Time, forces, fluxes)
   endif
 
   ! Allow for user-written code to alter fluxes after all the above
@@ -2340,10 +2351,11 @@ end subroutine  ocn_import
 !! Available adjustments are:
 !! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
 !! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
-subroutine apply_flux_adjustments(G, CS, Time, fluxes)
+subroutine apply_flux_adjustments(G, CS, Time, forces, fluxes)
   type(ocean_grid_type),    intent(inout) :: G !< Ocean grid structure
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
   type(time_type),          intent(in)    :: Time !< Model time structure
+  type(mech_forcing),       intent(inout) :: forces !< Driving mechanical forces
   type(forcing), optional,  intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
@@ -2419,11 +2431,11 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
 
     ! Average to C-grid locations
     do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-      fluxes%taux(I,j) = fluxes%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
+      forces%taux(I,j) = forces%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
     enddo ; enddo
 
     do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-      fluxes%tauy(i,J) = fluxes%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
+      forces%tauy(i,J) = forces%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
     enddo ; enddo
   endif ! overrode_x .or. overrode_y
 
