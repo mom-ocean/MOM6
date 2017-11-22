@@ -613,7 +613,7 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   Jeg = Jeg - G%jdg_offset
 
   ! This is the i-extent of the segment on this PE.
-  ! The values are nonsence if the segment is not on this PE.
+  ! The values are nonsense if the segment is not on this PE.
   seg%HI%IsdB = min( max(Isg, G%HI%IsdB), G%HI%IedB)
   seg%HI%IedB = min( max(Ieg, G%HI%IsdB), G%HI%IedB)
   seg%HI%isd = min( max(Isg+1, G%HI%isd), G%HI%ied)
@@ -624,7 +624,7 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   seg%HI%iec = min( max(Ieg, G%HI%isc), G%HI%iec)
 
   ! This is the j-extent of the segment on this PE.
-  ! The values are nonsence if the segment is not on this PE.
+  ! The values are nonsense if the segment is not on this PE.
   seg%HI%JsdB = min( max(Jsg, G%HI%JsdB), G%HI%JedB)
   seg%HI%JedB = min( max(Jeg, G%HI%JsdB), G%HI%JedB)
   seg%HI%jsd = min( max(Jsg+1, G%HI%jsd), G%HI%jed)
@@ -719,8 +719,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     endif
 
     if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
-    if (Js_obc<=G%HI%JsdB .and. Je_obc<=G%HI%JsdB) return ! Segment is not on tile
-    if (Js_obc>=G%HI%JedB) return ! Segment is not on tile
+    if (Je_obc-1<=G%HI%JsdB .or. Js_obc+1>=G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
@@ -822,8 +821,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     endif
 
     if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
-    if (Is_obc<=G%HI%IsdB .and. Ie_obc<=G%HI%IsdB) return ! Segment is not on tile
-    if (Is_obc>=G%HI%IedB) return ! Segment is not on tile
+    if (Ie_obc-1<=G%HI%IsdB .or. Is_obc+1>=G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
@@ -1264,15 +1262,15 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
     if (.not. segment%on_pe) cycle
     if (segment%is_E_or_W .and. segment%radiation) then
       do k=1,G%ke
-        I=segment%HI%IscB
-        do j=segment%HI%jsc,segment%HI%jec
+        I=segment%HI%IsdB
+        do j=segment%HI%jsd,segment%HI%jed
           segment%rx_normal(I,j,k) = OBC%rx_normal(I,j,k)
         enddo
       enddo
     elseif (segment%is_N_or_S .and. segment%radiation) then
       do k=1,G%ke
-        J=segment%HI%JscB
-        do i=segment%HI%isc,segment%HI%iec
+        J=segment%HI%JsdB
+        do i=segment%HI%isd,segment%HI%ied
           segment%rx_normal(i,J,k) = OBC%ry_normal(i,J,k)
         enddo
       enddo
@@ -1286,8 +1284,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
      if (.not. segment%on_pe) cycle
      if (segment%oblique) call gradient_at_q_points(G,segment,u_new,v_new)
      if (segment%direction == OBC_DIRECTION_E) then
-       I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
+       I=segment%HI%IsdB
+       if (I<G%HI%IscB) cycle
+       do k=1,nz ;  do j=segment%HI%jsd,segment%HI%jed
          if (segment%radiation) then
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
@@ -1339,8 +1338,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
      endif
 
      if (segment%direction == OBC_DIRECTION_W) then
-       I=segment%HI%IscB
-       do k=1,nz ;  do j=segment%HI%jsc,segment%HI%jec
+       I=segment%HI%IsdB
+       if (I>G%HI%IecB) cycle
+       do k=1,nz ;  do j=segment%HI%jsd,segment%HI%jed
          if (segment%radiation) then
            dhdt = u_old(I+1,j,k)-u_new(I+1,j,k) !old-new
            dhdx = u_new(I+1,j,k)-u_new(I+2,j,k) !in new time forward sasha for I+1
@@ -1392,8 +1392,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
      endif
 
      if (segment%direction == OBC_DIRECTION_N) then
-       J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
+       J=segment%HI%JsdB
+       if (J<G%HI%JscB) cycle
+       do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
          if (segment%radiation) then
            dhdt = v_old(i,J-1,k)-v_new(i,J-1,k) !old-new
            dhdy = v_new(i,J-1,k)-v_new(i,J-2,k) !in new time backward sasha for J-1
@@ -1446,8 +1447,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
 
 
      if (segment%direction == OBC_DIRECTION_S) then
-       J=segment%HI%JscB
-       do k=1,nz ;  do i=segment%HI%isc,segment%HI%iec
+       J=segment%HI%JsdB
+       if (J>G%HI%JecB) cycle
+       do k=1,nz ;  do i=segment%HI%isd,segment%HI%ied
          if (segment%radiation) then
            dhdt = v_old(i,J+1,k)-v_new(i,J+1,k) !old-new
            dhdy = v_new(i,J+1,k)-v_new(i,J+2,k) !in new time backward sasha for J-1
@@ -1525,13 +1527,13 @@ subroutine open_boundary_apply_normal_flow(OBC, G, u, v)
       cycle
     elseif (segment%radiation .or. segment%oblique .or. segment%gradient) then
       if (segment%is_E_or_W) then
-        I=segment%HI%IscB
-        do k=1,G%ke ;  do j=segment%HI%jsc,segment%HI%jec
+        I=segment%HI%IsdB
+        do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
           u(I,j,k) = segment%normal_vel(I,j,k)
         enddo; enddo
       elseif (segment%is_N_or_S) then
-        J=segment%HI%JscB
-        do k=1,G%ke ;  do i=segment%HI%isc,segment%HI%iec
+        J=segment%HI%JsdB
+        do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
           v(i,J,k) = segment%normal_vel(i,J,k)
         enddo; enddo
       endif
@@ -1558,13 +1560,13 @@ subroutine open_boundary_zero_normal_flow(OBC, G, u, v)
     if (.not. segment%on_pe) then
       cycle
     elseif (segment%is_E_or_W) then
-      I=segment%HI%IscB
-      do k=1,G%ke ;  do j=segment%HI%jsc,segment%HI%jec
+      I=segment%HI%IsdB
+      do k=1,G%ke ;  do j=segment%HI%jsd,segment%HI%jed
         u(I,j,k) = 0.
       enddo; enddo
     elseif (segment%is_N_or_S) then
-      J=segment%HI%JscB
-      do k=1,G%ke ;  do i=segment%HI%isc,segment%HI%iec
+      J=segment%HI%JsdB
+      do k=1,G%ke ;  do i=segment%HI%isd,segment%HI%ied
         v(i,J,k) = 0.
       enddo; enddo
     endif
@@ -1584,17 +1586,17 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
 
   if (segment%is_E_or_W) then
     if (segment%direction == OBC_DIRECTION_E) then
-      I=segment%HI%iscB
+      I=segment%HI%isdB
       do k=1,G%ke
-        do J=segment%HI%JscB,segment%HI%JecB
+        do J=max(segment%HI%JsdB, G%HI%JsdB+1),min(segment%HI%JedB, G%HI%JedB-1)
           segment%grad_normal(J,1,k) = (uvel(I-1,j+1,k)-uvel(I-1,j,k)) * G%mask2dBu(I-1,J)
           segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! western segment
-      I=segment%HI%iscB
+      I=segment%HI%isdB
       do k=1,G%ke
-        do J=segment%HI%JscB,segment%HI%JecB
+        do J=max(segment%HI%JsdB, G%HI%JsdB+1),min(segment%HI%JedB, G%HI%JedB-1)
           segment%grad_normal(J,1,k) = (uvel(I+1,j+1,k)-uvel(I+1,j,k)) * G%mask2dBu(I+1,J)
           segment%grad_normal(J,2,k) = (uvel(I,j+1,k)-uvel(I,j,k)) * G%mask2dBu(I,J)
         enddo
@@ -1602,17 +1604,17 @@ subroutine gradient_at_q_points(G,segment,uvel,vvel)
     endif
   else if (segment%is_N_or_S) then
     if (segment%direction == OBC_DIRECTION_N) then
-      J=segment%HI%jscB
+      J=segment%HI%jsdB
       do k=1,G%ke
-        do I=segment%HI%IscB,segment%HI%IecB
+        do I=max(segment%HI%IsdB, G%HI%IsdB+1),min(segment%HI%IedB, G%HI%IedB-1)
           segment%grad_normal(I,1,k) = (vvel(i+1,J-1,k)-vvel(i,J-1,k)) * G%mask2dBu(I,J-1)
           segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
       enddo
     else ! south segment
-      J=segment%HI%jscB
+      J=segment%HI%jsdB
       do k=1,G%ke
-        do I=segment%HI%IscB,segment%HI%IecB
+        do I=max(segment%HI%IsdB, G%HI%IsdB+1),min(segment%HI%IedB, G%HI%IedB-1)
           segment%grad_normal(I,1,k) = (vvel(i+1,J+1,k)-vvel(i,J+1,k)) * G%mask2dBu(I,J+1)
           segment%grad_normal(I,2,k) = (vvel(i+1,J,k)-vvel(i,J,k)) * G%mask2dBu(I,J)
         enddo
@@ -1769,7 +1771,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
       allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
     if (segment%oblique) then
-      allocate(segment%grad_normal(JscB:JecB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
+      allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
     endif
   endif
 
@@ -1790,7 +1792,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
       allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
     endif
     if (segment%oblique) then
-      allocate(segment%grad_normal(IscB:IecB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
+      allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
     endif
   endif
 
@@ -1973,7 +1975,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     ishift=0;jshift=0
     if (segment%is_E_or_W) then
       if (segment%direction == OBC_DIRECTION_W) ishift=1
-      I=segment%HI%IscB
+      I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
         segment%Cg(I,j) = sqrt(GV%g_prime(1)*G%bathyT(i+ishift,j))
  !       if (GV%Boussinesq) then
@@ -1989,7 +1991,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
     else! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       if (segment%direction == OBC_DIRECTION_S) jshift=1
-      J=segment%HI%JscB
+      J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
         segment%Cg(i,J) = sqrt(GV%g_prime(1)*G%bathyT(i,j+jshift))
 !       if (GV%Boussinesq) then
@@ -2503,8 +2505,8 @@ end subroutine mask_outside_OBCs
 
 !> flood the cin, cout values
 subroutine flood_fill(G, color, cin, cout, cland)
-  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
-  real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
+  type(dyn_horgrid_type), intent(inout) :: G      !< Ocean grid structure
+  real, dimension(:,:),   intent(inout) :: color  !< For sorting inside from outside
   integer, intent(in) :: cin    !< color for inside the domain
   integer, intent(in) :: cout   !< color for outside the domain
   integer, intent(in) :: cland  !< color for inside the land mask
@@ -2563,8 +2565,8 @@ end subroutine flood_fill
 
 !> flood the cin, cout values
 subroutine flood_fill2(G, color, cin, cout, cland)
-  type(dyn_horgrid_type),  intent(inout) :: G          !< Ocean grid structure
-  real, dimension(:,:), intent(inout) :: color      ! For sorting inside from outside
+  type(dyn_horgrid_type), intent(inout) :: G       !< Ocean grid structure
+  real, dimension(:,:),   intent(inout) :: color   !< For sorting inside from outside
   integer, intent(in) :: cin    !< color for inside the domain
   integer, intent(in) :: cout   !< color for outside the domain
   integer, intent(in) :: cland  !< color for inside the land mask
