@@ -719,7 +719,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
     endif
 
     if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
-    if (Je_obc-1<=G%HI%JsdB .or. Js_obc+1>=G%HI%JedB) return ! Segment is not on tile
+    if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
@@ -821,7 +821,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
     endif
 
     if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
-    if (Ie_obc-1<=G%HI%IsdB .or. Is_obc+1>=G%HI%IedB) return ! Segment is not on tile
+    if (Ie_obc<=G%HI%IsdB .or. Is_obc>=G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
 
   OBC%segment(l_seg)%on_pe = .true.
