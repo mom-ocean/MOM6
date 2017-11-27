@@ -51,7 +51,7 @@ use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_fixed_initialization, only : MOM_initialize_fixed
-use MOM_forcing_type,         only : MOM_forcing_chksum
+use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
 use MOM_io,                   only : slasher, file_exists, MOM_read_data
@@ -637,6 +637,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
+    call MOM_mech_forcing_chksum("Before steps", forces, G, haloshift=0)
     call check_redundant("Before steps ", u, v, G)
     call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
