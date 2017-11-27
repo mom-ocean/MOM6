@@ -183,8 +183,8 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
     ! Additional output parameters also 2d
-    ML_depth, &        ! The mixed layer depth in m.
-    ML_depth2, &       ! The mixed layer depth in m.
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MLD_EKMAN, &       ! MLD over Ekman length
@@ -655,17 +655,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     ! interface.
     do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
-
       U_Star = fluxes%ustar(i,j)
-      taux2 = 0.
-      if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
-      tauy2 = 0.0
-      if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
-      U_Star_Mean = sqrt(sqrt(taux2 + tauy2)/GV%rho0)
+      U_Star_Mean = fluxes%ustar_gustless(i,j)
       if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
         if (fluxes%frac_shelf_h(i,j) > 0.0) &
           U_Star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &
@@ -2207,15 +2198,15 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "in the boundary layer, applied when local stratification \n"//    &
                  "is negative.  The default is 0, but should probably be ~1.",      &
                  units="nondim", default=0.0)
-   call get_param(param_file, mdl, "USE_LA_LI2016", CS%USE_LA_Windsea,            &
+  call get_param(param_file, mdl, "USE_LA_LI2016", CS%USE_LA_Windsea,            &
                  "A logical to use the Li et al. 2016 (submitted) formula to \n"//&
                  " determine the Langmuir number.",                               &
                  units="nondim", default=.false.)
-   call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
+  call get_param(param_file, mdl, "LA_DEPTH_RATIO", CS%LaDepthRatio,                &
                  "The depth (normalized by BLD) to average Stokes drift over in \n"//&
                  " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
                  units="nondim",default=0.04)
-   call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
+  call get_param(param_file, mdl, "LT_ENHANCE", CS%LT_ENHANCE_FORM,        &
                  "Integer for Langmuir number mode. \n"//                   &
                  " *Requires USE_LA_LI2016 to be set to True. \n"//         &
                  "Options: 0 - No Langmuir \n"//                            &
@@ -2223,81 +2214,83 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
                  "         2 - Multiplied w/ adjusted La. \n"//             &
                  "         3 - Added w/ adjusted La.",                      &
                  units="nondim", default=0)
-   call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
+  call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
                  "Coefficient for Langmuir enhancement if LT_ENHANCE > 1",&
                  units="nondim", default=0.447)
-   call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
+  call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
                  "Exponent for Langmuir enhancement if LT_ENHANCE > 1", &
                  units="nondim", default=-1.33)
-   call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK,             &
+  call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK,             &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching Ekman depth if LT_ENHANCE=2.",            &
                  units="nondim", default=-0.87)
-   call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab,        &
+  call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab,        &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching stable Obukhov depth if LT_ENHANCE=2.",   &
                   units="nondim", default=0.0)
-   call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un,          &
+  call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un,          &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " MLD approaching unstable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.0)
-   call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab,         &
+  call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab,         &
                  "Coefficient for modification of Langmuir number due to\n"//&
                  " ratio of Ekman to stable Obukhov depth if LT_ENHANCE=2.", &
                   units="nondim", default=0.95)
-   call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un,            &
+  call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un,            &
                  "Coefficient for modification of Langmuir number due to\n"// &
                  " ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.",&
                   units="nondim", default=0.95)
-   if (CS%LT_ENHANCE_FORM.gt.0 .and. (.not.CS%USE_LA_Windsea)) then
-      call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, then "//&
-                 " LT_ENHANCE must be 0.")
+  if (CS%LT_ENHANCE_FORM>0 .and. (.not.CS%USE_LA_Windsea)) then
+    call MOM_error(FATAL, "If flag USE_LA_LI2016 is false, LT_ENHANCE must be 0.")
   endif
   ! This gives a minimum decay scale that is typically much less than Angstrom.
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min, &
                  "The (tiny) minimum friction velocity used within the \n"//&
-                 "ePBL code, derived from OMEGA and ANGSTROM.", units="meter second-1")
+                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'meter')
+      Time, 'Surface boundary layer depth', 'm',                            &
+      cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
       Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation'//&
-            ' through model layers', 'meter3 second-3')
+            ' through model layers', 'm3 s-3')
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'meter3 second-3')
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3')
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'meter')
+      Time, 'Surface region thickness that is used', 'm')
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
-      Time, 'Mixing Length that is used', 'meter')
+      Time, 'Mixing Length that is used', 'm')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second-1')
+      Time, 'Velocity Scale that is used.', 'm s-1')
   CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
-      Time, 'LT enhancement that is used.', 'non-dim')
+      Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
-      Time, 'MSTAR that is used.', 'non-dim')
+      Time, 'MSTAR that is used.', 'nondim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
+      Time, 'ePBL Surface Boundary layer depth.', 'm')
+  ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
+  !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
-      Time, 'Boundary layer depth over Ekman length.', 'meter')
+      Time, 'Boundary layer depth over Ekman length.', 'm')
   CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
-      Time, 'Boundary layer depth over Obukhov length.', 'meter')
+      Time, 'Boundary layer depth over Obukhov length.', 'm')
   CS%id_ekman_obukhov = register_diag_field('ocean_model', 'EKMAN_OBUKHOV', diag%axesT1, &
-      Time, 'Ekman length over Obukhov length.', 'meter')
+      Time, 'Ekman length over Obukhov length.', 'm')
   CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
-      Time, 'Langmuir number.', 'non-dim')
+      Time, 'Langmuir number.', 'nondim')
   CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
-      Time, 'Modified Langmuir number.', 'non-dim')
+      Time, 'Modified Langmuir number.', 'nondim')
 
 
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", use_temperature, &

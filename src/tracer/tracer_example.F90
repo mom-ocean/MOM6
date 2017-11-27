@@ -41,7 +41,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -77,16 +77,13 @@ type, public :: USER_tracer_example_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  real, pointer :: tr_aux(:,:,:,:) => NULL() ! The masked tracer concentration
-                                             ! for output, in g m-3.
   type(p3d), dimension(NTR) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
-  logical :: use_sponge
+  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
 
   integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
              ! if it is used and the surface tracer concentrations are to be
@@ -102,24 +99,20 @@ end type USER_tracer_example_CS
 
 contains
 
+!> This subroutine is used to register tracer fields and subroutines
+!! to be used with MOM.
 function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),    intent(in)   :: HI
+  type(hor_index_type),    intent(in)   :: HI   !< A horizontal index type structure.
   type(verticalGrid_type), intent(in)   :: GV   !< The ocean's vertical grid structure
   type(param_file_type),   intent(in)   :: param_file !< A structure to parse for run-time parameters
-  type(USER_tracer_example_CS), pointer :: CS
-  type(tracer_registry_type), pointer   :: tr_Reg
-  type(MOM_restart_CS),       pointer   :: restart_CS
-! This subroutine is used to register tracer fields and subroutines
-! to be used with MOM.
-! Arguments: HI - A horizontal index type structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file - A structure indicating the open file to parse for
-!                         model parameter values.
-!  (in/out)  CS - A pointer that is set to point to the control structure
-!                 for this module
-!  (in/out)  tr_Reg - A pointer that is set to point to the control structure
-!                  for the tracer advection and diffusion module.
-!  (in)      restart_CS - A pointer to the restart control structure.
+  type(USER_tracer_example_CS), pointer :: CS   !< A pointer that is set to point to the control
+                                                !! structure for this module
+  type(tracer_registry_type), pointer   :: tr_Reg !< A pointer that is set to point to the control
+                                                  !! structure for the tracer advection and
+                                                  !! diffusion module.
+  type(MOM_restart_CS),       pointer   :: restart_CS !< A pointer to the restart control structure.
+
+! Local variables
   character(len=80)  :: name, longname
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -155,9 +148,6 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
                  "specified from MOM_initialization.F90.", default=.false.)
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
-  endif
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr",I1.1)') m
@@ -186,37 +176,30 @@ function USER_register_tracer_example(HI, GV, param_file, CS, tr_Reg, restart_CS
   USER_register_tracer_example = .true.
 end function USER_register_tracer_example
 
+!> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
+!! and it sets up the tracer output.
 subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   sponge_CSp, diag_to_Z_CSp)
-  logical,                            intent(in) :: restart
-  type(time_type), target,            intent(in) :: day
+  logical,                            intent(in) :: restart !< .true. if the fields have already
+                                                            !! been read from a restart file.
+  type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(diag_ctrl), target,            intent(in) :: diag
-  type(ocean_OBC_type),               pointer    :: OBC
-  type(USER_tracer_example_CS),       pointer    :: CS
-  type(sponge_CS),                    pointer    :: sponge_CSp
-  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp
-!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
-! and it sets up the tracer output.
+  type(diag_ctrl), target,            intent(in) :: diag !< A structure that is used to regulate
+                                                         !! diagnostic output.
+  type(ocean_OBC_type),               pointer    :: OBC  !< This open boundary condition type specifies
+                                                         !! whether, where, and what open boundary
+                                                         !! conditions are used.
+  type(USER_tracer_example_CS),       pointer    :: CS   !< The control structure returned by a previous
+                                                         !! call to USER_register_tracer_example.
+  type(sponge_CS),                    pointer    :: sponge_CSp    !< A pointer to the control structure
+                                                                  !! for the sponges, if they are in use.
+  type(diag_to_Z_CS),                 pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                                  !! for diagnostics in depth space.
 
-! Arguments: restart - .true. if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m or kg m-2.
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 USER_register_tracer_example.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
+! Local variables
   real, allocatable :: temp(:,:,:)
   real, pointer, dimension(:,:,:) :: &
     OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
@@ -252,8 +235,7 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                         CS%tracer_IC_file)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
-        call read_data(CS%tracer_IC_file, trim(name), &
-                       CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
       do m=1,NTR
@@ -366,36 +348,31 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
 end subroutine USER_initialize_tracer
 
+!> This subroutine applies diapycnal diffusion and any other column
+!! tracer physics or chemistry to the tracers from this file.
+!! This is a simple example of a set of advected passive tracers.
+!! The arguments to this subroutine are redundant in that
+!!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old, h_new, ea, eb
-  type(forcing),                      intent(in) :: fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_old !< Layer thickness before entrainment,
+                                                                !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h_new !< Layer thickness after entrainment,
+                                                                !! in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: ea    !< an array to which the amount of
+                                              !! fluid entrained from the layer above during this
+                                              !! call will be added, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: eb    !< an array to which the amount of
+                                              !! fluid entrained from the layer below during this
+                                              !! call will be added, in m or kg m-2.
+  type(forcing),                      intent(in) :: fluxes !< A structure containing pointers to
+                                              !! any possible forcing fields.  Unused fields have NULL ptrs.
   real,                               intent(in) :: dt   !< The amount of time covered by this call, in s
-  type(USER_tracer_example_CS),       pointer    :: CS
-!   This subroutine applies diapycnal diffusion and any other column
-! tracer physics or chemistry to the tracers from this file.
-! This is a simple example of a set of advected passive tracers.
+  type(USER_tracer_example_CS),       pointer    :: CS   !< The control structure returned by a previous
+                                                         !! call to USER_register_tracer_example.
 
-! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
-!  (in)      h_new -  Layer thickness after entrainment, in m or kg m-2.
-!  (in)      ea - an array to which the amount of fluid entrained
-!                 from the layer above during this call will be
-!                 added, in m or kg m-2.
-!  (in)      eb - an array to which the amount of fluid entrained
-!                 from the layer below during this call will be
-!                 added, in m or kg m-2.
-!  (in)      fluxes - A structure containing pointers to any possible
-!                     forcing fields.  Unused fields have NULL ptrs.
-!  (in)      dt - The amount of time covered by this call, in s.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 USER_register_tracer_example.
-!
-! The arguments to this subroutine are redundant in that
-!     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
-
+! Local variables
   real :: hold0(SZI_(G))       ! The original topmost layer thickness,
                                ! with surface mass fluxes added back, m.
   real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
@@ -467,26 +444,9 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
     enddo ; enddo ; enddo
   enddo
 
-  if (CS%mask_tracers) then
-    do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-          CS%tr_aux(i,j,k,m) = CS%land_val(m)
-        else
-          CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
-        endif
-      enddo ; enddo ; enddo
-    endif ; enddo
-  endif
-
   do m=1,NTR
-    if (CS%mask_tracers) then
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr_aux(:,:,:,m),CS%diag)
-    else
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    endif
+    if (CS%id_tracer(m)>0) &
+      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
     if (CS%id_tr_ady(m)>0) &
@@ -499,33 +459,26 @@ subroutine tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS)
 
 end subroutine tracer_column_physics
 
+!> This function calculates the mass-weighted integral of all tracer stocks,
+!! returning the number of stocks it has calculated.  If the stock_index
+!! is present, only the stock corresponding to that coded index is returned.
 function USER_tracer_stock(h, stocks, G, GV, CS, names, units, stock_index)
   type(ocean_grid_type),              intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                                       intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(:),                 intent(out)   :: stocks
-  type(USER_tracer_example_CS),       pointer       :: CS
-  character(len=*), dimension(:),     intent(out)   :: names
-  character(len=*), dimension(:),     intent(out)   :: units
-  integer, optional,                  intent(in)    :: stock_index
-  integer                                           :: USER_tracer_stock
-! This function calculates the mass-weighted integral of all tracer stocks,
-! returning the number of stocks it has calculated.  If the stock_index
-! is present, only the stock corresponding to that coded index is returned.
+  real, dimension(:),                 intent(out)   :: stocks !< the mass-weighted integrated amount of each
+                                                              !! tracer, in kg times concentration units.
+  type(USER_tracer_example_CS),       pointer       :: CS     !< The control structure returned by a
+                                                              !! previous call to register_USER_tracer.
+  character(len=*), dimension(:),     intent(out)   :: names  !< the names of the stocks calculated.
+  character(len=*), dimension(:),     intent(out)   :: units  !< the units of the stocks calculated.
+  integer, optional,                  intent(in)    :: stock_index !< the coded index of a specific stock
+                                                                   !! being sought.
+  integer                                           :: USER_tracer_stock !< Return value: the number of
+                                                                         !! stocks calculated here.
 
-! Arguments: h - Layer thickness, in m or kg m-2.
-!  (out)     stocks - the mass-weighted integrated amount of each tracer,
-!                     in kg times concentration units.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - The control structure returned by a previous call to
-!                 register_USER_tracer.
-!  (out)     names - the names of the stocks calculated.
-!  (out)     units - the units of the stocks calculated.
-!  (in,opt)  stock_index - the coded index of a specific stock being sought.
-! Return value: the number of stocks calculated here.
-
+! Local variables
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -585,13 +538,13 @@ subroutine USER_tracer_surface_state(state, h, G, CS)
 
 end subroutine USER_tracer_surface_state
 
+!> Clean up allocated memory at the end.
 subroutine USER_tracer_example_end(CS)
   type(USER_tracer_example_CS), pointer :: CS
   integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    if (associated(CS%tr_aux)) deallocate(CS%tr_aux)
     do m=1,NTR
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)

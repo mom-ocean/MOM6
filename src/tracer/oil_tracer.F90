@@ -45,7 +45,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -108,7 +108,6 @@ type, public :: oil_tracer_CS ; private
   real, dimension(NTR_MAX) ::  oil_decay_days, & ! Decay time scale of oil (in days)
                                oil_decay_rate    ! Decay rate of oil (in s^-1) calculated from oil_decay_days
   integer, dimension(NTR_MAX) ::  oil_source_k ! Layer of source
-  logical :: mask_tracers  ! If true, oils are masked out in massless layers.
   logical :: oil_may_reinit  ! If true, oil may go through the
                            ! initialization code if they are not found in the
                            ! restart files.
@@ -180,9 +179,6 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "If true, OIL_IC_FILE is in depth space, not layer space", &
                  default=.false.)
 
-  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
-                 "If true, the tracers are masked out in massless layer. \n"//&
-                 "This can be a problem with time-averages.", default=.false.)
   call get_param(param_file, mdl, "OIL_MAY_REINIT", CS%oil_may_reinit, &
                  "If true, oil tracers may go through the initialization \n"//&
                  "code if they are not found in the restart files. \n"//&
@@ -341,8 +337,7 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                     trim(CS%IC_file)//".")
           endif
         else
-          call read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), &
-                         domain=G%Domain%mpp_domain)
+          call MOM_read_data(CS%IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
         endif
       else
         do k=1,nz ; do j=js,je ; do i=is,ie
@@ -366,8 +361,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   endif
 
   ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "years m3 s-1"
-  else ; flux_units = "years kg s-1" ; endif
+  if (GV%Boussinesq) then ; flux_units = "yr m3 s-1"
+  else ; flux_units = "yr kg s-1" ; endif
 
   do m=1,CS%ntr
     ! Register the tracer for the restart file.
@@ -443,7 +438,6 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
   real :: year, h_total, ldecay
   integer :: secs, days
   integer :: i, j, k, is, ie, js, je, nz, m, k_max
-  real, allocatable :: local_tr(:,:,:)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
@@ -512,24 +506,9 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     enddo
   endif
 
-  allocate(local_tr(G%isd:G%ied,G%jsd:G%jed,nz))
   do m=1,CS%ntr
-    if (CS%id_tracer(m)>0) then
-      if (CS%mask_tracers) then
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-            local_tr(i,j,k) = CS%land_val(m)
-          else
-            local_tr(i,j,k) = CS%tr(i,j,k,m)
-          endif
-        enddo ; enddo ; enddo
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          local_tr(i,j,k) = CS%tr(i,j,k,m)
-        enddo ; enddo ; enddo
-      endif ! CS%mask_tracers
-      call post_data(CS%id_tracer(m),local_tr,CS%diag)
-    endif ! CS%id_tracer(m)>0
+    if (CS%id_tracer(m)>0) &
+      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
     if (CS%id_tr_ady(m)>0) &
@@ -539,7 +518,6 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     if (CS%id_tr_dfy(m)>0) &
       call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
   enddo
-  deallocate(local_tr)
 
 end subroutine oil_tracer_column_physics
 

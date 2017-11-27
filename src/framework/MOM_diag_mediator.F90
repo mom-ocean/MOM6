@@ -23,6 +23,7 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_diag_remap,       only : diag_remap_ctrl
 use MOM_diag_remap,       only : diag_remap_update
+use MOM_diag_remap,       only : diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
@@ -31,6 +32,7 @@ use MOM_diag_remap,       only : diag_remap_diag_registration_closed
 use MOM_diag_remap,       only : horizontally_average_diag_field
 
 use diag_axis_mod, only : get_diag_axis_name
+use diag_data_mod, only : null_axis_id
 use diag_manager_mod, only : diag_manager_init, diag_manager_end
 use diag_manager_mod, only : send_data, diag_axis_init, diag_field_add_attribute
 ! The following module is needed for PGI since the following line does not compile with PGI 6.5.0
@@ -42,10 +44,11 @@ use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
 
 implicit none ; private
 
-#define __DO_SAFETY_CHECKS__
+#undef __DO_SAFETY_CHECKS__
 #define IMPLIES(A, B) ((.not. (A)) .or. (B))
 
 public set_axes_info, post_data, register_diag_field, time_type
+public set_masks_for_axes
 public post_data_1d_k
 public safe_alloc_ptr, safe_alloc_alloc
 public enable_averaging, disable_averaging, query_averaging_enabled
@@ -56,7 +59,8 @@ public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public define_axes_group, diag_masks_set
 public diag_register_area_ids
-public diag_register_volume_ids
+public diag_associate_volume_cell_measure
+public diag_get_volume_cell_measure_dm_id
 public diag_set_state_ptrs, diag_update_remap_grids
 
 interface post_data
@@ -95,6 +99,9 @@ type, public :: axes_grp
   ! ID's for cell_measures
   integer :: id_area = -1 !< The diag_manager id for area to be used for cell_measure of variables with this axes_grp.
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables with this axes_grp.
+  ! For masking
+  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
+  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
 end type axes_grp
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
@@ -109,8 +116,6 @@ type, private :: diag_type
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
   character(32) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null()
-  real, pointer, dimension(:,:)   :: mask2d => null()
-  real, pointer, dimension(:,:,:) :: mask3d => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated). False for intensive (concentrations).
@@ -135,7 +140,7 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesBL, axesTL, axesCuL, axesCvL
   type(axes_grp) :: axesBi, axesTi, axesCui, axesCvi
   type(axes_grp) :: axesB1, axesT1, axesCu1, axesCv1
-  type(axes_grp) :: axesZi, axesZL
+  type(axes_grp) :: axesZi, axesZL, axesNull
 
   ! Mask arrays for diagnostics
   real, dimension(:,:),   pointer :: mask2dT   => null()
@@ -176,6 +181,9 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: S => null()
   type(EOS_type),  pointer :: eqn_of_state => null()
   type(ocean_grid_type), pointer :: G => null()
+
+  ! The volume cell measure (special diagnostic) manager id
+  integer :: volume_cell_measure_dm_id = -1
 
 #if defined(DEBUG) || defined(__DO_SAFETY_CHECKS__)
   ! Keep a copy of h so that we know whether it has changed. If it has then
@@ -280,6 +288,9 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
   call define_axes_group(diag_cs, (/ id_xh, id_yq /), diag_cs%axesCv1, &
        x_cell_method='mean', y_cell_method='point', is_v_point=.true.)
 
+  ! Axis group for special null axis from diag manager
+  call define_axes_group(diag_cs, (/ null_axis_id /), diag_cs%axesNull)
+
   if (diag_cs%num_diag_coords>0) then
     allocate(diag_cs%remap_axesZL(diag_cs%num_diag_coords))
     allocate(diag_cs%remap_axesTL(diag_cs%num_diag_coords))
@@ -366,6 +377,104 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
 
 end subroutine set_axes_info
 
+!> set_masks_for_axes sets up the 2d and 3d masks for diagnostics using the current grid
+!! recorded after calling diag_update_remap_grids()
+subroutine set_masks_for_axes(G, diag_cs)
+  type(ocean_grid_type), target, intent(in) :: G !< The ocean grid type.
+  type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
+                                                       !! used for diagnostics
+  ! Local variables
+  integer :: c, nk, i, j, k
+  type(axes_grp), pointer :: axes, h_axes ! Current axes, for convenience
+
+  do c=1, diag_cs%num_diag_coords
+    ! This vertical coordinate has been configured so can be used.
+    if (diag_remap_axes_configured(diag_cs%diag_remap_cs(c))) then
+
+      ! Level/layer h-points in diagnostic coordinate
+      axes => diag_cs%remap_axesTL(c)
+      nk = axes%nz
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      call diag_remap_calc_hmask(diag_cs%diag_remap_cs(c), G, axes%mask3d)
+
+      h_axes => diag_cs%remap_axesTL(c) ! Use the h-point masks to generate the u-, v- and q- masks
+
+      ! Level/layer u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCuL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Level/layer v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Level/layer q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBL(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-layers')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
+            h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface h-points in diagnostic coordinate (w-point)
+      axes => diag_cs%remap_axesTi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at h-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,1) > 0.) axes%mask3d(i,J,1) = 1.
+        do K = 2, nk
+          if (h_axes%mask3d(i,j,k-1) + h_axes%mask3d(i,j,k) > 0.) axes%mask3d(i,J,k) = 1.
+        enddo
+        if (h_axes%mask3d(i,j,nk) > 0.) axes%mask3d(i,J,nk+1) = 1.
+      enddo ; enddo
+
+      h_axes => diag_cs%remap_axesTi(c) ! Use the w-point masks to generate the u-, v- and q- masks
+
+      ! Interface u-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCui(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at u-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%jsd:G%jed,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk+1 ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j,k) > 0.) axes%mask3d(I,j,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface v-points in diagnostic coordinate
+      axes => diag_cs%remap_axesCvi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at v-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%isd:G%ied,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk+1 ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(i,J,k) = 1.
+      enddo ; enddo ; enddo
+
+      ! Interface q-points in diagnostic coordinate
+      axes => diag_cs%remap_axesBi(c)
+      call assert(axes%nz == nk, 'set_masks_for_axes: vertical size mismatch at q-interfaces')
+      call assert(.not. associated(axes%mask3d), 'set_masks_for_axes: already associated')
+      allocate( axes%mask3d(G%IsdB:G%IedB,G%JsdB:G%JedB,nk+1) ) ; axes%mask3d(:,:,:) = 0.
+      do k = 1, nk ; do J=G%jsc-1,G%jec ; do I=G%isc-1,G%iec
+        if (h_axes%mask3d(i,j,k) + h_axes%mask3d(i+1,j+1,k) + &
+            h_axes%mask3d(i+1,j,k) + h_axes%mask3d(i,j+1,k) > 0.) axes%mask3d(I,J,k) = 1.
+      enddo ; enddo ; enddo
+
+    endif
+  enddo
+
+end subroutine set_masks_for_axes
+
 !> Attaches the id of cell areas to axes groups for use with cell_measures
 subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
   type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
@@ -380,7 +489,7 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesTL%id_area = fms_id
     do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesTL(i)%id_area = fms_id
-      ! Note to AJA: why am I not doing TZi too?
+      diag_cs%remap_axesTi(i)%id_area = fms_id
     enddo
   endif
   if (present(id_area_q)) then
@@ -390,21 +499,40 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
     diag_cs%axesBL%id_area = fms_id
     do i=1, diag_cs%num_diag_coords
       diag_cs%remap_axesBL(i)%id_area = fms_id
+      diag_cs%remap_axesBi(i)%id_area = fms_id
     enddo
   endif
 end subroutine diag_register_area_ids
 
 !> Attaches the id of cell volumes to axes groups for use with cell_measures
-subroutine diag_register_volume_ids(diag_cs, id_vol_t)
-  type(diag_ctrl),   intent(inout) :: diag_cs   !< Diagnostics control structure
-  integer, optional, intent(in)    :: id_vol_t !< Diag_manager id for volume of h-cells
+subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
+  type(diag_ctrl),   intent(inout) :: diag_cs     !< Diagnostics control structure
+  integer,           intent(in)    :: id_h_volume !< Diag_manager id for volume of h-cells
   ! Local variables
-  integer :: fms_id
-  if (present(id_vol_t)) then
-    fms_id = diag_cs%diags(id_vol_t)%fms_diag_id
-    call MOM_error(FATAL,"diag_register_volume_ids: not implemented yet!")
-  endif
-end subroutine diag_register_volume_ids
+  type(diag_type), pointer :: tmp
+
+  if (id_h_volume<=0) return ! Do nothing
+  diag_cs%volume_cell_measure_dm_id = id_h_volume ! Record for diag_get_volume_cell_measure_dm_id()
+
+  ! Set the cell measure for this axes group to the FMS id in this coordinate system
+  diag_cs%diags(id_h_volume)%axes%id_volume = diag_cs%diags(id_h_volume)%fms_diag_id
+
+  tmp => diag_cs%diags(id_h_volume)%next ! First item in the list, if any
+  do while (associated(tmp))
+    ! Set the cell measure for this axes group to the FMS id in this coordinate system
+    tmp%axes%id_volume = tmp%fms_diag_id
+    tmp => tmp%next ! Move to next axes group for this field
+  enddo
+
+end subroutine diag_associate_volume_cell_measure
+
+!> Returns diag_manager id for cell measure of h-cells
+integer function diag_get_volume_cell_measure_dm_id(diag_cs)
+  type(diag_ctrl),   intent(in) :: diag_cs   !< Diagnostics control structure
+
+  diag_get_volume_cell_measure_dm_id = diag_cs%volume_cell_measure_dm_id
+
+end function diag_get_volume_cell_measure_dm_id
 
 !> Defines a group of "axes" from list of handles
 subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_number, &
@@ -476,6 +604,31 @@ subroutine define_axes_group(diag_cs, handles, axes, nz, vertical_coordinate_num
   if (present(needs_remapping)) axes%needs_remapping = needs_remapping
   if (present(needs_interpolating)) axes%needs_interpolating = needs_interpolating
   if (present(xyave_axes)) axes%xyave_axes => xyave_axes
+
+  ! Setup masks for this axes group
+  axes%mask2d => null()
+  if (axes%rank==2) then
+    if (axes%is_h_point) axes%mask2d => diag_cs%mask2dT
+    if (axes%is_u_point) axes%mask2d => diag_cs%mask2dCu
+    if (axes%is_v_point) axes%mask2d => diag_cs%mask2dCv
+    if (axes%is_q_point) axes%mask2d => diag_cs%mask2dBu
+  endif
+  ! A static 3d mask for non-native coordinates can only be setup when a grid is available
+  axes%mask3d => null()
+  if (axes%rank==3 .and. axes%is_native) then
+    ! Native variables can/should use the native masks copied into diag_cs
+    if (axes%is_layer) then
+      if (axes%is_h_point) axes%mask3d => diag_cs%mask3dTL
+      if (axes%is_u_point) axes%mask3d => diag_cs%mask3dCuL
+      if (axes%is_v_point) axes%mask3d => diag_cs%mask3dCvL
+      if (axes%is_q_point) axes%mask3d => diag_cs%mask3dBL
+    elseif (axes%is_interface) then
+      if (axes%is_h_point) axes%mask3d => diag_cs%mask3dTi
+      if (axes%is_u_point) axes%mask3d => diag_cs%mask3dCui
+      if (axes%is_v_point) axes%mask3d => diag_cs%mask3dCvi
+      if (axes%is_q_point) axes%mask3d => diag_cs%mask3dBi
+    endif
+  endif
 
 end subroutine define_axes_group
 
@@ -615,7 +768,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:), pointer :: locfield => NULL()
   logical :: used, is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, i, j
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -651,6 +804,13 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%conversion_factor/=0.) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
+    do j=jsv,jev ; do i=isv,iev
+      if (field(i,j) == diag_cs%missing_value) then
+        locfield(i,j) = diag_cs%missing_value
+      else
+        locfield(i,j) = field(i,j) * diag%conversion_factor
+      endif
+    enddo ; enddo
     locfield(isv:iev,jsv:jev) = field(isv:iev,jsv:jev) * diag%conversion_factor
   else
     locfield => field
@@ -662,9 +822,9 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
           'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
       used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-   !elseif(associated(diag%mask2d)) then
+   !elseif(associated(diag%axes%mask2d)) then
    !  used = send_data(diag%fms_diag_id, locfield, &
-   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask2d)
+   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
     else
       used = send_data(diag%fms_diag_id, locfield, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -676,10 +836,10 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                        weight=diag_cs%time_int, rmask=mask)
-    elseif(associated(diag%mask2d)) then
+    elseif(associated(diag%axes%mask2d)) then
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=diag%mask2d)
+                       weight=diag_cs%time_int, rmask=diag%axes%mask2d)
     else
       used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                        is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -743,13 +903,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_reintegrate_diag_field( &
               diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -767,13 +927,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -791,13 +951,13 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       call vertically_interpolate_diag_field(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
               diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
-              diag%mask3d, diag_cs%missing_value, field, remapped_field)
+              diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
-      if (associated(diag%mask3d)) then
+      if (associated(diag%axes%mask3d)) then
         ! Since 3d masks do not vary in the vertical, just use as much as is
         ! needed.
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static, &
-                              mask=diag%mask3d(:,:,:diag%axes%nz+1))
+                              mask=diag%axes%mask3d)
       else
         call post_data_3d_low(diag, remapped_field, diag_cs, is_static)
       endif
@@ -830,7 +990,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: is_stat
-  integer :: isv, iev, jsv, jev
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -865,9 +1025,15 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag%conversion_factor/=0.) then
-    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), &
-                        lbound(field,3):ubound(field,3) ) )
-    locfield(isv:iev,jsv:jev,:) = field(isv:iev,jsv:jev,:) * diag%conversion_factor
+    ks = lbound(field,3) ; ke = ubound(field,3)
+    allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
+    do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
+      if (field(i,j,k) == diag_cs%missing_value) then
+        locfield(i,j,k) = diag_cs%missing_value
+      else
+        locfield(i,j,k) = field(i,j,k) * diag%conversion_factor
+      endif
+    enddo ; enddo ; enddo
   else
     locfield => field
   endif
@@ -879,9 +1045,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
             'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-     !elseif(associated(diag%mask3d)) then
+     !elseif(associated(diag%axes%mask3d)) then
      !  used = send_data(diag_field_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%mask3d)
+     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
       else
         used = send_data(diag%fms_diag_id, locfield, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
@@ -893,12 +1059,12 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
                          weight=diag_cs%time_int, rmask=mask)
-      elseif(associated(diag%mask3d)) then
-        call assert(size(locfield) == size(diag%mask3d), &
+      elseif(associated(diag%axes%mask3d)) then
+        call assert(size(locfield) == size(diag%axes%mask3d), &
             'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=diag%mask3d)
+                         weight=diag_cs%time_int, rmask=diag%axes%mask3d)
       else
         used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
                          is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
@@ -1306,41 +1472,74 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
   ! Local variables
-  integer :: fms_id, area_id
+  integer :: fms_id, area_id, volume_id
 
   ! This gets the cell area associated with the grid location of this variable
   area_id = axes%id_area
+  volume_id = axes%id_volume
 
   ! Get the FMS diagnostic id
   if (present(interp_method) .or. axes%is_h_point) then
     ! If interp_method is provided we must use it
     if (area_id>0) then
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count, area=area_id, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count, area=area_id)
+      endif
     else
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method=interp_method, tile_count=tile_count, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method=interp_method, tile_count=tile_count)
+      endif
     endif
   else
     ! If interp_method is not provided and the field is not at an h-point then interp_method='none'
     if (area_id>0) then
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count, area=area_id, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count, area=area_id)
+      endif
     else
-      fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+      if (volume_id>0) then
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
+                 init_time, long_name=long_name, units=units, missing_value=missing_value, &
+                 range=range, mask_variant=mask_variant, standard_name=standard_name, &
+                 verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
+                 interp_method='none', tile_count=tile_count, volume=volume_id)
+      else
+        fms_id = register_diag_field_fms(module_name, field_name, axes%handles, &
                  init_time, long_name=long_name, units=units, missing_value=missing_value, &
                  range=range, mask_variant=mask_variant, standard_name=standard_name, &
                  verbose=verbose, do_not_log=do_not_log, err_msg=err_msg, &
                  interp_method='none', tile_count=tile_count)
+      endif
     endif
   endif
 
@@ -1367,7 +1566,6 @@ subroutine add_diag_to_list(diag_cs, dm_id, fms_id, this_diag, axes, module_name
   ! Record FMS id, masks and conversion factor, in diag_type
   this_diag%fms_diag_id = fms_id
   this_diag%debug_str = trim(module_name)//"-"//trim(field_name)
-  call set_diag_mask(this_diag, diag_cs, axes)
   this_diag%axes => axes
 
 end subroutine add_diag_to_list
@@ -1387,6 +1585,12 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
   logical,          optional, intent(in)  :: v_extensive !< True for vertically extensive fields (vertically integrated). Default/absent for intensive.
   ! Local variables
   character(len=9) :: axis_name
+  logical :: x_mean, y_mean, x_sum, y_sum
+
+  x_mean = .false.
+  y_mean = .false.
+  x_sum = .false.
+  y_sum = .false.
 
   ostring = ''
   if (present(cell_methods)) then
@@ -1405,12 +1609,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(x_cell_method)
+        if (trim(x_cell_method)=='mean') x_mean=.true.
+        if (trim(x_cell_method)=='sum') x_sum=.true.
       endif
     else
       if (len(trim(axes%x_cell_method))>0) then
         call get_diag_axis_name(axes%handles(1), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%x_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%x_cell_method)
+        if (trim(axes%x_cell_method)=='mean') x_mean=.true.
+        if (trim(axes%x_cell_method)=='sum') x_sum=.true.
       endif
     endif
     if (present(y_cell_method)) then
@@ -1418,12 +1626,16 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(y_cell_method)
+        if (trim(y_cell_method)=='mean') y_mean=.true.
+        if (trim(y_cell_method)=='sum') y_sum=.true.
       endif
     else
       if (len(trim(axes%y_cell_method))>0) then
         call get_diag_axis_name(axes%handles(2), axis_name)
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%y_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%y_cell_method)
+        if (trim(axes%y_cell_method)=='mean') y_mean=.true.
+        if (trim(axes%y_cell_method)=='sum') y_sum=.true.
       endif
     endif
     if (present(v_cell_method)) then
@@ -1456,6 +1668,13 @@ subroutine attach_cell_methods(id, axes, ostring, cell_methods, &
         call diag_field_add_attribute(id, 'cell_methods', trim(axis_name)//':'//trim(axes%v_cell_method))
         ostring = trim(adjustl(ostring))//' '//trim(axis_name)//':'//trim(axes%v_cell_method)
       endif
+    endif
+    if (x_mean .and. y_mean) then
+      call diag_field_add_attribute(id, 'cell_methods', 'area:mean')
+      ostring = trim(adjustl(ostring))//' area:mean'
+    elseif (x_sum .and. y_sum) then
+      call diag_field_add_attribute(id, 'cell_methods', 'area:sum')
+      ostring = trim(adjustl(ostring))//' area:sum'
     endif
   endif
   ostring = adjustl(ostring)
@@ -1569,10 +1788,11 @@ end function register_scalar_field
 function register_static_field(module_name, field_name, axes, &
      long_name, units, missing_value, range, mask_variant, standard_name, &
      do_not_log, interp_method, tile_count, &
-     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area)
+     cmor_field_name, cmor_long_name, cmor_units, cmor_standard_name, area, &
+     x_cell_method, y_cell_method, area_cell_method)
   integer :: register_static_field
   character(len=*), intent(in) :: module_name, field_name
-  type(axes_grp),   intent(in) :: axes
+  type(axes_grp),   target,   intent(in) :: axes
   character(len=*), optional, intent(in) :: long_name, units, standard_name
   real,             optional, intent(in) :: missing_value, range(2)
   logical,          optional, intent(in) :: mask_variant, do_not_log
@@ -1581,6 +1801,9 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: cmor_field_name, cmor_long_name
   character(len=*), optional, intent(in) :: cmor_units, cmor_standard_name
   integer,          optional, intent(in) :: area !< fms_id for area_t
+  character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
+  character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
+  character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
 
   ! Output:    An integer handle for a diagnostic array.
   ! Arguments:
@@ -1604,6 +1827,7 @@ function register_static_field(module_name, field_name, axes, &
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   integer :: dm_id, fms_id, cmor_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=9) :: axis_name
 
   MOM_missing_value = axes%diag_cs%missing_value
   if(present(missing_value)) MOM_missing_value = missing_value
@@ -1624,6 +1848,17 @@ function register_static_field(module_name, field_name, axes, &
     call assert(associated(diag), 'register_static_field: diag allocation failed')
     diag%fms_diag_id = fms_id
     diag%debug_str = trim(module_name)//"-"//trim(field_name)
+    if (present(x_cell_method)) then
+      call get_diag_axis_name(axes%handles(1), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+    endif
+    if (present(y_cell_method)) then
+      call get_diag_axis_name(axes%handles(2), axis_name)
+      call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+    endif
+    if (present(area_cell_method)) then
+      call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
+    endif
   endif
 
   if (present(cmor_field_name)) then
@@ -1655,6 +1890,17 @@ function register_static_field(module_name, field_name, axes, &
       call alloc_diag_with_id(dm_id, diag_cs, cmor_diag)
       cmor_diag%fms_diag_id = fms_id
       cmor_diag%debug_str = trim(module_name)//"-"//trim(cmor_field_name)
+      if (present(x_cell_method)) then
+        call get_diag_axis_name(axes%handles(1), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(x_cell_method))
+      endif
+      if (present(y_cell_method)) then
+        call get_diag_axis_name(axes%handles(2), axis_name)
+        call diag_field_add_attribute(fms_id, 'cell_methods', trim(axis_name)//':'//trim(y_cell_method))
+      endif
+      if (present(area_cell_method)) then
+        call diag_field_add_attribute(fms_id, 'cell_methods', 'area:'//trim(area_cell_method))
+      endif
     endif
   endif
 
@@ -1865,7 +2111,7 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
 
   call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
                  'Set the default missing value to use for diagnostics.', &
-                 default=-1.e34)
+                 default=1.e20)
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
@@ -1946,26 +2192,41 @@ end subroutine
 !> Build/update vertical grids for diagnostic remapping.
 !! \note The target grids need to be updated whenever sea surface
 !! height changes.
-subroutine diag_update_remap_grids(diag_cs, alt_h)
+subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
   type(diag_ctrl),        intent(inout) :: diag_cs      !< Diagnostics control structure
-  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be
-                                                        !! something other than the current
-                                                        !! thicknesses
+  real, target, optional, intent(in   ) :: alt_h(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current thicknesses
+  real, target, optional, intent(in   ) :: alt_T(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current temperatures
+  real, target, optional, intent(in   ) :: alt_S(:,:,:) !< Used if remapped grids should be something other than
+                                                        !! the current salinity
   ! Local variables
   integer :: i
-  real, dimension(:,:,:), pointer :: h_diag
+  real, dimension(:,:,:), pointer :: h_diag, T_diag, S_diag
 
-  if(present(alt_h)) then
+  if (present(alt_h)) then
     h_diag => alt_h
   else
     h_diag => diag_cs%h
+  endif
+
+  if (present(alt_T)) then
+    T_diag => alt_T
+  else
+    T_diag => diag_CS%T
+  endif
+
+  if (present(alt_S)) then
+    S_diag => alt_S
+  else
+    S_diag => diag_CS%S
   endif
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, h_diag, diag_cs%T, diag_cs%S, &
+                           diag_cs%G, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 
@@ -1979,26 +2240,29 @@ subroutine diag_update_remap_grids(diag_cs, alt_h)
 
 end subroutine diag_update_remap_grids
 
-!> diag_masks_set sets up the 2d and 3d masks for diagnostics
-subroutine diag_masks_set(G, nz, missing_value, diag_cs)
+!> Sets up the 2d and 3d masks for native diagnostics
+subroutine diag_masks_set(G, nz, diag_cs)
   type(ocean_grid_type), target, intent(in) :: G  !< The ocean grid type.
   integer,                       intent(in) :: nz !< The number of layers in the model's native grid.
-  real,                          intent(in) :: missing_value !< A value to use for masked points.
   type(diag_ctrl),               pointer    :: diag_cs !< A pointer to a type with many variables
-                                                  !! used for diagnostics
+                                                       !! used for diagnostics
   ! Local variables
   integer :: k
 
-  diag_cs%mask2dT => G%mask2dT
-  diag_cs%mask2dBu=> G%mask2dBu
-  diag_cs%mask2dCu=> G%mask2dCu
-  diag_cs%mask2dCv=> G%mask2dCv
+  ! 2d masks point to the model masks since they are identical
+  diag_cs%mask2dT  => G%mask2dT
+  diag_cs%mask2dBu => G%mask2dBu
+  diag_cs%mask2dCu => G%mask2dCu
+  diag_cs%mask2dCv => G%mask2dCv
+
+  ! 3d native masks are needed by diag_manager but the native variables
+  ! can only be masked 2d - for ocean points, all layers exists.
   allocate(diag_cs%mask3dTL(G%isd:G%ied,G%jsd:G%jed,1:nz))
   allocate(diag_cs%mask3dBL(G%IsdB:G%IedB,G%JsdB:G%JedB,1:nz))
   allocate(diag_cs%mask3dCuL(G%IsdB:G%IedB,G%jsd:G%jed,1:nz))
   allocate(diag_cs%mask3dCvL(G%isd:G%ied,G%JsdB:G%JedB,1:nz))
   do k=1,nz
-    diag_cs%mask3dTL(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dTL(:,:,k) = diag_cs%mask2dT(:,:)
     diag_cs%mask3dBL(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCuL(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvL(:,:,k) = diag_cs%mask2dCv(:,:)
@@ -2008,13 +2272,11 @@ subroutine diag_masks_set(G, nz, missing_value, diag_cs)
   allocate(diag_cs%mask3dCui(G%IsdB:G%IedB,G%jsd:G%jed,1:nz+1))
   allocate(diag_cs%mask3dCvi(G%isd:G%ied,G%JsdB:G%JedB,1:nz+1))
   do k=1,nz+1
-    diag_cs%mask3dTi(:,:,k)  = diag_cs%mask2dT (:,:)
+    diag_cs%mask3dTi(:,:,k) = diag_cs%mask2dT(:,:)
     diag_cs%mask3dBi(:,:,k) = diag_cs%mask2dBu(:,:)
     diag_cs%mask3dCui(:,:,k) = diag_cs%mask2dCu(:,:)
     diag_cs%mask3dCvi(:,:,k) = diag_cs%mask2dCv(:,:)
   enddo
-
-!  diag_cs%missing_value = missing_value
 
 end subroutine diag_masks_set
 
@@ -2090,58 +2352,6 @@ function i2s(a,n_in)
     i2s = adjustl(i2s)
 end function i2s
 
-!> Associates the mask pointers within diag with the appropriate mask based on the axes group.
-subroutine set_diag_mask(diag, diag_cs, axes)
-  type(diag_ctrl), target, intent(in) :: diag_cs !< Diag_mediator control structure
-  type(diag_type), pointer, intent(inout) :: diag !< This diag type
-  type(axes_grp),  intent(in) :: axes !< Axes group
-
-  diag%mask2d => null()
-  diag%mask3d => null()
-
-  if (axes%rank .eq. 3) then
-    if (axes%is_layer) then
-      if (axes%is_h_point) then
-        diag%mask3d => diag_cs%mask3dTL
-      elseif (axes%is_q_point) then
-        diag%mask3d => diag_cs%mask3dBL
-      elseif (axes%is_u_point) then
-        diag%mask3d => diag_cs%mask3dCuL
-      elseif (axes%is_v_point) then
-        diag%mask3d => diag_cs%mask3dCvL
-      endif
-    elseif (axes%is_interface) then
-      if (axes%is_h_point) then
-        diag%mask3d => diag_cs%mask3dTi
-      elseif (axes%is_q_point) then
-        diag%mask3d => diag_cs%mask3dBi
-      elseif (axes%is_u_point) then
-        diag%mask3d => diag_cs%mask3dCui
-      elseif (axes%is_v_point) then
-        diag%mask3d => diag_cs%mask3dCvi
-      endif
-    endif
-
-    !call assert(associated(diag%mask3d), "set_diag_mask: Invalid 3d axes id."// &
-    !                                     " diag:"//diag%debug_str)
-  elseif(axes%rank .eq. 2) then
-
-    if (axes%is_h_point) then
-      diag%mask2d =>  diag_cs%mask2dT
-    elseif (axes%is_q_point) then
-      diag%mask2d =>  diag_cs%mask2dBu
-    elseif (axes%is_u_point) then
-        diag%mask2d =>  diag_cs%mask2dCu
-    elseif (axes%is_v_point) then
-        diag%mask2d =>  diag_cs%mask2dCv
-    endif
-
-    !call assert(associated(diag%mask2d), "set_diag_mask.F90: Invalid 2d axes id."// &
-    !                                     " diag:"//diag%debug_str)
-  endif
-
-end subroutine set_diag_mask
-
 !> Returns a new diagnostic id, it may be necessary to expand the diagnostics array.
 integer function get_new_diag_id(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_cs !< Diagnostics control structure
@@ -2180,8 +2390,6 @@ subroutine initialize_diag_type(diag)
   diag%in_use = .false.
   diag%fms_diag_id = -1
   diag%axes => null()
-  diag%mask2d => null()
-  diag%mask3d => null()
   diag%next => null()
   diag%conversion_factor = 0.
 

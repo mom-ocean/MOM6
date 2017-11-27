@@ -12,7 +12,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : read_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 
@@ -161,7 +161,7 @@ subroutine initialize_topography_from_file(D, G, param_file)
                   ! ensure the depth in masked-out PEs appears to be that of land
                   ! so this line does that in the halo regions. For non-masked PEs
                   ! the halo region is filled properly with a later pass_var().
-  call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, trim(topo_varname), D, G%Domain)
 
   call apply_topography_edits_from_file(D, G, param_file)
 
@@ -703,8 +703,7 @@ subroutine reset_face_lengths_file(G, param_file)
                            trim(filename))
   endif
 
-  call read_data(filename,"dyCuo",G%dy_Cu,domain=G%Domain%mpp_domain)
-  call read_data(filename,"dxCvo",G%dx_Cv,domain=G%Domain%mpp_domain)
+  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -1114,7 +1113,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   vars(3) = var_desc("geolat","degree", "latitude at tracer (T) points", 'h','1','1')
   vars(4) = var_desc("geolon","degree","longitude at tracer (T) points",'h','1','1')
   vars(5) = var_desc("D","meter","Basin Depth",'h','1','1')
-  vars(6) = var_desc("f","second-1","Coriolis Parameter",'q','1','1')
+  vars(6) = var_desc("f","s-1","Coriolis Parameter",'q','1','1')
   vars(7) = var_desc("dxCv","m","Zonal grid spacing at v points",'v','1','1')
   vars(8) = var_desc("dyCu","m","Meridional grid spacing at u points",'u','1','1')
   vars(9) = var_desc("dxCu","m","Zonal grid spacing at u points",'u','1','1')
@@ -1128,12 +1127,12 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
 
   vars(17)= var_desc("dxCvo","m","Open zonal grid spacing at v points",'v','1','1')
   vars(18)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
-  vars(19)= var_desc("wet", "none", "land or ocean?", 'h','1','1')
+  vars(19)= var_desc("wet", "nondim", "land or ocean?", 'h','1','1')
 
-  vars(20) = var_desc("Dblock_u","meter","Blocked depth at u points",'u','1','1')
-  vars(21) = var_desc("Dopen_u","meter","Open depth at u points",'u','1','1')
-  vars(22) = var_desc("Dblock_v","meter","Blocked depth at v points",'v','1','1')
-  vars(23) = var_desc("Dopen_v","meter","Open depth at v points",'v','1','1')
+  vars(20) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
+  vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
+  vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
+  vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
 
   nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 

@@ -157,7 +157,8 @@ subroutine make_frazil(h, tv, G, GV, CS, p_surf)
     do k=1,nz ; do i=is,ie ; pressure(i,k) = 0.0 ; enddo ; enddo
   endif
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,G,GV,h,nz,tv,p_surf) &
-!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps,pressure)
+!$OMP                           private(fraz_col,T_fr_set,T_freeze,hc,ps)  &
+!$OMP                      firstprivate(pressure)    !pressure might be set above, so should be firstprivate
   do j=js,je
     ps(:) = 0.0
     if (PRESENT(p_surf)) then ; do i=is,ie
@@ -892,7 +893,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
   numberOfGroundings = 0
 
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,h,tv,nsw,G,GV,optics,fluxes,dt,    &
-!$OMP                                  H_limit_fluxes,IforcingDepthScale,                &
+!$OMP                                  H_limit_fluxes,                                   &
 !$OMP                                  numberOfGroundings,iGround,jGround,nonPenSW,      &
 !$OMP                                  hGrounding,CS,Idt,aggregate_FW_forcing,           &
 !$OMP                                  minimum_forcing_depth,evap_CFL_limit,             &
@@ -900,12 +901,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
 !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2) &
 !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
 !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
+!$OMP                                  IforcingDepthScale,                               &
 !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
 !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
 !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
 !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,SurfPressure,       &
-!$OMP                                  start,npts,                                       &
-!$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)
+!$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
+!$OMP                     firstprivate(start,npts)
+
 
   ! Work in vertical slices for efficiency
   do j=js,je
@@ -1399,19 +1402,19 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
   if (useALEalgorithm) then
     CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
         Time, "The volume flux added to stop the ocean from drying out and becoming negative in depth", &
-        "meter second-1")
+        "m s-1")
     if (CS%id_createdH>0) allocate(CS%createdH(isd:ied,jsd:jed))
 
     ! diagnostic for heating of a grid cell from convergence of SW heat into the cell
     CS%id_penSW_diag = register_diag_field('ocean_model', 'rsdoabsorb',                     &
           diag%axesTL, Time, 'Convergence of Penetrative Shortwave Flux in Sea Water Layer',&
-          'Watt meter-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
+          'W m-2', standard_name='net_rate_of_absorption_of_shortwave_energy_in_ocean_layer',v_extensive=.true.)
 
     ! diagnostic for penetrative SW heat flux at top interface of tracer cell (nz+1 interfaces)
     ! k=1 gives penetrative SW at surface; SW(k=nz+1)=0 (no penetration through rock).
     CS%id_penSWflux_diag = register_diag_field('ocean_model', 'rsdo',                               &
           diag%axesTi, Time, 'Downwelling Shortwave Flux in Sea Water at Grid Cell Upper Interface',&
-          'Watt meter-2', standard_name='downwelling_shortwave_flux_in_sea_water')
+          'W m-2', standard_name='downwelling_shortwave_flux_in_sea_water')
 
     ! need both arrays for the SW diagnostics (one for flux, one for convergence)
     if (CS%id_penSW_diag>0 .or. CS%id_penSWflux_diag>0) then
@@ -1425,7 +1428,7 @@ subroutine diabatic_aux_init(Time, G, GV, param_file, diag, CS, useALEalgorithm,
     CS%id_nonpenSW_diag = register_diag_field('ocean_model', 'nonpenSW',                       &
           diag%axesT1, Time,                                                                   &
           'Non-downwelling SW radiation (i.e., SW absorbed in ocean surface with LW,SENS,LAT)',&
-          'Watt meter-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
+          'W m-2', standard_name='nondownwelling_shortwave_flux_in_sea_water')
     if (CS%id_nonpenSW_diag > 0) then
        allocate(CS%nonpenSW_diag(isd:ied,jsd:jed))
        CS%nonpenSW_diag(:,:) = 0.0
