@@ -705,8 +705,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     apply_OBC_open = open_boundary_query(OBC, apply_open_OBC=.true.)
     apply_OBCs = open_boundary_query(OBC, apply_specified_OBC=.true.) .or. &
            apply_OBC_flather .or. apply_OBC_open
-!   if (.not.apply_OBC_flather .and. OBC%oblique_BCs_exist_globally) stencil = 2
-    if (apply_OBC_flather .or. OBC%oblique_BCs_exist_globally) stencil = 2
 
     if (apply_OBC_flather .and. .not.GV%Boussinesq) call MOM_error(FATAL, &
       "btstep: Flather open boundary conditions have not yet been "// &
