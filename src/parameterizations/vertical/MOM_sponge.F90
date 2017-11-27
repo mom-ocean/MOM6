@@ -364,10 +364,10 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   real,                                     intent(in)    :: dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: ea  !< an array to which the amount of
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: ea  !< an array to which the amount of
                                                     !! fluid entrained from the layer above during
                                                     !! this call will be added, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(out)   :: eb !< an array to which the amount of
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: eb !< an array to which the amount of
                                                           !! fluid entrained from the layer below
                                                           !! during this call will be added, in H.
   type(sponge_CS),                          pointer       :: CS
