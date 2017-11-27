@@ -40,6 +40,7 @@ use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
 use MOM_forcing_type,     only: mech_forcing, allocate_mech_forcing, copy_back_forcing_fields
 use MOM_forcing_type,     only: set_net_mass_forcing, set_derived_forcing_fields
+use MOM_forcing_type,     only: copy_common_forcing_fields
 use MOM_restart,          only: save_restart
 use MOM_domains,          only: MOM_infra_init, num_pes, root_pe, pe_here
 use MOM_domains,          only: pass_vector, BGRID_NE, CGRID_NE, To_All
@@ -1735,6 +1736,10 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag)
     call ocn_import(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
                     c1, c2, c3, c4, OS%restore_salinity,OS%restore_temp)
+
+    ! Fields that exist in both the forcing and mech_forcing types must be copied.
+    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
+
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
