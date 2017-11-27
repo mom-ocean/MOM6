@@ -18,7 +18,7 @@ contains
 !> An integer handle for a diagnostic array returned by register_diag_field()
 integer function register_diag_field_array_fms(module_name, field_name, axes, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,                &
-     verbose, do_not_log, err_msg, interp_method, tile_count, area)
+     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
   character(len=*), intent(in) :: module_name             !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name              !< Name of the diagnostic field
   integer,          intent(in) :: axes(:)                 !< Container w/ up to 3 integer handles that indicates axes for this field
@@ -35,20 +35,21 @@ integer function register_diag_field_array_fms(module_name, field_name, axes, in
   character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count    !< no clue (not used in MOM?)
   integer,          optional, intent(in) :: area          !< The FMS id of cell area
+  integer,          optional, intent(in) :: volume        !< The FMS id of cell volume
   ! Local variables
 
   register_diag_field_array_fms = register_diag_field(module_name, field_name, axes,   &
              init_time, long_name=long_name, units=units, missing_value=missing_value, &
              mask_variant=mask_variant, standard_name=standard_name,                   &
              verbose=verbose, do_not_log=do_not_log, err_msg=err_msg,                  &
-             interp_method=interp_method)
+             area=area, volume=volume, interp_method=interp_method)
 
 end function register_diag_field_array_fms
 
 !> An integer handle for a diagnostic scalar array returned by register_diag_field()
 integer function register_diag_field_scalar_fms(module_name, field_name, init_time, &
      long_name, units, missing_value, range, mask_variant, standard_name,           &
-     verbose, do_not_log, err_msg, interp_method, tile_count, area)
+     verbose, do_not_log, err_msg, interp_method, tile_count, area, volume)
   character(len=*), intent(in) :: module_name             !< Name of this module, usually "ocean_model" or "ice_shelf_model"
   character(len=*), intent(in) :: field_name              !< Name of the diagnostic field
   type(time_type),  intent(in) :: init_time               !< Time at which a field is first available?
@@ -64,6 +65,7 @@ integer function register_diag_field_scalar_fms(module_name, field_name, init_ti
   character(len=*), optional, intent(in) :: interp_method !< If 'none' indicates the field should not be interpolated as a scalar
   integer,          optional, intent(in) :: tile_count    !< no clue (not used in MOM?)
   integer,          optional, intent(in) :: area          !< The FMS id of cell area (not used for scalars)
+  integer,          optional, intent(in) :: volume        !< The FMS id of cell volume (not used for scalars)
   ! Local variables
 
   register_diag_field_scalar_fms = register_diag_field(module_name, field_name,        &

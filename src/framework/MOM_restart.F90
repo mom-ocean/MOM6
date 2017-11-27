@@ -49,7 +49,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions, only : lowercase
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
-use MOM_io, only : read_field, write_field, read_data, get_filename_appendix
+use MOM_io, only : read_field, write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
 use MOM_io, only : vardesc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
@@ -62,6 +62,7 @@ implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
 public save_restart, query_initialized, restart_init_end, vardesc
+public restart_files_exist, determine_is_new_run, is_new_run
 
 type p4d
   real, dimension(:,:,:,:), pointer :: p => NULL()
@@ -104,6 +105,10 @@ type, public :: MOM_restart_CS ; private
                                     ! otherwise they are combined internally.
   logical :: large_file_support     ! If true, NetCDF 3.6 or later is being used
                                     ! and large-file-support is enabled.
+  logical :: new_run                ! If true, the input filenames and restart file
+                                    ! existence will result in a new run that is not
+                                    ! initializedfrom restart files.
+  logical :: new_run_set = .false.  ! If true, new_run has been determined for this restart_CS.
   character(len=240) :: restartfile ! The name or name root for MOM restart files.
 
   type(field_restart), pointer :: restart_field(:) => NULL()
@@ -867,13 +872,18 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   enddo
 end subroutine save_restart
 
-
+!> restore_state reads the model state from previously generated files.  All
+!! restart variables are read from the first file in the input filename list
+!! in which they are found.
 subroutine restore_state(filename, directory, day, G, CS)
-  character(len=*),      intent(in)  :: filename
-  character(len=*),      intent(in)  :: directory
-  type(time_type),       intent(out) :: day
-  type(ocean_grid_type), intent(in)  :: G    !< The ocean's grid structure
-  type(MOM_restart_CS),  pointer     :: CS
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(time_type),       intent(out) :: day       !< The time of the restarted run
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+
 !    This subroutine reads the model state from previously
 !  generated files.  All restart variables are read from the first
 !  file in the input filename list in which they are found.
@@ -894,132 +904,34 @@ subroutine restore_state(filename, directory, day, G, CS)
                                   ! additional restart files.
   character(len=256) :: mesg      ! A message for warnings.
   character(len=80) :: varname    ! A variable's name.
-  integer :: num_restart     ! The number of restart files that have already
-                             ! been opened.
   integer :: num_file        ! The number of files (restart files and others
                              ! explicitly in filename) that are open.
-  integer :: start_char      ! The location of the starting character in the
-                             ! current file name.
-  integer :: n, m, start_of_day, num_days
+  integer :: i, n, m, start_of_day, num_days, missing_fields
   integer :: isL, ieL, jsL, jeL, is0, js0
   integer :: sizes(7)
   integer :: ndim, nvar, natt, ntime, pos
+
   integer :: unit(CS%max_fields) ! The mpp unit of all open files.
-  logical :: unit_is_global(CS%max_fields) ! True if the file is global.
-  character(len=8)   :: hor_grid ! Variable grid info.
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
-  logical :: fexists
+  logical :: unit_is_global(CS%max_fields) ! True if the file is global.
+
+  character(len=8)   :: hor_grid ! Variable grid info.
+  real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
-  integer :: i, missing_fields
-  real    :: t1, t2
-  integer :: err
-  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
-  character(len=80) :: restartname
-  integer :: length
 
-  num_restart = 0 ; n = 1 ; start_char = 1
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
 
 ! Get NetCDF ids for all of the restart files.
-  do while (start_char <= len_trim(filename) )
-    do m=start_char,len_trim(filename)
-      if (filename(m:m) == ' ') exit
-    enddo
-    fname = filename(start_char:m-1)
-    start_char = m
-    do while ((start_char <= len_trim(filename)) .and. (filename(start_char:start_char) == ' '))
-      start_char = start_char + 1
-    enddo
-
-    if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
-      err = 0
-      if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
-      do while (err == 0)
-        restartname = trim(CS%restartfile)
-
-       !query fms_io if there is a filename_appendix (for ensemble runs)
-       call get_filename_appendix(filename_appendix)
-       if(len_trim(filename_appendix) > 0) then
-         length = len_trim(restartname)
-         if(restartname(length-2:length) == '.nc') then
-           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-         else
-           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-         end if
-        end if
-        filepath = trim(directory) // trim(restartname)
-
-        if (num_restart < 10) then
-          write(suffix,'("_",I1)') num_restart
-        else
-          write(suffix,'("_",I2)') num_restart
-        endif
-        if (num_restart > 0) filepath = trim(filepath) // suffix
-
-        ! if (.not.file_exists(filepath)) &
-          filepath = trim(filepath)//".nc"
-
-        num_restart = num_restart + 1
-        inquire(file=filepath, exist=fexists)
-        if (fexists) then
-          call open_file(unit(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                         threading = MULTIPLE, fileset = SINGLE_FILE)
-          unit_is_global(n) = .true.
-        elseif (CS%parallel_restartfiles) then
-          if (G%Domain%use_io_layout) then
-            ! Look for decomposed files using the I/O Layout.
-            fexists = file_exists(filepath, G%Domain)
-            if (fexists) &
-              call open_file(unit(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             domain=G%Domain%mpp_domain)
-          else
-            ! Look for any PE-specific files of the form NAME.nc.####.
-            if (num_PEs()>10000) then
-              write(filepath, '(a,i6.6)' ) trim(filepath)//'.', pe_here()
-            else
-              write(filepath, '(a,i4.4)' ) trim(filepath)//'.', pe_here()
-            endif
-            inquire(file=filepath, exist=fexists)
-            if (fexists) &
-              call open_file(unit(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                             threading = MULTIPLE, fileset = SINGLE_FILE)
-          endif
-          if (fexists) unit_is_global(n) = .false.
-        endif
-
-        if (fexists) then
-          unit_path(n) = filepath
-          n = n + 1
-          if (is_root_pe()) &
-            call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
-        else
-          err = 1 ; exit
-        endif
-      enddo ! while (err == 0) loop
-    else
-      filepath = trim(directory)//trim(fname)
-      inquire(file=filepath, exist=fexists)
-      if (.not. fexists) filepath = trim(filepath)//".nc"
-
-      inquire(file=filepath, exist=fexists)
-      if (fexists) then
-        call open_file(unit(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
-                       threading = MULTIPLE, fileset = SINGLE_FILE)
-        unit_is_global(n) = .true.
-        unit_path(n) = filepath
-        n = n + 1
-        if (is_root_pe()) &
-          call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
-      else
-        call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
-      endif
-
-    endif
-  enddo ! while (start_char < strlen(filename)) loop
-  num_file = n-1
+  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
+    num_file = open_restart_units('r', directory, G, CS, units=unit, &
+                     file_paths=unit_path, global_files=unit_is_global)
+  else
+    num_file = open_restart_units(filename, directory, G, CS, units=unit, &
+                     file_paths=unit_path, global_files=unit_is_global)
+  endif
 
   if (num_file == 0) then
     write(mesg,'("Unable to find any restart files specified by  ",A,"  in directory ",A,".")') &
@@ -1118,14 +1030,14 @@ subroutine restore_state(filename, directory, day, G, CS)
           elseif (unit_is_global(n) .or. G%Domain%use_io_layout) then
             if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
               ! Read 3d array...  Time level 1 is always used.
-              call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
+                             G%Domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then ! Read 2d array...
-              call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
+                             G%Domain, 1, position=pos)
             elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then ! Read 4d array...
-              call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                             G%Domain%mpp_domain, 1, position=pos)
+              call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
+                             G%Domain, 1, position=pos)
             else
               call MOM_error(FATAL, "MOM_restart restore_state: "//&
                               "No pointers set for "//trim(varname))
@@ -1149,7 +1061,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               isL = G%isc-1+is0 ; ieL = G%iec+is0
             else
               call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong i-size in "//trim(filepath))
+                    " has the wrong i-size in "//trim(unit_path(n)))
               exit
             endif
 
@@ -1165,7 +1077,7 @@ subroutine restore_state(filename, directory, day, G, CS)
               jsL = G%jsc-1+js0 ; jeL = G%jec+js0
             else
               call MOM_error(WARNING, "MOM_restart restore_state, "//trim(varname)//&
-                    " has the wrong j-size in "//trim(filepath))
+                    " has the wrong j-size in "//trim(unit_path(n)))
               exit
             endif
 
@@ -1226,6 +1138,236 @@ subroutine restore_state(filename, directory, day, G, CS)
   enddo
 
 end subroutine restore_state
+
+!> restart_files_exist determines whether any restart files exist.
+function restart_files_exist(filename, directory, G, CS)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical :: restart_files_exist                  !< The function result, which indicates whether
+                                                  !! any of the explicitly or automatically named
+                                                  !! restart files exist in directory.
+  integer :: num_files
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "restart_files_exist: Module must be initialized before it is used.")
+
+  if ((LEN_TRIM(filename) == 1) .and. (filename(1:1) == 'F')) then
+    num_files = open_restart_units('r', directory, G, CS)
+  else
+    num_files = open_restart_units(filename, directory, G, CS)
+  endif
+  restart_files_exist = (num_files > 0)
+
+end function restart_files_exist
+
+!> determine_is_new_run determines from the value of filename and the existence
+!! automatically named restart files in directory whether this would be a new,
+!! and as a side effect stores this information in CS.
+function determine_is_new_run(filename, directory, G, CS) result(is_new_run)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  logical :: is_new_run                           !< The function result, which indicates whether
+                                                  !! this is a new run, based on the value of
+                                                  !! filename and whether restart files exist.
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "determine_is_new_run: Module must be initialized before it is used.")
+  if (LEN_TRIM(filename) > 1) then
+    CS%new_run = .false.
+  elseif (LEN_TRIM(filename) == 0) then
+    CS%new_run = .true.
+  elseif (filename(1:1) == 'n') then
+    CS%new_run = .true.
+  elseif (filename(1:1) == 'F') then
+    CS%new_run = (open_restart_units('r', directory, G, CS) == 0)
+  else
+    CS%new_run = .false.
+  endif
+
+  CS%new_run_set = .true.
+  is_new_run = CS%new_run
+end function determine_is_new_run
+
+!> is_new_run returns whether this is going to be a new run based on the
+!! information stored in CS by a previous call to determine_is_new_run.
+function is_new_run(CS)
+  type(MOM_restart_CS),  pointer :: CS !< The control structure returned by a previous
+                                       !! call to restart_init.
+  logical :: is_new_run                !< The function result, which indicates whether
+                                       !! this is a new run, based on the value of
+                                       !! filename and whether restart files exist.
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "is_new_run: Module must be initialized before it is used.")
+  if (.not.CS%new_run_set) call MOM_error(FATAL, "MOM_restart " // &
+      "determine_is_new_run must be called for a restart file before is_new_run.")
+
+  is_new_run = CS%new_run
+end function is_new_run
+
+!> open_restart_units determines the number of existing restart files and optionally opens
+!! them and returns unit ids, paths and whether the files are global or spatially decomposed.
+function open_restart_units(filename, directory, G, CS, units, file_paths, &
+                            global_files) result(num_files)
+  character(len=*),      intent(in)  :: filename  !< The list of restart file names or a single
+                                                  !! character 'r' to read automatically named files.
+  character(len=*),      intent(in)  :: directory !< The directory in which to find restart files
+  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
+  type(MOM_restart_CS),  pointer     :: CS        !< The control structure returned by a previous
+                                                  !! call to restart_init.
+  integer, dimension(:), &
+               optional, intent(out) :: units     !< The mpp units of all opened files.
+  character(len=*), dimension(:), &
+               optional, intent(out) :: file_paths   !< The full paths to open files.
+  logical, dimension(:), &
+               optional, intent(out) :: global_files !< True if a file is global.
+
+  integer :: num_files  !< The number of files (both automatically named restart
+                        !! files and others explicitly in filename) that have been opened.
+
+!    This subroutine reads the model state from previously
+!  generated files.  All restart variables are read from the first
+!  file in the input filename list in which they are found.
+
+! Arguments: filename - A series of space delimited strings, each of
+!                       which is either "r" or the name of a file
+!                       from which the run is to be restarted.
+!  (in)      directory - The directory where the restart or save
+!                        files should be found.
+!  (in)      G - The ocean's grid structure.
+!  (in/out)  CS - The control structure returned by a previous call to
+!                 restart_init.
+
+  character(len=200) :: filepath  ! The path (dir/file) to the file being opened.
+  character(len=80) :: fname      ! The name of the current file.
+  character(len=8)  :: suffix     ! A suffix (like "_2") that is added to any
+                                  ! additional restart files.
+! character(len=256) :: mesg      ! A message for warnings.
+  integer :: num_restart     ! The number of restart files that have already
+                             ! been opened.
+  integer :: start_char      ! The location of the starting character in the
+                             ! current file name.
+  integer :: n, m, err, length
+
+
+  logical :: fexists
+  character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
+  character(len=80) :: restartname
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
+      "open_restart_units: Module must be initialized before it is used.")
+
+! Get NetCDF ids for all of the restart files.
+  num_restart = 0 ; n = 1 ; start_char = 1
+  do while (start_char <= len_trim(filename) )
+    do m=start_char,len_trim(filename)
+      if (filename(m:m) == ' ') exit
+    enddo
+    fname = filename(start_char:m-1)
+    start_char = m
+    do while ((start_char <= len_trim(filename)) .and. (filename(start_char:start_char) == ' '))
+      start_char = start_char + 1
+    enddo
+
+    if ((fname(1:1)=='r') .and. ( len_trim(fname) == 1)) then
+      err = 0
+      if (num_restart > 0) err = 1 ! Avoid going through the file list twice.
+      do while (err == 0)
+        restartname = trim(CS%restartfile)
+
+       !query fms_io if there is a filename_appendix (for ensemble runs)
+       call get_filename_appendix(filename_appendix)
+       if(len_trim(filename_appendix) > 0) then
+         length = len_trim(restartname)
+         if(restartname(length-2:length) == '.nc') then
+           restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+         else
+           restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+         end if
+        end if
+        filepath = trim(directory) // trim(restartname)
+
+        if (num_restart < 10) then
+          write(suffix,'("_",I1)') num_restart
+        else
+          write(suffix,'("_",I2)') num_restart
+        endif
+        if (num_restart > 0) filepath = trim(filepath) // suffix
+
+        ! if (.not.file_exists(filepath)) &
+          filepath = trim(filepath)//".nc"
+
+        num_restart = num_restart + 1
+        inquire(file=filepath, exist=fexists)
+        if (fexists) then
+          if (present(units)) &
+            call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                           threading = MULTIPLE, fileset = SINGLE_FILE)
+          if (present(global_files)) global_files(n) = .true.
+        elseif (CS%parallel_restartfiles) then
+          if (G%Domain%use_io_layout) then
+            ! Look for decomposed files using the I/O Layout.
+            fexists = file_exists(filepath, G%Domain)
+            if (fexists .and. (present(units))) &
+              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                             domain=G%Domain%mpp_domain)
+          else
+            ! Look for any PE-specific files of the form NAME.nc.####.
+            if (num_PEs()>10000) then
+              write(filepath, '(a,i6.6)' ) trim(filepath)//'.', pe_here()
+            else
+              write(filepath, '(a,i4.4)' ) trim(filepath)//'.', pe_here()
+            endif
+            inquire(file=filepath, exist=fexists)
+            if (fexists .and. (present(units))) &
+              call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                             threading = MULTIPLE, fileset = SINGLE_FILE)
+          endif
+          if (fexists .and. present(global_files)) global_files(n) = .false.
+        endif
+
+        if (fexists) then
+          if (present(file_paths)) file_paths(n) = filepath
+          n = n + 1
+          if (is_root_pe() .and. (present(units))) &
+            call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
+        else
+          err = 1 ; exit
+        endif
+      enddo ! while (err == 0) loop
+    else
+      filepath = trim(directory)//trim(fname)
+      inquire(file=filepath, exist=fexists)
+      if (.not. fexists) filepath = trim(filepath)//".nc"
+
+      inquire(file=filepath, exist=fexists)
+      if (fexists) then
+        if (present(units)) &
+          call open_file(units(n), trim(filepath), READONLY_FILE, NETCDF_FILE, &
+                       threading = MULTIPLE, fileset = SINGLE_FILE)
+        if (present(global_files)) global_files(n) = .true.
+        if (present(file_paths)) file_paths(n) = filepath
+        n = n + 1
+        if (is_root_pe() .and. (present(units))) &
+          call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
+      else
+        if (present(units)) &
+          call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
+      endif
+
+    endif
+  enddo ! while (start_char < strlen(filename)) loop
+  num_files = n-1
+
+end function open_restart_units
 
 subroutine restart_init(param_file, CS, restart_root)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters

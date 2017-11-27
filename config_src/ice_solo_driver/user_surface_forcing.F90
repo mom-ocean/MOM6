@@ -48,9 +48,9 @@ use MOM_diag_mediator, only : register_diag_field, diag_ctrl
 use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, allocate_forcing_type
+use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
+use MOM_io, only : file_exists, MOM_read_data
 use MOM_time_manager, only : time_type, operator(+), operator(/), get_time
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
 use MOM_tracer_flow_control, only : tracer_flow_control_CS
@@ -84,18 +84,20 @@ end type user_surface_forcing_CS
 
 contains
 
-subroutine USER_wind_forcing(state, fluxes, day, G, CS)
-  type(surface),                 intent(inout) :: state
-  type(forcing),                 intent(inout) :: fluxes
+subroutine USER_wind_forcing(sfc_state, forces, day, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
+  type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day
   type(ocean_grid_type),         intent(inout) :: G    !< The ocean's grid structure
-  type(user_surface_forcing_CS), pointer       :: CS
+  type(user_surface_forcing_CS), pointer       :: CS   !< A pointer to the control structure returned by
+                                                       !! a previous call to user_surface_forcing_init
 
-!   This subroutine sets the surface wind stresses, fluxes%taux and fluxes%tauy.
+!   This subroutine sets the surface wind stresses, forces%taux and forces%tauy.
 ! These are the stresses in the direction of the model grid (i.e. the same
 ! direction as the u- and v- velocities.)  They are both in Pa.
 !   In addition, this subroutine can be used to set the surface friction
-! velocity, fluxes%ustar, in m s-1. This is needed with a bulk mixed layer.
+! velocity, forces%ustar, in m s-1. This is needed with a bulk mixed layer.
 !
 ! Arguments: state - A structure containing fields that describe the
 !                    surface state of the ocean.
@@ -119,38 +121,36 @@ subroutine USER_wind_forcing(state, fluxes, day, G, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true.)
-
   !  Set the surface wind stresses, in units of Pa.  A positive taux
   !  accelerates the ocean to the (pseudo-)east.
 
   !  The i-loop extends to is-1 so that taux can be used later in the
   ! calculation of ustar - otherwise the lower bound would be Isq.
   do j=js,je ; do I=is-1,Ieq
-    fluxes%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
+    forces%taux(I,j) = G%mask2dCu(I,j) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
   do J=js-1,Jeq ; do i=is,ie
-    fluxes%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
+    forces%tauy(i,J) = G%mask2dCv(i,J) * 0.0  ! Change this to the desired expression.
   enddo ; enddo
 
   !    Set the surface friction velocity, in units of m s-1.  ustar
   !  is always positive.
-  if (associated(fluxes%ustar)) then ; do j=js,je ; do i=is,ie
+  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    fluxes%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
-       sqrt(0.5*(fluxes%taux(I-1,j)**2 + fluxes%taux(I,j)**2) + &
-            0.5*(fluxes%tauy(i,J-1)**2 + fluxes%tauy(i,J)**2))/CS%Rho0)
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gust_const/CS%Rho0 + &
+       sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
+            0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0)
   enddo ; enddo ; endif
 
 end subroutine USER_wind_forcing
 
-subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
-  type(surface),                 intent(inout) :: state
+subroutine USER_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+  type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
+                                                    !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes
   type(time_type),               intent(in)    :: day
   real,                          intent(in)    :: dt   !< The amount of time over which
-                                               !! the fluxes apply, in s
+                                                       !! the fluxes apply, in s
   type(ocean_grid_type),         intent(in)    :: G    !< The ocean's grid structure
   type(user_surface_forcing_CS), pointer       :: CS
 
@@ -261,10 +261,10 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         Salin_restore = 0.0
 
         fluxes%heat_restore(i,j) = (G%mask2dT(i,j) * (rhoXcp * CS%Flux_const)) * &
-            (Temp_restore - state%SST(i,j))
+            (Temp_restore - sfc_state%SST(i,j))
         fluxes%virt_precip(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
-            ((Salin_restore - state%SSS(i,j)) / &
-             (0.5 * (Salin_restore + state%SSS(i,j))))
+            ((Salin_restore - sfc_state%SSS(i,j)) / &
+             (0.5 * (Salin_restore + sfc_state%SSS(i,j))))
       enddo ; enddo
     else
       !   When modifying the code, comment out this error message.  It is here
@@ -280,7 +280,7 @@ subroutine USER_buoyancy_forcing(state, fluxes, day, dt, G, CS)
         density_restore = 1030.0
 
         fluxes%buoy(i,j) = G%mask2dT(i,j) * buoy_rest_const * &
-                          (density_restore - state%sfc_density(i,j))
+                          (density_restore - sfc_state%sfc_density(i,j))
       enddo ; enddo
     endif
   endif                                             ! end RESTOREBUOY

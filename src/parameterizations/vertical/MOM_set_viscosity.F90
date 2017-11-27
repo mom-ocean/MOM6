@@ -40,7 +40,7 @@ use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
+use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
@@ -539,11 +539,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
           hwtot = hwtot + hweight
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
             hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + &
                                            v_at_u*v_at_u + U_bg_sq)
           else
-            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
+            u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
             hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + &
                                            u_at_v*u_at_v + U_bg_sq)
           endif ; endif
@@ -572,7 +572,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
     if (use_BBL_EOS) then
       do i=is,ie
-        press(i) = 0.0 ! or = fluxes%p_surf(i,j)
+        press(i) = 0.0 ! or = forces%p_surf(i,j)
         if (.not.do_i(i)) then ; T_EOS(i) = 0.0 ; S_EOS(i) = 0.0 ; endif
       enddo
       do k=1,nz ; do i=is,ie
@@ -876,13 +876,13 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 
           if (m==1) then
             if (Rayleigh > 0.0) then
-              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+              v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
               visc%Ray_u(I,j,k) = Rayleigh*sqrt(u(I,j,k)*u(I,j,k) + &
                                                 v_at_u*v_at_u + U_bg_sq)
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
-              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u)
+              u_at_v = set_u_at_v(u, h, G, i, j, k, mask_u, OBC)
               visc%Ray_v(i,J,k) = Rayleigh*sqrt(v(i,J,k)*v(i,J,k) + &
                                                 u_at_v*u_at_v + U_bg_sq)
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
@@ -943,53 +943,79 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 end subroutine set_viscous_BBL
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
-function set_v_at_u(v, h, G, i, j, k, mask2dCv)
+function set_v_at_u(v, h, G, i, j, k, mask2dCv, OBC)
   type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in) :: v    !< The meridional velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
   integer,                                   intent(in) :: i, j, k
   real, dimension(SZI_(G),SZJB_(G)),         intent(in) :: mask2dCv
+  type(ocean_OBC_type),                      pointer    :: OBC
   real                                                  :: set_v_at_u
 
   ! This subroutine finds a thickness-weighted value of v at the u-points.
-  real :: hwt(4)           ! Masked weights used to average v onto u, in H.
+  real :: hwt(0:1,-1:0)    ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  integer :: i0, j0, i1, j1
 
-  hwt(1) = (h(i,j-1,k) + h(i,j,k)) * mask2dCv(i,J-1)
-  hwt(2) = (h(i+1,j-1,k) + h(i+1,j,k)) * mask2dCv(i+1,J-1)
-  hwt(3) = (h(i,j,k) + h(i,j+1,k)) * mask2dCv(i,J)
-  hwt(4) = (h(i+1,j,k) + h(i+1,j+1,k)) * mask2dCv(i+1,J)
+  do j0 = -1,0 ; do i0 = 0,1 ; i1 = i+i0 ; J1 = J+j0
+    hwt(i0,j0) = (h(i1,j1,k) + h(i1,j1+1,k)) * mask2dCv(i1,J1)
+  enddo ; enddo
 
-  hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
+  if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+    do j0 = -1,0 ; do i0 = 0,1 ; if ((OBC%segnum_v(i+i0,J+j0) /= OBC_NONE)) then
+      i1 = i+i0 ; J1 = J+j0
+      if (OBC%segment(OBC%segnum_v(i1,j1))%direction == OBC_DIRECTION_N) then
+        hwt(i0,j0) = 2.0 * h(i1,j1,k) * mask2dCv(i1,J1)
+      elseif (OBC%segment(OBC%segnum_v(i1,J1))%direction == OBC_DIRECTION_S) then
+        hwt(i0,j0) = 2.0 * h(i1,J1+1,k) * mask2dCv(i1,J1)
+      endif
+    endif ; enddo ; enddo
+  endif ; endif
+
+  hwt_tot = (hwt(0,-1) + hwt(1,0)) + (hwt(1,-1) + hwt(0,0))
   set_v_at_u = 0.0
   if (hwt_tot > 0.0) set_v_at_u = &
-          ((hwt(3) * v(i,J,k) + hwt(2) * v(i+1,J-1,k)) + &
-           (hwt(4) * v(i+1,J,k) + hwt(1) * v(i,J-1,k))) / hwt_tot
+          ((hwt(0,0) * v(i,J,k) + hwt(1,-1) * v(i+1,J-1,k)) + &
+           (hwt(1,0) * v(i+1,J,k) + hwt(0,-1) * v(i,J-1,k))) / hwt_tot
+
 end function set_v_at_u
 
 !> This subroutine finds a thickness-weighted value of u at the v-points.
-function set_u_at_v(u, h, G, i, j, k, mask2dCu)
-  type(ocean_grid_type),                  intent(in) :: G    !< The ocean's grid structure
+function set_u_at_v(u, h, G, i, j, k, mask2dCu, OBC)
+  type(ocean_grid_type),                     intent(in) :: G    !< The ocean's grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in) :: u    !< The zonal velocity, in m s-1
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZIB_(G),SZJ_(G)),  intent(in) :: mask2dCu
-  integer,                                intent(in) :: i, j, k
-  real                                               :: set_u_at_v
+  integer,                                   intent(in) :: i, j, k
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in) :: mask2dCu
+  type(ocean_OBC_type),                      pointer    :: OBC
+  real                                                  :: set_u_at_v
 
   ! This subroutine finds a thickness-weighted value of u at the v-points.
-  real :: hwt(4)           ! Masked weights used to average u onto v, in H.
+  real :: hwt(-1:0,0:1)    ! Masked weights used to average u onto v, in H.
   real :: hwt_tot          ! The sum of the masked thicknesses, in H.
+  integer :: i0, j0, i1, j1
 
-  hwt(1) = (h(i-1,j,k) + h(i,j,k)) * mask2dCu(I-1,j)
-  hwt(2) = (h(i,j,k) + h(i+1,j,k)) * mask2dCu(I,j)
-  hwt(3) = (h(i-1,j+1,k) + h(i,j+1,k)) * mask2dCu(I-1,j+1)
-  hwt(4) = (h(i,j+1,k) + h(i+1,j+1,k)) * mask2dCu(I,j+1)
+  do j0 = 0,1 ; do i0 = -1,0 ; I1 = I+i0 ; j1 = j+j0
+    hwt(i0,j0) = (h(i1,j1,k) + h(i1+1,j1,k)) * mask2dCu(I1,j1)
+  enddo ; enddo
 
-  hwt_tot = (hwt(1) + hwt(4)) + (hwt(2) + hwt(3))
+  if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
+    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= OBC_NONE)) then
+      I1 = I+i0 ; j1 = j+j0
+      if (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_E) then
+        hwt(i0,j0) = 2.0 * h(I1,j1,k) * mask2dCu(I1,j1)
+      elseif (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_W) then
+        hwt(i0,j0) = 2.0 * h(I1+1,j1,k) * mask2dCu(I1,j1)
+      endif
+    endif ; enddo ; enddo
+  endif ; endif
+
+  hwt_tot = (hwt(-1,0) + hwt(0,1)) + (hwt(0,0) + hwt(-1,1))
   set_u_at_v = 0.0
   if (hwt_tot > 0.0) set_u_at_v = &
-          ((hwt(2) * u(I,j,k) + hwt(3) * u(I-1,j+1,k)) + &
-           (hwt(1) * u(I-1,j,k) + hwt(4) * u(I,j+1,k))) / hwt_tot
+          ((hwt(0,0) * u(I,j,k) + hwt(-1,1) * u(I-1,j+1,k)) + &
+           (hwt(-1,0) * u(I-1,j,k) + hwt(0,1) * u(I,j+1,k))) / hwt_tot
+
 end function set_u_at_v
 
 !>   The following subroutine calculates the thickness of the surface boundary
@@ -997,7 +1023,7 @@ end function set_u_at_v
 !! the thickness of the topmost NKML layers (with a bulk mixed layer) are
 !! currently used.  The thicknesses are given in terms of fractional layers, so
 !! that this thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1009,9 +1035,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure containing pointers to any available
                                                  !! thermodynamic fields. Absent fields have
                                                  !! NULL ptrs.
-  type(forcing),           intent(in)    :: fluxes !< A structure containing pointers to any
-                                                 !! possible forcing fields. Unused fields have
-                                                 !! NULL ptrs.
+  type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(inout) :: visc !< A structure containing vertical viscosities and
                                                  !! related fields.
   real,                    intent(in)    :: dt   !< Time increment in s.
@@ -1030,7 +1054,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 !                the units of h are denoted as H.
 !  (in)      tv - A structure containing pointers to any available
 !                 thermodynamic fields. Absent fields have NULL ptrs.
-!  (in)      fluxes - A structure containing pointers to any possible
+!  (in)      forces - A structure containing pointers to mechanical
 !                     forcing fields.  Unused fields have NULL ptrs.
 !  (out)     visc - A structure containing vertical viscosities and related
 !                   fields.
@@ -1141,7 +1165,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc_ML): "//&
          "Module must be initialized before it is used.")
-  if (.not.(CS%dynamic_viscous_ML .or. associated(fluxes%frac_shelf_h))) return
+  if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
+            associated(forces%frac_shelf_v)) ) return
 
   Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
@@ -1155,19 +1180,13 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
   g_H_Rho0 = (GV%g_Earth * GV%H_to_m) / GV%Rho0
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
 
-  if (associated(fluxes%frac_shelf_h)) then
+  if (associated(forces%frac_shelf_u) .neqv. associated(forces%frac_shelf_v)) &
+    call MOM_error(FATAL, "set_viscous_ML: one of forces%frac_shelf_u and "//&
+                   "forces%frac_shelf_v is associated, but the other is not.")
+
+  if (associated(forces%frac_shelf_u)) then
     ! This configuration has ice shelves, and the appropriate variables need to
     ! be allocated.
-    if (.not.associated(fluxes%frac_shelf_u)) call MOM_error(FATAL, &
-      "set_viscous_ML: fluxes%frac_shelf_h is associated, but " // &
-      "fluxes%frac_shelf_u is not.")
-    if (.not.associated(fluxes%frac_shelf_v)) call MOM_error(FATAL, &
-      "set_viscous_ML: fluxes%frac_shelf_h is associated, but " // &
-      "fluxes%frac_shelf_v is not.")
-    if (.not.associated(visc%taux_shelf)) then
-      allocate(visc%taux_shelf(G%IsdB:G%IedB,G%jsd:G%jed))
-      visc%taux_shelf(:,:) = 0.0
-    endif
     if (.not.associated(visc%tauy_shelf)) then
       allocate(visc%tauy_shelf(G%isd:G%ied,G%JsdB:G%JedB))
       visc%tauy_shelf(:,:) = 0.0
@@ -1221,8 +1240,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif
   enddo ; endif
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS, &
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,        &
+!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS, &
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,js,je,OBC,    &
 !$OMP                                  H_to_m, m_to_H, Isq, Ieq, nz, U_bg_sq,mask_v,      &
 !$OMP                                  cdrag_sqrt,Rho0x400_G,nkml) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,uhtot,vhtot,U_Star, &
@@ -1242,16 +1261,16 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           do_i(I) = .true. ; do_any = .true.
           k_massive(I) = nkml
           Thtot(I) = 0.0 ; Shtot(I) = 0.0 ; Rhtot(i) = 0.0
-          uhtot(I) = dt_Rho0 * fluxes%taux(I,j)
-          vhtot(I) = 0.25 * dt_Rho0 * ((fluxes%tauy(i,J) + fluxes%tauy(i+1,J-1)) + &
-                                       (fluxes%tauy(i,J-1) + fluxes%tauy(i+1,J)))
+          uhtot(I) = dt_Rho0 * forces%taux(I,j)
+          vhtot(I) = 0.25 * dt_Rho0 * ((forces%tauy(i,J) + forces%tauy(i+1,J-1)) + &
+                                       (forces%tauy(i,J-1) + forces%tauy(i+1,J)))
 
           if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
             absf = 0.5*(abs(G%CoriolisBu(I,J)) + abs(G%CoriolisBu(I,J-1)))
             if (CS%omega_frac > 0.0) &
               absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
           endif
-          U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i+1,j)))
+          U_Star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i+1,j)))
           Idecay_len_TKE(I) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
         endif
       enddo
@@ -1330,9 +1349,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_h)) then
+    if (associated(forces%frac_shelf_u)) then
       do I=Isq,Ieq
-        if (fluxes%frac_shelf_u(I,j)*G%mask2dCu(I,j) == 0.0) then
+        if (forces%frac_shelf_u(I,j)*G%mask2dCu(I,j) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_u(I,j) = 0.0 ; visc%kv_tbl_shelf_u(I,j) = 0.0
         else
@@ -1365,7 +1384,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v)
+            v_at_u = set_v_at_u(v, h, G, i, j, k, mask_v, OBC)
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + &
                                            v_at_u**2 + U_bg_sq)
           endif
@@ -1389,7 +1408,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
                      dR_dT, dR_dS, Isq-G%IsdB+1, Ieq-Isq+1, tv%eqn_of_state)
       endif
 
@@ -1463,8 +1482,8 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
 
   enddo ! j-loop at u-points
 
-!$OMP parallel do default(none) shared(u, v, h, tv, fluxes, visc, dt, G, GV, CS, use_EOS,&
-!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,       &
+!$OMP parallel do default(none) shared(u, v, h, tv, forces, visc, dt, G, GV, CS, use_EOS,&
+!$OMP                                  dt_Rho0, h_neglect, h_tiny, g_H_Rho0,is,ie,OBC,   &
 !$OMP                                  Jsq,Jeq,nz,U_bg_sq,cdrag_sqrt,Rho0x400_G,nkml,    &
 !$OMP                                  m_to_H,H_to_m,mask_u) &
 !$OMP                          private(do_any,htot,do_i,k_massive,Thtot,vhtot,uhtot,absf,&
@@ -1485,9 +1504,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           do_i(i) = .true. ; do_any = .true.
           k_massive(i) = nkml
           Thtot(i) = 0.0 ; Shtot(i) = 0.0 ; Rhtot(i) = 0.0
-          vhtot(i) = dt_Rho0 * fluxes%tauy(i,J)
-          uhtot(i) = 0.25 * dt_Rho0 * ((fluxes%taux(I,j) + fluxes%taux(I-1,j+1)) + &
-                                       (fluxes%taux(I-1,j) + fluxes%taux(I,j+1)))
+          vhtot(i) = dt_Rho0 * forces%tauy(i,J)
+          uhtot(i) = 0.25 * dt_Rho0 * ((forces%taux(I,j) + forces%taux(I-1,j+1)) + &
+                                       (forces%taux(I-1,j) + forces%taux(I,j+1)))
 
          if (CS%omega_frac >= 1.0) then ; absf = 2.0*CS%omega ; else
            absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
@@ -1495,7 +1514,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
              absf = sqrt(CS%omega_frac*4.0*CS%omega**2 + (1.0-CS%omega_frac)*absf**2)
          endif
 
-         U_Star = max(CS%ustar_min, 0.5 * (fluxes%ustar(i,j) + fluxes%ustar(i,j+1)))
+         U_Star = max(CS%ustar_min, 0.5 * (forces%ustar(i,j) + forces%ustar(i,j+1)))
          Idecay_len_TKE(i) = ((absf / U_Star) * CS%TKE_decay) * H_to_m
 
         endif
@@ -1575,9 +1594,9 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
-    if (associated(fluxes%frac_shelf_h)) then
+    if (associated(forces%frac_shelf_v)) then
       do I=Is,Ie
-        if (fluxes%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
+        if (forces%frac_shelf_v(i,J)*G%mask2dCv(i,J) == 0.0) then
           do_i(I) = .false.
           visc%tbl_thick_shelf_v(i,J) = 0.0 ; visc%kv_tbl_shelf_v(i,J) = 0.0
         else
@@ -1610,7 +1629,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
           hwtot = hwtot + hweight
 
           if (.not.CS%linear_drag) then
-            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u)
+            u_at_v = set_u_at_v(u, h, G, i, J, k, mask_u, OBC)
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + &
                                            u_at_v**2 + U_bg_sq)
           endif
@@ -1634,7 +1653,7 @@ subroutine set_viscous_ML(u, v, h, tv, fluxes, visc, dt, G, GV, CS)
       endif ; enddo ! I-loop
 
       if (use_EOS) then
-        call calculate_density_derivs(T_EOS, S_EOS, fluxes%p_surf(:,j), &
+        call calculate_density_derivs(T_EOS, S_EOS, forces%p_surf(:,j), &
                      dR_dT, dR_dS, is-G%IsdB+1, ie-is+1, tv%eqn_of_state)
       endif
 
@@ -2001,21 +2020,21 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%TKE_bbl(isd:ied,jsd:jed)) ; visc%TKE_bbl = 0.0
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
-       diag%axesCu1, Time, 'BBL thickness at u points', 'meter')
+       diag%axesCu1, Time, 'BBL thickness at u points', 'm')
     CS%id_kv_bbl_u = register_diag_field('ocean_model', 'kv_bbl_u', diag%axesCu1, &
-       Time, 'BBL viscosity at u points', 'meter2 second-1')
+       Time, 'BBL viscosity at u points', 'm2 s-1')
     CS%id_bbl_thick_v = register_diag_field('ocean_model', 'bbl_thick_v', &
-       diag%axesCv1, Time, 'BBL thickness at v points', 'meter')
+       diag%axesCv1, Time, 'BBL thickness at v points', 'm')
     CS%id_kv_bbl_v = register_diag_field('ocean_model', 'kv_bbl_v', diag%axesCv1, &
-       Time, 'BBL viscosity at v points', 'meter2 second-1')
+       Time, 'BBL viscosity at v points', 'm2 s-1')
   endif
   if (CS%Channel_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz)) ; visc%Ray_u = 0.0
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz)) ; visc%Ray_v = 0.0
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
-       Time, 'Rayleigh drag velocity at u points', 'meter second-1')
+       Time, 'Rayleigh drag velocity at u points', 'm s-1')
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
-       Time, 'Rayleigh drag velocity at v points', 'meter second-1')
+       Time, 'Rayleigh drag velocity at v points', 'm s-1')
   endif
 
   if (differential_diffusion) then
@@ -2027,9 +2046,9 @@ subroutine set_visc_init(Time, G, GV, param_file, diag, visc, CS, OBC)
     allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed)) ; visc%nkml_visc_u = 0.0
     allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB)) ; visc%nkml_visc_v = 0.0
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
-       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'meter')
+       diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'm')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
-       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'meter')
+       diag%axesCv1, Time, 'Number of layers in viscous mixed layer at v points', 'm')
   endif
 
   CS%Hbbl = CS%Hbbl * GV%m_to_H
