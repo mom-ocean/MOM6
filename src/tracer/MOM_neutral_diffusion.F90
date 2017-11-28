@@ -1434,7 +1434,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_l(kl_left), Pres_l(kl_left+1), &
-        lastP_left, lastK_left, kl_left, kl_left_0, ki_left, top_connected_l, bot_connected_l, &
+        lastP_left, lastK_left, kl_left, kl_left_0, ki_left, tolerance, top_connected_l, bot_connected_l, &
         PoL(k_surface), KoL(k_surface))
       if ( refine_pos .and. (PoL(k_surface) > 0.) .and. (PoL(k_surface) < 1.) ) then
         min_bound = 0.
@@ -1483,7 +1483,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
 
       ! Set position within the searched column
       call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_r(kl_right), Pres_r(kl_right+1),        &
-         lastP_right, lastK_right, kl_right, kl_right_0, ki_right, top_connected_r, bot_connected_r,                   &
+         lastP_right, lastK_right, kl_right, kl_right_0, ki_right, tolerance, top_connected_r, bot_connected_r,                   &
          PoR(k_surface), KoR(k_surface))
       if ( refine_pos .and. (PoR(k_surface) > 0. .and. PoR(k_surface) < 1.) ) then
         min_bound = 0.
@@ -1586,7 +1586,7 @@ end subroutine increment_interface
 
 !> Searches the "other" (searched) column for the position of the neutral surface
 subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, kl_0, ki, &
-                                             top_connected, bot_connected, out_P, out_K)
+                                             tolerance, top_connected, bot_connected, out_P, out_K)
   real,                  intent(in   ) :: dRhoTopm1      !< Density difference across previous interface
   real,                  intent(in   ) :: dRhoTop        !< Density difference across top interface
   real,                  intent(in   ) :: dRhoBot        !< Density difference across top interface
@@ -1597,6 +1597,7 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   integer,               intent(in   ) :: kl             !< Layer in the searched column
   integer,               intent(in   ) :: kl_0           !< Layer in the searched column
   integer,               intent(in   ) :: ki             !< Interface of the searched column
+  real,                  intent(in   ) :: tolerance      !< How close to 0 "neutral" is defined
   logical, dimension(:), intent(inout) :: top_connected  !< True if the top interface was pointed to
   logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
   real,                  intent(  out) :: out_P          !< Position within searched column
@@ -1604,15 +1605,15 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
 
   if (kl > kl_0) then ! Away from top cell
     if (kl == lastK) then ! Searching in the same layer
-      if (dRhoTop > 0.) then
+      if (dRhoTop > tolerance) then
         out_P = max(0.,lastP) ; out_K = kl
-      elseif (dRhoTop == dRhoBot) then
+      elseif ( ABS(dRhoTop - dRhoBot)<tolerance ) then
         if (top_connected(kl)) then
           out_P = 1. ; out_K = kl
         else
           out_P = max(0.,lastP) ; out_K = kl
         endif
-      elseif (dRhoTop >= dRhoBot) then
+      elseif (dRhoTop >= (dRhoBot+tolerance)) then
         out_P = 1. ; out_K = kl
       else
         out_K = kl
@@ -1630,15 +1631,15 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   else ! At the top cell
     if (ki == 1) then
       out_P = 0. ; out_K = kl
-    elseif (dRhoTop > 0.) then
+    elseif (dRhoTop > tolerance) then
       out_P = max(0.,lastP) ; out_K = kl
-    elseif (dRhoTop == dRhoBot) then
+    elseif ( (dRhoTop - dRhoBot)<tolerance) then
       if (top_connected(kl)) then
         out_P = 1. ; out_K = kl
       else
         out_P = max(0.,lastP) ; out_K = kl
       endif
-    elseif (dRhoTop >= dRhoBot) then
+    elseif (dRhoTop >= (dRhoBot+tolerance)) then
       out_P = 1. ; out_K = kl
     else
       out_K = kl
