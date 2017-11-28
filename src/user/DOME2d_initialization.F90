@@ -36,11 +36,11 @@ contains
 !> Initialize topography with a shelf and slope in a 2D domain
 subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  type(dyn_horgrid_type), intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+                          intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),  intent(in)  :: param_file !< Parameter file structure
+  real,                   intent(in)  :: max_depth  !< Maximum depth of model in m
   ! Local variables
   integer :: i, j
   real    :: x, bay_depth, l1, l2
@@ -67,23 +67,22 @@ subroutine DOME2d_initialize_topography ( D, G, param_file, max_depth )
 
   bay_depth = dome2d_depth_bay
 
-  do i=G%isc,G%iec
-    do j=G%jsc,G%jec
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
 
-      ! Compute normalized zonal coordinate
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
+    ! Compute normalized zonal coordinate
+    x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
 
-      if ( x .le. l1 ) then
-        D(i,j) = bay_depth * max_depth
-      else if (( x .gt. l1 ) .and. ( x .lt. l2 )) then
-        D(i,j) = bay_depth * max_depth + (1.0-bay_depth) * max_depth * &
-                 ( x - l1 ) / (l2 - l1)
-      else
-        D(i,j) = max_depth
-      end if
+    if ( x <= l1 ) then
+      D(i,j) = bay_depth * max_depth
+    else if (( x > l1 ) .and. ( x < l2 )) then
+      D(i,j) = bay_depth * max_depth + (1.0-bay_depth) * max_depth * &
+               ( x - l1 ) / (l2 - l1)
+    else
+      D(i,j) = max_depth
+    endif
 
-    enddo
-  enddo
+  enddo ; enddo
+
 end subroutine DOME2d_initialize_topography
 
 !> Initialize thicknesses according to coordinate mode
@@ -157,56 +156,56 @@ subroutine DOME2d_initialize_thickness ( h, G, GV, param_file, just_read_params 
           endif
         enddo
 
-         x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-         if ( x .le. dome2d_width_bay ) then
-           h(i,j,1:nz-1) = GV%Angstrom;
-           h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom;
-         end if
+         x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+         if ( x <= dome2d_width_bay ) then
+           h(i,j,1:nz-1) = GV%Angstrom_Z
+           h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom_Z
+         endif
 
-      end do ; end do
+      enddo ; enddo
 
  !  case ( IC_RHO_C )
  !
  !    do j=js,je ; do i=is,ie
- !        eta1D(nz+1) = -1.0*G%bathyT(i,j)
- !        do k=nz,1,-1
- !          eta1D(k) = e0(k)
- !          if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
- !            eta1D(k) = eta1D(k+1) + min_thickness
- !            h(i,j,k) = min_thickness
- !          else
- !            h(i,j,k) = eta1D(k) - eta1D(k+1)
- !          endif
+ !       eta1D(nz+1) = -1.0*G%bathyT(i,j)
+ !       do k=nz,1,-1
+ !         eta1D(k) = e0(k)
+ !         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+ !           eta1D(k) = eta1D(k+1) + min_thickness
+ !           h(i,j,k) = min_thickness
+ !         else
+ !           h(i,j,k) = eta1D(k) - eta1D(k+1)
+ !         endif
  !       enddo
  !
- !       x = G%geoLonT(i,j) / G%len_lon;
- !       if ( x .le. dome2d_width_bay ) then
- !         h(i,j,1:nz-1) = min_thickness;
- !         h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness;
- !       end if
+ !       x = G%geoLonT(i,j) / G%len_lon
+ !       if ( x <= dome2d_width_bay ) then
+ !         h(i,j,1:nz-1) = min_thickness
+ !         h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * min_thickness
+ !       endif
  !
  !    enddo ; enddo
 
     case ( REGRIDDING_ZSTAR )
 
       do j=js,je ; do i=is,ie
-          eta1D(nz+1) = -1.0*G%bathyT(i,j)
-          do k=nz,1,-1
-            eta1D(k) = e0(k)
-            if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
-              eta1D(k) = eta1D(k+1) + min_thickness
-              h(i,j,k) = min_thickness
-            else
-              h(i,j,k) = eta1D(k) - eta1D(k+1)
-            endif
-         enddo
+        eta1D(nz+1) = -1.0*G%bathyT(i,j)
+        do k=nz,1,-1
+          eta1D(k) = e0(k)
+          if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+            eta1D(k) = eta1D(k+1) + min_thickness
+            h(i,j,k) = min_thickness
+          else
+            h(i,j,k) = eta1D(k) - eta1D(k+1)
+          endif
+        enddo
       enddo ; enddo
 
     case ( REGRIDDING_SIGMA )
       do j=js,je ; do i=is,ie
-        delta_h = G%bathyT(i,j) / nz;
-        h(i,j,:) = delta_h;
-      end do ; end do
+        delta_h = G%bathyT(i,j) / nz
+        h(i,j,:) = delta_h
+      enddo ; enddo
 
     case default
       call MOM_error(FATAL,"dome2d_initialize: "// &
@@ -231,12 +230,12 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz
-  real      :: x;
-  integer   :: index_bay_z;
-  real      :: delta_S, delta_T;
+  real      :: x
+  integer   :: index_bay_z
+  real      :: delta_S, delta_T
   real      :: S_ref, T_ref;        ! Reference salinity and temperature within surface layer
   real      :: S_range, T_range;    ! Range of salinities and temperatures over the vertical
-  real      :: xi0, xi1;
+  real      :: xi0, xi1
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
   real    :: dome2d_width_bay, dome2d_width_bottom, dome2d_depth_bay
@@ -274,35 +273,35 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
 
       do j=js,je ; do i=is,ie
-        xi0 = 0.0;
+        xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth;
-          S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
-          xi0 = xi1;
+          xi1 = xi0 + h(i,j,k) / G%max_depth
+          S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
+          xi0 = xi1
         enddo
       enddo ; enddo
 
     case ( REGRIDDING_RHO )
 
       do j=js,je ; do i=is,ie
-        xi0 = 0.0;
+        xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + h(i,j,k) / G%max_depth;
-          S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1);
-          xi0 = xi1;
+          xi1 = xi0 + h(i,j,k) / G%max_depth
+          S(i,j,k) = 34.0 + 0.5 * S_range * (xi0 + xi1)
+          xi0 = xi1
         enddo
-        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-        if ( x .le. dome2d_width_bay ) then
-          S(i,j,nz) = 34.0 + S_range;
+        x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+        if ( x <= dome2d_width_bay ) then
+          S(i,j,nz) = 34.0 + S_range
         endif
       enddo ; enddo
 
     case ( REGRIDDING_LAYER )
 
-      delta_S = S_range / ( G%ke - 1.0 );
-      S(:,:,1) = S_ref;
+      delta_S = S_range / ( G%ke - 1.0 )
+      S(:,:,1) = S_ref
       do k = 2,G%ke
-        S(:,:,k) = S(:,:,k-1) + delta_S;
+        S(:,:,k) = S(:,:,k-1) + delta_S
       enddo
 
     case default
@@ -313,10 +312,10 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
 
   ! Modify salinity and temperature when z coordinates are used
   if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_ZSTAR ) then
-    index_bay_z = Nint ( dome2d_depth_bay * G%ke );
+    index_bay_z = Nint ( dome2d_depth_bay * G%ke )
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-      if ( x .le. dome2d_width_bay ) then
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+      if ( x <= dome2d_width_bay ) then
         S(i,j,1:index_bay_z) = S_ref + S_range; ! Use for z coordinates
         T(i,j,1:index_bay_z) = 1.0;             ! Use for z coordinates
       endif
@@ -326,8 +325,8 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   ! Modify salinity and temperature when sigma coordinates are used
   if ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_SIGMA ) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-      if ( x .le. dome2d_width_bay ) then
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+      if ( x <= dome2d_width_bay ) then
         S(i,j,1:G%ke) = S_ref + S_range;    ! Use for sigma coordinates
         T(i,j,1:G%ke) = 1.0;                ! Use for sigma coordinates
       endif
@@ -335,15 +334,16 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, param_file, &
   endif
 
   ! Modify temperature when rho coordinates are used
-  T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0;
-  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then
+  T(G%isc:G%iec,G%jsc:G%jec,1:G%ke) = 0.0
+  if (( coordinateMode(verticalCoordinate) .eq. REGRIDDING_RHO ) .or. &
+      ( coordinateMode(verticalCoordinate) .eq. REGRIDDING_LAYER )) then
     do i = G%isc,G%iec ; do j = G%jsc,G%jec
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-      if ( x .le. dome2d_width_bay ) then
-        T(i,j,G%ke) = 1.0;
-      end if
-    end do ; end do
-  end if
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+      if ( x <= dome2d_width_bay ) then
+        T(i,j,G%ke) = 1.0
+      endif
+    enddo ; enddo
+  endif
 
 end subroutine DOME2d_initialize_temperature_salinity
 
@@ -466,7 +466,8 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
       do k = nz,1,-1
         z = z + 0.5 * h(i,j,k) ! Position of the center of layer k
         S(i,j,k) = 34.0 - 1.0 * (z/G%max_depth)
-        if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) S(i,j,k) = S_ref + S_range
+        if ( ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon < dome2d_west_sponge_width ) &
+          S(i,j,k) = S_ref + S_range
         z = z + 0.5 * h(i,j,k) ! Position of the interface k
       enddo
     enddo ; enddo
@@ -493,11 +494,11 @@ subroutine DOME2d_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
         endif
       enddo
 
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon;
-      if ( x .le. dome2d_width_bay ) then
-        h(i,j,1:nz-1) = GV%Angstrom;
-        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom;
-      end if
+      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon
+      if ( x <= dome2d_width_bay ) then
+        h(i,j,1:nz-1) = GV%Angstrom
+        h(i,j,nz) = dome2d_depth_bay * G%max_depth - (nz-1) * GV%Angstrom
+      endif
 
       eta(i,j,nz+1) = -G%bathyT(i,j)
       do K=nz,1,-1
