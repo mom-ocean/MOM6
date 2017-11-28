@@ -492,7 +492,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   ! Compute time_in: time at the beginning of the first ocn coupling interval
   call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  if (runtype /= "continue") then
+  if (runtype /= "continue" .and. runtype /= "branch") then
     ! In startup runs, take the one ocn coupling interval lag into account to
     ! compute the initial ocn time.  (time_in = time_init + ocn_cpl_interval)
     time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
