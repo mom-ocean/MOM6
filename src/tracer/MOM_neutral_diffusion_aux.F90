@@ -228,6 +228,11 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
     return
   endif
 
+  if ( delta_rho_init > 0.) then
+    refine_nondim_position = 1.
+    return
+  endif
+
   if (debug) then
     write (*,*) "------"
     write (*,*) "Starting x0, delta_rho: ", min_bound, delta_rho
@@ -271,11 +276,14 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
         b_last = b
         b = (P_int-P_top)/delta_P
         ! Test to see if it fell out of the bracketing interval. If so, take a bisection step
-        if (b < a .or. b > c) b = 0.5*(a + c)
+        if (b < a .or. b > c) then
+          b = 0.5*(a + c)
+        endif
       endif
       call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
                           b, ref_pres, EOS, fb, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
-      if (ABS(fb) <= tolerance .or. (b-b_last) <= tolerance ) then
+      if (debug) print *, "Iteration, b, fb: ", iter, b, fb
+      if (ABS(fb) <= tolerance .or. ABS(b-b_last) <= tolerance ) then
         refine_nondim_position = P_int/delta_P
         exit
       endif
