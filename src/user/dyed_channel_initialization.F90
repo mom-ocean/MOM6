@@ -1,4 +1,4 @@
-module dyed_obcs_initialization
+module dyed_channel_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -18,14 +18,14 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public dyed_obcs_set_OBC_data
+public dyed_channel_set_OBC_data
 
 integer :: ntr = 0
 
 contains
 
-!> This subroutine sets the dye properties at open boundary conditions.
-subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
+!> This subroutine sets the dye and flow properties at open boundary conditions.
+subroutine dyed_channel_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
@@ -36,19 +36,56 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
 ! Local variables
-  character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
+  character(len=40)  :: mdl = "dyed_channel_set_OBC_data" ! This subroutine's name.
   character(len=80)  :: name, longname
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, n, nz
+  real :: zonal_flow
+  integer :: i, j, k, l, itt, isd, ied, jsd, jed, m, n, nz
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye
   type(OBC_segment_type), pointer :: segment
   type(vardesc), allocatable, dimension(:) :: tr_desc
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not.associated(OBC)) return
+  if (.not.associated(OBC)) call MOM_error(FATAL, 'dyed_channel_initialization.F90: '// &
+        'dyed_channel_set_OBC_data() was called but OBC type was not initialized!')
+
+  call get_param(param_file, mdl, "SUPERCRITICAL_ZONAL_FLOW", zonal_flow, &
+                 "Constant zonal flow imposed at upstream open boundary.", &
+                 units="m/s", default=8.57)
+
+  do l=1, OBC%number_of_segments
+    segment => OBC%segment(l)
+    if (.not. segment%on_pe) cycle
+    if (segment%gradient) cycle
+    if (segment%oblique .and. .not. segment%nudged .and. .not. segment%Flather) cycle
+
+    if (segment%is_E_or_W) then
+      jsd = segment%HI%jsd ; jed = segment%HI%jed
+      IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+      do k=1,G%ke
+        do j=jsd,jed ; do I=IsdB,IedB
+          if (segment%specified .or. segment%nudged) then
+            segment%normal_vel(I,j,k) = zonal_flow
+          endif
+          if (segment%specified) then
+            segment%normal_trans(I,j,k) = zonal_flow * G%dyCu(I,j)
+          endif
+        enddo ; enddo
+      enddo
+      do j=jsd,jed ; do I=IsdB,IedB
+        segment%normal_vel_bt(I,j) = zonal_flow
+      enddo ; enddo
+    else
+      isd = segment%HI%isd ; ied = segment%HI%ied
+      JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+      do J=JsdB,JedB ; do i=isd,ied
+        segment%normal_vel_bt(i,J) = 0.0
+      enddo ; enddo
+    endif
+  enddo
 
   call get_param(param_file, mdl, "NUM_DYE_TRACERS", ntr, &
                  "The number of dye tracers in this run. Each tracer \n"//&
@@ -80,8 +117,8 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   enddo
   deallocate(tr_desc)
 
-end subroutine dyed_obcs_set_OBC_data
+end subroutine dyed_channel_set_OBC_data
 
-!> \namespace dyed_obcs_initialization
+!> \namespace dyed_channel_initialization
 !! Setting dyes, one for painting the inflow on each side.
-end module dyed_obcs_initialization
+end module dyed_channel_initialization
