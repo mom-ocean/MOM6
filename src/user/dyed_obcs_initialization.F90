@@ -64,8 +64,8 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
 ! ! Set the inflow values of the dyes, one per segment.
 ! ! We know the order: north, south, east, west
   do m=1,ntr
-    write(name,'("dye_",I1.1)') m
-    write(longname,'("Concentration of dyed_obc Tracer ",I1.1, " on segment ",I1.1)') m, m
+    write(name,'("dye_",I2.2)') m
+    write(longname,'("Concentration of dyed_obc Tracer ",I2.2, " on segment ",I2.2)') m, m
     tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     do n=1,OBC%number_of_segments
