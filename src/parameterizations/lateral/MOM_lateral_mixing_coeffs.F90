@@ -721,7 +721,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the magnitude of the vertical component of vorticity for use in the Leith-like schemes
-subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, vert_vort_mag_h, vert_vort_mag_q)
+subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, vert_vort_mag_h, vert_vort_mag_q)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
@@ -732,6 +732,7 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, vert_vort_m
   real,                                      intent(in)  :: mod_Leith  !< Non-dimensional coefficient multiplying the
                                                                        !! divergence contribution to the Leith viscosity.
                                                                        !! Set to zero for conventional Leith.
+  logical,                                   intent(in)  :: QG_Leith !< True if using QG Leith scheme
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: vert_vort_mag_h !< Magnitude of vertical component
                                                                             !! of vorticity at h-ponts (s-1)
   real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: vert_vort_mag_q !< Magnitude of vertical component
@@ -803,6 +804,16 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, vert_vort_m
     DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
     vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
   enddo ; enddo
+
+  ! Add in beta for QG Leith
+  if (QG_Leith) then
+    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
+    enddo ; enddo
+    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+      vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
+    enddo ; enddo
+  endif
 
   ! Magnitude of vorticity at h-points
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

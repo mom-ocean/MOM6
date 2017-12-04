@@ -555,7 +555,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      call calc_vert_vort_mag(G, GV, u, v, h, k, CS%no_slip, mod_Leith, vert_vort_mag_h, vert_vort_mag_q)
+      call calc_vert_vort_mag(G, GV, u, v, h, k, CS%no_slip, mod_Leith, .false., vert_vort_mag_h, vert_vort_mag_q)
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
