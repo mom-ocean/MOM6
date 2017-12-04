@@ -1282,7 +1282,7 @@ end subroutine find_neutral_surface_positions_continuous
 subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,                                                   &
                 Pres_l, hcol_l, Tl, Sl, dRdT_l, dRdS_l, stable_l, Pres_r, hcol_r, Tr, Sr, dRdT_r, dRdS_r, stable_r,    &
                 PoL, PoR, KoL, KoR, hEff,                                                                              &
-                refine_pos_in, ppoly_T_l, ppoly_S_l, ppoly_T_r, ppoly_S_r, EOS, max_iter, tolerance, ref_pres)
+                refine_pos_in, ppoly_T_l, ppoly_S_l, ppoly_T_r, ppoly_S_r, EOS, max_iter, tol_in, ref_pres)
   integer,                    intent(in)    :: nk        !< Number of levels
   integer,                    intent(in)    :: ns        !< Number of neutral surfaces
   integer,                    intent(in)    :: deg       !< Degree of polynomial used for reconstructions
@@ -1314,7 +1314,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
   real, dimension(nk,deg+1),  optional, intent(in) :: ppoly_S_r !< Right-column coefficients of S reconstruction
   type(EOS_type),             optional, pointer    :: EOS       !< Equation of state structure
   integer,                    optional, intent(in) :: max_iter  !< Maximum number of iterations in refine_position
-  real,                       optional, intent(in) :: tolerance !< Convergence criterion for refine_position
+  real,                       optional, intent(in) :: tol_in    !< Convergence criterion for refine_position
   real,                       optional, intent(in) :: ref_pres  !< Reference pressure to use for deriviative calculation
 
   ! Local variables
@@ -1329,7 +1329,7 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
   real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
-  real    :: min_bound
+  real    :: min_bound, tolerance
   logical, dimension(nk) :: top_connected_l, top_connected_r
   logical, dimension(nk) :: bot_connected_l, bot_connected_r
 
@@ -1345,11 +1345,12 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
     refine_pos = refine_pos_in
     if (refine_pos .and. (.not. ( present(ppoly_T_l) .and. present(ppoly_S_l) .and.  &
                                   present(ppoly_T_r) .and. present(ppoly_S_r) .and.  &
-                                  present(tolerance) .and. present(max_iter) .and. present(ref_pres) ) )) &
+                                  present(tol_in) .and. present(max_iter) .and. present(ref_pres) ) )) &
         call MOM_error(FATAL, "fine_neutral_surface_positions_discontinuous: refine_pos is requested, but polynomial"// &
                               "coefficients not available for T and S")
   endif
-
+  tolerance = 0.
+  if (present(tol_in)) tolerance = tol_in
   do k = 1,nk
     if (stable_l(k)) then
       kl_left = k
@@ -1792,6 +1793,10 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         T_right_top = ( 1. - PiR(k_sublayer) ) * Tir(krt) + PiR(k_sublayer) * Tir(krt+1)
         T_right_layer = ppm_ave(PiR(k_sublayer), PiR(k_sublayer+1) + real(krb-krt), &
                                 aL_r(krt), aR_r(krt), Tr(krt))
+        dT_top = T_right_top - T_left_top
+        dT_bottom = T_right_bottom - T_left_bottom
+        dT_ave = 0.5 * ( dT_top + dT_bottom )
+        dT_layer = T_right_layer - T_left_layer
       else ! Discontinuous reconstruction
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
@@ -1815,11 +1820,11 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
         T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
                                             PiR(k_sublayer), PiR(k_sublayer+1))
+        dT_top = T_right_top - T_left_top
+        dT_bottom = T_right_bottom - T_left_bottom
+        dT_layer = T_right_layer - T_left_layer
+        dT_ave = dT_layer
       endif
-      dT_top = T_right_top - T_left_top
-      dT_bottom = T_right_bottom - T_left_bottom
-      dT_ave = 0.5 * ( dT_top + dT_bottom )
-      dT_layer = T_right_layer - T_left_layer
       if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
       else
