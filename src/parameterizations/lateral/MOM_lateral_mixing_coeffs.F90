@@ -125,6 +125,7 @@ type, public :: VarMix_CS ;
 end type VarMix_CS
 
 public VarMix_init, calc_slope_functions, calc_resoln_function
+public calc_vert_vort_mag
 
 contains
 
@@ -719,7 +720,110 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 
 end subroutine calc_slope_functions_using_just_e
 
-!> Initializes the variables mixing coefficients container
+!> Calculates the magnitude of the vertical component of vorticity for use in the Leith-like schemes
+subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, vert_vort_mag_h, vert_vort_mag_q)
+  type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg m-2)
+  integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
+  logical,                                   intent(in)  :: no_slip !< True if vorticity should have no-slip BCs
+  real,                                      intent(in)  :: mod_Leith  !< Non-dimensional coefficient multiplying the
+                                                                       !! divergence contribution to the Leith viscosity.
+                                                                       !! Set to zero for conventional Leith.
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: vert_vort_mag_h !< Magnitude of vertical component
+                                                                            !! of vorticity at h-ponts (s-1)
+  real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: vert_vort_mag_q !< Magnitude of vertical component
+                                                                            !! of vorticity at q-ponts (s-1)
+  ! Local variables
+  real, dimension(SZIB_(G),SZJB_(G)) :: vort_xy, & ! Vertical vorticity (dv/dx - du/dy) (s-1)
+                                        dudy, & ! Meridional shear of zonal velocity (s-1)
+                                        dvdx    ! Zonal shear of meridional velocity (s-1)
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
+    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
+    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+  real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
+  real :: DY_dxBu, DX_dyBu
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  ! Divergence
+  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+    div_xx(i,j) = 0.5*((G%dyCu(I,j) * u(I,j,k) * (h(i+1,j,k)+h(i,j,k)) - &
+                        G%dyCu(I-1,j) * u(I-1,j,k) * (h(i-1,j,k)+h(i,j,k)) ) + &
+                       (G%dxCv(i,J) * v(i,J,k) * (h(i,j,k)+h(i,j+1,k)) - &
+                        G%dxCv(i,J-1)*v(i,J-1,k)*(h(i,j,k)+h(i,j-1,k))))*G%IareaT(i,j)/ &
+                                  (h(i,j,k) + GV%H_subroundoff)
+  enddo ; enddo
+
+  ! Divergence gradient
+  do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+    div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+  enddo ; enddo
+
+  do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
+    div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+  enddo ; enddo
+
+  ! Components for the vertical vorticity
+  ! Note this a simple re-calculation of shearing components using the same discretization.
+  ! We will consider using a circulation based calculation of vorticity later.
+  ! Also note this will need OBC boundary conditions re-applied...
+  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+    dvdx(I,J) = DY_dxBu * (v(i+1,J,k) * G%IdyCv(i+1,J) - v(i,J,k) * G%IdyCv(i,J))
+    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+    dudy(I,J) = DX_dyBu * (u(I,j+1,k) * G%IdxCu(I,j+1) - u(I,j,k) * G%IdxCu(I,j))
+  enddo ; enddo
+
+  ! Vorticity
+  if (no_slip) then
+    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+      vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+    enddo ; enddo
+  else
+    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+      vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+    enddo ; enddo
+  endif
+
+  ! Vorticity gradient
+  do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+    DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
+    vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
+  enddo ; enddo
+
+  do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
+    vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
+  enddo ; enddo
+
+  ! Magnitude of vorticity at h-points
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    vert_vort_mag_h(i,j) = sqrt( &
+      0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
+            (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
+      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
+            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+  enddo ; enddo
+
+  ! Magnitude of vorticity at q-points
+  do J=js-1,Jeq ; do I=is-1,Ieq
+    vert_vort_mag_q(I,J) = sqrt( &
+      0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
+            (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+      mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+            (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
+  enddo ; enddo
+
+end subroutine calc_vert_vort_mag
+
 subroutine VarMix_init(Time, G, param_file, diag, CS)
   type(time_type),            intent(in) :: Time !< Current model time
   type(ocean_grid_type),      intent(in) :: G    !< Ocean grid structure
