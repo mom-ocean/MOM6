@@ -281,14 +281,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
     div_xx, &     ! horizontal divergence (du/dx + dv/dy) (1/sec) including metric terms
-    FrictWorkIntz ! depth integrated energy dissipated by lateral friction (W/m2)
+    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction (W/m2)
+    vert_vort_mag_h  ! Magnitude of vertical vorticity at h-points |dv/dx - du/dy| (1/sec)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain (s-1)
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
-    vort_xy       ! vertical vorticity (dv/dx - du/dy) (1/sec) including metric terms
+    vort_xy, &    ! Vertical vorticity (dv/dx - du/dy) (1/sec)
+    vert_vort_mag_q ! Magnitude of vertical vorticity at q-points |dv/dx - du/dy| (1/sec)
 
   real, dimension(SZI_(G),SZJB_(G)) :: &
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 sec-1) including metric terms
@@ -317,7 +319,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                      ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
                      ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
-  real :: Vort_mag   ! magnitude of the vorticity (1/s)
+! real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -379,11 +381,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP parallel do default(none) shared(Isq,Ieq,Jsq,Jeq,nz,CS,G,GV,u,v,is,js,ie,je,h,  &
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
-!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE)     &
+!$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
+!$OMP                                  vert_vort_mag_h, vert_vort_mag_q) &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
-!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,Vort_mag,AhLth,KhLth, &
+!$OMP                                  vort_xy,vort_xy_dx,vort_xy_dy,AhLth,KhLth, &
 !$OMP                                  div_xx, div_xx_dx, div_xx_dy, mod_Leith,       &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
@@ -600,7 +603,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                 (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-        Vort_mag = sqrt( &
+        vert_vort_mag_h(i,j) = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
                 (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
           mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
@@ -621,7 +624,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           if (CS%Smagorinsky_Kh) &
             KhSm = CS%LAPLAC_CONST_xx(i,j) * Shear_mag
           if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xx(i,j) * Vort_mag
+            KhLth = CS%LAPLAC3_CONST_xx(i,j) * vert_vort_mag_h(i,j)
           Kh = Kh_scale * MAX(KhLth, MAX(CS%Kh_bg_xx(i,j), KhSm))
           if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
             Kh = MIN(Kh, CS%Kh_Max_xx(i,j))
@@ -663,7 +666,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             endif
           endif
           if (CS%Leith_Ah) &
-            AhLth = Vort_mag * (CS%BIHARM_CONST_xx(i,j))
+            AhLth = vert_vort_mag_h(i,j) * (CS%BIHARM_CONST_xx(i,j))
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
@@ -730,7 +733,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
       endif
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
-        Vort_mag = sqrt( &
+        vert_vort_mag_q(I,J) = sqrt( &
           0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
                 (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
           mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
@@ -778,7 +781,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
           if (CS%Smagorinsky_Kh) &
             KhSm = CS%LAPLAC_CONST_xy(I,J) * Shear_mag
           if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xy(I,J) * Vort_mag
+            KhLth = CS%LAPLAC3_CONST_xy(I,J) * vert_vort_mag_q(I,J)
           Kh = Kh_scale * MAX(MAX(CS%Kh_bg_xy(I,J), KhSm), KhLth)
           if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
             Kh = MIN(Kh, CS%Kh_Max_xy(I,J))
@@ -823,7 +826,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             endif
           endif
           if (CS%Leith_Ah) &
-            AhLth =  Vort_mag * (CS%BIHARM5_CONST_xy(I,J))
+            AhLth =  vert_vort_mag_q(I,J) * (CS%BIHARM5_CONST_xy(I,J))
           Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xy(I,J))
