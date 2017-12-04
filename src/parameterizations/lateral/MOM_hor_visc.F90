@@ -535,25 +535,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-    if (CS%no_slip) then
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    else
-      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-        vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    endif
-
-! Vorticity gradient
-    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
-      vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
-    enddo ; enddo
-
-    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
-      vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
-    enddo ; enddo
-
 ! Divergence gradient
     do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
       div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
@@ -596,18 +577,59 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       endif; endif
     endif
 
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
-        Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
-          0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
-                (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      ! Components for the vertical vorticity
+      ! Note this a simple re-calculation of shearing components using the same discretization.
+      ! We will consider using a circulation based calculation of vorticity later.
+      ! Also note this will need OBC boundary conditions re-applied...
+      do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
+        dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
+      enddo ; enddo
+      ! Vorticity
+      if (CS%no_slip) then
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      else
+        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
       endif
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+
+      ! Vorticity gradient
+      do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+        vort_xy_dx(i,J) = CS%DY_dxBu(I,J)*(vort_xy(I,J)*G%IdyCu(I,j) - vort_xy(I-1,J)*G%IdyCu(I-1,j))
+      enddo ; enddo
+
+      do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+        vort_xy_dy(I,j) = CS%DX_dyBu(I,J)*(vort_xy(I,J)*G%IdxCv(i,J) - vort_xy(I,J-1)*G%IdxCv(i,J-1))
+      enddo ; enddo
+
+      ! Magnitude of vorticity at h-points
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         vert_vort_mag_h(i,j) = sqrt( &
           0.5*((vort_xy_dx(i,J-1)*vort_xy_dx(i,J-1) + vort_xy_dx(i,J)*vort_xy_dx(i,J)) + &
                 (vort_xy_dy(I-1,j)*vort_xy_dy(I-1,j) + vort_xy_dy(I,j)*vort_xy_dy(I,j))) + &
           mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I-1,j)*div_xx_dx(I-1,j)) + &
                 (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i,J-1)*div_xx_dy(i,J-1))))
+      enddo ; enddo
+
+      ! Magnitude of vorticity at q-points
+      do J=js-1,Jeq ; do I=is-1,Ieq
+        vert_vort_mag_q(I,J) = sqrt( &
+          0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
+                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
+          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
+                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
+      enddo ; enddo
+    endif
+
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
+        Shear_mag = sqrt(sh_xx(i,j)*sh_xx(i,j) + &
+          0.25*((sh_xy(I-1,J-1)*sh_xy(I-1,J-1) + sh_xy(I,J)*sh_xy(I,J)) + &
+                (sh_xy(I-1,J)*sh_xy(I-1,J) + sh_xy(I,J-1)*sh_xy(I,J-1))))
       endif
       if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
         hrat_min = min(1.0, min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1)) / &
@@ -732,12 +754,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
             0.25*((sh_xx(i,j)*sh_xx(i,j) + sh_xx(i+1,j+1)*sh_xx(i+1,j+1)) + &
                   (sh_xx(i,j+1)*sh_xx(i,j+1) + sh_xx(i+1,j)*sh_xx(i+1,j))))
       endif
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) &
-        vert_vort_mag_q(I,J) = sqrt( &
-          0.5*((vort_xy_dx(i,J)*vort_xy_dx(i,J) + vort_xy_dx(i+1,J)*vort_xy_dx(i+1,J)) + &
-                (vort_xy_dy(I,j)*vort_xy_dy(I,j) + vort_xy_dy(I,j+1)*vort_xy_dy(I,j+1))) + &
-          mod_Leith*0.5*((div_xx_dx(I,j)*div_xx_dx(I,j) + div_xx_dx(I,j+1)*div_xx_dx(I,j+1)) + &
-                (div_xx_dy(i,J)*div_xx_dy(i,J) + div_xx_dy(i+1,J)*div_xx_dy(i+1,J))))
 
       h2uq = 4.0 * h_u(I,j) * h_u(I,j+1)
       h2vq = 4.0 * h_v(i,J) * h_v(i+1,J)
