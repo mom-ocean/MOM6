@@ -20,52 +20,52 @@ contains
 
 !> Given the reconsturcitons of dRdT, dRdS, T, S mark the cells which are stably stratified parts of the water column
 !! For an layer to be unstable the top interface must be denser than the bottom or the bottom interface of the layer
-!!
 subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
   integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk),    intent(in)    :: dRdT        !< drho/dT (kg/m3/degC)
-  real, dimension(nk),    intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt)
-  real, dimension(nk),    intent(in)    :: T           !< drho/dS (kg/m3/ppt)
-  real, dimension(nk),    intent(in)    :: S           !< drho/dS (kg/m3/ppt)
+  real, dimension(nk,2),  intent(in)    :: dRdT        !< drho/dT (kg/m3/degC) at interfaces
+  real, dimension(nk,2),  intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt) at interfaces
+  real, dimension(nk,2),  intent(in)    :: T           !< drho/dS (kg/m3/ppt) at interfaces
+  real, dimension(nk,2),  intent(in)    :: S           !< drho/dS (kg/m3/ppt) at interfaces
   logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
   integer,                intent(  out) :: ns          !< Number of neutral surfaces in unmasked part of the column
 
   integer :: k, first_stable, prev_stable
   real :: delta_rho
 
-  ns = 0
-  ! If only one cell, then we really shouldn't do anything
-  if (nk==1) then
-    stable_cell(nk)=.true.
-    ns = 2
-    return
-  endif
-  first_stable = 1
-  prev_stable = 1
-  ! First sweep down and find the first place where the column is stable
-  do k=1,nk-1
-    delta_rho = ( (dRdT(k) + dRdT(k+1))*(T(k)-T(k+1)) ) + ( (dRdS(k) + dRdS(k+1))*(S(k)-S(k+1)) )
-    if (delta_rho <= 0.) then
-      first_stable = k+1
-      prev_stable = k
-      stable_cell(k) = .true.
-      ns = ns + 2
-      exit
-    else
-      stable_cell(k) = .false.
-    endif
+  ! First check to make sure that density profile between the two interfaces of the cell are stable
+  ! Note that we neglect a factor of 0.5 because we only care about the sign of delta_rho not magnitude
+  do k = 1,nk
+    ! Compare density of bottom interface to top interface, should be positive (or zero) if stable
+    delta_rho = (dRdT(k,2) + dRdT(k,1))*(T(k,2) - T(k,1)) + (dRdS(k,2) + dRdS(k,1))*(S(k,2) - S(k,1))
+    stable_cell(k) = delta_rho >= 0.
   enddo
 
-  ! Loop through the rest of the column
-  do k=first_stable,nk
-    delta_rho = ( (dRdT(prev_stable) + dRdT(k))*(T(prev_stable)-T(k)) ) + ( (dRdS(prev_stable) + dRdS(k))*(S(prev_stable)-S(k)) )
-    if (delta_rho <= 0.) then
-      stable_cell(k) = .true.
-      prev_stable = k
-      ns = ns + 2
-    else
-      stable_cell(k) = .false.
+  ! Check to see that bottom interface of upper cell is lighter than the upper interface of the lower cell
+  do k=1,nk
+    if (stable_cell(k)) then
+      first_stable = k
+      exit
     endif
+  enddo
+  prev_stable = first_stable
+
+  ! Start either with the first stable cell or the layer just below the surface
+  do k = prev_stable+1, nk
+    ! Don't do anything if the cell has already been marked as unstable
+    if (.not. stable_cell(k)) cycle
+    ! Otherwise, we need to check to see if this cell's upper interface is denser than the previous stable_cell
+    ! Compare top interface of lower cell to bottom interface of upper cell, positive or zero if bottom cell is stable
+    delta_rho = (dRdT(k,1) + dRdT(prev_stable,2))*(T(k,1) - T(prev_stable,2)) + &
+                (dRdS(k,1) + dRdS(prev_stable,2))*(S(k,1) - S(prev_stable,2))
+    stable_cell(k) = delta_rho >= 0.
+    ! If the lower cell is marked as stable, then it should be the next reference cell
+    if (stable_cell(k)) prev_stable = k
+  enddo
+
+  ! Number of interfaces is the 2 times number of stable cells in the water column
+  ns = 0
+  do k = 1,nk
+    if (stable_cell(k)) ns = ns + 2
   enddo
 
 end subroutine mark_unstable_cells

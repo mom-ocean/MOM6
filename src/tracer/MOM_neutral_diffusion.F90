@@ -405,12 +405,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
       endif
   enddo ; enddo ; enddo
 
-  if (.not. CS%continuous_reconstruction) then
-    do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
-      call mark_unstable_cells( G%ke, CS%dRdT_l(i,j,:), CS%dRdS_l(i,j,:), T(i,j,:), S(i,j,:), CS%stable_cell(i,j,:), CS%ns(i,j) )
-    enddo ; enddo
-  endif
-
   do j = G%jsc-1, G%jec+1
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
@@ -448,6 +442,11 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     endif
   enddo
 
+  if (.not. CS%continuous_reconstruction) then
+    do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
+      call mark_unstable_cells( G%ke, CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%stable_cell(i,j,:), CS%ns(i,j) )
+    enddo ; enddo
+  endif
 
   CS%uhEff(:,:,:) = 0.
   CS%vhEff(:,:,:) = 0.
@@ -2137,7 +2136,6 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   logical :: v
 
   v = verbose
-
   ndiff_unit_tests_discontinuous = .false. ! Normally return false
   write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_discontinuous ='
 
@@ -2152,10 +2150,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   do k = 1,nk ; Pres_l(k+1) = Pres_l(k) + hL(k) ; Pres_r(k+1) = Pres_r(k) + hR(k) ; enddo
   ! Identical columns
   Tl = (/20.,16.,12./) ; Tr = (/20.,16.,12./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
 
@@ -2167,10 +2165,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.,10.,0.,0.,0.,10.,0.,0.,0.,10.,0.,0./), & ! hEff
                                    'Identical columns')
   Tl = (/20.,16.,12./) ; Tr = (/18.,14.,10./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2181,10 +2179,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column slightly cooler')
   Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./) ;
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2195,10 +2193,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Left column slightly cooler')
   Tl = (/20.,16.,12./) ; Tr = (/14.,10.,6./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2209,10 +2207,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0/), & ! hEff
                                    'Right column somewhat cooler')
   Tl = (/20.,16.,12./) ; Tr = (/8.,6.,4./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2223,10 +2221,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0/), & ! hEff
                                    'Right column much cooler')
   Tl = (/14.,14.,10./) ; Tr = (/14.,14.,10./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2237,10 +2235,10 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.,10.,0.,0.,0.,10.,0.,0.,0.,10.,0.,0./), & ! hEff
                                    'Identical columns with mixed layer')
   Tl = (/20.,16.,12./) ; Tr = (/14.,14.,10./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2251,10 +2249,11 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column with mixed layer')
   Tl = (/14.,14.,6./) ; Tr = (/12.,16.,8./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
+  print *, stable_l, stable_r
   call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
   call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 10, KoL, KoR, PoL, PoR, hEff, &
@@ -2268,8 +2267,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   Tl = (/10.,11.,6./) ; Tr = (/12.,13.,8./)
   Til(:,1) = (/8.,12.,10./) ; Til(:,2) = (/12.,10.,2./)
   Tir(:,1) = (/10.,14.,12./) ; TiR(:,2) = (/14.,12.,4./)
-  call mark_unstable_cells( nk, dRdT, dRdS, Tl, Sl, stable_l, ns_l )
-  call mark_unstable_cells( nk, dRdT, dRdS, Tr, Sr, stable_r, ns_r )
+  call mark_unstable_cells( nk, dRdT, dRdS, Til, Sil, stable_l, ns_l )
+  call mark_unstable_cells( nk, dRdT, dRdS, Tir, Sir, stable_r, ns_r )
   call find_neutral_surface_positions_discontinuous(nk, ns_l+ns_r, 1, Pres_l, hL, TiL, SiL, dRdT, dRdS, stable_l, &
             Pres_r, hR, TiR, SiR, dRdT, dRdS, stable_r, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 8, KoL, KoR, PoL, PoR, hEff, &
