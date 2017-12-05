@@ -306,9 +306,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: KhSm       ! Smagorinsky Laplacian viscosity  (m2/s)
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
-  real :: mod_Leith  ! nondimensional coefficient for divergence part of modified Leith
-                     ! viscosity. Here set equal to nondimensional Laplacian Leith constant.
-                     ! This is set equal to zero if modified Leith is not used.
   real :: Shear_mag  ! magnitude of the shear (1/s)
 ! real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
@@ -521,13 +518,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
       enddo ; enddo
     endif
 
-! Coefficient for modified Leith
-    if (CS%Modified_Leith) then
-      mod_Leith = 1.0
-    else
-      mod_Leith = 0.0
-    endif
-
 !  Evaluate u0 = x.Div(Grad u) and v0 = y.Div( Grad u)
     if (CS%biharmonic) then
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -555,7 +545,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      call calc_vert_vort_mag(G, GV, u, v, h, k, CS%no_slip, mod_Leith, .false., vert_vort_mag_h, vert_vort_mag_q)
+      call calc_vert_vort_mag(VarMix, G, GV, u, v, h, k, vert_vort_mag_h, vert_vort_mag_q)
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

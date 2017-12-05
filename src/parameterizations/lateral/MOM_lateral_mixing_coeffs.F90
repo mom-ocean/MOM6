@@ -109,6 +109,21 @@ type, public :: VarMix_CS ;
                                !! and especially 2 are coded to be more efficient.
   real :: Visbeck_S_max   !< Upper bound on slope used in Eady growth rate (nondim).
 
+  ! Leith parameters
+  logical :: use_QG_Leith      !< If true, enables the QG Leith scheme
+  logical :: Leith_Kh          !< If true, enables the Leith scheme
+  logical :: modified_Leith    !< if true, include the divergence contribution to Leith viscosity
+  real :: Leith_Lap_const      !< The non-dimensional coefficient in the Leith viscosity
+  logical :: Leith_Ah          !< If true, enables the bi-harmonic Leith scheme
+  real :: Leith_bi_const       !< The non-dimensional coefficient in the bi-harmonic Leith viscosity
+  logical :: no_slip           !< If true, no slip boundary conditions are used.
+                               !! Otherwise free slip boundary conditions are assumed.
+                               !! The implementation of the free slip boundary
+                               !! conditions on a C-grid is much cleaner than the
+                               !! no slip boundary conditions. The use of free slip
+                               !! b.c.s is strongly encouraged. The no slip b.c.s
+                               !! are not implemented with the biharmonic viscosity.
+
   ! Diagnostics
   !>@{
   !! Diagnostic identifier
@@ -721,18 +736,14 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the magnitude of the vertical component of vorticity for use in the Leith-like schemes
-subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, vert_vort_mag_h, vert_vort_mag_q)
+subroutine calc_vert_vort_mag(CS, G, GV, u, v, h, k, vert_vort_mag_h, vert_vort_mag_q)
+  type(VarMix_CS),                           pointer     :: CS !< Variable mixing coefficients
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)  :: u !< Zonal flow (m s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: v !< Meridional flow (m s-1)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg m-2)
   integer,                                   intent(in)  :: k !< Layer for which to calculate vorticity magnitude
-  logical,                                   intent(in)  :: no_slip !< True if vorticity should have no-slip BCs
-  real,                                      intent(in)  :: mod_Leith  !< Non-dimensional coefficient multiplying the
-                                                                       !! divergence contribution to the Leith viscosity.
-                                                                       !! Set to zero for conventional Leith.
-  logical,                                   intent(in)  :: QG_Leith !< True if using QG Leith scheme
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: vert_vort_mag_h !< Magnitude of vertical component
                                                                             !! of vorticity at h-ponts (s-1)
   real, dimension(SZIB_(G),SZJB_(G)),        intent(out) :: vert_vort_mag_q !< Magnitude of vertical component
@@ -749,7 +760,7 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, v
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
     div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
   real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
-  real :: DY_dxBu, DX_dyBu
+  real :: mod_Leith, DY_dxBu, DX_dyBu
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -784,7 +795,7 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, v
   enddo ; enddo
 
   ! Vorticity
-  if (no_slip) then
+  if (CS%no_slip) then
     do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
       vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
     enddo ; enddo
@@ -806,7 +817,7 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, v
   enddo ; enddo
 
   ! Add in beta for QG Leith
-  if (QG_Leith) then
+  if (CS%use_QG_Leith) then
     do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
       vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
     enddo ; enddo
@@ -814,6 +825,8 @@ subroutine calc_vert_vort_mag(G, GV, u, v, h, k, no_slip, mod_Leith, QG_Leith, v
       vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
     enddo ; enddo
   endif
+
+  mod_Leith = 0.; if (CS%modified_Leith) mod_Leith = 1.0
 
   ! Magnitude of vorticity at h-points
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1129,6 +1142,39 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     in_use = .true.
     allocate(CS%cg1(isd:ied,jsd:jed)); CS%cg1(:,:) = 0.0
     call wave_speed_init(CS%wave_speed_CSp, use_ebt_mode=CS%Resoln_use_ebt, mono_N2_depth=N2_filter_depth)
+  endif
+
+  ! Leith parameters
+  call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
+               "If true, use a Leith nonlinear eddy viscosity.", &
+               default=CS%use_QG_Leith)
+  call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
+               "If true, use a biharmonic Leith nonlinear eddy \n"//&
+               "viscosity.", default=.false.)
+  call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
+               "If true, use the QG Leith nonlinear eddy viscosity.", &
+               default=.false.)
+  call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
+               "If true, add a term to Leith viscosity which is \n"//&
+               "proportional to the gradient of divergence.", &
+               default=.false.)
+  call get_param(param_file, mdl, "LEITH_LAP_CONST", CS%Leith_Lap_const, &
+               "The nondimensional Laplacian Leith constant, \n"//&
+               "often set to 1.0", units="nondim", default=0.0, &
+                fail_if_missing = CS%Leith_Kh)
+  call get_param(param_file, mdl, "LEITH_BI_CONST", CS%Leith_bi_const, &
+               "The nondimensional biharmonic Leith constant, \n"//&
+               "typical values are thus far undetermined.", units="nondim", default=0.0, &
+               fail_if_missing = CS%Leith_Ah)
+  if (CS%Leith_Kh .or. CS%Leith_Ah) then
+    in_use = .true.
+    call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
+                   "If true, no slip boundary conditions are used; otherwise \n"//&
+                   "free slip boundary conditions are assumed. The \n"//&
+                   "implementation of the free slip BCs on a C-grid is much \n"//&
+                   "cleaner than the no slip BCs. The use of free slip BCs \n"//&
+                   "is strongly encouraged, and no slip BCs are not used with \n"//&
+                   "the biharmonic viscosity.", default=.false.)
   endif
 
   ! If nothing is being stored in this class then deallocate
