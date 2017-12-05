@@ -21,7 +21,7 @@ use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_neutral_diffusion,     only : neutral_diffusion_init, neutral_diffusion_end
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
-use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion, neutral_diffusion_comp
+use MOM_neutral_diffusion,     only : neutral_diffusion_calc_coeffs, neutral_diffusion
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_variables,             only : thermo_var_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -52,10 +52,6 @@ type, public :: tracer_hor_diff_CS ; private
                                   ! limit is not violated.
   logical :: use_neutral_diffusion ! If true, use the neutral_diffusion module from within
                                    ! tracer_hor_diff.
-  logical :: ndiff_comp_flux       ! If true, neutral diffusion uses Prescription B of Griffies et al. 1998, where
-                                   ! the temperature flux is calculated from the salinity flux to ensure no change in
-                                   ! locally referenced potential density due to diffusion
-
   type(neutral_diffusion_CS), pointer :: neutral_diffusion_CSp => NULL() ! Control structure for neutral diffusion.
   type(diag_ctrl), pointer :: diag ! structure to regulate timing of diagnostic output.
   logical :: debug                 ! If true, write verbose checksums for debugging purposes.
@@ -353,28 +349,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      if (CS%ndiff_comp_flux) then
-        ! Find index of T and S tracers
-        T_idx = -1 ; S_idx = -1
-        do m=1,ntr
-          if (trim(Reg%tr(m)%name) == "T") T_idx = m
-          if (trim(Reg%tr(m)%name) == "S") S_idx = m
-        enddo
-        if ((T_idx < 0) .or. (S_idx < 0)) call MOM_error(FATAL, "Neutral diffusion: NDIFF_COMP_FLUX = .true." // &
-                                                                "requires both T and S to be registered")
-        call neutral_diffusion_comp(G, GV, h, Coef_x, Coef_y, Reg%Tr(T_idx)%t, Reg%Tr(S_idx)%t, T_idx, S_idx, I_numitts*dt, &
-                                    CS%neutral_diffusion_CSp)
-        do m = 1,ntr
-          if ( (m == T_idx) .or. (m == S_idx) ) cycle
-          call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
-                                 Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
-        enddo
-      else
-        do m=1,ntr ! for each tracer
-          call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
-                                 Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
-        enddo ! m
-      endif
+      do m=1,ntr ! for each tracer
+         call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
+                                Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
+      enddo
     enddo ! itt
 
   else    ! following if not using neutral diffusion, but instead along-surface diffusion
@@ -1398,8 +1376,6 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
                units="nondim", default=0.5)
   call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
           desc="The (baroclinic) dynamics time step.", units="s")
-
-
   call get_param(param_file, mdl, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
                  "If true, enable epipycnal mixing between the surface \n"//&
                  "boundary layer and the interior.", default=.false.)
@@ -1418,12 +1394,6 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
 
   CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
   CSnd => CS%neutral_diffusion_CSp
-  if (CS%use_neutral_diffusion) then
-    call get_param(param_file, "MOM_neutral_diffusion", "NDIFF_COMP_FLUX", CS%ndiff_comp_flux, &
-                 "If true, use Prescription B of Griffies et al. (1998) \n" // &
-                 "to calculate the temperature flux from the salinity   \n" // &
-                 "flux to ensure that density does not change", default = .false.)
-  endif
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
 
