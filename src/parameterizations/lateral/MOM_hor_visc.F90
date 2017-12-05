@@ -76,7 +76,7 @@ use MOM_error_handler,         only : MOM_error, FATAL, WARNING
 use MOM_file_parser,           only : get_param, log_version, param_file_type
 use MOM_grid,                  only : ocean_grid_type
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
-use MOM_lateral_mixing_coeffs, only : calc_vert_vort_mag
+use MOM_lateral_mixing_coeffs, only : calc_Leith_viscosity
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
@@ -282,14 +282,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     str_xx,&      ! str_xx is the diagonal term in the stress tensor (H m2 s-2)
     bhstr_xx,&    ! A copy of str_xx that only contains the biharmonic contribution (H m2 s-2)
     FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction (W/m2)
-    vert_vort_mag_h  ! Magnitude of vertical vorticity at h-points |dv/dx - du/dy| (1/sec)
+    Leith_Kh_h, & ! Leith Laplacian viscosity at h-points (m2 s-1)
+    Leith_Ah_h    ! Leith bi-harmonic viscosity at h-points (m4 s-1)
 
   real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! components in the shearing strain (s-1)
     sh_xy,  &     ! horizontal shearing strain (du/dy + dv/dx) (1/sec) including metric terms
     str_xy, &     ! str_xy is the cross term in the stress tensor (H m2 s-2)
     bhstr_xy, &   ! A copy of str_xy that only contains the biharmonic contribution (H m2 s-2)
-    vert_vort_mag_q ! Magnitude of vertical vorticity at q-points |dv/dx - du/dy| (1/sec)
+    Leith_Kh_q, & ! Leith Laplacian viscosity at q-points (m2 s-1)
+    Leith_Ah_q    ! Leith bi-harmonic viscosity at q-points (m4 s-1)
 
   real, dimension(SZIB_(G),SZJB_(G),SZK_(G)) :: &
     Ah_q, &   ! biharmonic viscosity at corner points (m4/s)
@@ -307,7 +309,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
   real :: AhLth      ! 2D Leith biharmonic viscosity (m4/s)
   real :: KhLth      ! 2D Leith Laplacian viscosity  (m2/s)
   real :: Shear_mag  ! magnitude of the shear (1/s)
-! real :: Vort_mag   ! magnitude of the vorticity (1/s)
   real :: h2uq, h2vq ! temporary variables in units of H^2 (i.e. m2 or kg2 m-4).
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
@@ -370,12 +371,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
 !$OMP                                  rescale_Kh,VarMix,h_neglect,h_neglect3,        &
 !$OMP                                  Kh_h,Ah_h,Kh_q,Ah_q,diffu,apply_OBC,OBC,diffv, &
 !$OMP                                  find_FrictWork,FrictWork,use_MEKE_Ku,MEKE,     &
-!$OMP                                  vert_vort_mag_h, vert_vort_mag_q) &
+!$OMP                                  Leith_Kh_h, Leith_Kh_q, Leith_Ah_h, Leith_Ah_q) &
 !$OMP                          private(u0, v0, sh_xx, str_xx, visc_bound_rem,         &
 !$OMP                                  sh_xy, str_xy, Ah, Kh, AhSm, KhSm, dvdx, dudy, &
 !$OMP                                  bhstr_xx, bhstr_xy,FatH,RoScl, hu, hv, h_u, h_v, &
 !$OMP                                  AhLth,KhLth, &
-!$OMP                                  mod_Leith,       &
 !$OMP                                  Shear_mag, h2uq, h2vq, hq, Kh_scale, hrat_min)
   do k=1,nz
 
@@ -545,7 +545,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     endif
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-      call calc_vert_vort_mag(VarMix, G, GV, u, v, h, k, vert_vort_mag_h, vert_vort_mag_q)
+      call calc_Leith_viscosity(VarMix, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, Leith_Ah_h, Leith_Ah_q)
     endif
 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -568,8 +568,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
           if (CS%Smagorinsky_Kh) &
             KhSm = CS%LAPLAC_CONST_xx(i,j) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xx(i,j) * vert_vort_mag_h(i,j)
+          if (CS%Leith_Kh) KhLth = Leith_Kh_h(i,j)
+          ! Note: move Leith outside of resolution function
           Kh = Kh_scale * MAX(KhLth, MAX(CS%Kh_bg_xx(i,j), KhSm))
           if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
             Kh = MIN(Kh, CS%Kh_Max_xx(i,j))
@@ -610,8 +610,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               AhSm = CS%BIHARM_CONST_xx(i,j) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) &
-            AhLth = vert_vort_mag_h(i,j) * (CS%BIHARM_CONST_xx(i,j))
+          if (CS%Leith_Ah) AhLth = Leith_Ah_h(i,j)
           Ah = MAX(MAX(CS%Ah_bg_xx(i,j), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xx(i,j))
@@ -719,8 +718,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
         if ((CS%Smagorinsky_Kh) .or. (CS%Leith_Kh)) then
           if (CS%Smagorinsky_Kh) &
             KhSm = CS%LAPLAC_CONST_xy(I,J) * Shear_mag
-          if (CS%Leith_Kh) &
-            KhLth = CS%LAPLAC3_CONST_xy(I,J) * vert_vort_mag_q(I,J)
+          if (CS%Leith_Kh) KhLth = Leith_Kh_q(I,J)
           Kh = Kh_scale * MAX(MAX(CS%Kh_bg_xy(I,J), KhSm), KhLth)
           if (CS%bound_Kh .and. .not.CS%better_bound_Kh) &
             Kh = MIN(Kh, CS%Kh_Max_xy(I,J))
@@ -764,8 +762,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
               AhSm = CS%BIHARM_CONST_xy(I,J) * Shear_mag
             endif
           endif
-          if (CS%Leith_Ah) &
-            AhLth =  vert_vort_mag_q(I,J) * (CS%BIHARM5_CONST_xy(I,J))
+          if (CS%Leith_Ah) AhLth = Leith_Ah_q(I,J)
           Ah = MAX(MAX(CS%Ah_bg_xy(I,J), AhSm),AhLth)
           if (CS%bound_Ah .and. .not.CS%better_bound_Ah) &
             Ah = MIN(Ah, CS%Ah_Max_xy(I,J))
