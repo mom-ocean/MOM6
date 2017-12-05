@@ -30,7 +30,6 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public neutral_diffusion
-public neutral_diffusion_comp
 public neutral_diffusion_init
 public neutral_diffusion_diag_init
 public neutral_diffusion_end
@@ -669,196 +668,6 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
 
 end subroutine neutral_diffusion
 
-!> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update.
-subroutine neutral_diffusion_comp(G, GV, h, Coef_x, Coef_y, T, S, T_idx, S_idx, dt, CS)
-  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< Layer thickness (H units)
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points (m^2)
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at u-points (m^2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: T      !< Temperature
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: S      !< Salinity
-  integer,                                   intent(in)    :: T_idx  !< Index of temperature tracer
-  integer,                                   intent(in)    :: S_idx  !< Index of temperature tracer
-  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts (I_numitts in tracer_hordiff)
-  type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
-
-  ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer      (concentration * H)
-  real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer (concentration * H)
-  real, dimension(SZI_(G),SZJ_(G),G%ke)        :: T_tendency    ! tendency array for diagn
-  real, dimension(SZI_(G),SZJ_(G))             :: T_tendency_2d ! depth integrated content tendency for diagn
-  real, dimension(SZIB_(G),SZJ_(G))            :: T_trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
-  real, dimension(SZI_(G),SZJB_(G))            :: T_trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
-  real, dimension(SZI_(G),SZJ_(G),G%ke)        :: S_tendency    ! tendency array for diagn
-  real, dimension(SZI_(G),SZJ_(G))             :: S_tendency_2d ! depth integrated content tendency for diagn
-  real, dimension(SZIB_(G),SZJ_(G))            :: S_trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
-  real, dimension(SZI_(G),SZJB_(G))            :: S_trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
-  real, dimension(G%ke)                        :: dS            ! change in tracer concentration due to ndiffusion
-  real, dimension(G%ke)                        :: dTemp            ! change in tracer concentration due to ndiffusion
-  real, dimension(G%ke)                        :: dRdT            ! change in tracer concentration due to ndiffusion
-  real, dimension(G%ke)                        :: dRdS            ! change in tracer concentration due to ndiffusion
-  integer :: i, j, k, ks, nk
-  real :: ppt2mks, Idt, T_convert, S_convert
-
-  nk = GV%ke
-
-  ! for diagnostics
-  if(CS%id_neutral_diff_tracer_conc_tend(T_idx)    > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend(T_idx)    > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend_2d(T_idx) > 0  .or.  &
-     CS%id_neutral_diff_tracer_trans_x_2d(T_idx)   > 0  .or.  &
-     CS%id_neutral_diff_tracer_trans_y_2d(T_idx)   > 0) then
-     Idt              = 1.0/dt
-     T_tendency(:,:,:)  = 0.0
-     T_tendency_2d(:,:) = 0.0
-     T_trans_x_2d(:,:)  = 0.0
-     T_trans_y_2d(:,:)  = 0.0
-     T_convert = CS%C_p  * GV%H_to_kg_m2
-  endif
-  if(CS%id_neutral_diff_tracer_conc_tend(S_idx)    > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend(S_idx)    > 0  .or.  &
-     CS%id_neutral_diff_tracer_cont_tend_2d(S_idx) > 0  .or.  &
-     CS%id_neutral_diff_tracer_trans_x_2d(S_idx)   > 0  .or.  &
-     CS%id_neutral_diff_tracer_trans_y_2d(S_idx)   > 0) then
-     ppt2mks          = 0.001
-     Idt              = 1.0/dt
-     S_tendency(:,:,:)  = 0.0
-     S_tendency_2d(:,:) = 0.0
-     S_trans_x_2d(:,:)  = 0.0
-     S_trans_y_2d(:,:)  = 0.0
-     S_convert = ppt2mks * GV%H_to_kg_m2
-  endif
-
-  uFlx(:,:,:) = 0.
-  vFlx(:,:,:) = 0.
-
-  ! First calculate fluxes of salt
-  ! x-flux
-  do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-    if (G%mask2dCu(I,j)>0.) then
-      call neutral_surface_flux(nk, CS%nsurf, CS%ppoly_deg, h(i,j,:), h(i+1,j,:),       &
-                                S(i,j,:), S(i+1,j,:), &
-                                CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
-                                CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
-                                CS%uhEff(I,j,:), uFlx(I,j,:), &
-                                CS%continuous_reconstruction, CS%remap_CS)
-    endif
-  enddo ; enddo
-
-  ! y-flux
-  do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-    if (G%mask2dCv(i,J)>0.) then
-      call neutral_surface_flux(nk, CS%nsurf, CS%ppoly_deg, h(i,j,:), h(i,j+1,:),       &
-                                S(i,j,:), S(i,j+1,:), &
-                                CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
-                                CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
-                                CS%vhEff(i,J,:), vFlx(i,J,:),   &
-                                CS%continuous_reconstruction, CS%remap_CS)
-    endif
-  enddo ; enddo
-
-  ! Update the tracer concentration from divergence of neutral diffusive flux components
-  do j = G%jsc,G%jec ; do i = G%isc,G%iec
-    if (G%mask2dT(i,j)>0.) then
-
-      dS(:) = 0.
-      do ks = 1,CS%nsurf-1 ;
-        k = CS%uKoL(I,j,ks)
-        dS(k) = dS(k) + Coef_x(I,j)   * uFlx(I,j,ks)
-        k = CS%uKoR(I-1,j,ks)
-        dS(k) = dS(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
-        k = CS%vKoL(i,J,ks)
-        dS(k) = dS(k) + Coef_y(i,J)   * vFlx(i,J,ks)
-        k = CS%vKoR(i,J-1,ks)
-        dS(k) = dS(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
-      enddo
-      do k = 1, GV%ke
-        S(i,j,k) = S(i,j,k) + dS(k) * &
-                        ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
-        dTemp(k) = dS(k) * (CS%dRdS_l(i,j,k)/CS%dRdT_l(i,j,k))
-        T(i,j,k) = T(i,j,k) + dTemp(k) * &
-                        ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
-      enddo
-
-! Update to appropriately calculate T flux
-!      if(CS%id_neutral_diff_tracer_conc_tend(S_idx)    > 0  .or.  &
-!         CS%id_neutral_diff_tracer_cont_tend(S_idx)    > 0  .or.  &
-!         CS%id_neutral_diff_tracer_cont_tend_2d(S_idx) > 0 ) then
-!        do k = 1, GV%ke
-!          S_tendency(i,j,k) = dS(k) * G%IareaT(i,j) * Idt
-!        enddo
-!      endif
-!      if(CS%id_neutral_diff_tracer_conc_tend(T_idx)    > 0  .or.  &
-!         CS%id_neutral_diff_tracer_cont_tend(T_idx)    > 0  .or.  &
-!         CS%id_neutral_diff_tracer_cont_tend_2d(T_idx) > 0 ) then
-!        do k = 1, GV%ke
-!          T_tendency(i,j,k) = dT(k) * G%IareaT(i,j) * Idt
-!        enddo
-!      endif
-
-    endif
-  enddo ; enddo
-
-!  Need to update this so that the T fluxes are calculated correctly
-!  ! Diagnose vertically summed zonal flux, giving zonal tracer transport from ndiff.
-!  ! Note sign corresponds to downgradient flux convention.
-!  if(CS%id_neutral_diff_tracer_trans_x_2d(m) > 0) then
-!    do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-!      trans_x_2d(I,j) = 0.
-!      if (G%mask2dCu(I,j)>0.) then
-!        do ks = 1,CS%nsurf-1 ;
-!          trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
-!        enddo
-!        trans_x_2d(I,j) = trans_x_2d(I,j) * Idt * convert
-!      endif
-!    enddo ; enddo
-!    call post_data(CS%id_neutral_diff_tracer_trans_x_2d(m), trans_x_2d(:,:), CS%diag)
-!  endif
-!
-!  ! Diagnose vertically summed merid flux, giving meridional tracer transport from ndiff.
-!  ! Note sign corresponds to downgradient flux convention.
-!  if(CS%id_neutral_diff_tracer_trans_y_2d(m) > 0) then
-!    do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-!      trans_y_2d(i,J) = 0.
-!      if (G%mask2dCv(i,J)>0.) then
-!        do ks = 1,CS%nsurf-1 ;
-!          trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
-!        enddo
-!        trans_y_2d(i,J) = trans_y_2d(i,J) * Idt * convert
-!      endif
-!    enddo ; enddo
-!    call post_data(CS%id_neutral_diff_tracer_trans_y_2d(m), trans_y_2d(:,:), CS%diag)
-!  endif
-!
-!  ! post tendency of tracer content
-!  if(CS%id_neutral_diff_tracer_cont_tend(m) > 0) then
-!    call post_data(CS%id_neutral_diff_tracer_cont_tend(m), tendency(:,:,:)*convert, CS%diag)
-!  endif
-
-!  ! post depth summed tendency for tracer content
-!  if(CS%id_neutral_diff_tracer_cont_tend_2d(m) > 0) then
-!    do j = G%jsc,G%jec ; do i = G%isc,G%iec
-!      do k = 1, GV%ke
-!        tendency_2d(i,j) = tendency_2d(i,j) + tendency(i,j,k)
-!      enddo
-!    enddo ; enddo
-!    call post_data(CS%id_neutral_diff_tracer_cont_tend_2d(m), tendency_2d(:,:)*convert, CS%diag)
-!  endif
-
-!  ! post tendency of tracer concentration; this step must be
-!  ! done after posting tracer content tendency, since we alter
-!  ! the tendency array.
-!  if(CS%id_neutral_diff_tracer_conc_tend(m) > 0) then
-!    do k = 1, GV%ke ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
-!      tendency(i,j,k) =  tendency(i,j,k) / ( h(i,j,k) + GV%H_subroundoff )
-!    enddo ; enddo ; enddo
-!    call post_data(CS%id_neutral_diff_tracer_conc_tend(m), tendency, CS%diag)
-!  endif
-
-
-end subroutine neutral_diffusion_comp
-
 !> Returns interface scalar, Si, for a column of layer values, S.
 subroutine interface_scalar(nk, h, S, Si, i_method)
   integer,               intent(in)    :: nk       !< Number of levels
@@ -1324,8 +1133,9 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
   logical :: searching_right_column ! True if searching for the position of a left interface in the right column
   logical :: reached_bottom         ! True if one of the bottom-most interfaces has been used as the target
   logical :: refine_pos             ! Use rootfinding to find the true neutral surface position
+  logical :: search_layer
   integer :: k, kl_left_0, kl_right_0
-  real    :: dRho, dRhoTop, dRhoBot, dRhoTopm1, hL, hR
+  real    :: dRho, dRhoTop, dRhoBot, hL, hR
   integer :: lastK_left, lastK_right
   real    :: lastP_left, lastP_right
   real    :: min_bound, tolerance
@@ -1410,18 +1220,9 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       dRhoBot = 0.5 * &
         ( ( dRdT_l(kl_left,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left,2) - Tr(kl_right,ki_right) ) &
         + ( dRdS_l(kl_left,2) + dRdS_r(kl_right,ki_right) ) * ( Sl(kl_left,2) - Sr(kl_right,ki_right) ) )
-      if (lastK_left /= kl_left .and. kl_left>kl_left_0) then
-        if (stable_l(kl_left-1) ) then ! Calculate the density difference at top of discontinuity
-          dRhoTopm1 = 0.5 * &
-            ( ( dRdT_l(kl_left-1,2) + dRdT_r(kl_right,ki_right) ) * ( Tl(kl_left-1,2) - Tr(kl_right,ki_right) ) &
-            + ( dRdS_l(kl_left-1,2) + dRdS_r(kl_right,ki_right) ) * ( Sl(kl_left-1,2) - Sr(kl_right,ki_right) ) )
-        endif
-      else
-        dRhoTopm1 = dRhoTop
-      endif
       if (debug_this_module) then
-        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, ":  dRhoTopm1=", dRhoTopm1, &
-                                                  "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
+        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, &
+                                                  " dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
         write(*,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
         write(*,*) "Temp/Salt Reference: ", Tr(kl_right,ki_right), Sr(kl_right,ki_right)
         write(*,*) "Temp/Salt Top L: ", Tl(kl_left,1), Sl(kl_left,1)
@@ -1433,10 +1234,10 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       KoR(k_surface) = kl_right
 
       ! Set position within the searched column
-      call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_l(kl_left), Pres_l(kl_left+1), &
+      call search_other_column_discontinuous(dRhoTop, dRhoBot, Pres_l(kl_left), Pres_l(kl_left+1), &
         lastP_left, lastK_left, kl_left, kl_left_0, ki_left, tolerance, top_connected_l, bot_connected_l, &
-        PoL(k_surface), KoL(k_surface))
-      if ( refine_pos .and. (PoL(k_surface) > 0.) .and. (PoL(k_surface) < 1.) ) then
+        PoL(k_surface), KoL(k_surface), search_layer)
+      if ( refine_pos .and. search_layer ) then
         min_bound = 0.
         if (k_surface > 1) then
           if ( KoL(k_surface) == KoL(k_surface-1) ) min_bound = PoL(k_surface-1)
@@ -1449,7 +1250,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       if (PoL(k_surface) == 0.) top_connected_l(KoL(k_surface)) = .true.
       if (PoL(k_surface) == 1.) bot_connected_l(KoL(k_surface)) = .true.
       call increment_interface(nk, kl_right, ki_right, stable_r, reached_bottom, searching_right_column, searching_left_column)
-      lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
 
     elseif (searching_right_column) then
       ! Interpolate for the neutral surface position within the right column, layer krm1
@@ -1460,17 +1260,8 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       dRhoBot = 0.5 * &
         ( ( dRdT_r(kl_right,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,2) - Tl(kl_left,ki_left) ) &
         + ( dRdS_r(kl_right,2) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,2) - Sl(kl_left,ki_left) ) )
-      if (lastK_right /= kl_right .and. kl_right>kl_right_0) then
-        if(stable_r(kl_right-1)) then
-          dRhoTopm1 = 0.5 * &
-            ( ( dRdT_r(kl_right-1,2) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right-1,2) - Tl(kl_left,ki_left) ) &
-            + ( dRdS_r(kl_right-1,2) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right-1,2) - Sl(kl_left,ki_left) ) )
-        endif
-      else
-        dRhoTopm1 = dRhoTop
-      endif
       if (debug_this_module) then
-        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, ":  dRhoTopm1=", dRhoTopm1, &
+        write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, &
                                                   "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
         write(*,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
         write(*,*) "Temp/Salt Reference: ", Tl(kl_left,ki_left), Sl(kl_left,ki_left)
@@ -1482,10 +1273,10 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       KoL(k_surface) = kl_left
 
       ! Set position within the searched column
-      call search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Pres_r(kl_right), Pres_r(kl_right+1),        &
+      call search_other_column_discontinuous(dRhoTop, dRhoBot, Pres_r(kl_right), Pres_r(kl_right+1),        &
          lastP_right, lastK_right, kl_right, kl_right_0, ki_right, tolerance, top_connected_r, bot_connected_r,                   &
-         PoR(k_surface), KoR(k_surface))
-      if ( refine_pos .and. (PoR(k_surface) > 0. .and. PoR(k_surface) < 1.) ) then
+         PoR(k_surface), KoR(k_surface), search_layer)
+      if ( refine_pos .and. search_layer) then
         min_bound = 0.
         if (k_surface > 1) then
           if ( KoR(k_surface) == KoR(k_surface-1) )  min_bound = PoR(k_surface-1)
@@ -1498,7 +1289,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       if (PoR(k_surface) == 0.) top_connected_r(KoR(k_surface)) = .true.
       if (PoR(k_surface) == 1.) bot_connected_r(KoR(k_surface)) = .true.
       call increment_interface(nk, kl_left, ki_left, stable_l, reached_bottom, searching_left_column, searching_right_column)
-      lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
     else
       stop 'Else what?'
@@ -1527,23 +1317,6 @@ subroutine find_neutral_surface_positions_discontinuous(nk, ns, deg,            
       endif
     endif
   enddo neutral_surfaces
-  ! Check to make sure that neutral surfaces are truly neutral
-  if (debug_this_module) then
-    do k_surface = 1,ns-1
-      if (hEff(k_surface)>0.) then
-        kl_left = KoL(k_surface)
-        kl_right = KoR(k_surface)
-        if (refine_pos) then
-          if ( check_neutral_positions(deg, EOS, &
-                PoL(k_surface), ppoly_T_l(kl_left,:),  ppoly_S_l(kl_left,:),  (/Pres_l(kl_left),Pres_l(kl_left+1)/),  &
-                PoR(k_surface), ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), (/Pres_r(kl_right),Pres_r(kl_right+1)/),&
-                tolerance, ref_pres) ) then
-            call MOM_error(WARNING,"Endpoints of neutral surfaces have different densities")
-          endif
-        endif
-      endif
-    enddo
-  endif
 
 end subroutine find_neutral_surface_positions_discontinuous
 
@@ -1580,14 +1353,11 @@ subroutine increment_interface(nk, kl, ki, stable, reached_bottom, searching_thi
   else
     call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
   endif
-
-
 end subroutine increment_interface
 
 !> Searches the "other" (searched) column for the position of the neutral surface
-subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, kl_0, ki, &
-                                             tolerance, top_connected, bot_connected, out_P, out_K)
-  real,                  intent(in   ) :: dRhoTopm1      !< Density difference across previous interface
+subroutine search_other_column_discontinuous(dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, kl_0, ki, &
+                                             tolerance, top_connected, bot_connected, out_P, out_K, search_layer)
   real,                  intent(in   ) :: dRhoTop        !< Density difference across top interface
   real,                  intent(in   ) :: dRhoBot        !< Density difference across top interface
   real,                  intent(in   ) :: Ptop           !< Pressure at top interface
@@ -1602,7 +1372,9 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
   real,                  intent(  out) :: out_P          !< Position within searched column
   integer,               intent(  out) :: out_K          !< Layer within searched column
+  logical,               intent(  out) :: search_layer   !< Neutral surface within cell
 
+  search_layer = .false.
   if (kl > kl_0) then ! Away from top cell
     if (kl == lastK) then ! Searching in the same layer
       if (dRhoTop > tolerance) then
@@ -1624,6 +1396,7 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
       else
         out_K = kl
         out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
+        search_layer = .true.
       endif
     else ! Searching across the interface
       if (.not. bot_connected(kl-1) ) then
@@ -1656,6 +1429,7 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
     else
       out_K = kl
       out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
+      search_layer = .true.
     endif
   endif
 
