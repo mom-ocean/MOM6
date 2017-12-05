@@ -117,8 +117,6 @@ type, public :: hor_visc_CS ; private
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: Leith_Kh        ! If true, use 2D Leith nonlinear eddy
                              ! viscosity. KH is the background value.
-  logical :: Modified_Leith  ! If true, use extra component of Leith viscosity
-                             ! to damp divergent flow. To use, still set Leith_Kh=.TRUE.
   logical :: Leith_Ah        ! If true, use a biharmonic form of 2D Leith
                              ! nonlinear eddy viscosity. AH is the background.
   logical :: bound_Coriolis  ! If true & SMAGORINSKY_AH is used, the biharmonic
@@ -184,15 +182,11 @@ type, public :: hor_visc_CS ; private
 ! parameters and metric terms.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     Laplac_Const_xx, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xx, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xx, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xx    ! Biharmonic metric-dependent constants (nondim)
+    Biharm_Const_xx     ! Biharmonic metric-dependent constants (nondim)
 
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     Laplac_Const_xy, &  ! Laplacian  metric-dependent constants (nondim)
-    Biharm_Const_xy, &  ! Biharmonic metric-dependent constants (nondim)
-    Laplac3_Const_xy, & ! Laplacian  metric-dependent constants (nondim)
-    Biharm5_Const_xy    ! Biharmonic metric-dependent constants (nondim)
+    Biharm_Const_xy     ! Biharmonic metric-dependent constants (nondim)
 
   type(diag_ctrl), pointer :: diag ! structure to regulate diagnostic timing
 
@@ -1012,7 +1006,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   CS%bound_Kh = .false. ; CS%better_bound_Kh = .false. ; CS%Smagorinsky_Kh = .false. ; CS%Leith_Kh = .false.
   CS%bound_Ah = .false. ; CS%better_bound_Ah = .false. ; CS%Smagorinsky_Ah = .false. ; CS%Leith_Ah = .false.
   CS%bound_Coriolis = .false.
-  CS%Modified_Leith = .false.
 
   Kh = 0.0 ; Ah = 0.0
 
@@ -1049,17 +1042,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                  "If true, use a Leith nonlinear eddy viscosity.", &
                  default=.false.)
-
-    call get_param(param_file, mdl, "MODIFIED_LEITH", CS%Modified_Leith, &
-                 "If true, add a term to Leith viscosity which is \n"//&
-                 "proportional to the gradient of divergence.", &
-                 default=.false.)
-
-    if (CS%Leith_Kh .or. get_all) &
-      call get_param(param_file, mdl, "LEITH_LAP_CONST", Leith_Lap_const, &
-                 "The nondimensional Laplacian Leith constant, \n"//&
-                 "often ??", units="nondim", default=0.0, &
-                  fail_if_missing = CS%Leith_Kh)
 
     call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited \n"//&
@@ -1122,13 +1104,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "Coriolis acceleration.  The default is set by MAXVEL.", &
                  units="m s-1", default=maxvel)
       endif
-    endif
-
-    if (CS%Leith_Ah .or. get_all) then
-      call get_param(param_file, mdl, "LEITH_BI_CONST",Leith_bi_const, &
-                 "The nondimensional biharmonic Leith constant, \n"//&
-                 "typical values are thus far undetermined", units="nondim", default=0.0, &
-                 fail_if_missing = CS%Leith_Ah)
     endif
 
   endif
@@ -1198,10 +1173,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       ALLOC_(CS%Laplac_Const_xx(isd:ied,jsd:jed))     ; CS%Laplac_Const_xx(:,:) = 0.0
       ALLOC_(CS%Laplac_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac_Const_xy(:,:) = 0.0
     endif
-    if (CS%Leith_Kh) then
-      ALLOC_(CS%Laplac3_Const_xx(isd:ied,jsd:jed))     ; CS%Laplac3_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac3_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_Const_xy(:,:) = 0.0
-    endif
 
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
@@ -1238,10 +1209,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
         ALLOC_(CS%Biharm_Const2_xx(isd:ied,jsd:jed))     ; CS%Biharm_Const2_xx(:,:) = 0.0
         ALLOC_(CS%Biharm_Const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_Const2_xy(:,:) = 0.0
       endif
-    endif
-    if (CS%Leith_Ah) then
-      ALLOC_(CS%Biharm5_Const_xx(isd:ied,jsd:jed))     ; CS%Biharm5_Const_xx(:,:) = 0.0
-      ALLOC_(CS%Biharm5_Const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm5_Const_xy(:,:) = 0.0
     endif
   endif
 
@@ -1294,7 +1261,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
-      if (CS%Leith_Kh) CS%LAPLAC3_CONST_xx(i,j) = Leith_Lap_const * grid_sp_h3
 
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
 
@@ -1309,7 +1275,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
-      if (CS%Leith_Kh) CS%LAPLAC3_CONST_xy(I,J) = Leith_Lap_const * grid_sp_q3
 
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
@@ -1352,9 +1317,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                                   (fmax * BoundCorConst)
         endif
       endif
-      if (CS%Leith_Ah) then
-        CS%BIHARM5_CONST_xx(i,j) = Leith_bi_const * (grid_sp_h2 * grid_sp_h3)
-      endif
 
       CS%Ah_bg_xx(i,j) = MAX(Ah, Ah_vel_scale * grid_sp_h2 * sqrt(grid_sp_h2))
       if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
@@ -1372,10 +1334,6 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
           CS%Biharm_Const2_xy(I,J) = (grid_sp_q2 * grid_sp_q2 * grid_sp_q2) * &
                                       (abs(G%CoriolisBu(I,J)) * BoundCorConst)
         endif
-      endif
-
-      if (CS%Leith_Ah) then
-        CS%BIHARM5_CONST_xy(I,J) = Leith_bi_const * (grid_sp_q2 * grid_sp_q3)
       endif
 
       CS%Ah_bg_xy(I,J) = MAX(Ah, Ah_vel_scale * grid_sp_q2 * sqrt(grid_sp_q2))
@@ -1533,9 +1491,6 @@ subroutine hor_visc_end(CS)
     if (CS%Smagorinsky_Kh) then
       DEALLOC_(CS%Laplac_Const_xx) ; DEALLOC_(CS%Laplac_Const_xy)
     endif
-    if (CS%Leith_Kh) then
-      DEALLOC_(CS%Laplac3_Const_xx) ; DEALLOC_(CS%Laplac3_Const_xy)
-    endif
   endif
 
   if (CS%biharmonic) then
@@ -1550,9 +1505,6 @@ subroutine hor_visc_end(CS)
       if (CS%bound_Coriolis) then
         DEALLOC_(CS%Biharm_Const2_xx) ; DEALLOC_(CS%Biharm_Const2_xy)
       endif
-    endif
-    if (CS%Leith_Ah) then
-      DEALLOC_(CS%Biharm5_Const_xx) ; DEALLOC_(CS%Biharm5_Const_xy)
     endif
   endif
   deallocate(CS)
