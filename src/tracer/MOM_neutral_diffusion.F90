@@ -1607,14 +1607,20 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
   if (kl > kl_0) then ! Away from top cell
     if (kl == lastK) then ! Searching in the same layer
       if (dRhoTop > tolerance) then
-        out_P = max(0.,lastP) ; out_K = kl
-      elseif ( ABS(dRhoTop - dRhoBot)<tolerance ) then
+        if (lastK == kl) then
+          out_P = lastP
+        else
+          out_P = 0.
+        endif
+        out_K = kl
+!        out_P = max(0.,lastP) ; out_K = kl
+      elseif ( dRhoTop == dRhoBot ) then
         if (top_connected(kl)) then
           out_P = 1. ; out_K = kl
         else
           out_P = max(0.,lastP) ; out_K = kl
         endif
-      elseif (dRhoTop >= (dRhoBot+tolerance)) then
+      elseif (dRhoTop >= dRhoBot) then
         out_P = 1. ; out_K = kl
       else
         out_K = kl
@@ -1633,14 +1639,20 @@ subroutine search_other_column_discontinuous(dRhoTopm1, dRhoTop, dRhoBot, Ptop, 
     if (ki == 1) then
       out_P = 0. ; out_K = kl
     elseif (dRhoTop > tolerance) then
-      out_P = max(0.,lastP) ; out_K = kl
-    elseif ( (dRhoTop - dRhoBot)<tolerance) then
+      if (lastK == kl) then
+        out_P = lastP
+      else
+        out_P = 0.
+      endif
+      out_K = kl
+!      out_P = max(0.,lastP) ; out_K = kl
+    elseif ( dRhoTop == dRhoBot ) then
       if (top_connected(kl)) then
         out_P = 1. ; out_K = kl
       else
         out_P = max(0.,lastP) ; out_K = kl
       endif
-    elseif (dRhoTop >= (dRhoBot+tolerance)) then
+    elseif (dRhoTop >= dRhoBot) then
       out_P = 1. ; out_K = kl
     else
       out_K = kl
