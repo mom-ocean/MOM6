@@ -33,7 +33,7 @@ use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
 use MOM_diag_mediator,        only : diag_register_area_ids
-use MOM_diag_mediator,        only : diag_associate_volume_cell_measure
+use MOM_diag_mediator,        only : register_cell_measure
 use MOM_diag_mediator,        only : diag_set_state_ptrs, diag_update_remap_grids
 use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,        only : register_diag_field, register_static_field
@@ -2108,8 +2108,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call set_masks_for_axes(G, diag)
 
   ! Diagnose static fields AND associate areas/volumes with axes
-  call write_static_fields(G, CS%diag)
-  call write_parameter_fields(G, CS)
+  call write_static_fields(G, GV, CS%tv, CS%diag)
   call callTree_waypoint("static fields written (initialize_MOM)")
 
   ! Register the volume cell measure (must be one of first diagnostics)
@@ -2339,7 +2338,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
   real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
 
-  real :: conv2watt
+  real :: conv2watt, conv2salt
   character(len=48) :: thickness_units, flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
@@ -2350,8 +2349,10 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  S_flux_units    = get_tr_flux_units(GV, "psu")
+  S_flux_units    = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
   conv2watt       = GV%H_to_kg_m2 * C_p
+  conv2salt       = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001 and remove the following line?
+  if (.not.GV%Boussinesq) conv2salt = GV%H_to_kg_m2
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2434,8 +2435,8 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   endif
 
   if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,                         &
-          'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil',                    &
+    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,  &
+          'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
           cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
           cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
   endif
@@ -2449,17 +2450,17 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
 
   ! lateral heat advective and diffusive fluxes
-  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time,          &
-      'Advective (by residual mean) Zonal Flux of Potential Temperature', 'W m-2', &
+  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
+      'Advective (by residual mean) Zonal Flux of Heat', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
-  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time,               &
-      'Advective (by residual mean) Meridional Flux of Potential Temperature', 'W m-2', &
+  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
+      'Advective (by residual mean) Meridional Flux of Heat', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
-  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time,        &
-      'Diffusive Zonal Flux of Potential Temperature', 'W m-2',                      &
+  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time, &
+      'Diffusive Zonal Flux of Heat', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
   CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Potential Temperature', 'W m-2',          &
+      'Diffusive Meridional Flux of Heat', 'W m-2', &
       v_extensive = .true., conversion = conv2watt)
   if (CS%id_Tadx   > 0) call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Tady   > 0) call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
@@ -2469,13 +2470,16 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! lateral salt advective and diffusive fluxes
   CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
+      'Advective (by residual mean) Zonal Flux of Salt', S_flux_units, &
+      v_extensive = .true., conversion = conv2salt)
   CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
+      'Advective (by residual mean) Meridional Flux of Salt', S_flux_units, &
+      v_extensive = .true., conversion = conv2salt)
   CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Salinity', S_flux_units, v_extensive = .true.)
+      'Diffusive Zonal Flux of Salt', S_flux_units, &
+      v_extensive = .true., conversion = conv2salt)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salinity', S_flux_units, v_extensive = .true.)
+      'Diffusive Meridional Flux of Salt', S_flux_units, v_extensive = .true.)
   if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2484,13 +2488,13 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Advective Zonal Flux of Heat', 'W m-2', conversion = conv2watt)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Advective Meridional Flux of Heat', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Diffusive Zonal Flux of Heat', 'W m-2', conversion = conv2watt)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Potential Temperature', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Diffusive Meridional Flux of Heat', 'W m-2', conversion = conv2watt)
   if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
@@ -2498,13 +2502,13 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! vertically integrated lateral salt advective and diffusive fluxes
   CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Salinity', S_flux_units)
+      'Vertically Integrated Advective Zonal Flux of Salt', S_flux_units, conversion = conv2salt)
   CS%id_Sady_2d = register_diag_field('ocean_model', 'S_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Salinity', S_flux_units)
+      'Vertically Integrated Advective Meridional Flux of Salt', S_flux_units, conversion = conv2salt)
   CS%id_Sdiffx_2d = register_diag_field('ocean_model', 'S_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Salinity', S_flux_units)
+      'Vertically Integrated Diffusive Zonal Flux of Salt', S_flux_units, conversion = conv2salt)
   CS%id_Sdiffy_2d = register_diag_field('ocean_model', 'S_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Salinity', S_flux_units)
+      'Vertically Integrated Diffusive Meridional Flux of Salt', S_flux_units, conversion = conv2salt)
   if (CS%id_Sadx_2d   > 0) call safe_alloc_ptr(CS%S_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Sady_2d   > 0) call safe_alloc_ptr(CS%S_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Sdiffx_2d > 0) call safe_alloc_ptr(CS%S_diffx_2d,IsdB,IedB,jsd,jed)
@@ -3161,26 +3165,14 @@ subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
 
 end subroutine post_surface_diagnostics
 
-!> Sets a handle inside diagnostics mediator to associate 3d cell measures
-subroutine register_cell_measure(G, diag, Time)
-  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
-  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
-  type(time_type),         intent(in)    :: Time !< Model time
-  ! Local variables
-  integer :: id
-  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
-                           Time, 'Ocean grid-cell volume', 'm3', &
-                           standard_name='ocean_volume', v_extensive=.true., &
-                           x_cell_method='sum', y_cell_method='sum')
-  call diag_associate_volume_cell_measure(diag, id)
-
-end subroutine register_cell_measure
 
 !> Offers the static fields in the ocean grid type
 !! for output via the diag_manager.
-subroutine write_static_fields(G, diag)
-  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
-  type(diag_ctrl), target, intent(inout) :: diag   !< regulates diagnostic output
+subroutine write_static_fields(G, GV, tv, diag)
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+  type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
   ! Local variables
   real    :: tmp_h(SZI_(G),SZJ_(G))
   integer :: id, i, j
@@ -3320,28 +3312,20 @@ subroutine write_static_fields(G, diag)
     call post_data(id, tmp_h, diag, .true.)
   endif
 
-end subroutine write_static_fields
-
-subroutine write_parameter_fields(G, CS)
-  type(ocean_grid_type),   intent(in)    :: G      !< ocean grid structure
-  type(MOM_control_struct),pointer       :: CS     !< pointer set in this routine to MOM control structure
-  ! Local variables
-  integer :: id
-
-  id = register_static_field('ocean_model','Rho_0', CS%diag%axesNull, &
+  id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
        'mean ocean density used with the Boussinesq approximation', &
        'kg m-3', cmor_field_name='rhozero', &
        cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
        cmor_long_name='reference sea water density for boussinesq approximation')
-  if (id > 0) call post_data(id, CS%GV%Rho0, CS%diag, .true.)
+  if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
 
-  id = register_static_field('ocean_model','C_p', CS%diag%axesNull, &
+  id = register_static_field('ocean_model','C_p', diag%axesNull, &
        'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
        cmor_standard_name='specific_heat_capacity_of_sea_water', &
        cmor_long_name='specific_heat_capacity_of_sea_water')
-  if (id > 0) call post_data(id, CS%tv%C_p, CS%diag, .true.)
+  if (id > 0) call post_data(id, tv%C_p, diag, .true.)
 
-end subroutine write_parameter_fields
+end subroutine write_static_fields
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here
