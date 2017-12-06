@@ -569,10 +569,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then
-    ! These should be done with a pass that excludes uh & vh.
-    call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
     if (CS%debug) &
       call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
@@ -581,9 +580,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
     if (CS%debug) &
       call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+
+    ! These should be done with a pass that excludes uh & vh.
+!   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   endif
 
-  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   endif
