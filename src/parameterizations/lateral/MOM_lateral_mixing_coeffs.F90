@@ -413,12 +413,14 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, CS)
   if (.not. ASSOCIATED(CS)) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_slope_functions:"//&
          "Module must be initialized before it is used.")
 
-  if (CS%calculate_Eady_growth_rate) then
+  if (CS%calculate_Eady_growth_rate .or. CS%use_stored_slopes) then
     call find_eta(h, tv, GV%g_Earth, G, GV, e, halo_size=2)
     if (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, &
                                   CS%slope_x, CS%slope_y, N2_u, N2_v, 1)
-      call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      if (CS%calculate_Eady_growth_rate) then
+        call calc_Visbeck_coeffs(h, e, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, CS)
+      endif
 !     call calc_slope_functions_using_just_e(h, G, CS, e, .false.)
     else
       !call calc_isoneutral_slopes(G, GV, h, e, tv, dt*CS%kappa_smooth, CS%slope_x, CS%slope_y)
@@ -759,13 +761,18 @@ subroutine calc_Leith_viscosity(CS, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, L
                                         dvdx    ! Zonal shear of meridional velocity (s-1)
   real, dimension(SZI_(G),SZJB_(G)) :: &
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) (m-1 s-1)
-    div_xx_dy     ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+    div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) (m-1 s-1)
+    dslopey_dz, & ! z-derivative of y-slope at v-points (m-1)
+    h_at_v        ! Thickness at v-points (m or kg m-2)
 
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) (m-1 s-1)
-    div_xx_dx     ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+    div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) (m-1 s-1)
+    dslopex_dz, & ! z-derivative of x-slope at u-points (m-1)
+    h_at_u        ! Thickness at u-points (m or kg m-2)
   real, dimension(SZI_(G),SZJ_(G)) :: div_xx ! Estimate of horizontal divergence at h-points (s-1)
   real :: mod_Leith, DY_dxBu, DX_dyBu, vert_vort_mag
+  real :: h_at_slope_above, h_at_slope_below, Ih, f
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -811,23 +818,63 @@ subroutine calc_Leith_viscosity(CS, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, L
   endif
 
   ! Vorticity gradient
-  do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+  do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
     DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
     vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
   enddo ; enddo
 
-  do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+  do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
     DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
     vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
   enddo ; enddo
 
   ! Add in beta for the Leith viscosity
   if (CS%use_beta_in_Leith) then
-    do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
     enddo ; enddo
-    do J=js-1,Jeq+1 ; do I=is-2,Ieq+1
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j) )
+    enddo ; enddo
+  endif
+
+  ! Add in stretching term for the QG Leith vsicosity
+  if (CS%use_QG_Leith) then
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) * h(i+1,j,k) ) / &
+                         ( ( h(i,j,k-1) * h(i+1,j,k-1) ) * ( h(i,j,k) + h(i+1,j,k) ) &
+                         + ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k-1) + h(i+1,j,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) * h(i+1,j,k+1) ) / &
+                         ( ( h(i,j,k) * h(i+1,j,k) ) * ( h(i,j,k+1) + h(i+1,j,k+1) ) &
+                         + ( h(i,j,k+1) * h(i+1,j,k+1) ) * ( h(i,j,k) + h(i+1,j,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopex_dz(I,j) = 2. * ( CS%slope_x(i,j,k) - CS%slope_x(i,j,k+1) ) * Ih
+      h_at_u(I,j) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+      h_at_slope_above = 2. * ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) * h(i,j+1,k) ) / &
+                         ( ( h(i,j,k-1) * h(i,j+1,k-1) ) * ( h(i,j,k) + h(i,j+1,k) ) &
+                         + ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k-1) + h(i,j+1,k-1) ) + GV%H_subroundoff )
+      h_at_slope_below = 2. * ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) * h(i,j+1,k+1) ) / &
+                         ( ( h(i,j,k) * h(i,j+1,k) ) * ( h(i,j,k+1) + h(i,j+1,k+1) ) &
+                         + ( h(i,j,k+1) * h(i,j+1,k+1) ) * ( h(i,j,k) + h(i,j+1,k) ) + GV%H_subroundoff )
+      Ih = 1./ ( ( h_at_slope_above + h_at_slope_below + GV%H_subroundoff ) * GV%H_to_m )
+      dslopey_dz(i,J) = 2. * ( CS%slope_y(i,j,k) - CS%slope_y(i,j,k+1) ) * Ih
+      h_at_v(i,J) = 2. * ( h_at_slope_above * h_at_slope_below ) * Ih
+    enddo ; enddo
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
+      vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
+            ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
+            + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
+              ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) )
+    enddo ; enddo
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+      f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
+      vort_xy_dy(I,j) = vort_xy_dx(I,j) - f * &
+            ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
+            + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
+              ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) )
     enddo ; enddo
   endif
 
