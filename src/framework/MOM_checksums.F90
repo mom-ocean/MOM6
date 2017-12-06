@@ -308,7 +308,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                              LBOUND(array,2):UBOUND(array,2)) )
     rescaled_array(:,:) = 0.0
-    Is = HI%isc ; if (sym_stats) Is = HI%isc-1 
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
     Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
     do J=Js,HI%JecB ; do I=Is,HI%IecB
       rescaled_array(I,J) = scale*array(I,J)
@@ -896,7 +896,7 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
                              LBOUND(array,2):UBOUND(array,2), &
                              LBOUND(array,3):UBOUND(array,3)) )
     rescaled_array(:,:,:) = 0.0
-    Is = HI%isc ; if (sym_stats) Is = HI%isc-1 
+    Is = HI%isc ; if (sym_stats) Is = HI%isc-1
     Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
     do k=1,size(array,3) ; do J=Js,HI%JecB ; do I=Is,HI%IecB
       rescaled_array(I,J,k) = scale*array(I,J,k)
