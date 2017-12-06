@@ -184,7 +184,7 @@ subroutine find_eta_2d(h, tv, G_Earth, G, GV, eta, eta_bt, halo_size)
     if (present(eta_bt)) then
 !$OMP do
       do j=js,je ; do i=is,ie
-        eta(i,j) = eta_bt(i,j)
+        eta(i,j) = GV%H_to_m*eta_bt(i,j)
       enddo ; enddo
     else
 !$OMP do

@@ -76,7 +76,7 @@ type, public :: bulkmixedlayer_CS ; private
                              ! released mean kinetic energy becomes TKE, nondim.
   real    :: Hmix_min        ! The minimum mixed layer thickness in m.
   real    :: H_limit_fluxes  ! When the total ocean depth is less than this
-                             ! value, in m, scale away all surface forcing to
+                             ! value, in H, scale away all surface forcing to
                              ! avoid boiling the ocean.
   real    :: ustar_min       ! A minimum value of ustar to avoid numerical
                              ! problems, in m s-1.  If the value is small enough,
@@ -3736,6 +3736,7 @@ subroutine bulkmixedlayer_init(Time, G, GV, param_file, diag, CS)
                  "The surface fluxes are scaled away when the total ocean \n"//&
                  "depth is less than DEPTH_LIMIT_FLUXES.", &
                  units="m", default=0.1*CS%Hmix_min)
+  CS%H_limit_fluxes = CS%H_limit_fluxes * GV%m_to_H
   call get_param(param_file, mdl, "OMEGA",CS%omega, &
                  "The rotation rate of the earth.", units="s-1", &
                  default=7.2921e-5)
