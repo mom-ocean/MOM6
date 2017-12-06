@@ -839,7 +839,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
     h_def2_v
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H.
-  real :: Hmix_min  ! CS%Hmix_min converted to units of H.           
+  real :: Hmix_min  ! CS%Hmix_min converted to units of H.
   real :: h1, h2  ! Temporary thicknesses, in H.
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 
