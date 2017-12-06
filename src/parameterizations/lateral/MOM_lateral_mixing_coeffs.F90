@@ -111,6 +111,7 @@ type, public :: VarMix_CS ;
 
   ! Leith parameters
   logical :: use_QG_Leith      !< If true, enables the QG Leith scheme
+  logical :: use_beta_in_Leith !< If true, includes the beta term in the Leith viscosity
   logical :: Leith_Kh          !< If true, enables the Leith scheme
   logical :: modified_Leith    !< if true, include the divergence contribution to Leith viscosity
   logical :: Leith_Ah          !< If true, enables the bi-harmonic Leith scheme
@@ -820,8 +821,8 @@ subroutine calc_Leith_viscosity(CS, G, GV, u, v, h, k, Leith_Kh_h, Leith_Kh_q, L
     vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
   enddo ; enddo
 
-  ! Add in beta for QG Leith
-  if (CS%use_QG_Leith) then
+  ! Add in beta for the Leith viscosity
+  if (CS%use_beta_in_Leith) then
     do J=js-2,Jeq+1 ; do I=is-1,Ieq+1
       vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1) )
     enddo ; enddo
@@ -1156,15 +1157,21 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
   endif
 
   ! Leith parameters
+  call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
+               "If true, use the QG Leith nonlinear eddy viscosity.", &
+               default=.false.)
   call get_param(param_file, mdl, "LEITH_KH", CS%Leith_Kh, &
                "If true, use a Leith nonlinear eddy viscosity.", &
+               default=CS%use_QG_Leith)
+  if (CS%use_QG_Leith .and. .not. CS%Leith_Kh) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "LEITH_KH must be True when USE_QG_LEITH=True.")
+  call get_param(param_file, mdl, "USE_BETA_IN_LEITH", CS%use_beta_in_Leith, &
+               "If true, include the beta term in the QG Leith nonlinear eddy viscosity.", &
                default=CS%use_QG_Leith)
   call get_param(param_file, mdl, "LEITH_AH", CS%Leith_Ah, &
                "If true, use a biharmonic Leith nonlinear eddy \n"//&
                "viscosity.", default=.false.)
-  call get_param(param_file, mdl, "USE_QG_LEITH", CS%use_QG_Leith, &
-               "If true, use the QG Leith nonlinear eddy viscosity.", &
-               default=.false.)
   call get_param(param_file, mdl, "MODIFIED_LEITH", CS%modified_Leith, &
                "If true, add a term to Leith viscosity which is \n"//&
                "proportional to the gradient of divergence.", &
@@ -1186,6 +1193,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
                    "cleaner than the no slip BCs. The use of free slip BCs \n"//&
                    "is strongly encouraged, and no slip BCs are not used with \n"//&
                    "the biharmonic viscosity.", default=.false.)
+    if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "USE_STORED_SLOPES must be True when ing Leith.")
   endif
   if (CS%Leith_Kh) then
     allocate(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
