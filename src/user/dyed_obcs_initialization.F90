@@ -3,7 +3,7 @@ module dyed_obcs_initialization
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_dyn_horgrid,     only : dyn_horgrid_type
-use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use MOM_get_input,       only : directories
 use MOM_grid,            only : ocean_grid_type
@@ -20,7 +20,7 @@ implicit none ; private
 
 public dyed_obcs_set_OBC_data
 
-integer, parameter :: NTR = 4
+integer :: ntr = 0
 
 contains
 
@@ -42,7 +42,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye
   type(OBC_segment_type), pointer :: segment
-  type(vardesc) :: tr_desc(NTR)
+  type(vardesc), allocatable, dimension(:) :: tr_desc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -50,19 +50,25 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
 
   if (.not.associated(OBC)) return
 
-  if (OBC%number_of_segments .ne. 4) then
-    print *, 'Error in dyed_obcs segment setup'
+  call get_param(param_file, mdl, "NUM_DYE_TRACERS", ntr, &
+                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "should have a separate boundary segment.", default=0,   &
+                 do_not_log=.true.)
+
+  if (OBC%number_of_segments .lt. ntr) then
+    call MOM_error(WARNING, "Error in dyed_obc segment setup")
     return   !!! Need a better error message here
   endif
+  allocate(tr_desc(ntr))
 
 ! ! Set the inflow values of the dyes, one per segment.
 ! ! We know the order: north, south, east, west
-  do m=1,NTR
-    write(name,'("dye_",I1.1)') m
-    write(longname,'("Concentration of dyed_obc Tracer ",I1.1, " on segment ",I1.1)') m, m
+  do m=1,ntr
+    write(name,'("dye_",I2.2)') m
+    write(longname,'("Concentration of dyed_obc Tracer ",I2.2, " on segment ",I2.2)') m, m
     tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
-    do n=1,NTR
+    do n=1,OBC%number_of_segments
       if (n == m) then
         dye = 1.0
       else
@@ -72,6 +78,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
                                    OBC%segment(n), OBC_scalar=dye)
     enddo
   enddo
+  deallocate(tr_desc)
 
 end subroutine dyed_obcs_set_OBC_data
 
