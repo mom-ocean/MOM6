@@ -10,8 +10,11 @@ use polynomial_functions,      only : evaluation_polynomial, first_derivative_po
 implicit none ; private
 
 public mark_unstable_cells
-public mark_unstable_cells_i
-public calc_delta_rho
+public increment_interface
+public calc_drho
+public drho_at_pos
+public search_other_column
+public interpolate_for_nondim_position
 public refine_nondim_position
 public check_neutral_positions
 public kahan_sum
@@ -70,47 +73,64 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
 
 end subroutine mark_unstable_cells
 
-subroutine mark_unstable_cells_i(nk, dRdT, dRdS,T, S, stable_cell, ns)
-  integer,                intent(in)    :: nk          !< Number of levels in a column
-  real, dimension(nk,2),    intent(in)    :: dRdT        !< drho/dT (kg/m3/degC)
-  real, dimension(nk,2),    intent(in)    :: dRdS        !< drho/dS (kg/m3/ppt)
-  real, dimension(nk,2),    intent(in)    :: T           !< drho/dS (kg/m3/ppt)
-  real, dimension(nk,2),    intent(in)    :: S           !< drho/dS (kg/m3/ppt)
-  logical, dimension(nk), intent(  out) :: stable_cell !< True if this cell is unstably stratified
-  integer,                intent(  out) :: ns          !< Number of neutral surfaces in unmasked part of the column
+!> Increments the interface which was just connected and also set flags if the bottom is reached
+subroutine increment_interface(nk, kl, ki, stable, reached_bottom, searching_this_column, searching_other_column)
+  integer, intent(in   )                :: nk                     !< Number of vertical levels
+  integer, intent(inout)                :: kl                     !< Current layer (potentially updated)
+  integer, intent(inout)                :: ki                     !< Current interface
+  logical, dimension(nk), intent(in   ) :: stable                 !< True if the cell is stably stratified
+  logical, intent(inout)                :: reached_bottom         !< Updated when kl == nk and ki == 2
+  logical, intent(inout)                :: searching_this_column  !< Updated when kl == nk and ki == 2
+  logical, intent(inout)                :: searching_other_column !< Updated when kl == nk and ki == 2
+  integer :: k
 
-  integer :: k, first_stable, prev_stable
-  real :: delta_rho
-
-  ! If only one cell, then we really shouldn't do anything
-  if (nk==1) then
-    stable_cell(nk)=.true.
-    ns = 2
-    return
-  endif
-
-  do k=1,nk
-    ! Only check cell which are stable
-    if (stable_cell(k)) then
-      delta_rho = ( (dRdT(k,1) + dRdT(k,2))*(T(k,1)-T(k,2)) ) + ( (dRdS(k,1) + dRdS(k,2))*(S(k,1)-S(k,2)) )
-      if (delta_rho > 0.) then
-        stable_cell(k) = .false.
-        ns = ns - 2
+  if (ki == 1) then
+    ki = 2
+  elseif ((ki == 2) .and. (kl < nk) ) then
+    do k = kl+1,nk
+      if (stable(kl)) then
+        kl = k
+        ki = 1
+        exit
       endif
-    endif
-  enddo
+      ! If we did not find another stable cell, then the current cell is essentially the bottom
+      ki = 2
+      reached_bottom = .true.
+      searching_this_column = .true.
+      searching_other_column = .false.
+    enddo
+  elseif ((kl == nk) .and. (ki==2)) then
+    reached_bottom = .true.
+    searching_this_column = .true.
+    searching_other_column = .false.
+  else
+    call MOM_error(FATAL,"Unanticipated eventuality in increment_interface")
+  endif
+end subroutine increment_interface
 
-end subroutine mark_unstable_cells_i
+!> Calculates difference in density at two points (rho1-rho2) with known density derivatives, T, and S
+real function calc_drho(T1, S1, dRdT1, dRdS1, T2, S2, dRdT2, dRdS2)
+  real, intent(in   ) :: T1     !< Temperature at point 1
+  real, intent(in   ) :: S1     !< Salinity at point 1
+  real, intent(in   ) :: dRdT1  !< dRhodT at point 1
+  real, intent(in   ) :: dRdS1  !< dRhodS at point 1
+  real, intent(in   ) :: T2     !< Temperature at point 2
+  real, intent(in   ) :: S2     !< Salinity at point 2
+  real, intent(in   ) :: dRdT2  !< dRhodT at point 2
+  real, intent(in   ) :: dRdS2  !< dRhodS at point
+
+  calc_drho = 0.5*( (dRdT1+dRdT2)*(T1-T2) + (dRdS1+dRdS2)*(S1-S2) )
+end function calc_drho
 
 !> Calculate the difference in neutral density between a reference T, S, alpha, and beta
 !! and a point on the polynomial reconstructions of T, S
-subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, x0, ref_pres, EOS, &
+subroutine drho_at_pos(T_ref, S_ref, alpha_ref, beta_ref, deg, P_top, P_bot, ppoly_T, ppoly_S, x0, ref_pres, EOS, &
                           delta_rho, P_out, T_out, S_out, alpha_avg_out, beta_avg_out, delta_T_out, delta_S_out)
-  integer,                intent(in)  :: deg       !< Degree of polynomial reconstruction
   real,                   intent(in)  :: T_ref     !< Temperature at reference surface
   real,                   intent(in)  :: S_ref     !< Salinity at reference surface
   real,                   intent(in)  :: alpha_ref !< dRho/dT at reference surface
   real,                   intent(in)  :: beta_ref  !< dRho/dS at reference surface
+  integer,                intent(in)  :: deg       !< Degree of polynomial reconstruction
   real,                   intent(in)  :: P_top     !< Pressure (Pa) at top interface of layer to be searched
   real,                   intent(in)  :: P_bot     !< Pressure (Pa) at bottom interface
   real, dimension(deg+1), intent(in)  :: ppoly_T   !< Coefficients of T reconstruction
@@ -156,7 +176,122 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
   if (present(delta_T_out)) delta_T_out = delta_T
   if (present(delta_S_out)) delta_S_out = delta_S
 
-end subroutine calc_delta_rho
+end subroutine drho_at_pos
+
+!> Searches the "other" (searched) column for the position of the neutral surface
+subroutine search_other_column(dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, kl_0, ki, &
+                               top_connected, bot_connected, out_P, out_K, search_layer)
+  real,                  intent(in   ) :: dRhoTop        !< Density difference across top interface
+  real,                  intent(in   ) :: dRhoBot        !< Density difference across top interface
+  real,                  intent(in   ) :: Ptop           !< Pressure at top interface
+  real,                  intent(in   ) :: Pbot           !< Pressure at bottom interface
+  real,                  intent(in   ) :: lastP          !< Last position connected in the searched column
+  integer,               intent(in   ) :: lastK          !< Last layer connected in the searched column
+  integer,               intent(in   ) :: kl             !< Layer in the searched column
+  integer,               intent(in   ) :: kl_0           !< Layer in the searched column
+  integer,               intent(in   ) :: ki             !< Interface of the searched column
+  logical, dimension(:), intent(inout) :: top_connected  !< True if the top interface was pointed to
+  logical, dimension(:), intent(inout) :: bot_connected  !< True if the top interface was pointed to
+  real,                  intent(  out) :: out_P          !< Position within searched column
+  integer,               intent(  out) :: out_K          !< Layer within searched column
+  logical,               intent(  out) :: search_layer   !< Neutral surface within cell
+
+  search_layer = .false.
+  if (kl > kl_0) then ! Away from top cell
+    if (kl == lastK) then ! Searching in the same layer
+      if (dRhoTop > 0.) then
+        if (lastK == kl) then
+          out_P = lastP
+        else
+          out_P = 0.
+        endif
+        out_K = kl
+!        out_P = max(0.,lastP) ; out_K = kl
+      elseif ( dRhoTop == dRhoBot ) then
+        if (top_connected(kl)) then
+          out_P = 1. ; out_K = kl
+        else
+          out_P = max(0.,lastP) ; out_K = kl
+        endif
+      elseif (dRhoTop >= dRhoBot) then
+        out_P = 1. ; out_K = kl
+      else
+        out_K = kl
+        out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
+        search_layer = .true.
+      endif
+    else ! Searching across the interface
+      if (.not. bot_connected(kl-1) ) then
+        out_K = kl-1
+        out_P = 1.
+      else
+        out_K = kl
+        out_P = 0.
+      endif
+    endif
+  else ! At the top cell
+    if (ki == 1) then
+      out_P = 0. ; out_K = kl
+    elseif (dRhoTop > 0.) then
+      if (lastK == kl) then
+        out_P = lastP
+      else
+        out_P = 0.
+      endif
+      out_K = kl
+!      out_P = max(0.,lastP) ; out_K = kl
+    elseif ( dRhoTop == dRhoBot ) then
+      if (top_connected(kl)) then
+        out_P = 1. ; out_K = kl
+      else
+        out_P = max(0.,lastP) ; out_K = kl
+      endif
+    elseif (dRhoTop >= dRhoBot) then
+      out_P = 1. ; out_K = kl
+    else
+      out_K = kl
+      out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
+      search_layer = .true.
+    endif
+  endif
+
+end subroutine search_other_column
+
+!> Returns the non-dimensional position between Pneg and Ppos where the
+!! interpolated density difference equals zero.
+!! The result is always bounded to be between 0 and 1.
+real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
+  real, intent(in) :: dRhoNeg !< Negative density difference
+  real, intent(in) :: Pneg    !< Position of negative density difference
+  real, intent(in) :: dRhoPos !< Positive density difference
+  real, intent(in) :: Ppos    !< Position of positive density difference
+
+  if (Ppos<Pneg) then
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! Ppos<Pneg'
+  elseif (dRhoNeg>dRhoPos) then
+    write(0,*) 'dRhoNeg, Pneg, dRhoPos, Ppos=',dRhoNeg, Pneg, dRhoPos, Ppos
+  elseif (dRhoNeg>dRhoPos) then
+    stop 'interpolate_for_nondim_position: Houston, we have a problem! dRhoNeg>dRhoPos'
+  endif
+  if (Ppos<=Pneg) then ! Handle vanished or inverted layers
+    interpolate_for_nondim_position = 0.5
+  elseif ( dRhoPos - dRhoNeg > 0. ) then
+    interpolate_for_nondim_position = min( 1., max( 0., -dRhoNeg / ( dRhoPos - dRhoNeg ) ) )
+  elseif ( dRhoPos - dRhoNeg == 0) then
+    if (dRhoNeg>0.) then
+      interpolate_for_nondim_position = 0.
+    elseif (dRhoNeg<0.) then
+      interpolate_for_nondim_position = 1.
+    else ! dRhoPos = dRhoNeg = 0
+      interpolate_for_nondim_position = 0.5
+    endif
+  else ! dRhoPos - dRhoNeg < 0
+    interpolate_for_nondim_position = 0.5
+  endif
+  if ( interpolate_for_nondim_position < 0. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint < Pneg'
+  if ( interpolate_for_nondim_position > 1. ) stop 'interpolate_for_nondim_position: Houston, we have a problem! Pint > Ppos'
+end function interpolate_for_nondim_position
+
 
 !> Use root-finding methods to find where dRho = 0, based on the equation of state and the polynomial
 !! reconstructions of temperature, salinity. Initial guess is based on the zero crossing of based on linear
@@ -206,7 +341,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
   real :: d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
 
   real :: P_last
-  logical :: debug = .false.
+  logical :: debug = .true.
   if (ref_pres>=0.) P_ref = ref_pres
   delta_P = P_bot-P_top
   refine_nondim_position = min_bound
@@ -220,8 +355,8 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
   endif
 
   ! Calculate the initial values
-  call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, min_bound, &
-                      ref_pres, EOS, delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
+  call drho_at_pos(T_ref, S_ref, alpha_ref, beta_ref, deg, P_top, P_bot, ppoly_T, ppoly_S, min_bound, &
+                   ref_pres, EOS, delta_rho, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
   delta_rho_init = delta_rho
   if ( ABS(delta_rho_init) < tolerance ) then
     refine_nondim_position = min_bound
@@ -280,10 +415,11 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
           b = 0.5*(a + c)
         endif
       endif
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
+      call drho_at_pos(T_ref, S_ref, alpha_ref, beta_ref, deg, P_top, P_bot, ppoly_T, ppoly_S,   &
                           b, ref_pres, EOS, fb, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
       if (debug) print *, "Iteration, b, fb: ", iter, b, fb
-      if (ABS(fb) <= tolerance .or. ABS(b-b_last) <= tolerance ) then
+!      if (ABS(fb) <= tolerance .or. ABS(b-b_last) <= tolerance ) then
+      if( (fb <= 0.) .and. (fb >= -tolerance) ) then
         refine_nondim_position = P_int/delta_P
         exit
       endif
@@ -361,7 +497,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
       else
         sb = sb - tol
       end if
-      call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+      call drho_at_pos(T_ref, S_ref, alpha_ref, beta_ref, deg, P_top, P_bot, ppoly_T, ppoly_S, &
                         sb, ref_pres, EOS, fb)
       if ( ( 0. < fb .and. 0. < fc ) .or. &
            ( fb <= 0. .and. fc <= 0. ) ) then
@@ -414,7 +550,7 @@ real function refine_nondim_position(max_iter, tolerance, T_ref, S_ref, alpha_re
   endif
 
   if (debug) then
-    call calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
+    call drho_at_pos(T_ref, S_ref, alpha_ref, beta_ref, deg, P_top, P_bot, ppoly_T, ppoly_S, &
                         refine_nondim_position, ref_pres, EOS, delta_rho)
     write (*,*) "End delta_rho: ", delta_rho
     write (*,*) "x0, delta_x: ", x0, refine_nondim_position-x0
