@@ -150,6 +150,7 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
   logical                         :: check_remapping
   logical                         :: force_bounds_in_subcell
   logical                         :: local_logical
+  logical                         :: remap_boundary_extrap
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -216,8 +217,11 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
                  "If true, the values on the intermediate grid used for remapping\n"//&
                  "are forced to be bounded, which might not be the case due to\n"//&
                  "round off.", default=.false.)
+  call get_param(param_file, mdl, "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
+                 "If true, values at the interfaces of boundary cells are \n"//&
+                 "extrapolated instead of piecewise constant", default=.false.)
   call initialize_remapping( CS%remapCS, string, &
-                             boundary_extrapolation=.false., &
+                             boundary_extrapolation=remap_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell)
