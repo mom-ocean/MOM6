@@ -419,10 +419,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                "BOUSSINESQ is defined. This does not apply if a restart \n"//&
                "file is read.", default=.not.GV%Boussinesq, do_not_log=just_read)
   if (new_sim) then
-    if (convert .and. .not.GV%Boussinesq) then
-      ! Convert h from m to kg m-2 then to thickness units (H)
-      call convert_thickness(h, G, GV, tv)
-    elseif (GV%Boussinesq) then
+    if (GV%Boussinesq .or. convert) then
       ! Convert h from m to thickness units (H)
       do k=1,nz ; do j=js,je ; do i=is,ie
         h(i,j,k) = h(i,j,k)*GV%m_to_H
@@ -432,6 +429,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         h(i,j,k) = h(i,j,k)*GV%kg_m2_to_H
       enddo ; enddo ; enddo
     endif
+
+    if (convert .and. .not.GV%Boussinesq) &
+      ! Convert thicknesses from geomtric distances to mass-per-unit-area.
+      call convert_thickness(h, G, GV, tv)
   endif
 
 !  Remove the mass that would be displaced by an ice shelf or inverse barometer.
@@ -907,14 +908,14 @@ end subroutine initialize_thickness_search
 ! -----------------------------------------------------------------------------
 
 subroutine convert_thickness(h, G, GV, tv)
-  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
-                                          intent(inout) :: h    !< Layer thicknesses, being
-                                                                !! converted from m to H (m or kg
-                                                                !! m-2)
-  type(thermo_var_ptrs),                  intent(in)    :: tv   !< A structure pointing to various
-                                                                !! thermodynamic variables
+                           intent(inout) :: h    !< Input eometric layer thicknesses (in H units),
+                                                 !! being converted to layer pressure
+                                                 !! thicknesses (also in H units).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
+                                                 !! thermodynamic variables
 ! Arguments: h - The thickness that is being initialized.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
@@ -924,6 +925,8 @@ subroutine convert_thickness(h, G, GV, tv)
                                        ! across a layer, in m2 s-2.
   real :: rho(SZI_(G))
   real :: I_gEarth
+  real :: Hm_rho_to_Pa  ! A conversion factor from the input geometric thicknesses
+                        ! times the layer densities into Pa, in Pa m3 / H kg.
   logical :: Boussinesq
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: itt, max_itt
@@ -933,6 +936,7 @@ subroutine convert_thickness(h, G, GV, tv)
   max_itt = 10
   Boussinesq = GV%Boussinesq
   I_gEarth = 1.0 / GV%g_Earth
+  Hm_rho_to_Pa = (GV%g_Earth * GV%H_to_m) ! = GV%H_to_Pa / GV%Rho0
 
   if (Boussinesq) then
     call MOM_error(FATAL,"Not yet converting thickness with Boussinesq approx.")
@@ -947,7 +951,7 @@ subroutine convert_thickness(h, G, GV, tv)
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_top(:,j), rho, &
                                  is, ie-is+1, tv%eqn_of_state)
           do i=is,ie
-            p_bot(i,j) = p_top(i,j) + GV%g_Earth * h(i,j,k) * rho(i)
+            p_bot(i,j) = p_top(i,j) + Hm_rho_to_Pa * (h(i,j,k) * rho(i))
           enddo
         enddo
 
@@ -961,7 +965,8 @@ subroutine convert_thickness(h, G, GV, tv)
             !   The hydrostatic equation is linear to such a
             ! high degree that no bounds-checking is needed.
             do i=is,ie
-              p_bot(i,j) = p_bot(i,j) + rho(i) * (GV%g_Earth*h(i,j,k) - dz_geo(i,j))
+              p_bot(i,j) = p_bot(i,j) + rho(i) * &
+                (Hm_rho_to_Pa*h(i,j,k) - dz_geo(i,j))
             enddo
           enddo ; endif
         enddo
@@ -972,7 +977,9 @@ subroutine convert_thickness(h, G, GV, tv)
       enddo
     else
       do k=1,nz ; do j=js,je ; do i=is,ie
-        h(i,j,k) = h(i,j,k) * GV%Rlay(k) * GV%kg_m2_to_H
+        h(i,j,k) = (h(i,j,k) * GV%Rlay(k)) * Hm_rho_to_Pa
+        ! This is mathematically equivalent to
+        !  h(i,j,k) = h(i,j,k) * (GV%Rlay(k) / GV%Rho0)
       enddo ; enddo ; enddo
     endif
   endif
