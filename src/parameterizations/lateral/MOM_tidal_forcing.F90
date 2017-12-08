@@ -39,7 +39,7 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_io,            only : field_exists, file_exists, read_data
+use MOM_io,            only : field_exists, file_exists, MOM_read_data
 use MOM_time_manager,  only : time_type, time_type_to_real
 
 implicit none ; private
@@ -395,7 +395,7 @@ subroutine find_in_files(tidal_input_files,varname,array,G)
   do nf=1,size(tidal_input_files)
     if (LEN_TRIM(tidal_input_files(nf)) == 0) cycle
     if (field_exists(tidal_input_files(nf), varname, G%Domain%mpp_domain)) then
-      call read_data(tidal_input_files(nf), varname, array, G%Domain%mpp_domain)
+      call MOM_read_data(tidal_input_files(nf), varname, array, G%Domain)
       return
     endif
   enddo

@@ -30,7 +30,7 @@ module MOM_generic_tracer
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
-  use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc
+  use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
   use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
   use MOM_spatial_means, only : global_area_mean
   use MOM_sponge, only : set_up_sponge_field, sponge_CS
@@ -339,7 +339,7 @@ contains
             call MOM_error(NOTE,"initialize_MOM_generic_tracer: "//&
                   "Using Generic Tracer IC file on native grid "//trim(CS%IC_file)//&
                   " for tracer "//trim(g_tracer_name))
-            call read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, domain=G%Domain%mpp_domain)
+            call MOM_read_data(CS%IC_file, trim(g_tracer_name), tr_ptr, G%Domain)
           endif
         else
           call MOM_error(FATAL,"initialize_MOM_generic_tracer: "//&

@@ -472,8 +472,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: h_harm        ! Harmonic mean layer thickness, in H.
   real :: c2_h_u(SZIB_(G), SZK_(G)+1) ! Wave speed squared divided by h at u-points, m s-2.
   real :: c2_h_v(SZI_(G), SZK_(G)+1)  ! Wave speed squared divided by h at v-points, m s-2.
-  real :: hN2_u(SZIB_(G), SZK_(G)+1) ! Thickness times N2 at interfaces above u-points, m s-2.
-  real :: hN2_v(SZI_(G), SZK_(G)+1)  ! Thickness times N2 at interfaces above v-points, m s-2.
+  real :: hN2_u(SZIB_(G), SZK_(G)+1) ! Thickness in m times N2 at interfaces above u-points, m s-2.
+  real :: hN2_v(SZI_(G), SZK_(G)+1)  ! Thickness in m times N2 at interfaces above v-points, m s-2.
   real :: Sfn_est       ! Two preliminary estimates (before limiting) of the
                         ! overturning streamfunction, both in m3 s-1.
   real :: Sfn_unlim_u(SZIB_(G), SZK_(G)+1) ! Streamfunction for u-points (m3 s-1)
@@ -659,7 +659,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
 
               ! hN2_u is used with the FGNV streamfunction formulation
-              hN2_u(I,K) = 0.5*( hg2A / haA + hg2B / haB ) * max(drdz*G_rho0 , N2_floor)
+              hN2_u(I,K) = (0.5 * H_to_m * ( hg2A / haA + hg2B / haB )) * &
+                           max(drdz*G_rho0 , N2_floor)
             endif
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
@@ -727,7 +728,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
-          hN2_u(I,K) = N2_floor * h_neglect
+          hN2_u(I,K) = N2_floor * dz_neglect
           Sfn_unlim_u(I,K) = 0.
         endif ! if (k > nk_linear)
         if (CS%id_sfn_unlim_x>0) diag_sfn_unlim_x(I,j,K) = Sfn_unlim_u(I,K)
@@ -904,7 +905,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
 
               ! hN2_v is used with the FGNV streamfunction formulation
-              hN2_v(i,K) = 0.5*( hg2A / haA + hg2B / haB ) * max(drdz*G_rho0 , N2_floor)
+              hN2_v(i,K) = (0.5 * H_to_m * ( hg2A / haA + hg2B / haB )) * &
+                           max(drdz*G_rho0 , N2_floor)
             endif
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
@@ -972,7 +974,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
-          hN2_v(i,K) = N2_floor * h_neglect
+          hN2_v(i,K) = N2_floor * dz_neglect
           Sfn_unlim_v(i,K) = 0.
         endif ! if (k > nk_linear)
         if (CS%id_sfn_unlim_y>0) diag_sfn_unlim_y(i,J,K) = Sfn_unlim_v(i,K)
