@@ -2185,7 +2185,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
-  call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
+  call tracer_hor_diff_init(Time, G, param_file, diag, CS%tv%eqn_of_state, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   if (CS%use_ALE_algorithm) &
     call register_diags_TS_vardec(Time, G%HI, GV, param_file, CS)
