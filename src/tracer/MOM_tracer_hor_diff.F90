@@ -11,7 +11,7 @@ use MOM_domains,               only : sum_across_PEs, max_across_PEs
 use MOM_domains,               only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,               only : pass_vector
 use MOM_debugging,             only : hchksum, uvchksum
-use MOM_EOS,                   only : calculate_density
+use MOM_EOS,                   only : calculate_density, EOS_type
 use MOM_error_handler,         only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,         only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,         only : callTree_enter, callTree_leave, callTree_waypoint
@@ -333,8 +333,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
     ! lateral diffusion iterations. Otherwise the call to neutral_diffusion_calc_coeffs()
     ! would be inside the itt-loop. -AJA
 
-    call neutral_diffusion_calc_coeffs(G, GV, h, tv%T, tv%S, tv%eqn_of_state, &
-                                       CS%neutral_diffusion_CSp)
+    call neutral_diffusion_calc_coeffs(G, GV, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
     do J=js-1,je ; do i=is,ie
       Coef_y(i,J) = I_numitts * khdt_y(i,J)
     enddo ; enddo
@@ -1326,10 +1325,11 @@ end subroutine tracer_epipycnal_ML_diff
 
 
 !> Initialize lateral tracer diffusion module
-subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
+subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS, CSnd)
   type(time_type), target,    intent(in)    :: Time       !< current model time
   type(ocean_grid_type),      intent(in)    :: G          !< ocean grid structure
   type(diag_ctrl), target,    intent(inout) :: diag       !< diagnostic control
+  type(EOS_type),  target,    intent(in)    :: EOS        !< Equation of state CS
   type(param_file_type),      intent(in)    :: param_file !< parameter file
   type(tracer_hor_diff_CS),   pointer       :: CS         !< horz diffusion control structure
   type(neutral_diffusion_CS), pointer       :: CSnd       !< pointer to neutral diffusion CS
@@ -1392,7 +1392,7 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, CS, CSnd)
                  units="nondim", default=1.0)
   endif
 
-  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, CS%neutral_diffusion_CSp)
+  CS%use_neutral_diffusion = neutral_diffusion_init(Time, G, param_file, diag, EOS, CS%neutral_diffusion_CSp)
   CSnd => CS%neutral_diffusion_CSp
   if (CS%use_neutral_diffusion .and. CS%Diffuse_ML_interior) call MOM_error(FATAL, "MOM_tracer_hor_diff: "// &
        "USE_NEUTRAL_DIFFUSION and DIFFUSE_ML_TO_INTERIOR are mutually exclusive!")
