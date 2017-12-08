@@ -65,6 +65,12 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (nz == 1) then
+    call MOM_error(WARNING, "MOM_tracer_diabatic.F90, tracer_vertdiff called "//&
+                            "with only one vertical level")
+    return
+  endif
+
   if (present(convert_flux_in)) convert_flux = convert_flux_in
   h_neglect = GV%H_subroundoff
   sink_dist = 0.0
@@ -413,7 +419,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     do i = 1, min(numberOfGroundings, maxGroundings)
       write(mesg(1:45),'(3es15.3)') G%geoLonT( iGround(i), jGround(i) ), &
                              G%geoLatT( iGround(i), jGround(i)) , hGrounding(i)
-      call MOM_error(WARNING, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
+      call MOM_error(WARNING, "MOM_tracer_diabatic.F90, applyTracerBoundaryFluxesInOut(): "//&
                               "Tracer created. x,y,dh= "//trim(mesg), all_print=.true.)
     enddo
 

@@ -40,7 +40,6 @@ use MOM_boundary_update,       only : update_OBC_data, update_OBC_CS
 use MOM_continuity,            only : continuity, continuity_init, continuity_CS
 use MOM_continuity,            only : continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
-use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_index,             only : hor_index_type
@@ -94,7 +93,9 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                   !! that were fed into the barotopic calculation, in m s-2.
 
   ! The following variables are only used with the split time stepping scheme.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height, in m.
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_)             :: eta     !< Instantaneous free surface height (in Boussinesq mode)
+                                                                   !! or column mass anomaly (in non-Boussinesq mode),
+                                                                   !! in units of H (m or kg m-2)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: u_av    !< layer x-velocity with vertical mean replaced by
                                                                    !! time-mean barotropic velocity over a baroclinic timestep (m s-1)
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: v_av    !< layer y-velocity with vertical mean replaced by
@@ -568,10 +569,9 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
+  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then
-    ! These should be done with a pass that excludes uh & vh.
-    call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
     if (CS%debug) &
       call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
@@ -580,9 +580,11 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
 
     if (CS%debug) &
       call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym)
+
+    ! These should be done with a pass that excludes uh & vh.
+!   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   endif
 
-  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   endif
@@ -878,7 +880,11 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, param_file, CS, restart_CS, u
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
 
-  vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  if (GV%Boussinesq) then
+    vd = var_desc("sfc",thickness_units,"Free surface Height",'h','1')
+  else
+    vd = var_desc("p_bot",thickness_units,"Bottom Pressure",'h','1')
+  endif
   call register_restart_field(CS%eta, vd, .false., restart_CS)
 
   vd = var_desc("u2","m s-1","Auxiliary Zonal velocity",'u','L')
@@ -943,7 +949,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
-  character(len=48) :: thickness_units, flux_units
+  character(len=48) :: thickness_units, flux_units, eta_rest_name
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 
@@ -1052,7 +1058,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   if (associated(OBC)) CS%OBC => OBC
   if (associated(update_OBC_CSp)) CS%update_OBC_CSp => update_OBC_CSp
 
-  if (.not. query_initialized(CS%eta,"sfc",restart_CS))  then
+  eta_rest_name = "sfc" ; if (.not.GV%Boussinesq) eta_rest_name = "p_bot"
+  if (.not. query_initialized(CS%eta, trim(eta_rest_name), restart_CS)) then
     ! Estimate eta based on the layer thicknesses - h.  With the Boussinesq
     ! approximation, eta is the free surface height anomaly, while without it
     ! eta is the mass of ocean per unit area.  eta always has the same

@@ -83,16 +83,13 @@ type, public :: advection_test_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  real, pointer :: tr_aux(:,:,:,:) => NULL() ! The masked tracer concentration
-                                             ! for output, in g m-3.
   type(p3d), dimension(NTR) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
-  logical :: use_sponge
+  logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
   logical :: tracers_may_reinit
 
   real :: x_origin, x_width ! Parameters describing the test functions
@@ -176,9 +173,6 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  call get_param(param_file, mdl, "MASK_TRACERS_IN_MASSLESS_LAYERS", CS%mask_tracers, &
-                 "If true, tracers will be masked out in massless layers. \n", &
-                 default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
@@ -187,9 +181,6 @@ function register_advection_test_tracer(HI, GV, param_file, CS, tr_Reg, restart_
 
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
-  endif
 
   do m=1,NTR
     if (m < 10) then ; write(name,'("tr",I1.1)') m
@@ -416,26 +407,9 @@ subroutine advection_test_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, 
     enddo
   endif
 
-  if (CS%mask_tracers) then
-    do m = 1,NTR ; if (CS%id_tracer(m) > 0) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-          CS%tr_aux(i,j,k,m) = CS%land_val(m)
-        else
-          CS%tr_aux(i,j,k,m) = CS%tr(i,j,k,m)
-        endif
-      enddo ; enddo ; enddo
-    endif ; enddo
-  endif
-
   do m=1,NTR
-    if (CS%mask_tracers) then
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr_aux(:,:,:,m),CS%diag)
-    else
-      if (CS%id_tracer(m)>0) &
-        call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    endif
+    if (CS%id_tracer(m)>0) &
+      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
       call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
     if (CS%id_tr_ady(m)>0) &
@@ -539,7 +513,6 @@ subroutine advection_test_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    if (associated(CS%tr_aux)) deallocate(CS%tr_aux)
     do m=1,NTR
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)

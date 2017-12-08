@@ -23,18 +23,19 @@ public register_Kelvin_OBC, Kelvin_OBC_end
 
 !> Control structure for Kelvin wave open boundaries.
 type, public :: Kelvin_OBC_CS ; private
-  integer :: mode = 0         !< Vertical mode
-  real    :: coast_angle = 0  !< Angle of coastline
-  real    :: coast_offset = 0 !< Longshore distance to coastal angle
-  real    :: N0 = 0           !< Brunt-Vaisala frequency
-  real    :: H0 = 0           !< Bottom depth
-  real    :: F_0              !< Coriolis parameter
-  real    :: plx = 0          !< Longshore wave parameter
-  real    :: pmz = 0          !< Vertical wave parameter
-  real    :: lambda = 0       !< Vertical wave parameter
-  real    :: omega            !< Frequency
-  real    :: rho_range        !< Density range
-  real    :: rho_0            !< Mean density
+  integer :: mode = 0          !< Vertical mode
+  real    :: coast_angle = 0   !< Angle of coastline
+  real    :: coast_offset1 = 0 !< Longshore distance to coastal angle
+  real    :: coast_offset2 = 0 !< Longshore distance to coastal angle
+  real    :: N0 = 0            !< Brunt-Vaisala frequency
+  real    :: H0 = 0            !< Bottom depth
+  real    :: F_0               !< Coriolis parameter
+  real    :: plx = 0           !< Longshore wave parameter
+  real    :: pmz = 0           !< Vertical wave parameter
+  real    :: lambda = 0        !< Vertical wave parameter
+  real    :: omega             !< Frequency
+  real    :: rho_range         !< Density range
+  real    :: rho_0             !< Mean density
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -67,15 +68,20 @@ function register_Kelvin_OBC(param_file, CS, OBC_Reg)
                  default=0.0, do_not_log=.true.)
   call get_param(param_file, mdl, "TOPO_CONFIG", config, do_not_log=.true.)
   if (trim(config) == "Kelvin") then
-    call get_param(param_file, mdl, "KELVIN_COAST_OFFSET", CS%coast_offset, &
+    call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", CS%coast_offset1, &
                    "The distance along the southern and northern boundaries \n"//&
                    "at which the coasts angle in.", &
                    units="km", default=100.0)
-    call get_param(param_file, mdl, "KELVIN_COAST_ANGLE", CS%coast_angle, &
-                   "The angle of the southern bondary beyond X=KELVIN_COAST_OFFSET.", &
+    call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", CS%coast_offset2, &
+                   "The distance from the southern and northern boundaries \n"//&
+                   "at which the coasts angle in.", &
+                   units="km", default=10.0)
+    call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", CS%coast_angle, &
+                   "The angle of the southern bondary beyond X=ROTATED_COAST_OFFSET.", &
                    units="degrees", default=11.3)
     CS%coast_angle = CS%coast_angle * (atan(1.0)/45.) ! Convert to radians
-    CS%coast_offset = CS%coast_offset * 1.e3          ! Convert to m
+    CS%coast_offset1 = CS%coast_offset1 * 1.e3          ! Convert to m
+    CS%coast_offset2 = CS%coast_offset2 * 1.e3          ! Convert to m
   endif
   if (CS%mode /= 0) then
     call get_param(param_file, mdl, "DENSITY_RANGE", CS%rho_range, &
@@ -112,16 +118,18 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
   character(len=40)  :: mdl = "Kelvin_initialize_topography" ! This subroutine's name.
   real :: min_depth ! The minimum and maximum depths in m.
   real :: PI ! 3.1415...
-  real :: coast_offset, coast_angle, right_angle
+  real :: coast_offset1, coast_offset2, coast_angle, right_angle
   integer :: i, j
 
   call MOM_mesg("  Kelvin_initialization.F90, Kelvin_initialize_topography: setting topography", 5)
 
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0)
-  call get_param(param_file, mdl, "KELVIN_COAST_OFFSET", coast_offset, &
+  call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_1", coast_offset1, &
                  default=100.0, do_not_log=.true.)
-  call get_param(param_file, mdl, "KELVIN_COAST_ANGLE", coast_angle, &
+  call get_param(param_file, mdl, "ROTATED_COAST_OFFSET_2", coast_offset2, &
+                 default=10.0, do_not_log=.true.)
+  call get_param(param_file, mdl, "ROTATED_COAST_ANGLE", coast_angle, &
                  default=11.3, do_not_log=.true.)
 
   coast_angle = coast_angle * (atan(1.0)/45.) ! Convert to radians
@@ -130,21 +138,15 @@ subroutine Kelvin_initialize_topography(D, G, param_file, max_depth)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     D(i,j)=max_depth
     ! Southern side
-    if ((G%geoLonT(i,j) > coast_offset) .AND. &
-        (atan2(G%geoLatT(i,j),G%geoLonT(i,j) - coast_offset) < &
-        coast_angle)) D(i,j)=0.5*min_depth
+    if ((G%geoLonT(i,j) - G%west_lon > coast_offset1) .AND. &
+        (atan2(G%geoLatT(i,j) - G%south_lat + coast_offset2, &
+         G%geoLonT(i,j) - G%west_lon - coast_offset1) < coast_angle)) &
+             D(i,j)=0.5*min_depth
     ! Northern side
-    if ((G%geoLonT(i,j) < G%len_lon - coast_offset) .AND. &
-        (atan2(G%len_lat - G%geoLatT(i,j),G%len_lon - coast_offset - G%geoLonT(i,j)) < &
-        coast_angle)) D(i,j)=0.5*min_depth
-    ! Western side
-    if ((G%geoLonT(i,j) < coast_offset) .AND. &
-        (atan2(G%geoLatT(i,j),G%geoLonT(i,j) - coast_offset) > &
-        right_angle + coast_angle)) D(i,j)=0.5*min_depth
-    ! Eastern side
-    if ((G%geoLonT(i,j) > G%len_lon - coast_offset) .AND. &
-        (atan2(G%len_lat - G%geoLatT(i,j),G%len_lon - coast_offset - G%geoLonT(i,j)) > &
-              right_angle + coast_angle)) D(i,j)=0.5*min_depth
+    if ((G%geoLonT(i,j) - G%west_lon < G%len_lon - coast_offset1) .AND. &
+        (atan2(G%len_lat + G%south_lat + coast_offset2 - G%geoLatT(i,j), &
+         G%len_lon + G%west_lon - coast_offset1 - G%geoLonT(i,j)) < coast_angle)) &
+             D(i,j)=0.5*min_depth
 
     if (D(i,j) > max_depth) D(i,j) = max_depth
     if (D(i,j) < min_depth) D(i,j) = 0.5*min_depth
@@ -212,8 +214,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
       do j=jsd,jed ; do I=IsdB,IedB
         x1 = 1000. * G%geoLonCu(I,j)
         y1 = 1000. * G%geoLatCu(I,j)
-        x = (x1 - CS%coast_offset) * cosa + y1 * sina
-        y = - (x1 - CS%coast_offset) * sina + y1 * cosa
+        x = (x1 - CS%coast_offset1) * cosa + y1 * sina
+        y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i+1,j) + G%bathyT(i,j)))
           val2 = fac * exp(- CS%F_0 * y / cff)
@@ -236,8 +238,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
       do J=JsdB,JedB ; do i=isd,ied
         x1 = 1000. * G%geoLonCv(i,J)
         y1 = 1000. * G%geoLatCv(i,J)
-        x = (x1 - CS%coast_offset) * cosa + y1 * sina
-        y = - (x1 - CS%coast_offset) * sina + y1 * cosa
+        x = (x1 - CS%coast_offset1) * cosa + y1 * sina
+        y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
           cff = sqrt(G%g_Earth * 0.5 * (G%bathyT(i,j+1) + G%bathyT(i,j)))
           val2 = fac * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)

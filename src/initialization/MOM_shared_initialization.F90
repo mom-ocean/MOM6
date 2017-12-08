@@ -12,7 +12,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
 use MOM_io, only : close_file, create_file, fieldtype, file_exists
-use MOM_io, only : read_data, SINGLE_FILE, MULTIPLE
+use MOM_io, only : MOM_read_data, MOM_read_vector, SINGLE_FILE, MULTIPLE
 use MOM_io, only : slasher, vardesc, write_field, var_desc
 use MOM_string_functions, only : uppercase
 
@@ -161,7 +161,7 @@ subroutine initialize_topography_from_file(D, G, param_file)
                   ! ensure the depth in masked-out PEs appears to be that of land
                   ! so this line does that in the halo regions. For non-masked PEs
                   ! the halo region is filled properly with a later pass_var().
-  call read_data(filename,trim(topo_varname),D,domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename, trim(topo_varname), D, G%Domain)
 
   call apply_topography_edits_from_file(D, G, param_file)
 
@@ -703,8 +703,7 @@ subroutine reset_face_lengths_file(G, param_file)
                            trim(filename))
   endif
 
-  call read_data(filename,"dyCuo",G%dy_Cu,domain=G%Domain%mpp_domain)
-  call read_data(filename,"dxCvo",G%dx_Cv,domain=G%Domain%mpp_domain)
+  call MOM_read_vector(filename, "dyCuo", "dxCvo", G%dy_Cu, G%dx_Cv, G%Domain)
   call pass_vector(G%dy_Cu, G%dx_Cv, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
 
   do j=jsd,jed ; do I=IsdB,IedB
