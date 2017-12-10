@@ -18,6 +18,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public channelssp_initialize_topography
+public channelssp_initialize_sponges
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -100,6 +101,116 @@ subroutine channelssp_initialize_topography(D, G, param_file, max_depth)
 
 
 end subroutine channelssp_initialize_topography
+
+
+! -----------------------------------------------------------------------------
+!> set up the sponge used for channelssp topography
+!> difference from the sponge designed in channel_initialization.F90: 
+!> no sponge to restore interface heights where there is continental slope
+!> specific for channelssp: the northermost several degrees of west/east boundaries
+
+subroutine channelssp_initialize_sponges(G, GV, use_temperature, tv, param_file, CSp, h)
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
+                                             ! so as to be used as input of
+                                             ! set_coord_from_file
+  logical, intent(in) :: use_temperature    !< Switch for temperature.
+  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
+                                            !! to any available thermodynamic
+                                            !! fields, potential temperature and
+                                            !! salinity or mixed layer density.
+                                            !! Absent fields have NULL ptrs.
+  type(param_file_type), intent(in) :: param_file !< A structure indicating the
+                                            !! open file to parse for model
+                                            !! parameter values.
+  type(sponge_CS),   pointer    :: CSp      !< A pointer that is set to point to
+                                            !! the control structure for the
+                                            !! sponge module.
+  real, intent(in), dimension(SZI_(G),SZJ_(G), SZK_(G)) :: h !< Thickness field. - may not be used!
+  real, dimension(SZK_(G)) :: rho           ! layer densities
+  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta, m.
+                                         ! eta only varies in z
+  real :: Idamp(SZI_(G),SZJ_(G))         ! The inverse damping rate, in s-1.
+                                         ! Idamp only varies in y; /= 0 only
+                                         ! within the sponge layer
+  real :: eta0(SZK_(G)+1)                ! target interface heights for density class in the sponge layer
+  real :: damp_rate, damp, spongelen = 2.0, etab, c = 7.7, rhot, rhob, min_depth, intrho, nlat, ll, dx
+  ! spongelen: thickness of sponge layer in dimensional degree
+  ! etab: bottom ocean height; rhot & rhob:  biggest/smallest rho in the sponge
+  ! layer; 
+  ! c: constant in fitting eta = eta(rho); intrho is interface rho; 
+  ! ll is the double width of continental slope, dx is non-dimensional
+  ! longitudinal grid increment
+  integer :: i, j, k, is, ie, js, je, nz
+  logical, save :: first_call = .true.
+  character(len=40)  :: mdl = "channelssp_initialize_sponges" ! This subroutine's name
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; eta0(:) = 0.0; etab = - G%max_depth;
+  ll = 3.0/G%len_lon            ! non-dimensional longitudinal range where continental slope is located  
+  dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/G%len_lon
+
+  rho = GV%Rlay         ! loaded target potential density for each layer
+  rhot = 1025.212       ! target surface rho in the sponge
+  rhob = 1027.412       ! target bottom interface rho in the sponge
+
+  if (first_call) call log_version(param_file, mdl, version)
+  first_call = .false.
+
+
+  call get_param(param_file, mdl, "SPONGE_RATE", damp_rate, &
+                 "The rate at which the zonal-mean sponges damp.", units="s-1", &
+                 default = 1.0/(10.0*86400.0))
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
+                 "The minimum depth of the ocean.", units="m", default=0.0)
+
+
+  nlat = G%south_lat + G%len_lat        ! should be -30.0 degree
+
+  ! compute target interface heights, stored in eta0
+  do k = 4, nz-2                        ! top 3 interface heights = 0.0, so start from k = 4
+    intrho = (rho(k-1)+rho(k))/2.0      ! interface rho
+    eta0(k) = etab*(1-1/c*log(1-(exp(c)-1)*(intrho-rhob)/(rhob-rhot)))  ! target height at each interface
+  enddo
+  do k = nz-1, nz+1
+    eta0(k) = etab                      ! interface heights reaches ocean bottom
+  enddo
+
+  ! initialize the damping rate so it is 0 outside of the sponge layer &
+  ! and increases linearly with latitude within the sponge layer
+  do i = is, ie; do j = js, je
+    if ((G%geoLatT(i,j) >= nlat-spongelen .and. G%geoLonT(i,j)>=ll+dx/2) .or. &
+        (G%geoLatT(i,j) >= nlat-spongelen .and. G%geoLonT(i,j)<=1.0-ll-dx/2)) then ! the sponge has meridional AND zonal range
+      damp = damp_rate/spongelen * (G%geoLatT(i,j)-nlat+spongelen)
+    else
+      damp = 0.0   ! outside of the sponge
+    endif
+    do k = 1,nz+1; eta(i,j,k) = eta0(k); enddo    ! initialize target heights for each (lat,lon) grid
+
+    if (G%bathyT(i,j) > min_depth) then ! bathT: Ocean bottom depth (positive) at tracer points, in m.
+      Idamp(i,j) = damp                 ! no need to divide this by 86400!!!
+    else
+      Idamp(i,j) = 0.0
+    endif     ! so that at the side walls, Idamp = 0
+  enddo; enddo
+
+  call initialize_sponge(Idamp, eta, G, param_file, CSp)
+
+!From MOM_sponge.F90
+!subroutine initialize_sponge(Idamp, eta, G, param_file, CSp, &
+!                             Iresttime_i_mean, int_height_i_mean)
+!
+! Arguments: Idamp - The inverse of the restoring time, in s-1.
+!  (in)      eta - The interface heights to damp back toward, in m.
+!  (in)      G - The ocean's grid structure.
+!  (in)      param_file - A structure indicating the open file to parse for
+!                         model parameter values.
+!  (in/out)  CSp - A pointer that is set to point to the control structure
+!                 for this module
+
+
+end subroutine channelssp_initialize_sponges
+
 
 
 ! -----------------------------------------------------------------------------

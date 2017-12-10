@@ -102,10 +102,9 @@ subroutine channel_initialize_topography(D, G, param_file, max_depth)
 end subroutine channel_initialize_topography
 
 ! -----------------------------------------------------------------------------
-!> This subroutine initializes layer thicknesses for the channel test case,
-!! by finding the depths of interfaces in a specified latitude-dependent
-!! temperature profile with an exponentially decaying thermocline on top of a
-!! linear stratification.
+!> sets up the sponge layer in the northernmost degrees of topography
+!> from westmost longitude to the eastmost longitude
+
 subroutine channel_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_ref)
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
@@ -219,8 +218,7 @@ subroutine channel_initialize_sponges(G, GV, use_temperature, tv, param_file, CS
   ! initialize the damping rate so it is 0 outside of the sponge layer &
   ! and increases linearly with latitude within the sponge layer
   do i = is, ie; do j = js, je
-    if ((G%geoLatT(i,j) >= nlat-spongelen .and. G%geoLonT(i,j)>=ll+dx/2) .or. &
-        (G%geoLatT(i,j) >= nlat-spongelen .and. G%geoLonT(i,j)<=1.0-ll-dx/2)) then ! the sponge has meridional AND zonal range
+    if (G%geoLatT(i,j) >= nlat-spongelen) then
       damp = damp_rate/spongelen * (G%geoLatT(i,j)-nlat+spongelen)
     else
       damp = 0.0   ! outside of the sponge
