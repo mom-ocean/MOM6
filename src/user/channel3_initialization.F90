@@ -29,8 +29,8 @@ contains
 !> This subroutine sets up the channel3 test case topography.
 !> channel3 is similar to channel but:
 !> 1) with sloped side walls to mimic continental slope, and to reduce numerical instability
-!> 2) the northern sponge region was left with no slope so that the sponge layer can be correctly adopted
-!> 3) the continental slope on west and east boundaries decay to zero at the edge of sponge
+!> 2) the sponge layer has no slope
+!> 3) the slope on west/east boundaries decay to zero at the edge of sponge
 
 subroutine channel3_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
@@ -63,7 +63,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
   ssp = ssp/latext
   D = 0.0
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/lonext
-  
+
   call MOM_mesg("  channel3_initialization.F90, channel3_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mod, version, "")
@@ -73,13 +73,12 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
   do j = js,je                ! meridional grid points
   do i = is,ie                ! zonal grid points
     x = (G%geoLonT(i,j)-G%west_lon) / lonext      ! non-dimensional longitude
-    y = (G%geoLatT(i,j)-G%south_lat) / latext     ! non-dimensional latitude
 
   !  This sets topography that has a reentrant channel between southern and northern boundaries
   !  difference from channls: no slope in the northern boundary, to allow the sponge to work properly
 
     D(i,j) = 1.0 - spike(x-dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp)&
-                        *spike(max(0.0, y-(1.0-ssp)+sdp/2.0), sdp) &                                     ! Patagonia, west
+                        *spike(max(0.0, y-(1.0-ssp-sdp/2.0)), sdp) &                                     ! Patagonia, west
                 -spike(x-1.0+dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp)&
                         *spike(max(0.0, y-(1.0-ssp)+sdp/2.0), sdp) &                                     ! Patagonia, east
                 -spike(x-dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &                   ! Antarctic Peninsula, west
@@ -101,7 +100,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
       endif
 
       ! make sure the model is not zonally reentrant outside of Drake Passage
-      if ((y>=reentrantn+sdp .and. x<=dx/1.5) .or. (y>=reentrantn+sdp .and. x>=1.0-dx/1.5)) then 
+      if ((y>=reentrantn+sdp .and. x<dx/1.5) .or. (y>=reentrantn+sdp .and. x>1.0-dx/1.5)) then 
         D(i,j) = 0.0
       endif
 
