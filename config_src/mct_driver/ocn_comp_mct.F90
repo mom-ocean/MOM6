@@ -2198,15 +2198,15 @@ subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp,
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
+        net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
                      (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
-      net_FW2(i,j) = net_FW(i,j)
+      net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)
     enddo ; enddo
 
     if (CS%adjust_net_fresh_water_by_scaling) then
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
       enddo; enddo
     else
       fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
