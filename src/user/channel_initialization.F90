@@ -83,8 +83,10 @@ subroutine channel_initialize_topography(D, G, param_file, max_depth)
     ! make sure no deeper than max depth and no shallower than Scotia Arc top
     if (D(i,j) < 1 - sa) then
       D(i,j) = 1 - sa
-    else if (D(i,j) > 1.0) then
+    elseif (D(i,j) > 1.0) then
       D(i,j) = 1.0
+    elseif (D(i,j)<0.0) then
+      D(i,j) = 0.0
     endif
 
     ! meridional walls outside of the reentrant channel, in the west boundary
@@ -93,7 +95,7 @@ subroutine channel_initialize_topography(D, G, param_file, max_depth)
     elseif (x<dx/1.5 .and. y >= reentrantn) then ! the wall north of Drake Passage
       D(i,j) = 0.0
     endif
-
+    
     D(i,j) = D(i,j) * max_depth
   enddo
   enddo
