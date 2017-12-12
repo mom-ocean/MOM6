@@ -25,8 +25,9 @@ public register_dyed_channel_OBC, dyed_channel_update_flow
 
 !> Control structure for tidal bay open boundaries.
 type, public :: dyed_channel_OBC_CS ; private
-  real :: zonal_flow = 8.57         !< Maximum inflow
-  real :: frequency  = 0.0         !< Inflow frequency
+  real :: zonal_flow = 8.57         !< Mean inflow
+  real :: tidal_amp = 0.0           !< Sloshing amplitude
+  real :: frequency  = 0.0          !< Sloshing frequency
 end type dyed_channel_OBC_CS
 
 integer :: ntr = 0
@@ -49,9 +50,12 @@ function register_dyed_channel_OBC(param_file, CS, OBC_Reg)
   endif
   allocate(CS)
 
-  call get_param(param_file, mdl, "SUPERCRITICAL_ZONAL_FLOW", CS%zonal_flow, &
-                 "Constant zonal flow imposed at upstream open boundary.", &
+  call get_param(param_file, mdl, "CHANNEL_MEAN_FLOW", CS%zonal_flow, &
+                 "Mean zonal flow imposed at upstream open boundary.", &
                  units="m/s", default=8.57)
+  call get_param(param_file, mdl, "CHANNEL_TIDAL_AMP", CS%tidal_amp, &
+                 "Sloshing amplitude imposed at upstream open boundary.", &
+                 units="m/s", default=0.0)
   call get_param(param_file, mdl, "CHANNEL_FLOW_FREQUENCY", CS%frequency, &
                  "Frequency of oscillating zonal flow.", &
                  units="s-1", default=0.0)
@@ -161,7 +165,7 @@ subroutine dyed_channel_update_flow(OBC, CS, G, Time)
       if (CS%frequency == 0.0) then
         flow = CS%zonal_flow
       else
-        flow = CS%zonal_flow * cos(2 * PI * CS%frequency * time_sec)
+        flow = CS%zonal_flow + CS%tidal_amp * cos(2 * PI * CS%frequency * time_sec)
       endif
       do k=1,G%ke
         do j=jsd,jed ; do I=IsdB,IedB
