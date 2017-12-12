@@ -29,6 +29,7 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_setLogUnit, shr_file_setLogLevel
 
 ! MOM6 modules
+use MOM_domains,          only : MOM_infra_init, MOM_infra_end
 use MOM_coms,             only : reproducing_sum
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
@@ -42,7 +43,7 @@ use MOM_forcing_type,     only: mech_forcing, allocate_mech_forcing, copy_back_f
 use MOM_forcing_type,     only: set_net_mass_forcing, set_derived_forcing_fields
 use MOM_forcing_type,     only: copy_common_forcing_fields
 use MOM_restart,          only: save_restart
-use MOM_domains,          only: MOM_infra_init, num_pes, root_pe, pe_here
+use MOM_domains,          only: num_pes, root_pe, pe_here
 use MOM_domains,          only: pass_vector, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only: pass_var, AGRID, fill_symmetric_edges
 use MOM_grid,             only: ocean_grid_type, get_global_grid_size
@@ -2468,12 +2469,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                  !                        !! ocean state to be deallocated upon termination.
   type(time_type),             intent(in)    :: Time      !< The model time, used for writing restarts.
 
-  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
-  !GMM call save_restart(Ocean_state, Time)
-  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
+  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag, end_diag_manager=.true.)
+  ! print time stats
+  call MOM_infra_end
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
-  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
 
 end subroutine ocean_model_end
 
