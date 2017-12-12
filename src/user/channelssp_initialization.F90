@@ -89,7 +89,7 @@ subroutine channelssp_initialize_topography(D, G, param_file, max_depth)
                 - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
 
       ! make sure no deeper than max depth and no shallower than Scotia Arc top IN the ocean interior
-      if (D(i,j)<1.0 - sa .and. x>=dx+ll/2/lonext .and. x<=1.0-ll/2/lonext-dx .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
+      if (D(i,j)<1.0 - sa .and. x>=dx/1.5+ll/2/lonext .and. x<=1.0-ll/2/lonext-dx/1.5 .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
         D(i,j) = 1 - sa
       else if (D(i,j) > 1.0) then
         D(i,j) = 1.0

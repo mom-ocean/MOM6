@@ -63,6 +63,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
   ssp = ssp/latext
   D = 0.0
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/lonext
+  print *, 'dx=', dx*lonext
 
   call MOM_mesg("  channel3_initialization.F90, channel3_initialize_topography: setting topography", 5)
 
@@ -73,6 +74,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
   do j = js,je                ! meridional grid points
   do i = is,ie                ! zonal grid points
     x = (G%geoLonT(i,j)-G%west_lon) / lonext      ! non-dimensional longitude
+    y=(G%geoLatT(i,j)-G%south_lat) / latext     ! non-dimensional latitude
 
   !  This sets topography that has a reentrant channel between southern and northern boundaries
   !  difference from channls: no slope in the northern boundary, to allow the sponge to work properly
@@ -80,7 +82,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
     D(i,j) = 1.0 - spike(x-dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp)&
                         *spike(max(0.0, y-(1.0-ssp-sdp/2.0)), sdp) &                                     ! Patagonia, west
                 -spike(x-1.0+dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp)&
-                        *spike(max(0.0, y-(1.0-ssp)+sdp/2.0), sdp) &                                     ! Patagonia, east
+                        *spike(max(0.0, y-(1.0-ssp-sdp/2.0)), sdp) &                                     ! Patagonia, east
                 -spike(x-dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &                   ! Antarctic Peninsula, west
                 -spike(x-1.0+dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &               ! Antarctic Peninsula, east
                 -spike(y, ll/latext) &                                                                   ! Antarctica
@@ -93,7 +95,7 @@ subroutine channel3_initialize_topography(D, G, param_file, max_depth)
                 - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
 
       ! make sure no deeper than max depth and no shallower than Scotia Arc top IN the ocean interior
-      if (D(i,j)<1.0 - sa .and. x>=ll/2/lonext .and. x<=1.0-ll/2/lonext .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
+      if (D(i,j)<1.0 - sa .and. x>=dx/1.5+ll/2/lonext .and. x<=1.0-ll/2/lonext-dx/1.5 .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
         D(i,j) = 1 - sa
       else if (D(i,j) > 1.0) then
         D(i,j) = 1.0
