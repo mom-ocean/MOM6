@@ -43,6 +43,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: deg = 2 ! Degree of polynomial used for reconstructions
   logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
   logical :: refine_position = .false.
+  logical :: debug
   integer :: max_iter ! Maximum number of iterations if refine_position is defined
   real :: tolerance   ! Convergence criterion representing difference from true neutrality
   real :: ref_pres    ! Reference pressure, negative if using locally referenced neutral density
@@ -93,8 +94,6 @@ end type neutral_diffusion_CS
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
 character(len=40)  :: mdl = "MOM_neutral_diffusion" ! module name
-
-logical :: debug_this_module = .false. ! If true, verbose output of find neutral position
 
 contains
 
@@ -185,11 +184,11 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
                      default=10)
       call set_ndiff_aux_params(CS%ndiff_aux_CS, max_iter = max_iter, drho_tol = drho_tol, xtol = xtol)
     endif
-    call set_ndiff_aux_params(CS%ndiff_aux_CS, deg=CS%deg, ref_pres = CS%ref_pres, EOS = EOS)
-    call get_param(param_file, mdl, "NDIFF_DEBUG", debug_this_module,             &
+    call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
                    "Turns on verbose output for discontinuous neutral \n"//      &
                    "diffusion routines.", &
                    default = .false.)
+    call set_ndiff_aux_params(CS%ndiff_aux_CS, deg=CS%deg, ref_pres = CS%ref_pres, EOS = EOS, debug = CS%debug)
   endif
 
 ! call get_param(param_file, mdl, "KHTR", CS%KhTr, &
@@ -1187,7 +1186,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
     dRho = 0.5 * &
       ( ( dRdT_r(kl_right,ki_right) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,ki_right) - Tl(kl_left,ki_left) ) &
       + ( dRdS_r(kl_right,ki_right) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,ki_right) - Sl(kl_left,ki_left) ) )
-    if (debug_this_module)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  &
+    if (CS%debug)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  &
         kl_left=",kl_left, "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
@@ -1232,7 +1231,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
       ! Potential density difference, rho(kl) - rho(kl_right,ki_right) (will be positive)
       dRhoBot = calc_drho(Tl(kl_left,2), Sl(kl_left,2), dRdT_l(kl_left,2), dRdS_l(kl_left,2), &
                           T_other, S_other, dRdT_other, dRdS_other)
-      if (debug_this_module) then
+      if (CS%debug) then
         write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching left layer ", kl_left, &
                                                   " dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
         write(*,'(A,I2,X,I2)') "Searching from right: ", kl_right, ki_right
@@ -1284,7 +1283,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
       endif
       dRhoBot = calc_drho(Tr(kl_right,2), Sr(kl_right,2), dRdT_r(kl_right,2), dRdS_r(kl_right,2), &
                   T_other, S_other, dRdT_other, dRdS_other)
-      if (debug_this_module) then
+      if (CS%debug) then
         write(*,'(A,I2,A,E12.4,A,E12.4,A,E12.4)') "Searching right layer ", kl_right, &
                                                   "  dRhoTop=", dRhoTop, "  dRhoBot=", dRhoBot
         write(*,'(A,I2,X,I2)') "Searching from left: ", kl_left, ki_left
@@ -1319,7 +1318,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
     lastK_left = KoL(k_surface)  ; lastP_left = PoL(k_surface)
     lastK_right = KoR(k_surface) ; lastP_right = PoR(k_surface)
 
-    if (debug_this_module)  write(*,'(A,I3,A,ES16.6,A,I2,A,ES16.6)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
+    if (CS%debug)  write(*,'(A,I3,A,ES16.6,A,I2,A,ES16.6)') "KoL:", KoL(k_surface), " PoL:", PoL(k_surface), "     KoR:", &
       KoR(k_surface), " PoR:", PoR(k_surface)
     ! Effective thickness
     if (k_surface>1) then

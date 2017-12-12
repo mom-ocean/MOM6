@@ -27,6 +27,7 @@ type, public :: ndiff_aux_CS_type ; private
   real :: ref_pres        !< Determines whether a constant reference pressure is used everywhere or locally referenced
                           !< density is done. ref_pres <-1 is the latter, ref_pres >= 0. otherwise
   logical :: force_brent = .false.  !< Use Brent's method instead of Newton even when second derivatives are available
+  logical :: debug
   type(EOS_type), pointer :: EOS !< Pointer to equation of state used in the model
 
 end type ndiff_aux_CS_type
@@ -34,7 +35,7 @@ end type ndiff_aux_CS_type
 contains
 
 !> Initialize the parameters used to iteratively find the neutral direction
-subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, force_brent, EOS)
+subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, force_brent, EOS, debug)
   type(ndiff_aux_CS_type),  intent(inout) :: CS          !< Control structure for refine_pos
   integer,        optional, intent(in   ) :: deg         !< Degree of polynommial used in reconstruction
   integer,        optional, intent(in   ) :: max_iter    !< Maximum number of iterations
@@ -42,6 +43,7 @@ subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, fo
   real,           optional, intent(in   ) :: xtol        !< Tolerance for change in position
   real,           optional, intent(in   ) :: ref_pres    !< Reference pressure to use
   logical,        optional, intent(in   ) :: force_brent !< Force Brent method for linear, TEOS-10, and WRIGHT
+  logical,        optional, intent(in   ) :: debug       !< If true, print output use to help debug neutral diffusion
   type(EOS_type), target, optional, intent(in   ) :: EOS !< Equation of state
 
   if (present( deg         )) CS%nterm       =  deg + 1
@@ -51,6 +53,7 @@ subroutine set_ndiff_aux_params( CS, deg, max_iter, drho_tol, xtol, ref_pres, fo
   if (present( ref_pres    )) CS%ref_pres    =  ref_pres
   if (present( force_brent )) CS%force_brent =  force_brent
   if (present( EOS         )) CS%EOS         => EOS
+  if (present( debug       )) CS%debug       =  debug
 
 end subroutine set_ndiff_aux_params
 
@@ -246,6 +249,8 @@ subroutine search_other_column(dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, k
         endif
       elseif (dRhoTop >= dRhoBot) then
         out_P = 1. ; out_K = kl
+      elseif (dRhoTop < 0. .and. dRhoBot < 0.)then
+        out_P = 1. ; out_K = kl
       else
         out_K = kl
         out_P = max(interpolate_for_nondim_position( dRhoTop, Ptop, dRhoBot, Pbot ),lastP)
@@ -278,6 +283,8 @@ subroutine search_other_column(dRhoTop, dRhoBot, Ptop, Pbot, lastP, lastK, kl, k
         out_P = max(0.,lastP) ; out_K = kl
       endif
     elseif (dRhoTop >= dRhoBot) then
+      out_P = 1. ; out_K = kl
+    elseif (dRhoTop < 0. .and. dRhoBot < 0.)then
       out_P = 1. ; out_K = kl
     else
       out_K = kl
@@ -355,6 +362,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
   real :: delta_rho, d_delta_rho_dP ! Terms for the Newton iteration
   real :: P_int, P_min, P_ref ! Interpolated pressure
   real :: delta_rho_init, delta_rho_final
+  real :: neg_x, neg_fun
   real :: T, S, alpha, beta, alpha_avg, beta_avg
   ! Newton's Method with variables
   real :: dT_dP, dS_dP, delta_T, delta_S, delta_P
@@ -364,7 +372,6 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
   real :: d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
 
   real :: P_last
-  logical :: debug = .false.
   if (CS%ref_pres>=0.) P_ref = CS%ref_pres
   delta_P = P_bot-P_top
   refine_nondim_position = min_bound
@@ -390,8 +397,11 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
     return
   endif
 
+  ! Set the initial values to ensure that the algorithm returns a 'negative' value
+  neg_fun = delta_rho
+  neg_x = min_bound
 
-  if (debug) then
+  if (CS%debug) then
     write (*,*) "------"
     write (*,*) "Starting x0, delta_rho: ", min_bound, delta_rho
   endif
@@ -440,7 +450,13 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
       endif
       call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
                        b, fb, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
-      if (debug) print *, "Iteration, b, fb: ", iter, b, fb
+      if (CS%debug) print *, "Iteration, b, fb: ", iter, b, fb
+
+      if (fb < 0. .and. fb > neg_fun) then
+        neg_fun = fb
+        neg_x = b
+      endif
+
       ! For the logic to find neutral surfaces to work properly, the function needs to converge to zero
       !  or a small negative value
       if( (fb <= 0.) .and. (fb >= -CS%drho_tol) ) then
@@ -465,7 +481,10 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
     refine_nondim_position = b
     delta_rho = fb
   endif
-
+  if (delta_rho > 0.) then
+    refine_nondim_position = neg_x
+    delta_rho = neg_fun
+  endif
   ! Do Brent if analytic second derivatives don't exist
   if (do_brent) then
     sa = max(refine_nondim_position,min_bound) ; fa = delta_rho
@@ -551,7 +570,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
 
   ! Make sure that the result is bounded between 0 and 1
   if (refine_nondim_position>1.) then
-    if (debug) then
+    if (CS%debug) then
       write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
       write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
       write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
@@ -565,7 +584,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
   endif
 
   if (refine_nondim_position<min_bound) then
-    if (debug) then
+    if (CS%debug) then
       write (*,*) "T, T Poly Coeffs: ", T, ppoly_T
       write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
       write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
@@ -578,7 +597,7 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
     refine_nondim_position = min_bound
   endif
 
-  if (debug) then
+  if (CS%debug) then
     call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S, &
                      refine_nondim_position, delta_rho)
     write (*,*) "End delta_rho: ", delta_rho
