@@ -17,6 +17,7 @@ public drho_at_pos
 public search_other_column
 public interpolate_for_nondim_position
 public refine_nondim_position
+public check_neutral_positions
 public kahan_sum
 
 type, public :: ndiff_aux_CS_type ; private
@@ -79,6 +80,11 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
     stable_cell(k) = delta_rho >= 0.
   enddo
 
+  if (ANY(.not. stable_cell)) then
+    print *, "Unstable cell 1"
+  endif
+
+  first_stable = 1
   ! Check to see that bottom interface of upper cell is lighter than the upper interface of the lower cell
   do k=1,nk
     if (stable_cell(k)) then
@@ -100,6 +106,9 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
     ! If the lower cell is marked as stable, then it should be the next reference cell
     if (stable_cell(k)) prev_stable = k
   enddo
+  if (ANY(.not. stable_cell)) then
+    print *, "Unstable cell 2"
+  endif
 
   ! Number of interfaces is the 2 times number of stable cells in the water column
   ns = 0
@@ -446,6 +455,9 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         ! Test to see if it fell out of the bracketing interval. If so, take a bisection step
         if (b < a .or. b > c) then
           b = 0.5*(a + c)
+          if (CS%debug) print *, "Bisection step size: ", b-b_last
+        else
+          if (CS%debug) print *, "Newton step size, f'(b): ", (fb/d_delta_rho_dP)/delta_P, d_delta_rho_dP
         endif
       endif
       call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
@@ -604,10 +616,51 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
     write (*,*) "x0, delta_x: ", min_bound, refine_nondim_position-min_bound
     write (*,*) "refine_nondim_position: ", refine_nondim_position
     write (*,*) "Iterations: ", iter
+    write (*,*) "T_poly_coeffs: ", ppoly_T
+    write (*,*) "S_poly_coeffs: ", ppoly_S
     write (*,*) "******"
   endif
 
 end function refine_nondim_position
+
+subroutine check_neutral_positions(CS, Ptop_l, Pbot_l, Ptop_r, Pbot_r, PoL, PoR, Tl_coeffs, Tr_coeffs, &
+                                 Sl_coeffs, Sr_coeffs)
+  type(ndiff_aux_CS_type),   intent(in) :: CS        !< Control structure with parameters for this module
+  real,                      intent(in) :: Ptop_l    !< Pressure at top interface of left cell
+  real,                      intent(in) :: Pbot_l    !< Pressure at bottom interface of left cell
+  real,                      intent(in) :: Ptop_r    !< Pressure at top interface of right cell
+  real,                      intent(in) :: Pbot_r    !< Pressure at bottom interface of right cell
+  real,                      intent(in) :: PoL       !< Nondim position in left cell
+  real,                      intent(in) :: PoR       !< Nondim position in right cell
+  real, dimension(CS%nterm), intent(in) :: Tl_coeffs !< T polynomial coefficients of left cell
+  real, dimension(CS%nterm), intent(in) :: Tr_coeffs !< T polynomial coefficients of right cell
+  real, dimension(CS%nterm), intent(in) :: Sl_coeffs !< S polynomial coefficients of left cell
+  real, dimension(CS%nterm), intent(in) :: Sr_coeffs !< S polynomial coefficients of right cell
+  ! Local variables
+  real :: Pl, Pr, Tl, Tr, Sl, Sr
+  real :: alpha_l, alpha_r, beta_l, beta_r
+  real :: delta_rho
+
+  Pl = (1. - PoL)*Ptop_l + PoL*Pbot_l
+  Pr = (1. - PoR)*Ptop_r + PoR*Pbot_r
+  Tl = evaluation_polynomial( Tl_coeffs, CS%nterm, PoL )
+  Sl = evaluation_polynomial( Sl_coeffs, CS%nterm, PoL )
+  Tr = evaluation_polynomial( Tr_coeffs, CS%nterm, PoR )
+  Sr = evaluation_polynomial( Sr_coeffs, CS%nterm, PoR )
+
+  if (CS%ref_pres<0.) then
+    call calculate_density_derivs( Tl, Sl, Pl, alpha_l, beta_l, CS%EOS )
+    call calculate_density_derivs( Tr, Sr, Pr, alpha_r, beta_r, CS%EOS )
+  else
+    call calculate_density_derivs( Tl, Sl, CS%ref_pres, alpha_l, beta_l, CS%EOS )
+    call calculate_density_derivs( Tr, Sr, CS%ref_pres, alpha_r, beta_r, CS%EOS )
+  endif
+
+  delta_rho = 0.5*( (alpha_l + alpha_r)*(Tl - Tr) + (beta_l + beta_r)*(Sl - Sr) )
+  print *, "Delta-rho: ", delta_rho
+
+
+end subroutine check_neutral_positions
 
 !> Do a compensated sum to account for roundoff level
 subroutine kahan_sum(sum, summand, c)
