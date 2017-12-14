@@ -255,7 +255,7 @@ end subroutine channelssp_initialize_sponges
       xx = x
     endif
 
-    cosbellh  = cos(PI/2.0*MIN(xx/L, 1.0))
+    cosbellh  = cos(PI/2.0*MIN(abs(xx)/L, 1.0))
   end function cosbellh
 
   !< similar to cosbellh but takes a different shape of bell

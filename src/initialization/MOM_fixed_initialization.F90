@@ -35,6 +35,7 @@ use shoebox_initialization, only : shoebox_initialize_topography
 use channel_initialization, only : channel_initialize_topography
 use channels_initialization, only : channels_initialize_topography
 use channelssp_initialization, only : channelssp_initialize_topography
+use channel2_initialization, only : channel2_initialize_topography
 use channel3_initialization, only : channel3_initialize_topography
 use box_initialization, only : box_initialize_topography
 use bowlhk_initialization, only : bowlhk_initialize_topography
@@ -204,6 +205,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t channel - use the channel test case topography. \n"//&
                  " \t channels - use the channels test case topography. \n"//&
                  " \t channelssp - use the channelssp test case topography. \n"//&
+                 " \t channel2 - use the channel2 test case topography. \n"//&
                  " \t channel3 - use the channel3 test case topography. \n"//&
                  " \t box - use the box test case topography. \n"//&
                  " \t bowlhk - use the bowlhk test case topography. \n"//&
@@ -236,6 +238,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("channel"); call channel_initialize_topography(D, G, PF, max_depth)
     case ("channels"); call channels_initialize_topography(D, G, PF, max_depth)
     case ("channelssp"); call channelssp_initialize_topography(D, G, PF, max_depth)
+    case ("channel2"); call channel2_initialize_topography(D, G, PF, max_depth)
     case ("channel3"); call channel3_initialize_topography(D, G, PF, max_depth)
     case ("box"); call box_initialize_topography(D, G, PF, max_depth)
     case ("bowlhk"); call bowlhk_initialize_topography(D, G, PF, max_depth)    

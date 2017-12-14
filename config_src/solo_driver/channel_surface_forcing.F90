@@ -259,7 +259,7 @@ end subroutine channel_surface_forcing_init
          xx = x
        endif
 
-       cosbellh  = cos(PI/2.0*MIN(xx/L, 1.0))
+       cosbellh  = cos(PI/2.0*MIN(abs(xx)/L, 1.0))
      end function cosbellh
 
 
