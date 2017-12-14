@@ -75,8 +75,6 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:,:,:) :: dRdT_i     ! dRho/dT (kg/m3/degC) at top edge
   real,    allocatable, dimension(:,:,:,:) :: dRdS_i     ! dRho/dS (kg/m3/ppt) at top edge
   integer, allocatable, dimension(:,:)     :: ns     ! Number of interfacs in a column
-  real,    allocatable, dimension(:,:,:) :: dRdT_l ! dRho/dT (kg/m3/degC) cell average
-  real,    allocatable, dimension(:,:,:) :: dRdS_l ! dRho/dS (kg/m3/ppt) cell average
   logical, allocatable, dimension(:,:,:) :: stable_cell  ! True if the cell is stably stratified wrt to the next cell
 
   type(diag_ctrl), pointer :: diag ! structure to regulate output
@@ -85,10 +83,8 @@ type, public :: neutral_diffusion_CS ; private
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_cont_tend_2d ! k-summed tracer content tendency
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_trans_x_2d   ! k-summed ndiff zonal tracer transport
   integer, allocatable, dimension(:) :: id_neutral_diff_tracer_trans_y_2d   ! k-summed ndiff merid tracer transport
-  integer :: id_stable_cell = -1
   integer :: id_uhEff_2d = -1
   integer :: id_vhEff_2d = -1
-
 
   real    :: C_p ! heat capacity of seawater (J kg-1 K-1)
   type(EOS_type), pointer :: EOS !< Equation of state parameters
@@ -219,8 +215,6 @@ logical function neutral_diffusion_init(Time, G, param_file, diag, EOS, CS)
   allocate(CS%Sint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Sint(:,:,:) = 0.
   allocate(CS%Pint(SZI_(G),SZJ_(G),SZK_(G)+1)) ; CS%Pint(:,:,:) = 0.
   allocate(CS%stable_cell(SZI_(G),SZJ_(G),SZK_(G))) ; CS%stable_cell(:,:,:) = .true.
-  allocate(CS%dRdT_l(SZI_(G),SZJ_(G),SZK_(G)))   ; CS%dRdT_l(:,:,:) = 0.
-  allocate(CS%dRdS_l(SZI_(G),SZJ_(G),SZK_(G)))   ; CS%dRdS_l(:,:,:) = 0.
   ! U-points
   allocate(CS%uPoL(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoL(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
   allocate(CS%uPoR(G%isd:G%ied,G%jsd:G%jed, CS%nsurf)); CS%uPoR(G%isc-1:G%iec,G%jsc:G%jec,:)   = 0.
@@ -369,8 +363,6 @@ subroutine neutral_diffusion_diag_init(Time, G, diag, C_p, Reg, CS)
 
   enddo
 
-  CS%id_stable_cell = register_diag_field('ocean_model', 'ndiff_stable_cell', diag%axesTl, Time, &
-    '1 if the cell is stably stratified wrt to the one below and above', 'none')
   CS%id_uheff_2d = register_diag_field('ocean_model', 'uhEff_2d', diag%axesCu1, Time, &
     'Total thickness of diffusive sublayers at u-points', 'm')
   CS%id_vheff_2d = register_diag_field('ocean_model', 'vhEff_2d', diag%axesCv1, Time, &
@@ -393,7 +385,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   integer :: i, j, k
   ! Variables used for reconstructions
   real, dimension(SZK_(G),2) :: ppoly_r_S            ! Reconstruction slopes
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)) :: stable_cell_real
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
@@ -412,8 +403,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
     CS%S_i(:,:,:,:) = 0.
     CS%dRdT_i(:,:,:,:) = 0.
     CS%dRdS_i(:,:,:,:) = 0.
-    CS%dRdT_l(:,:,:) = 0.
-    CS%dRdS_l(:,:,:) = 0.
     CS%ns(:,:) = 0.
     CS%stable_cell(:,:,:) = .true.
   endif
@@ -422,12 +411,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
   CS%Pint(:,:,1) = 0.
   do k=1,G%ke ; do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
       CS%Pint(i,j,k+1) = CS%Pint(i,j,k) + h(i,j,k)*GV%H_to_Pa
-      if (CS%ref_pres<=0.) then
-        P_lay = 0.5*(CS%Pint(i,j,k+1) + CS%Pint(i,j,k))
-        call calculate_density_derivs(T(i,j,k), S(i,j,k), P_lay, CS%dRdT_l(i,j,k), CS%dRdS_l(i,j,k),  CS%EOS)
-      else
-        call calculate_density_derivs(T(i,j,k), S(i,j,k), CS%ref_pres, CS%dRdT_l(i,j,k), CS%dRdS_l(i,j,k),  CS%EOS)
-      endif
   enddo ; enddo ; enddo
 
   do j = G%jsc-1, G%jec+1
@@ -469,16 +452,9 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
 
   if (.not. CS%continuous_reconstruction) then
     do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
-      call mark_unstable_cells( G%ke, CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), CS%stable_cell(i,j,:), CS%ns(i,j) )
+      call mark_unstable_cells( G%ke, CS%dRdT_i(i,j,:,:), CS%dRdS_i(i,j,:,:), CS%T_i(i,j,:,:), CS%S_i(i,j,:,:), &
+                                CS%stable_cell(i,j,:), CS%ns(i,j) )
     enddo ; enddo
-    do k = 1,G%ke ; do j = G%jsc-1, G%jec+1 ; do i = G%isc-1, G%iec+1
-      if (CS%stable_cell(i,j,k)) then
-        stable_cell_real(i,j,k) = 1.
-      else
-        stable_cell_real(i,j,k) = 0.
-      endif
-    enddo ; enddo ; enddo
-    if (CS%id_stable_cell>0) call post_data(CS%id_stable_cell, stable_cell_real, CS%diag)
   endif
 
   CS%uhEff(:,:,:) = 0.
@@ -542,14 +518,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, CS)
 
   if (CS%id_uhEff_2d>0) then
     hEff_sum(:,:) = 0.
-    do k = 1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
+    do k = 1,CS%nsurf-1 ; do j=G%jsc,G%jec ; do i=G%isc-1,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%uhEff(i,j,k)
     enddo ; enddo; enddo
     call post_data(CS%id_uhEff_2d, hEff_sum, CS%diag)
   endif
   if (CS%id_vhEff_2d>0) then
     hEff_sum(:,:) = 0.
-    do k = 1,G%ke ; do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
+    do k = 1,CS%nsurf-1 ; do j=G%jsc-1,G%jec ; do i=G%isc,G%iec
       hEff_sum(i,j) = hEff_sum(i,j) + CS%vhEff(i,j,k)
     enddo ; enddo; enddo
     call post_data(CS%id_vhEff_2d, hEff_sum, CS%diag)
@@ -1309,6 +1285,7 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
       dRdS_other = dRdS_l(kl_left, ki_left)
       ! Interpolate for the neutral surface position within the right column, layer krm1
       ! Potential density difference, rho(kr-1) - rho(kl) (should be negative)
+
       if (CS%refine_position .and. (lastK_right == kl_right)) then
         call drho_at_pos(CS%ndiff_aux_CS, T_other, S_other, dRdT_other, dRdS_other, Pres_r(kl_right),          &
                          Pres_l(kl_right+1), ppoly_T_r(kl_right,:), ppoly_S_r(kl_right,:), lastP_right, dRhoTop)
@@ -1375,22 +1352,25 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
     endif
   enddo neutral_surfaces
   if (CS%debug) then
-    print *, "==========Start Neutral Surfaces=========="
+    write (*,*) "==========Start Neutral Surfaces=========="
     do k = 1,ns-1
       if (hEff(k)>0.) then
       kl_left = KoL(k)
       kl_right = KoR(k)
+      write (*,'(A,I3,X,ES16.6,X,I3,X,ES16.6)') "Top surface KoL, PoL, KoR, PoR: ", kl_left, PoL(k), kl_right, PoR(k)
       call check_neutral_positions(CS%ndiff_aux_CS, Pres_l(kl_left), Pres_l(kl_left+1), Pres_r(kl_right), &
                                    Pres_r(kl_right+1), PoL(k), PoR(k), ppoly_T_l(kl_left,:), ppoly_T_r(kl_right,:), &
                                    ppoly_S_l(kl_left,:), ppoly_S_r(kl_right,:))
       kl_left = KoL(k+1)
       kl_right = KoR(k+1)
+      write (*,'(A,I3,X,ES16.6,X,I3,X,ES16.6)') "Bot surface KoL, PoL, KoR, PoR: ", kl_left, PoL(k+1), kl_right, PoR(k)
       call check_neutral_positions(CS%ndiff_aux_CS, Pres_l(kl_left), Pres_l(kl_left+1), Pres_r(kl_right), &
                                    Pres_r(kl_right+1), PoL(k), PoR(k), ppoly_T_l(kl_left,:), ppoly_T_r(kl_right,:), &
                                    ppoly_S_l(kl_left,:), ppoly_S_r(kl_right,:))
       endif
     enddo
-    print *, "==========End Neutral Surfaces=========="
+    write(*,'(A,E16.6)') "Total thickness of sublayers: ", SUM(hEff)
+    write(*,*) "==========End Neutral Surfaces=========="
   endif
 
 end subroutine find_neutral_surface_positions_discontinuous
@@ -1506,13 +1486,6 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                                 aL_r(krt), aR_r(krt), Tr(krt))
         dT_top = T_right_top - T_left_top
         dT_bottom = T_right_bottom - T_left_bottom
-        dT_ave = 0.5 * ( dT_top + dT_bottom )
-        dT_layer = T_right_layer - T_left_layer
-        if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
-          dT_ave = 0.
-        else
-          dT_ave = dT_layer
-        endif
       else ! Discontinuous reconstruction
         klb = KoL(k_sublayer+1)
         klt = KoL(k_sublayer)
@@ -1538,9 +1511,6 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                                             PiR(k_sublayer), PiR(k_sublayer+1))
         dT_top = T_right_top - T_left_top
         dT_bottom = T_right_bottom - T_left_bottom
-        dT_ave = T_right_layer - T_left_layer
-        dT_layer = Tr(klt) - Tl(krt)
-        dT_ave = dT_layer
       endif
       if (signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
         dT_ave = 0.
@@ -1548,6 +1518,13 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         dT_ave = dT_ave
       endif
       dT_ave = dT_ave
+    endif
+    dT_ave = 0.5 * ( dT_top + dT_bottom )
+    dT_layer = T_right_layer - T_left_layer
+    if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
+      dT_ave = 0.
+    else
+      dT_ave = dT_layer
     endif
     Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
   enddo

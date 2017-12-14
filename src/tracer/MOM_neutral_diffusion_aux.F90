@@ -80,10 +80,6 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
     stable_cell(k) = delta_rho >= 0.
   enddo
 
-  if (ANY(.not. stable_cell)) then
-    print *, "Unstable cell 1"
-  endif
-
   first_stable = 1
   ! Check to see that bottom interface of upper cell is lighter than the upper interface of the lower cell
   do k=1,nk
@@ -106,9 +102,6 @@ subroutine mark_unstable_cells(nk, dRdT, dRdS,T, S, stable_cell, ns)
     ! If the lower cell is marked as stable, then it should be the next reference cell
     if (stable_cell(k)) prev_stable = k
   enddo
-  if (ANY(.not. stable_cell)) then
-    print *, "Unstable cell 2"
-  endif
 
   ! Number of interfaces is the 2 times number of stable cells in the water column
   ns = 0
@@ -436,15 +429,15 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
       endif
       dalpha_dS = dbeta_dT ! Cross derivatives are identicial
       ! By chain rule dT_dP= (dT_dz)*(dz/dP) = dT_dz / (Pbot-Ptop)
-      dT_dP = first_derivative_polynomial( ppoly_T, CS%nterm, refine_nondim_position ) / delta_P
-      dS_dP = first_derivative_polynomial( ppoly_S, CS%nterm, refine_nondim_position ) / delta_P
+      dT_dP = first_derivative_polynomial( ppoly_T, CS%nterm, b ) / delta_P
+      dS_dP = first_derivative_polynomial( ppoly_S, CS%nterm, b ) / delta_P
       ! Total derivative of d_delta_rho wrt P
       d_delta_rho_dP = 0.5*( delta_S*(dS_dP*dbeta_dS + dT_dP*dbeta_dT + dbeta_dP) +     &
                              ( delta_T*(dS_dP*dalpha_dS + dT_dP*dalpha_dT + dalpha_dP))) + &
                              dS_dP*beta_avg + dT_dP*alpha_avg
-      ! This probably won't happen, but if it does nudge the value a little for the next iteration
+      ! This probably won't happen, but if it does take a bisection
       if (d_delta_rho_dP == 0.) then
-        b = b + 2*EPSILON(b)*b
+        b = 0.5*(a+c)
       else
         ! Newton step update
         P_int = P_int - (fb / d_delta_rho_dP)
@@ -455,14 +448,11 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
         ! Test to see if it fell out of the bracketing interval. If so, take a bisection step
         if (b < a .or. b > c) then
           b = 0.5*(a + c)
-          if (CS%debug) print *, "Bisection step size: ", b-b_last
-        else
-          if (CS%debug) print *, "Newton step size, f'(b): ", (fb/d_delta_rho_dP)/delta_P, d_delta_rho_dP
         endif
       endif
       call drho_at_pos(CS, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, ppoly_T, ppoly_S,   &
                        b, fb, P_int, T, S, alpha_avg, beta_avg, delta_T, delta_S)
-      if (CS%debug) print *, "Iteration, b, fb: ", iter, b, fb
+      if (CS%debug) write(*,'(A,I3.3,X,ES23.15,X,ES23.15)') "Iteration, b, fb: ", iter, b, fb
 
       if (fb < 0. .and. fb > neg_fun) then
         neg_fun = fb
@@ -587,7 +577,6 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
       write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
       write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
       write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
-      write (*,*) "P, dT_dP, dS_dP:", P_int, dT_dP, dS_dP
       write (*,*) "x0: ", min_bound
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
@@ -601,7 +590,6 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
       write (*,*) "S, S Poly Coeffs: ", S, ppoly_S
       write (*,*) "T_ref, alpha_ref: ", T_ref, alpha_ref
       write (*,*) "S_ref, beta_ref : ", S_ref, beta_ref
-      write (*,*) "dT_dP, dS_dP:", dT_dP, dS_dP
       write (*,*) "x0: ", min_bound
       write (*,*) "refine_nondim_position: ", refine_nondim_position
     endif
@@ -657,8 +645,7 @@ subroutine check_neutral_positions(CS, Ptop_l, Pbot_l, Ptop_r, Pbot_r, PoL, PoR,
   endif
 
   delta_rho = 0.5*( (alpha_l + alpha_r)*(Tl - Tr) + (beta_l + beta_r)*(Sl - Sr) )
-  print *, "Delta-rho: ", delta_rho
-
+  write(*,'(A,ES23.15)') "Delta-rho: ", delta_rho
 
 end subroutine check_neutral_positions
 
