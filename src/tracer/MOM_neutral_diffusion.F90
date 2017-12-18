@@ -1512,12 +1512,6 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         dT_top = T_right_top - T_left_top
         dT_bottom = T_right_bottom - T_left_bottom
       endif
-      if (signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
-        dT_ave = 0.
-      else
-        dT_ave = dT_ave
-      endif
-      dT_ave = dT_ave
     endif
     dT_ave = 0.5 * ( dT_top + dT_bottom )
     dT_layer = T_right_layer - T_left_layer
