@@ -33,15 +33,19 @@ public edge_values_implicit_h6
 ! extrapolation. The are needed only in the case where thicknesses vanish
 ! to a small enough values such that the eigenvalues of the matrix can not
 ! be separated.
-real, parameter :: hNegligible = 1.e-10 ! A cut-off minimum thickness for sum(h)
-real, parameter :: hMinFrac    = 1.e-5  ! A minimum fraction for min(h)/(sum(h)
+!   Specifying a dimensional parameter value, as is done here, is a terrible idea.
+real, parameter :: hNeglect_edge_dflt = 1.e-10 ! The default value for cut-off minimum
+                                          ! thickness for sum(h) in edge value inversions
+real, parameter :: hNeglect_dflt = 1.e-30 ! The default value for cut-off minimum
+                                          ! thickness for sum(h) in other calculations
+real, parameter :: hMinFrac      = 1.e-5  ! A minimum fraction for min(h)/sum(h)
 
 contains
 
 !------------------------------------------------------------------------------
 ! Bound edge values by neighboring cell averages
 !------------------------------------------------------------------------------
-subroutine bound_edge_values( N, h, u, edge_values )
+subroutine bound_edge_values( N, h, u, edge_values, h_neglect )
 ! ------------------------------------------------------------------------------
 ! In this routine, we loop on all cells to bound their left and right
 ! edge values by the cell averages. That is, the left edge value must lie
@@ -54,10 +58,13 @@ subroutine bound_edge_values( N, h, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values,
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 
   ! Local variables
   integer       :: k            ! loop index
@@ -69,6 +76,9 @@ subroutine bound_edge_values( N, h, u, edge_values )
                                                 ! van Leer slopes
   real          :: slope                ! retained PLM slope
 
+  real      :: hNeglect ! A negligible thicness in the same units as h.
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells to bound edge value
   do k = 1,N
@@ -104,9 +114,9 @@ subroutine bound_edge_values( N, h, u, edge_values )
     u0_l = edge_values(k,1)
     u0_r = edge_values(k,2)
 
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + 1.E-30 )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + 1.E-30 )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + 1.E-30 )
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -230,9 +240,8 @@ end subroutine check_discontinuous_edge_values
 
 
 !------------------------------------------------------------------------------
-! Compute h2 edge values (explicit second order accurate)
-!------------------------------------------------------------------------------
-subroutine edge_values_explicit_h2( N, h, u, edge_values )
+!> Compute h2 edge values (explicit second order accurate)
+subroutine edge_values_explicit_h2( N, h, u, edge_values, h_neglect )
 ! ------------------------------------------------------------------------------
 ! Compute edge values based on second-order explicit estimates.
 ! These estimates are based on a straight line spanning two cells and evaluated
@@ -247,15 +256,21 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
 ! ------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 
   ! Local variables
   integer   :: k        ! loop index
   real      :: h0, h1   ! cell widths
   real      :: u0, u1   ! cell averages
+  real      :: hNeglect ! A negligible thicness in the same units as h.
+
+  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on interior cells
   do k = 2,N
@@ -265,8 +280,8 @@ subroutine edge_values_explicit_h2( N, h, u, edge_values )
 
     ! Avoid singularities when h0+h1=0
     if (h0+h1==0.) then
-      h0 = hNegligible
-      h1 = hNegligible
+      h0 = hNeglect
+      h1 = hNeglect
     endif
 
     u0 = u(k-1)
@@ -289,9 +304,8 @@ end subroutine edge_values_explicit_h2
 
 
 !------------------------------------------------------------------------------
-! Compute h4 edge values (explicit fourth order accurate)
-!------------------------------------------------------------------------------
-subroutine edge_values_explicit_h4( N, h, u, edge_values )
+!> Compute h4 edge values (explicit fourth order accurate)
+subroutine edge_values_explicit_h4( N, h, u, edge_values, h_neglect )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order explicit estimates.
 ! These estimates are based on a cubic interpolant spanning four cells
@@ -312,10 +326,13 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: edge_values
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j
@@ -326,6 +343,9 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   real, dimension(5)    :: x                ! used to compute edge
   real, dimension(4,4)  :: A                ! values near the boundaries
   real, dimension(4)    :: B, C
+  real      :: hNeglect ! A negligible thicness in the same units as h.
+
+  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on interior cells
   do i = 3,N-1
@@ -337,7 +357,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
 
     ! Avoid singularities when consecutive pairs of h vanish
     if (h0+h1==0. .or. h1+h2==0. .or. h2+h3==0.) then
-      f1 = max( hNegligible, h0+h1+h2+h3 )
+      f1 = max( hNeglect, h0+h1+h2+h3 )
       h0 = max( hMinFrac*f1, h(i-2) )
       h1 = max( hMinFrac*f1, h(i-1) )
       h2 = max( hMinFrac*f1, h(i) )
@@ -383,7 +403,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
   end do ! end loop on interior cells
 
   ! Determine first two edge values
-  f1 = max( hNegligible, hMinFrac*sum(h(1:4)) )
+  f1 = max( hNeglect, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max(f1, h(i-1))
@@ -421,7 +441,7 @@ subroutine edge_values_explicit_h4( N, h, u, edge_values )
 #endif
 
   ! Determine last two edge values
-  f1 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
+  f1 = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max(f1, h(N-5+i))
@@ -469,9 +489,8 @@ end subroutine edge_values_explicit_h4
 
 
 !------------------------------------------------------------------------------
-! Compute ih4 edge values (implicit fourth order accurate)
-!------------------------------------------------------------------------------
-subroutine edge_values_implicit_h4( N, h, u, edge_values )
+!> Compute ih4 edge values (implicit fourth order accurate)
+subroutine edge_values_implicit_h4( N, h, u, edge_values, h_neglect )
 ! -----------------------------------------------------------------------------
 ! Compute edge values based on fourth-order implicit estimates.
 !
@@ -497,10 +516,13 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)     :: N ! Number of cells
-  real, dimension(:),   intent(in)     :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout)  :: edge_values
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j                 ! loop indexes
@@ -517,6 +539,9 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
+  real      :: hNeglect ! A negligible thicness in the same units as h.
+
+  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells (except last one)
   do i = 1,N-1
@@ -527,8 +552,8 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
 
     ! Avoid singularities when h0+h1=0
     if (h0+h1==0.) then
-      h0 = hNegligible
-      h1 = hNegligible
+      h0 = hNeglect
+      h1 = hNeglect
     endif
 
     ! Auxiliary calculations
@@ -553,7 +578,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
   end do ! end loop on cells
 
   ! Boundary conditions: left boundary
-  h0 = max( hNegligible, hMinFrac*sum(h(1:4)) )
+  h0 = max( hNeglect, hMinFrac*sum(h(1:4)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max( h0, h(i-1) )
@@ -576,7 +601,7 @@ subroutine edge_values_implicit_h4( N, h, u, edge_values )
   tri_b(1) = evaluation_polynomial( Csys, 4, x(1) )        ! first edge value
 
   ! Boundary conditions: right boundary
-  h0 = max( hNegligible, hMinFrac*sum(h(N-3:N)) )
+  h0 = max( hNeglect, hMinFrac*sum(h(N-3:N)) )
   x(1) = 0.0
   do i = 2,5
     x(i) = x(i-1) + max( h0, h(N-5+i) )
@@ -612,9 +637,8 @@ end subroutine edge_values_implicit_h4
 
 
 !------------------------------------------------------------------------------
-! Compute ih6 edge values (implicit sixth order accurate)
-!------------------------------------------------------------------------------
-subroutine edge_values_implicit_h6( N, h, u, edge_values )
+!> Compute ih6 edge values (implicit sixth order accurate)
+subroutine edge_values_implicit_h6( N, h, u, edge_values, h_neglect )
 ! -----------------------------------------------------------------------------
 ! Sixth-order implicit estimates of edge values are based on a four-cell,
 ! three-edge stencil. A tridiagonal system is set up and is based on
@@ -649,10 +673,13 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 ! -----------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)     :: N ! Number of cells
-  real, dimension(:),   intent(in)     :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)     :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout)  :: edge_values
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: edge_values !< Returned edge values, with the
+                                           !! same units as u; the second index size is 2.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
 
   ! Local variables
   integer               :: i, j, k              ! loop indexes
@@ -681,6 +708,9 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
                            tri_u, &             ! trid. system (upper diagonal)
                            tri_b, &             ! trid. system (unknowns vector)
                            tri_x                ! trid. system (rhs)
+  real      :: hNeglect ! A negligible thicness in the same units as h.
+
+  hNeglect = hNeglect_edge_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Loop on cells (except last one)
   do k = 2,N-2
@@ -693,7 +723,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 
     ! Avoid singularities when h0=0 or h3=0
     if (h0*h3==0.) then
-      g = max( hNegligible, h0+h1+h2+h3 )
+      g = max( hNeglect, h0+h1+h2+h3 )
       h0 = max( hMinFrac*g, h0 )
       h1 = max( hMinFrac*g, h1 )
       h2 = max( hMinFrac*g, h2 )
@@ -810,7 +840,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 
   ! Avoid singularities when h0=0 or h3=0
   if (h0*h3==0.) then
-    g = max( hNegligible, h0+h1+h2+h3 )
+    g = max( hNeglect, h0+h1+h2+h3 )
     h0 = max( hMinFrac*g, h0 )
     h1 = max( hMinFrac*g, h1 )
     h2 = max( hMinFrac*g, h2 )
@@ -922,7 +952,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   tri_b(2) = a * u(1) + b * u(2) + c * u(3) + d * u(4)
 
   ! Boundary conditions: left boundary
-  g = max( hNegligible, hMinFrac*sum(h(1:6)) )
+  g = max( hNeglect, hMinFrac*sum(h(1:6)) )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + max( g, h(i-1) )
@@ -955,7 +985,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
 
   ! Avoid singularities when h0=0 or h3=0
   if (h0*h3==0.) then
-    g = max( hNegligible, h0+h1+h2+h3 )
+    g = max( hNeglect, h0+h1+h2+h3 )
     h0 = max( hMinFrac*g, h0 )
     h1 = max( hMinFrac*g, h1 )
     h2 = max( hMinFrac*g, h2 )
@@ -1067,7 +1097,7 @@ subroutine edge_values_implicit_h6( N, h, u, edge_values )
   tri_b(N) = a * u(N-3) + b * u(N-2) + c * u(N-1) + d * u(N)
 
   ! Boundary conditions: right boundary
-  g = max( hNegligible, hMinFrac*sum(h(N-5:N)) )
+  g = max( hNeglect, hMinFrac*sum(h(N-5:N)) )
   x(1) = 0.0
   do i = 2,7
     x(i) = x(i-1) + max( g, h(N-7+i) )
