@@ -6,6 +6,7 @@ module baroclinic_zone_initialization
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_grid, only : ocean_grid_type
+use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
@@ -65,15 +66,16 @@ subroutine bcz_params(G, param_file, S_ref, dSdz, delta_S, dSdx, T_ref, dTdz, &
 end subroutine bcz_params
 
 !> Initialization of temperature and salinity with the baroclinic zone initial conditions
-subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file, &
+subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, GV, param_file, &
                                                      just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< The model thicknesses in H (m or kg m-2)
   type(param_file_type),                     intent(in)  :: param_file  !< Parameter file handle
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                      !! only read parameters without changing T & S.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, dTdz, dTdx, delta_T ! Parameters describing temperature distribution
@@ -108,8 +110,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, G, param_file, &
       fn = xs
     endif
     do k = nz, 1, -1
-      zc = zi + 0.5*h(i,j,k)          ! Position of middle of cell
-      zi = zi + h(i,j,k)              ! Top interface position
+      zc = zi + 0.5*h(i,j,k)*GV%H_to_m ! Position of middle of cell
+      zi = zi + h(i,j,k)*GV%H_to_m    ! Top interface position
       T(i,j,k) = T_ref + dTdz * zc  & ! Linear temperature stratification
                  + dTdx * x         & ! Linear gradient
                  + delta_T * fn       ! Smooth fn of width L_zone
