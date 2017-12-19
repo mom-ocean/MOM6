@@ -38,7 +38,6 @@ end type rho_CS
 integer, parameter :: NB_REGRIDDING_ITERATIONS = 1
 !> Deviation tolerance between succesive grids in regridding iterations
 real, parameter    :: DEVIATION_TOLERANCE = 1e-10
-! This CPP macro embeds some safety checks
 
 public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d, end_coord_rho
 
@@ -88,15 +87,23 @@ end subroutine set_rho_params
 !!
 !! 1. Density profiles are calculated on the source grid.
 !! 2. Positions of target densities (for interfaces) are found by interpolation.
-subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface)
-  type(rho_CS),             intent(in)    :: CS !< coord_rho control structure
-  integer,                  intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
-  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real, dimension(nz),      intent(in)    :: h  !< Layer thicknesses, in m
-  real, dimension(nz),      intent(in)    :: T !< T for source column
-  real, dimension(nz),      intent(in)    :: S !< S for source column
-  type(EOS_type),           pointer       :: eqn_of_state !< Equation of state structure
-  real, dimension(CS%nk+1), intent(inout) :: z_interface !< Absolute positions of interfaces
+subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
+                            h_neglect, h_neglect_edge)
+  type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
+  integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
+  real,                intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real, dimension(nz), intent(in)    :: h  !< Layer thicknesses, in H
+  real, dimension(nz), intent(in)    :: T  !< T for source column
+  real, dimension(nz), intent(in)    :: S  !< S for source column
+  type(EOS_type),      pointer       :: eqn_of_state !< Equation of state structure
+  real, dimension(CS%nk+1), &
+                       intent(inout) :: z_interface !< Absolute positions of interfaces
+  real,      optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h0.
+  real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h0.
   ! Local variables
   integer :: k, count_nonzero_layers
   integer, dimension(nz) :: mapping
@@ -123,7 +130,8 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface)
 
     ! Based on source column density profile, interpolate to generate a new grid
     call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
-                                    h_nv, xTmp, CS%target_density, CS%nk, h_new, x1)
+                                    h_nv, xTmp, CS%target_density, CS%nk, h_new, &
+                                    x1, h_neglect, h_neglect_edge)
 
     ! Inflate vanished layers
     call old_inflate_layers_1d(CS%min_thickness, CS%nk, h_new)
@@ -160,8 +168,9 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface)
 
 end subroutine build_rho_column
 
-subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_state, zInterface)
-  !< Iteratively uild a rho coordinate column
+subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_state, &
+                               zInterface, h_neglect, h_neglect_edge)
+  !< Iteratively build a rho coordinate column
   !!
   !! The algorithm operates as follows within each column:
   !!
@@ -182,6 +191,12 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz),   intent(in)    :: T, S !< T and S for column
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h
 
   ! Local variables
   integer   :: k, m
@@ -230,7 +245,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
     ! One regridding iteration
     ! Based on global density profile, interpolate to generate a new grid
     call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
-         hTmp, xTmp, CS%target_density, nz, h1, x1)
+         hTmp, xTmp, CS%target_density, nz, h1, x1, h_neglect, h_neglect_edge)
 
     call old_inflate_layers_1d( CS%min_thickness, nz, h1 )
     x1(1) = 0.0 ; do k = 1,nz ; x1(k+1) = x1(k) + h1(k) ; end do
@@ -240,10 +255,10 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
       h1(k) = x1(k+1) - x1(k)
     end do
 
-    call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp)
+    call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp, h_neglect, h_neglect_edge)
     S_tmp(:) = Tmp(:)
 
-    call remapping_core_h(remapCS, nz, h0, T, nz, h1, Tmp)
+    call remapping_core_h(remapCS, nz, h0, T, nz, h1, Tmp, h_neglect, h_neglect_edge)
     T_tmp(:) = Tmp(:)
 
     ! Compute the deviation between two successive grids

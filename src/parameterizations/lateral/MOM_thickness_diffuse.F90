@@ -1076,9 +1076,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
-!$OMP parallel do default(none) shared(is,ie,js,je,pres,T,S,IsdB,tv,uhD,uhtot, &
-!$OMP                                  Work_u,G_scale,use_EOS,e)   &
-!$OMP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
+    !$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then
         do I=is-1,ie
@@ -1096,12 +1094,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdiB = drho_dT_u(I) * (T(i+1,j,1)-T(i,j,1)) + &
                   drho_dS_u(I) * (S(i+1,j,1)-S(i,j,1))
         endif
-        Work_u(I,j) = Work_u(I,j) + G_scale * ( (uhD(I,j,1) * drdiB) * 0.25 * &
-            ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
+        Work_u(I,j) = Work_u(I,j) + ( G_scale * H_to_m ) * &
+            ( (uhD(I,j,1) * drdiB) * 0.25 * &
+              ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
 
       enddo
     enddo
 
+    !$OMP parallel do default(shared) private(pres_v,T_v,S_v,drho_dT_v,drho_dS_v,drdjB)
     do J=js-1,je
       if (use_EOS) then
         do i=is,ie
@@ -1119,8 +1119,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdjB = drho_dT_v(i) * (T(i,j+1,1)-T(i,j,1)) + &
                   drho_dS_v(i) * (S(i,j+1,1)-S(i,j,1))
         endif
-        Work_v(i,J) = Work_v(i,J) - G_scale * ( (vhD(i,J,1) * drdjB) * 0.25 * &
-            ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
+        Work_v(i,J) = Work_v(i,J) - ( G_scale * H_to_m ) * &
+            ( (vhD(i,J,1) * drdjB) * 0.25 * &
+              ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
       enddo
     enddo
   endif
@@ -1781,22 +1782,22 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
 
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at U-point', 'm s-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-point', 'm2 s-1')
   CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at V-point', 'm s-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-point', 'm2 s-1')
   CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time,               &
-       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'm s-2',&
+       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'm2 s-1',&
    cmor_field_name='diftrblo',                                                               &
    cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection',       &
    cmor_units='m2 s-1',                                                                      &
    cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'm s-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'm2 s-1')
   CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'm s-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'm2 s-1')
   CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
-           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'm s-2')
+           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'm2 s-1')
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
            'Zonal slope of neutral surface', 'nondim')
