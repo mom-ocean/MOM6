@@ -1432,9 +1432,9 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   type(remapping_CS), optional, intent(in)    :: remap_CS
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt, k
-  real :: T_right_top, T_right_bottom, T_right_layer
-  real :: T_left_top, T_left_bottom, T_left_layer
-  real :: dT_top, dT_bottom, dT_layer, dT_ave
+  real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
+  real :: T_left_top, T_left_bottom, T_left_layer, T_left_sub, T_left_top_int, T_left_bot_int
+  real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int
   real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
   real, dimension(nk) :: aL_l !< Left-column left edge value of tracer (conc, e.g. degC)
@@ -1449,7 +1449,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real, dimension(nk,deg+1) :: ppoly_r_coeffs_r
   real, dimension(nk,deg+1) :: ppoly_r_S_l
   real, dimension(nk,deg+1) :: ppoly_r_S_r
-
+  logical :: down_flux
   ! Setup reconstruction edge values
   if (continuous) then
     call interface_scalar(nk, hl, Tl, Til, 2)
@@ -1486,44 +1486,99 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                                 aL_r(krt), aR_r(krt), Tr(krt))
         dT_top = T_right_top - T_left_top
         dT_bottom = T_right_bottom - T_left_bottom
+        dT_ave = 0.5 * ( dT_top + dT_bottom )
+        dT_layer = T_right_layer - T_left_layer
+        if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
+          dT_ave = 0.
+        else
+          dT_ave = dT_layer
+        endif
+        Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
       else ! Discontinuous reconstruction
-        klb = KoL(k_sublayer+1)
-        klt = KoL(k_sublayer)
-        if (klt .ne. klb) then
-          call MOM_error(WARNING, "Neutral surfaces span more than one layer")
+        ! Calculate tracer values on left and right side of the neutral surface
+        call neutral_surface_T_eval(nk, nsurf, k_sublayer, KoL, PiL, Tl, Tid_l, deg, iMethod, ppoly_r_coeffs_l,     &
+                              T_left_top, T_left_bottom, T_left_sub, T_left_top_int, T_left_bot_int, T_left_layer)
+        call neutral_surface_T_eval(nk, nsurf, k_sublayer, KoR, PiR, Tr, Tid_r, deg, iMethod, ppoly_r_coeffs_r,     &
+                              T_right_top, T_right_bottom, T_right_sub, T_right_top_int, T_right_bot_int, T_right_layer)
+
+        dT_top      = T_right_top     - T_left_top
+        dT_bottom   = T_right_bottom  - T_left_bottom
+        dT_sublayer = T_right_sub     - T_left_sub
+        dT_top_int  = T_right_top_int - T_left_top_int
+        dT_bot_int  = T_right_bot_int - T_left_bot_int
+        ! Enforcing the below criterion incorrectly zero out fluxes
+        !dT_layer = T_right_layer - T_left_layer
+
+        down_flux = dT_top <= 0. .and. dT_bottom <= 0. .and.       &
+                    dT_sublayer <= 0. .and. dT_top_int <= 0. .and. &
+                    dT_bot_int <= 0.
+        down_flux = down_flux .or.                                 &
+                    (dT_top >= 0. .and. dT_bottom >= 0. .and.      &
+                    dT_sublayer >= 0. .and. dT_top_int >= 0. .and. &
+                    dT_bot_int >= 0.)
+        if (down_flux) then
+          Flx(k_sublayer) = dT_sublayer * hEff(k_sublayer)
+        else
           Flx(k_sublayer) = 0.
-          cycle
         endif
-        T_left_bottom = evaluation_polynomial( ppoly_r_coeffs_l(klb,:), deg+1, PiL(k_sublayer+1))
-        T_left_top = evaluation_polynomial( ppoly_r_coeffs_l(klt,:), deg+1, PiL(k_sublayer))
-        T_left_layer = average_value_ppoly(nk, Tl, Tid_l, ppoly_r_coeffs_l, iMethod, klb, &
-                                           PiL(k_sublayer), PiL(k_sublayer+1))
-        krb = KoR(k_sublayer+1)
-        krt = KoR(k_sublayer)
-        if (krt .ne. krb) then
-          call MOM_error(WARNING, "Neutral surfaces span more than one layer")
-          Flx(k_sublayer) = 0.
-          cycle
-        endif
-        T_right_bottom = evaluation_polynomial( ppoly_r_coeffs_r(krb,:), deg+1, PiR(k_sublayer+1))
-        T_right_top = evaluation_polynomial( ppoly_r_coeffs_r(krt,:), deg+1, PiR(k_sublayer))
-        T_right_layer = average_value_ppoly(nk, Tr, Tid_r, ppoly_r_coeffs_r, iMethod, krb, &
-                                            PiR(k_sublayer), PiR(k_sublayer+1))
-        dT_top = T_right_top - T_left_top
-        dT_bottom = T_right_bottom - T_left_bottom
       endif
     endif
-    dT_ave = 0.5 * ( dT_top + dT_bottom )
-    dT_layer = T_right_layer - T_left_layer
-    if (signum(1.,dT_top) * signum(1.,dT_bottom) <= 0. .or. signum(1.,dT_ave) * signum(1.,dT_layer) <= 0. ) then
-      dT_ave = 0.
-    else
-      dT_ave = dT_layer
-    endif
-    Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
   enddo
 
 end subroutine neutral_surface_flux
+
+!> Evaluate various parts of the reconstructions to calculate gradient-based flux limter
+subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMethod, T_poly, &
+                                  T_top, T_bot, T_sub, T_top_int, T_bot_int, T_layer)
+  integer,                   intent(in   ) :: nk        !< Number of cell everages
+  integer,                   intent(in   ) :: ns        !< Number of neutral surfaces
+  integer,                   intent(in   ) :: k_sub     !< Index of current neutral layer
+  integer, dimension(ns),    intent(in   ) :: Ks        !< List of the layers associated with each neutral surface
+  real, dimension(ns),       intent(in   ) :: Ps        !< List of the positions within a layer of each surface
+  real, dimension(nk),       intent(in   ) :: T_mean    !< Cell average of tracer
+  real, dimension(nk,2),     intent(in   ) :: T_int     !< Cell interface values of tracer from reconstruction
+  integer,                   intent(in   ) :: deg       !< Degree of reconstruction polynomial (e.g. 1 is linear)
+  integer,                   intent(in   ) :: iMethod   !< Method of integration to use
+  real, dimension(nk,deg+1), intent(in   ) :: T_poly    !< Coefficients of polynomial reconstructions
+  real,                      intent(  out) :: T_top     !< Tracer value at top (across discontinuity if necessary)
+  real,                      intent(  out) :: T_bot     !< Tracer value at bottom (across discontinuity if necessary)
+  real,                      intent(  out) :: T_sub     !< Average of the tracer value over the sublayer
+  real,                      intent(  out) :: T_top_int !< Tracer value at top interface of neutral layer
+  real,                      intent(  out) :: T_bot_int !< Tracer value at bottom interface of neutral layer
+  real,                      intent(  out) :: T_layer   !< Cell-average that the the reconstruction belongs to
+
+  integer :: kl, ks_top, ks_bot
+
+  ks_top = k_sub
+  ks_bot = k_sub + 1
+  if ( Ks(ks_top) .ne. Ks(ks_bot) ) then
+    call MOM_error(FATAL, "Neutral surfaces span more than one layer")
+  endif
+  kl = Ks(k_sub)
+  ! First if the neutral surfaces spans the entirety of a cell, then do not search across the discontinuity
+  if ( (Ps(ks_top) == 0.) .and. (Ps(ks_bot) == 1.)) then
+    T_top = T_int(kl,1)
+    T_bot = T_int(kl,2)
+  else
+    ! Search across potential discontinuity at top
+    if ( (kl > 1) .and. (Ps(ks_top) == 0.)  ) then
+      T_top = T_int(kl-1,2)
+    else
+      T_top = evaluation_polynomial( T_poly(kl,:), deg+1, Ps(ks_top) )
+    endif
+    ! Search across potential discontinuity at bottom
+    if ( (kl < nk) .and. (Ps(ks_bot) == 1.) ) then
+      T_bot = T_int(kl+1,1)
+    else
+      T_bot = evaluation_polynomial( T_poly(kl,:), deg+1, Ps(ks_bot) )
+    endif
+  endif
+  T_sub = average_value_ppoly(nk, T_mean, T_int, T_poly, iMethod, kl, Ps(ks_top), Ps(ks_bot))
+  T_top_int = evaluation_polynomial( T_poly(kl,:), deg+1, Ps(ks_top))
+  T_bot_int = evaluation_polynomial( T_poly(kl,:), deg+1, Ps(ks_bot))
+  T_layer = T_mean(kl)
+
+end subroutine neutral_surface_T_eval
 
 !> Discontinuous PPM reconstructions of the left/right edge values within a cell
 subroutine ppm_left_right_edge_values(nk, Tl, Ti, aL, aR)
