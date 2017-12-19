@@ -1933,6 +1933,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:), pointer :: seg_vel => NULL()  ! pointer to segment velocity array
   real, dimension(:,:), pointer :: seg_trans => NULL()  ! pointer to segment transport array
   real, dimension(:,:,:), allocatable :: tmp_buffer
+  logical :: brushcutter_mode
+  integer :: subsample_factor
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -1941,6 +1943,13 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
   if (.not. associated(OBC)) return
 
+  !will be able to dynamically switch between sub-sampling refined grid data or model grid
+  brushcutter_mode = .false.
+  if (brushcutter_mode) then
+    subsample_factor = 2
+  else
+    subsample_factor = 1
+  endif
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
 
@@ -1953,13 +1962,14 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     js_obc = max(segment%js_obc,jsd-1)
     je_obc = min(segment%je_obc,jed)
 
-
-    if (segment%is_E_or_W) then
-      nj_seg=nj_seg-1
-      js_obc=js_obc+1
-    else
-      ni_seg=ni_seg-1
-      is_obc=is_obc+1
+    if (brushcutter_mode) then
+      if (segment%is_E_or_W) then
+        nj_seg=nj_seg-1
+        js_obc=js_obc+1
+      else
+        ni_seg=ni_seg-1
+        is_obc=is_obc+1
+      endif
     endif
 
 ! Calculate auxiliary fields at staggered locations.
@@ -2026,23 +2036,39 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
         ! read source data interpolated to the current model time
         if (siz(1)==1) then
-          allocate(tmp_buffer(1,nj_seg*2+1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+          allocate(tmp_buffer(1,(nj_seg+1)*subsample_factor-1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
         else
-          allocate(tmp_buffer(ni_seg*2+1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
+          allocate(tmp_buffer((ni_seg+1)*subsample_factor-1,1,segment%field(m)%nk_src))  ! segment data is currrently on supergrid
         endif
 
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
-        if (siz(1)==1) then
-          segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
+        if (brushcutter_mode) then
+          if (siz(1)==1) then
+            segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
+          else
+            segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
+          endif
         else
-          segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
+          if (siz(1)==1) then
+            segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset,:)
+          else
+            segment%field(m)%buffer_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset,1,:)
+          endif
         endif
         if (segment%field(m)%nk_src > 1) then
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer)
-          if (siz(1)==1) then
-            segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
+          if (brushcutter_mode) then
+            if (siz(1)==1) then
+              segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
+            else
+              segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
+            endif
           else
-            segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(2*(is_obc+G%idg_offset)-1:2*(ie_obc+G%idg_offset)-1:2,1,:)
+            if (siz(1)==1) then
+              segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,js_obc+G%jdg_offset+1:je_obc+G%jdg_offset,:)
+            else
+              segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset,1,:)
+            endif
           endif
           do j=js_obc,je_obc
             do i=is_obc,ie_obc
