@@ -1290,9 +1290,17 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   integer :: i, j, k
   real    :: nominalDepth, totalThickness
   real, dimension(SZK_(GV)+1) :: zOld, zNew
+  real :: h_neglect, h_neglect_edge
 #ifdef __DO_SAFETY_CHECKS__
   real    :: dh
 #endif
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1313,7 +1321,8 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
       call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
-                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
+                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.
@@ -1397,6 +1406,14 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   integer   :: i, j, k, nz
   real :: depth
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1417,7 +1434,9 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
       enddo
 
       call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, nz, depth, &
-                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
+                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, &
+                               z_col, z_col_new, zScale=GV%m_to_H, &
+                               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1510,6 +1529,14 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   real :: depth
   integer :: i, j, k, nz
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1529,8 +1556,9 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
       enddo
 
       call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_Pa, GV%m_to_H, &
-                          GV%H_subroundoff, nz, depth, &
-                          h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
+                          GV%H_subroundoff, nz, depth, h(i, j, :), &
+                          tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
+                          h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )

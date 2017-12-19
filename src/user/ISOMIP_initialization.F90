@@ -138,7 +138,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   type(thermo_var_ptrs),   intent(in)  :: tv          !< A structure containing pointers to any
@@ -211,9 +211,9 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom_z
+          h(i,j,k) = GV%Angstrom
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
     enddo ; enddo
@@ -226,9 +226,9 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = min_thickness
+          h(i,j,k) = GV%m_to_H * min_thickness
         else
-          h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         endif
       enddo
    enddo ; enddo
@@ -237,7 +237,7 @@ subroutine ISOMIP_initialize_thickness ( h, G, GV, param_file, tv, just_read_par
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = delta_h
+      h(i,j,:) = GV%m_to_H * delta_h
     end do ; end do
 
   case default
@@ -255,11 +255,11 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or kg m-2)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                      !! only read parameters without changing T & S.
 
   ! Local variables
   integer   :: i, j, k, is, ie, js, je, nz, itt
@@ -309,12 +309,12 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
       S_range = S_range / G%max_depth ! Convert S_range into dS/dz
       T_range = T_range / G%max_depth ! Convert T_range into dT/dz
       do j=js,je ; do i=is,ie
-        xi0 = -G%bathyT(i,j);
+        xi0 = -G%bathyT(i,j)
         do k = nz,1,-1
-          xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
+          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m ! Depth in middle of layer
           S(i,j,k) = S_sur + S_range * xi0
           T(i,j,k) = T_sur + T_range * xi0
-          xi0 = xi0 + 0.5 * h(i,j,k) ! Depth at top of layer
+          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m ! Depth at top of layer
         enddo
       enddo ; enddo
 
@@ -346,13 +346,13 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, G, GV, param_file, 
      T_range = T_range / G%max_depth ! Convert T_range into dT/dz
 
      do j=js,je ; do i=is,ie
-       xi0 = 0.0;
+       xi0 = 0.0
        do k = 1,nz
           !T0(k) = T_Ref; S0(k) = S_Ref
-          xi1 = xi0 + 0.5 * h(i,j,k);
-          S0(k) = S_sur +  S_range * xi1;
-          T0(k) = T_sur +  T_range * xi1;
-          xi0 = xi0 + h(i,j,k);
+          xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_m
+          S0(k) = S_sur +  S_range * xi1
+          T0(k) = T_sur +  T_range * xi1
+          xi0 = xi0 + h(i,j,k) * GV%H_to_m
           !write(*,*)'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
        enddo
 
@@ -584,7 +584,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, tv, PF, use_ALE, CSp, ACSp)
     S_range = S_range / G%max_depth ! Convert S_range into dS/dz
     T_range = T_range / G%max_depth ! Convert T_range into dT/dz
     do j=js,je ; do i=is,ie
-      xi0 = -G%bathyT(i,j);
+      xi0 = -G%bathyT(i,j)
       do k = nz,1,-1
         xi0 = xi0 + 0.5 * h(i,j,k) ! Depth in middle of layer
         S(i,j,k) = S_sur + S_range * xi0
