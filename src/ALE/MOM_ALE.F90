@@ -748,6 +748,14 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -779,8 +787,10 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
     ! we need to use remapping_core because there isn't a tracer registry set up in
     ! the state initialization routine
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), tv_local%S(i,j,:))
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), tv_local%T(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), &
+                            tv_local%S(i,j,:), h_neglect, h_neglect_edge)
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), &
+                            tv_local%T(i,j,:), h_neglect, h_neglect_edge)
     enddo ; enddo
 
 
@@ -824,6 +834,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real, dimension(SZI_(G), SZJ_(G))           :: work_2d
   real                                        :: Idt, ppt2mks
   real, dimension(GV%ke)                      :: h2
+  real :: h_neglect, h_neglect_edge
   logical                                     :: show_call_tree
 
   show_call_tree = .false.
@@ -835,6 +846,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   if ( .not. present(dxInterface) .and. (CS_ALE%remap_uv_using_old_alg .and. (present(u) .or. present(v))) ) then
     call MOM_error(FATAL, "remap_all_state_vars: dxInterface must be present if using old algorithm and u/v are to"// &
                           "be remapped")
+  endif
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
   endif
 
   nz      = GV%ke
@@ -854,12 +872,9 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   endif
 
   ! Remap tracer
-!$OMP parallel default(none) shared(G,GV,h_old,h_new,dxInterface,CS_remapping,nz,Reg,u,v,ntr,show_call_tree, &
-!$OMP                               dt,CS_ALE,work_conc,work_cont,work_2d,Idt,ppt2mks) &
-!$OMP                       private(h1,h2,dx,u_column)
   if (ntr>0) then
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
-!$OMP do
+    !$OMP parallel do default(shared) private(h1,h2,u_column)
     do m=1,ntr ! For each tracer
 
       do j = G%jsc,G%jec
@@ -870,7 +885,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
             ! Build the start and final grids
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
-            call remapping_core_h(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, u_column)
+            call remapping_core_h(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, &
+                                  u_column, h_neglect, h_neglect_edge)
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
             ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not
@@ -951,7 +967,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   ! Remap u velocity component
   if ( present(u) ) then
-!$OMP do
+    !$OMP parallel do default(shared) private(h1,h2,dx,u_column)
     do j = G%jsc,G%jec
       do I = G%iscB,G%iecB
         if (G%mask2dCu(I,j)>0.) then
@@ -965,7 +981,8 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i+1,j,:) )
           endif
-          call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, u_column)
+          call remapping_core_h(CS_remapping, nz, h1, u(I,j,:), nz, h2, &
+                                u_column, h_neglect, h_neglect_edge)
           u(I,j,:) = u_column(:)
         endif
       enddo
@@ -976,7 +993,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   ! Remap v velocity component
   if ( present(v) ) then
-!$OMP do
+    !$OMP parallel do default(shared) private(h1,h2,dx,u_column)
     do J = G%jscB,G%jecB
       do i = G%isc,G%iec
         if (G%mask2dCv(i,j)>0.) then
@@ -990,13 +1007,13 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
           else
             h2(:) = 0.5 * ( h_new(i,j,:) + h_new(i,j+1,:) )
           endif
-          call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, u_column)
+          call remapping_core_h(CS_remapping, nz, h1, v(i,J,:), nz, h2, &
+                                u_column, h_neglect, h_neglect_edge)
           v(i,J,:) = u_column(:)
         endif
       enddo
     enddo
   endif
-!$OMP end parallel
 
   if (show_call_tree) call callTree_waypoint("v remapped (remap_all_state_vars)")
   if (show_call_tree) call callTree_leave("remap_all_state_vars()")
@@ -1024,6 +1041,7 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1)
+  real :: h_neglect, h_neglect_edge
   logical :: ignore_vanished_layers, use_remapping_core_w
 
   ignore_vanished_layers = .false.
@@ -1032,32 +1050,35 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
 
-!$OMP parallel default(none) shared(CS,G,GV,h_src,s_src,h_dst,s_dst &
-!$OMP                               ,ignore_vanished_layers, use_remapping_core_w, nk_src ) &
-!$OMP                        firstprivate(n_points,dx)
-!$OMP do
-  do j = G%jsc,G%jec
-    do i = G%isc,G%iec
-      if (G%mask2dT(i,j)>0.) then
-        if (ignore_vanished_layers) then
-          n_points = 0
-          do k = 1, nk_src
-            if (h_src(i,j,k)>0.) n_points = n_points + 1
-          enddo
-          s_dst(i,j,:) = 0.
-        endif
-        if (use_remapping_core_w) then
-          call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
-          call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, dx, s_dst(i,j,:))
-        else
-          call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), s_dst(i,j,:))
-        endif
-      else
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
+
+  !$OMP parallel do default(shared) firstprivate(n_points,dx)
+  do j = G%jsc,G%jec ; do i = G%isc,G%iec
+    if (G%mask2dT(i,j) > 0.) then
+      if (ignore_vanished_layers) then
+        n_points = 0
+        do k = 1, nk_src
+          if (h_src(i,j,k)>0.) n_points = n_points + 1
+        enddo
         s_dst(i,j,:) = 0.
       endif
-    enddo
-  enddo
-!$OMP end parallel
+      if (use_remapping_core_w) then
+        call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
+        call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
+                              GV%ke, dx, s_dst(i,j,:), h_neglect, h_neglect_edge)
+      else
+        call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
+                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neglect, h_neglect_edge)
+      endif
+    else
+      s_dst(i,j,:) = 0.
+    endif
+  enddo ; enddo
 
 end subroutine ALE_remap_scalar
 
@@ -1083,25 +1104,35 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   real    :: hTmp(GV%ke)
   real    :: tmp(GV%ke)
   real, dimension(CS%nk,2)                  :: ppoly_linear_E            !Edge value of polynomial
-  real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefficients !Coefficients of polynomial
+  real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefs !Coefficients of polynomial
+  real :: h_neglect
+
+  !### Replace this with GV%H_subroundoff
+  !### Omit the rescaling by H_to_m here. It should not be needed.
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 * GV%H_to_m
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 * GV%H_to_m
+  endif
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
   ! the module level.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b)                  &
-!$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefficients,tmp)
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b,h_neglect) &
+!$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefs,tmp)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       ! Build current grid
+  !### Omit the rescaling by H_to_m here. It should not be needed.
       hTmp(:) = h(i,j,:)*GV%H_to_m
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile
-      ppoly_linear_E = 0.0
-      ppoly_linear_coefficients = 0.0
-      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+      ppoly_linear_E(:,:) = 0.0
+      ppoly_linear_coefs(:,:) = 0.0
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
 
       do k = 1,GV%ke
         S_t(i,j,k) = ppoly_linear_E(k,1)
@@ -1109,12 +1140,12 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       end do
 
       ! Reconstruct temperature profile
-      ppoly_linear_E = 0.0
-      ppoly_linear_coefficients = 0.0
+      ppoly_linear_E(:,:) = 0.0
+      ppoly_linear_coefs(:,:) = 0.0
       tmp(:) = tv%T(i,j,:)
-      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefficients )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
 
       do k = 1,GV%ke
         T_t(i,j,k) = ppoly_linear_E(k,1)
@@ -1150,29 +1181,40 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   real, dimension(CS%nk,2) :: &
       ppoly_parab_E            !Edge value of polynomial
   real, dimension(CS%nk,CS%degree_parab+1) :: &
-      ppoly_parab_coefficients !Coefficients of polynomial
+      ppoly_parab_coefs !Coefficients of polynomial
+  real :: h_neglect
 
+  !### Replace this with GV%H_subroundoff
+  !### Omit the rescaling by H_to_m here. It should not be needed.
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30  * GV%H_to_m
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 * GV%H_to_m
+  endif
 
   ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
   ! the module level.
 
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b) &
-!$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefficients)
+!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b,h_neglect) &
+!$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefs)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
       ! Build current grid
+  !### Omit the rescaling by H_to_m here. It should not be needed.
       hTmp(:) = h(i,j,:) * GV%H_to_m
       tmp(:) = tv%S(i,j,:)
 
       ! Reconstruct salinity profile
-      ppoly_parab_E = 0.0
-      ppoly_parab_coefficients = 0.0
-      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E )
-      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+      ppoly_parab_E(:,:) = 0.0
+      ppoly_parab_coefs(:,:) = 0.0
+      !### Try to replace the following value of h_neglect with GV%H_subroundoff.
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
+                                    ppoly_parab_coefs, h_neglect )
 
       do k = 1,GV%ke
         S_t(i,j,k) = ppoly_parab_E(k,1)
@@ -1180,13 +1222,15 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       end do
 
       ! Reconstruct temperature profile
-      ppoly_parab_E = 0.0
-      ppoly_parab_coefficients = 0.0
+      ppoly_parab_E(:,:) = 0.0
+      ppoly_parab_coefs(:,:) = 0.0
       tmp(:) = tv%T(i,j,:)
-      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E )
-      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+      !### Try to replace the following value of h_neglect with GV%H_subroundoff.
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
       if (CS%boundary_extrapolation_for_pressure) call &
-        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefficients )
+        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
+                                    ppoly_parab_coefs, h_neglect )
 
       do k = 1,GV%ke
         T_t(i,j,k) = ppoly_parab_E(k,1)
@@ -1348,13 +1392,13 @@ subroutine ALE_initThicknessToCoord( CS, G, GV, h )
   type(ALE_CS), intent(inout)                            :: CS  !< module control structure
   type(ocean_grid_type), intent(in)                      :: G   !< module grid structure
   type(verticalGrid_type), intent(in)                    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness in H
 
   ! Local variables
   integer :: i, j, k
 
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
+    h(i,j,:) = GV%m_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j) )
   enddo; enddo
 
 end subroutine ALE_initThicknessToCoord

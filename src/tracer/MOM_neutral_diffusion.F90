@@ -361,6 +361,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
   real, dimension(SZK_(G),2) :: ppoly_r_S            ! Reconstruction slopes
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   ! If doing along isopycnal diffusion (as opposed to neutral diffusion, set the reference pressure)
   if (CS%ref_pres>=0.) ref_pres(:) = CS%ref_pres
@@ -385,13 +393,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, h, T, S, EOS, CS)
     ! Interpolate state to interface
     do i = G%isc-1, G%iec+1
       if (CS%continuous_reconstruction) then
-        call interface_scalar(G%ke, h(i,j,:), T(i,j,:), CS%Tint(i,j,:), 2)
-        call interface_scalar(G%ke, h(i,j,:), S(i,j,:), CS%Sint(i,j,:), 2)
+        call interface_scalar(G%ke, h(i,j,:), T(i,j,:), CS%Tint(i,j,:), 2, h_neglect)
+        call interface_scalar(G%ke, h(i,j,:), S(i,j,:), CS%Sint(i,j,:), 2, h_neglect)
       else
         call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), T(i,j,:), CS%ppoly_coeffs_T(i,j,:,:), &
-                                       CS%T_i(i,j,:,:), ppoly_r_S, iMethod )
+                                       CS%T_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
         call build_reconstructions_1d( CS%remap_CS, G%ke, h(i,j,:), S(i,j,:), CS%ppoly_coeffs_S(i,j,:,:), &
-                                       CS%S_i(i,j,:,:), ppoly_r_S, iMethod )
+                                       CS%S_i(i,j,:,:), ppoly_r_S, iMethod, h_neglect, h_neglect_edge )
       endif
     enddo
 
@@ -491,6 +499,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
   real, dimension(G%ke)                        :: dTracer     ! change in tracer concentration due to ndiffusion
   integer :: i, j, k, ks, nk
   real :: ppt2mks, Idt, convert
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  h_neglect_edge = GV%m_to_H*1.0e-10
+  h_neglect = GV%m_to_H*1.0e-30
 
   nk = GV%ke
 
@@ -522,7 +535,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
                                 CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
                                 CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
                                 CS%uhEff(I,j,:), uFlx(I,j,:), &
-                                CS%continuous_reconstruction, CS%remap_CS)
+                                CS%continuous_reconstruction, h_neglect, CS%remap_CS, h_neglect_edge)
     endif
   enddo ; enddo
 
@@ -534,7 +547,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
                                 CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
                                 CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
                                 CS%vhEff(i,J,:), vFlx(i,J,:),   &
-                                CS%continuous_reconstruction, CS%remap_CS)
+                                CS%continuous_reconstruction, h_neglect, CS%remap_CS, h_neglect_edge)
     endif
   enddo ; enddo
 
@@ -629,13 +642,14 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, Tracer, m, dt, name, CS)
 end subroutine neutral_diffusion
 
 !> Returns interface scalar, Si, for a column of layer values, S.
-subroutine interface_scalar(nk, h, S, Si, i_method)
+subroutine interface_scalar(nk, h, S, Si, i_method, h_neglect)
   integer,               intent(in)    :: nk       !< Number of levels
   real, dimension(nk),   intent(in)    :: h        !< Layer thickness (H units)
   real, dimension(nk),   intent(in)    :: S        !< Layer scalar (conc, e.g. ppt)
   real, dimension(nk+1), intent(inout) :: Si       !< Interface scalar (conc, e.g. ppt)
   integer,               intent(in)    :: i_method !< =1 use average of PLM edges
                                                    !! =2 use continuous PPM edge interpolation
+  real,                  intent(in)    :: h_neglect !< A negligibly small thickness (H units)
   ! Local variables
   integer :: k, km2, kp1
   real, dimension(nk) :: diff
@@ -657,7 +671,7 @@ subroutine interface_scalar(nk, h, S, Si, i_method)
       ! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
       km2 = max(1, k-2)
       kp1 = min(nk, k+1)
-      Si(k) = ppm_edge(h(km2), h(k-1), h(k), h(kp1),  S(k-1), S(k), diff(k-1), diff(k))
+      Si(k) = ppm_edge(h(km2), h(k-1), h(k), h(kp1),  S(k-1), S(k), diff(k-1), diff(k), h_neglect)
     enddo
   endif
   Si(nk+1) = S(nk) + 0.5 * diff(nk)
@@ -666,7 +680,7 @@ end subroutine interface_scalar
 
 !> Returns the PPM quasi-fourth order edge value at k+1/2 following
 !! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
-real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
+real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1, h_neglect)
   real, intent(in) :: hkm1 !< Width of cell k-1
   real, intent(in) :: hk   !< Width of cell k
   real, intent(in) :: hkp1 !< Width of cell k+1
@@ -675,10 +689,10 @@ real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1)
   real, intent(in) :: Akp1 !< Average scalar value of cell k+1
   real, intent(in) :: Pk   !< PLM slope for cell k
   real, intent(in) :: Pkp1 !< PLM slope for cell k+1
+  real, intent(in) :: h_neglect !< A negligibly small thickness (H units)
 
   ! Local variables
   real :: R_hk_hkp1, R_2hk_hkp1, R_hk_2hkp1, f1, f2, f3, f4
-  real, parameter :: h_neglect = 1.e-30
 
   R_hk_hkp1 = hk + hkp1
   if (R_hk_hkp1 <= 0.) then
@@ -1769,7 +1783,8 @@ subroutine calc_delta_rho(deg, T_ref, S_ref, alpha_ref, beta_ref, P_top, P_bot, 
 end subroutine calc_delta_rho
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
-subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, hEff, Flx, continuous, remap_CS)
+subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, &
+                                hEff, Flx, continuous, h_neglect, remap_CS, h_neglect_edge)
   integer,                      intent(in)    :: nk    !< Number of levels
   integer,                      intent(in)    :: nsurf !< Number of neutral surfaces
   integer,                      intent(in)    :: deg   !< Degree of polynomial reconstructions
@@ -1786,7 +1801,13 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real, dimension(nsurf-1),     intent(in)    :: hEff  !< Effective thickness between two neutral surfaces (Pa)
   real, dimension(nsurf-1),     intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
   logical,                      intent(in)    :: continuous !< True if using continuous reconstruction
+  real,                         intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h0.
   type(remapping_CS), optional, intent(in)    :: remap_CS
+  real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h0.
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt, k
   real :: T_right_top, T_right_bottom, T_right_layer
@@ -1809,8 +1830,8 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
 
   ! Setup reconstruction edge values
   if (continuous) then
-    call interface_scalar(nk, hl, Tl, Til, 2)
-    call interface_scalar(nk, hr, Tr, Tir, 2)
+    call interface_scalar(nk, hl, Tl, Til, 2, h_neglect)
+    call interface_scalar(nk, hr, Tr, Tir, 2, h_neglect)
     call ppm_left_right_edge_values(nk, Tl, Til, aL_l, aR_l)
     call ppm_left_right_edge_values(nk, Tr, Tir, aL_r, aR_r)
   else
@@ -1819,8 +1840,10 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
     Tid_l(:,:) = 0.
     Tid_r(:,:) = 0.
 
-    call build_reconstructions_1d( remap_CS, nk, hl, Tl, ppoly_r_coeffs_l, Tid_l, ppoly_r_S_l, iMethod )
-    call build_reconstructions_1d( remap_CS, nk, hr, Tr, ppoly_r_coeffs_r, Tid_r, ppoly_r_S_r, iMethod )
+    call build_reconstructions_1d( remap_CS, nk, hl, Tl, ppoly_r_coeffs_l, Tid_l, &
+                                   ppoly_r_S_l, iMethod, h_neglect, h_neglect_edge )
+    call build_reconstructions_1d( remap_CS, nk, hr, Tr, ppoly_r_coeffs_r, Tid_r, &
+                                   ppoly_r_S_r, iMethod, h_neglect, h_neglect_edge )
   endif
 
   do k_sublayer = 1, nsurf-1
@@ -1929,47 +1952,80 @@ logical function ndiff_unit_tests_continuous(verbose)
   real, dimension(2*nk+1)    :: Flx                        ! Test flux
   integer :: k
   logical :: v
+  real :: h_neglect, h_neglect_edge
+
+  h_neglect_edge = 1.0e-10 ; h_neglect = 1.0e-30
 
   v = verbose
 
   ndiff_unit_tests_continuous = .false. ! Normally return false
   write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_continuous ='
 
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fv_diff(v,0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,1.,1.,1., 0.,1.,2., 1., 'FV: Straight line on uniform grid')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,1.,1.,0., 0.,4.,8., 7., 'FV: Vanished right cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,0.,1.,1., 0.,4.,8., 7., 'FV: Vanished left cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,1.,2.,4., 0.,3.,9., 4., 'FV: Stretched grid')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,2.,0.,2., 0.,1.,2., 0., 'FV: Vanished middle cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,0.,1.,0., 0.,1.,2., 2., 'FV: Vanished on both sides')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,1.,0.,0., 0.,1.,2., 0., 'FV: Two vanished cell sides')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fv_diff(v,0.,0.,0., 0.,1.,2., 0., 'FV: All vanished cells')
 
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_fvlsq_slope(v,0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,1.,1.,1., 0.,1.,2., 1., 'LSQ: Straight line on uniform grid')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,1.,1.,0., 0.,1.,2., 1., 'LSQ: Vanished right cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,0.,1.,1., 0.,1.,2., 1., 'LSQ: Vanished left cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,1.,2.,4., 0.,3.,9., 2., 'LSQ: Stretched grid')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,1.,0.,1., 0.,1.,2., 2., 'LSQ: Vanished middle cell')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,0.,1.,0., 0.,1.,2., 0., 'LSQ: Vanished on both sides')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,1.,0.,0., 0.,1.,2., 0., 'LSQ: Two vanished cell sides')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_fvlsq_slope(v,0.,0.,0., 0.,1.,2., 0., 'LSQ: All vanished cells')
 
-  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1)
-  !ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v,5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
-  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2)
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v,5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
+  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 1, h_neglect)
+  !ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+  !  test_data1d(5, Tio, (/27.,21.,15.,9.,3./), 'Linear profile, interface temperatures')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_data1d(v,5, Tio, (/24.,22.5,15.,7.5,6./), 'Linear profile, linear interface temperatures')
+  call interface_scalar(4, (/10.,10.,10.,10./), (/24.,18.,12.,6./), Tio, 2, h_neglect)
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_data1d(v,5, Tio, (/24.,22.,15.,8.,6./), 'Linear profile, PPM interface temperatures')
 
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v, 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v, 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v, 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v, 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
-  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_ifndp(v,-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-1.0, 0.,  1.0, 1.0, 0.5, 'Check mid-point')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v, 0.0, 0.,  1.0, 1.0, 0.0, 'Check bottom')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v, 0.1, 0.,  1.1, 1.0, 0.0, 'Check below')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-1.0, 0.,  0.0, 1.0, 1.0, 'Check top')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-1.0, 0., -0.1, 1.0, 1.0, 'Check above')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-1.0, 0.,  3.0, 1.0, 0.25, 'Check 1/4')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-3.0, 0.,  1.0, 1.0, 0.75, 'Check 3/4')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v, 1.0, 0.,  1.0, 1.0, 0.0, 'Check dRho=0 below')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-1.0, 0., -1.0, 1.0, 1.0, 'Check dRho=0 above')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v, 0.0, 0.,  0.0, 1.0, 0.5, 'Check dRho=0 mid')
+  ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. &
+    test_ifndp(v,-2.0, .5,  5.0, 0.5, 0.5, 'Check dP=0')
 
   ! Identical columns
   call find_neutral_surface_positions_continuous(3, &
@@ -1993,12 +2049,14 @@ logical function ndiff_unit_tests_continuous(verbose)
                                    (/0.,0.,10.,10.,20.,20.,30.,30./), '... right positions')
   call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/20.,16.,12./), (/20.,16.,12./), & ! Tl, Tr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., &
+                               h_neglect, h_neglect_edge=h_neglect_edge)
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 7, Flx, &
               (/0.,0.,0.,0.,0.,0.,0./), 'Identical columns, rho flux (=0)')
   call neutral_surface_flux(3, 2*3+2, 2, (/10.,10.,10./), (/10.,10.,10./), & ! nk, hL, hR
                                (/-1.,-1.,-1./), (/1.,1.,1./), & ! Sl, Sr
-                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true.)
+                               PiLRo, PiRLo, KoL, KoR, hEff, Flx, .true., &
+                               h_neglect, h_neglect_edge=h_neglect_edge)
   ndiff_unit_tests_continuous = ndiff_unit_tests_continuous .or. test_data1d(v, 7, Flx, &
               (/0.,20.,0.,20.,0.,20.,0./), 'Identical columns, S flux')
 
@@ -2163,6 +2221,7 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   real, dimension(nk,2)       :: poly_T_l, poly_T_r, poly_S,  poly_slope    ! Linear reconstruction for T
   real, dimension(nk,2)       :: dRdT, dRdS
   integer                     :: iMethod
+  real                        :: h_neglect, h_neglect_edge
   integer :: k
   logical :: v
 
@@ -2170,6 +2229,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
 
   ndiff_unit_tests_discontinuous = .false. ! Normally return false
   write(*,*) '==== MOM_neutral_diffusion: ndiff_unit_tests_discontinuous ='
+
+  h_neglect = 1.0e-30 ; h_neglect_edge = 1.0e-10
 
   ! Unit tests for find_neutral_surface_positions_discontinuous
   ! Salinity is 0 for all these tests
@@ -2182,8 +2243,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   do k = 1,nk ; Pres_l(k+1) = Pres_l(k) + hL(k) ; Pres_r(k+1) = Pres_r(k) + hR(k) ; enddo
   ! Identical columns
   Tl = (/20.,16.,12./) ; Tr = (/20.,16.,12./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2194,8 +2255,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.,10.,0.,0.,0.,10.,0.,0.,0.,10.,0.,0./), & ! hEff
                                    'Identical columns')
   Tl = (/20.,16.,12./) ; Tr = (/18.,14.,10./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2206,8 +2267,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column slightly cooler')
   Tl = (/18.,14.,10./) ; Tr = (/20.,16.,12./) ;
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2218,8 +2279,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Left column slightly cooler')
   Tl = (/20.,16.,12./) ; Tr = (/14.,10.,6./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2230,8 +2291,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 5.0, 0.0, 5.0, 0.0, 5.0, 0.0, 0.0, 0.0/), & ! hEff
                                    'Right column somewhat cooler')
   Tl = (/20.,16.,12./) ; Tr = (/8.,6.,4./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2242,8 +2303,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0/), & ! hEff
                                    'Right column much cooler')
   Tl = (/14.,14.,10./) ; Tr = (/14.,14.,10./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2254,8 +2315,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.,10.,0.,0.,0.,10.,0.,0.,0.,10.,0.,0./), & ! hEff
                                    'Identical columns with mixed layer')
   Tl = (/20.,16.,12./) ; Tr = (/14.,14.,10./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
@@ -2266,8 +2327,8 @@ logical function ndiff_unit_tests_discontinuous(verbose)
                                    (/0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0/), & ! hEff
                                    'Right column with mixed layer')
   Tl = (/14.,14.,6./) ; Tr = (/12.,16.,8./)
-  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod )
-  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod )
+  call build_reconstructions_1d( remap_CS, nk, hL, Tl, poly_T_l, TiL, poly_slope, iMethod, h_neglect, h_neglect_edge )
+  call build_reconstructions_1d( remap_CS, nk, hR, Tr, poly_T_r, TiR, poly_slope, iMethod, h_neglect, h_neglect_edge )
   call find_neutral_surface_positions_discontinuous(nk, 1, Pres_l, TiL, SiL, dRdT, dRdS, &
             Pres_r, TiR, SiR, dRdT, dRdS, PoL, PoR, KoL, KoR, hEff)
   ndiff_unit_tests_discontinuous = ndiff_unit_tests_discontinuous .or.  test_nsp(v, 12, KoL, KoR, PoL, PoR, hEff, &
