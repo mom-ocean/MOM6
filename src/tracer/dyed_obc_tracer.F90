@@ -30,14 +30,12 @@ implicit none ; private
 public register_dyed_obc_tracer, initialize_dyed_obc_tracer
 public dyed_obc_tracer_column_physics, dyed_obc_tracer_end
 
-! ntr is the number of tracers in this module.
-integer, parameter :: NTR = 4
-
 type p3d
   real, dimension(:,:,:), pointer :: p => NULL()
 end type p3d
 
 type, public :: dyed_obc_tracer_CS ; private
+  integer :: ntr    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
   character(len=200) :: tracer_IC_file ! The full path to the IC file, or " "
@@ -46,23 +44,23 @@ type, public :: dyed_obc_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR) :: &
+  type(p3d), allocatable, dimension(:) :: &
     tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
     tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
     tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
     tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
-  real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
 
-  integer, dimension(NTR) :: ind_tr ! Indices returned by aof_set_coupler_flux
-             ! if it is used and the surface tracer concentrations are to be
-             ! provided to the coupler.
+  integer, allocatable, dimension(:) :: &
+    ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
+               ! surface tracer concentrations are to be provided to the coupler.
+    id_tracer, id_tr_adx, id_tr_ady, &
+    id_tr_dfx, id_tr_dfy
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
-  integer, dimension(NTR) :: id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1
-  integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
+  type(MOM_restart_CS), pointer :: restart_CSp => NULL()
 
-  type(vardesc) :: tr_desc(NTR)
+  type(vardesc), allocatable :: tr_desc(:)
 end type dyed_obc_tracer_CS
 
 contains
@@ -84,6 +82,8 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "dyed_obc_tracer" ! This module's name.
   character(len=200) :: inputdir
+  character(len=48)  :: var_name ! The variable's name.
+  character(len=48)  :: desc_name ! The variable's descriptor.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_dyed_obc_tracer
   integer :: isd, ied, jsd, jed, nz, m
@@ -98,6 +98,27 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "NUM_DYE_TRACERS", CS%ntr, &
+                 "The number of dye tracers in this run. Each tracer \n"//&
+                 "should have a separate boundary segment.", default=0)
+  allocate(CS%tr_adx(CS%ntr), &
+           CS%tr_ady(CS%ntr), &
+           CS%tr_dfx(CS%ntr), &
+           CS%tr_dfy(CS%ntr))
+  allocate(CS%ind_tr(CS%ntr), &
+           CS%id_tracer(CS%ntr), &
+           CS%id_tr_adx(CS%ntr), &
+           CS%id_tr_ady(CS%ntr), &
+           CS%id_tr_dfx(CS%ntr), &
+           CS%id_tr_dfy(CS%ntr))
+  allocate(CS%tr_desc(CS%ntr))
+
+  CS%id_tracer(:) = -1
+  CS%id_tr_adx(:) = -1
+  CS%id_tr_ady(:) = -1
+  CS%id_tr_dfx(:) = -1
+  CS%id_tr_dfy(:) = -1
+
   call get_param(param_file, mdl, "dyed_obc_TRACER_IC_FILE", CS%tracer_IC_file, &
                  "The name of a file from which to read the initial \n"//&
                  "conditions for the dyed_obc tracers, or blank to initialize \n"//&
@@ -110,11 +131,11 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                    CS%tracer_IC_file)
   endif
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
-  do m=1,NTR
-    write(name,'("dye_",I1.1)') m
-    write(longname,'("Concentration of dyed_obc Tracer ",I1.1)') m
+  do m=1,CS%ntr
+    write(name,'("dye_",I2.2)') m
+    write(longname,'("Concentration of dyed_obc Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
     ! This is needed to force the compiler not to do a copy in the registration
@@ -135,10 +156,11 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   enddo
 
   CS%tr_Reg => tr_Reg
+  CS%restart_CSp => restart_CS
   register_dyed_obc_tracer = .true.
 end function register_dyed_obc_tracer
 
-!> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
+!> This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
 subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                   diag_to_Z_CSp)
@@ -162,7 +184,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
                            ! in through u- and v- points through the open
                            ! boundary conditions, in the same units as tr.
-  character(len=16) :: name     ! A variable's name in a NetCDF file.
+  character(len=24) :: name     ! A variable's name in a NetCDF file.
   character(len=72) :: longname ! The long name of that variable.
   character(len=48) :: units    ! The dimensions of the variable.
   character(len=48) :: flux_units ! The units for tracer fluxes, usually
@@ -175,6 +197,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
+  if (CS%ntr < 1) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -189,12 +212,12 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (.not.file_exists(CS%tracer_IC_file, G%Domain)) &
         call MOM_error(FATAL, "dyed_obc_initialize_tracer: Unable to open "// &
                         CS%tracer_IC_file)
-      do m=1,NTR
+      do m=1,CS%ntr
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_dyed_obc_tracer")
         call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
-      do m=1,NTR
+      do m=1,CS%ntr
         do k=1,nz ; do j=js,je ; do i=is,ie
           CS%tr(i,j,k,m) = 0.0
         enddo ; enddo ; enddo
@@ -206,7 +229,7 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
   else ; flux_units = "kg s-1" ; endif
 
-  do m=1,NTR
+  do m=1,CS%ntr
     ! Register the tracer for the restart file.
     call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
                        caller="initialize_dyed_obc_tracer")
@@ -277,23 +300,24 @@ subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
+  if (CS%ntr < 1) return
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
-    do m=1,NTR
+    do m=1,CS%ntr
       do k=1,nz ;do j=js,je ; do i=is,ie
-          h_work(i,j,k) = h_old(i,j,k)
+        h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth)
-      call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+      if (nz > 1) call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
-    do m=1,NTR
-      call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
+    do m=1,CS%ntr
+      if (nz > 1) call tracer_vertdiff(h_old, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   endif
 
-  do m=1,NTR
+  do m=1,CS%ntr
     if (CS%id_tracer(m)>0) &
       call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
     if (CS%id_tr_adx(m)>0) &
@@ -315,7 +339,7 @@ subroutine dyed_obc_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,NTR
+    do m=1,CS%ntr
       if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
       if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
       if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
@@ -328,7 +352,8 @@ end subroutine dyed_obc_tracer_end
 
 !> \namespace dyed_obc_tracer
 !!                                                                     *
-!!  By Kate Hedstrom, 2017, copied from DOME tracers.                  *
+!!  By Kate Hedstrom, 2017, copied from DOME tracers and also          *
+!!    dye_example.                  *
 !!                                                                     *
 !!    This file contains an example of the code that is needed to set  *
 !!  up and use a set of dynamically passive tracers. These tracers     *
@@ -340,7 +365,6 @@ end subroutine dyed_obc_tracer_end
 !!  their output and the subroutine that does any tracer physics or    *
 !!  chemistry along with diapycnal mixing (included here because some  *
 !!  tracers may float or swim vertically or dye diapycnal processes).  *
-!!                                                                     *
 !!                                                                     *
 !!  Macros written all in capital letters are defined in MOM_memory.h. *
 !!                                                                     *

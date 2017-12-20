@@ -75,6 +75,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_s
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
 use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
+use dyed_channel_initialization, only : dyed_channel_set_OBC_tracer_data
 use dyed_obcs_initialization, only : dyed_obcs_set_OBC_data
 use supercritical_initialization, only : supercritical_set_OBC_data
 use soliton_initialization, only : soliton_initialize_velocity
@@ -533,6 +534,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "A string that sets how the user code is invoked to set open\n"//&
                  " boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
+                 "   dyed_channel - supercritical with dye on the inflow boundary\n"//&
                  "   dyed_obcs - circle_obcs with dyes on the open boundaries\n"//&
                  "   Kelvin - barotropic Kelvin wave forcing on the western boundary\n"//&
                  "   shelfwave - Flather with shelf wave forcing on western boundary\n"//&
@@ -541,6 +543,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  "   USER - user specified", default="none")
     if (trim(config) == "DOME") then
       call DOME_set_OBC_data(OBC, tv, G, GV, PF, tracer_Reg)
+    elseif (trim(config) == "dyed_channel") then
+      call dyed_channel_set_OBC_tracer_data(OBC, G, GV, PF, tracer_Reg)
+      OBC%update_OBC = .true.
     elseif (trim(config) == "dyed_obcs") then
       call dyed_obcs_set_OBC_data(OBC, G, GV, PF, tracer_Reg)
     elseif (trim(config) == "Kelvin") then
