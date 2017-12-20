@@ -24,6 +24,8 @@ program MOM_main
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
+
+  use time_interp_external_mod, only : time_interp_external_init
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
@@ -205,6 +207,9 @@ program MOM_main
     call set_current_pelist(ocean_pelist)
     deallocate(ocean_pelist)
   endif
+
+  !!! dont keep this here - move to mom open_boundary ###
+  call time_interp_external_init()
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )

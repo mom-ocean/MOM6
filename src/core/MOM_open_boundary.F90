@@ -431,6 +431,10 @@ subroutine initialize_segment_data(G, OBC, PF)
   integer, dimension(:), allocatable :: saved_pelist
   integer :: current_pe
   integer, dimension(1) :: single_pelist
+  !will be able to dynamically switch between sub-sampling refined grid data or model grid
+  logical :: brushcutter_mode
+
+
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -481,7 +485,8 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
-    call get_param(PF, mdl, segnam, segstr)
+    ! needs documentation !!
+    call get_param(PF, mdl, segnam, segstr, 'xyz')
 
     call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) then
@@ -508,6 +513,8 @@ subroutine initialize_segment_data(G, OBC, PF)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
+    ! this is hard-coded for now - needs cleanup ###
+    brushcutter_mode = .false.
 
     do m=1,num_fields
       call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
@@ -525,16 +532,25 @@ subroutine initialize_segment_data(G, OBC, PF)
         call field_size(filename,fieldname,siz,no_domain=.true.)
         if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
-          if (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0) then
+          if (brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
             call MOM_error(FATAL,'segment data are not on the supergrid')
           endif
           siz2(1)=1
+
           if (siz(1)>1) then
-            siz2(1)=(siz(1)-1)/2
+            if (brushcutter_mode) then
+              siz2(1)=(siz(1)-1)/2
+            else
+              siz2(1)=siz(1)
+            endif
           endif
           siz2(2)=1
           if (siz(2)>1) then
-            siz2(2)=(siz(2)-1)/2
+            if (brushcutter_mode) then
+              siz2(2)=(siz(2)-1)/2
+            else
+              siz2(2)=siz(2)
+            endif
           endif
           siz2(3)=siz(3)
 
@@ -1935,6 +1951,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:,:), allocatable :: tmp_buffer
   logical :: brushcutter_mode
   integer :: subsample_factor
+  integer :: is_obc2, js_obc2
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2024,9 +2041,25 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (.not.associated(segment%field(m)%buffer_dst)) then
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
           if (segment%field(m)%nk_src > 1) then
-            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+            if (brushcutter_mode) then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
+            else
+              if (segment%is_E_or_W) then
+                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,G%ke))
+              else
+                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,G%ke))
+              endif
+            endif
           else
-            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
+            if (brushcutter_mode) then
+              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
+            else
+              if (segment%is_E_or_W) then
+                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
+              else
+                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
+              endif
+            endif
           endif
           segment%field(m)%buffer_dst(:,:,:)=0.0
           if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
@@ -2070,20 +2103,38 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
               segment%field(m)%dz_src(:,js_obc,:)=tmp_buffer(is_obc+G%idg_offset+1:ie_obc+G%idg_offset,1,:)
             endif
           endif
-          do j=js_obc,je_obc
-            do i=is_obc,ie_obc
 
+          if (segment%is_E_or_W) then
+            ishift=1
+            if (segment%direction == OBC_DIRECTION_E) ishift=0
+            do j=js_obc+1,je_obc
+              I=is_obc
               ! Using the h remapping approach
               ! Pretty sure we need to check for source/target grid consistency here
-              segment%field(m)%buffer_dst(i,j,:)=0.0  ! initialize remap destination buffer
-              if (G%mask2dT(i,j)>0.) then
+              segment%field(m)%buffer_dst(I,j,:)=0.0  ! initialize remap destination buffer
+              if (G%mask2dCu(I,j)>0.) then
                 call remapping_core_h(OBC%remap_CS, &
-                     segment%field(m)%nk_src,segment%field(m)%dz_src(i,j,:), &
-                     segment%field(m)%buffer_src(i,j,:), &
-                     G%ke, h(i,j,:), segment%field(m)%buffer_dst(i,j,:))
+                     segment%field(m)%nk_src,segment%field(m)%dz_src(I,j,:), &
+                     segment%field(m)%buffer_src(I,j,:), &
+                     G%ke, h(i+ishift,j,:), segment%field(m)%buffer_dst(I,j,:))
               endif
             enddo
-          enddo
+          else
+            jshift=1
+            if (segment%direction == OBC_DIRECTION_N) jshift=0
+            do i=is_obc+1,ie_obc
+              J=js_obc
+              ! Using the h remapping approach
+              ! Pretty sure we need to check for source/target grid consistency here
+              segment%field(m)%buffer_dst(i,J,:)=0.0  ! initialize remap destination buffer
+              if (G%mask2dCv(i,J)>0.) then
+                call remapping_core_h(OBC%remap_CS, &
+                     segment%field(m)%nk_src,segment%field(m)%dz_src(i,J,:), &
+                     segment%field(m)%buffer_src(i,J,:), &
+                     G%ke, h(i,j+jshift,:), segment%field(m)%buffer_dst(i,J,:))
+              endif
+            enddo
+          endif
         else  ! 2d data
           segment%field(m)%buffer_dst(:,:,1)=segment%field(m)%buffer_src(:,:,1)  ! initialize remap destination buffer
         endif
@@ -2099,12 +2150,29 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
       endif
 
+      ! from this point on, data are entirely on segments - will
+      ! write all segment loops as 2d loops.
+      if (segment%is_E_or_W) then
+        js_obc2 = js_obc+1
+        is_obc2 = is_obc
+      else
+        js_obc2 = js_obc
+        is_obc2 = is_obc+1
+      endif
+      if (segment%is_N_or_S) then
+        is_obc2 = is_obc+1
+        js_obc2 = js_obc
+      else
+        is_obc2 = is_obc
+        js_obc2 = js_obc+1
+      endif
+
       if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
         if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
           if((trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) .or.  &
              (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S)) then
-            do j=js_obc,je_obc
-              do i=is_obc,ie_obc
+            do j=js_obc2,je_obc
+              do i=is_obc2,ie_obc
                 segment%normal_trans_bt(i,j) = 0.0
                 do k=1,G%ke
                   segment%normal_vel(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
@@ -2120,8 +2188,8 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
       endif
 
       if (trim(segment%field(m)%name) == 'SSH') then
-        do j=js_obc,je_obc
-          do i=is_obc,ie_obc
+        do j=js_obc2,je_obc
+          do i=is_obc2,ie_obc
             segment%eta(i,j) = segment%field(m)%buffer_dst(i,j,1)
           enddo
         enddo
@@ -2129,7 +2197,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
       if (trim(segment%field(m)%name) == 'TEMP') then
         if (associated(segment%field(m)%buffer_dst)) then
-          do k=1,nz; do j=js_obc, je_obc;do i=is_obc,ie_obc
+          do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo; enddo; enddo
         else
@@ -2137,7 +2205,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
       elseif (trim(segment%field(m)%name) == 'SALT') then
         if (associated(segment%field(m)%buffer_dst)) then
-          do k=1,nz; do j=js_obc, je_obc;do i=is_obc,ie_obc
+          do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo; enddo; enddo
         else
