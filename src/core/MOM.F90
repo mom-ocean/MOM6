@@ -766,7 +766,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     endif
 
     ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    if (CS%id_uhtr > 0 .or. CS%id_vhtr > 0 .or. CS%id_umo > 0 .or. CS%id_vmo > 0) then
+    if (transport_remap_grid_needed(CS)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
         h_pre_dyn(i,j,k) = h(i,j,k)
         if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
@@ -2746,7 +2746,8 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T
 
   ! Post mass transports, including SGS
   ! Build the remap grids using the layer thicknesses from before the dynamics
-  call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
+  if (transport_remap_grid_needed(CS)) &
+    call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
 
   H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
   if (CS%id_umo_2d > 0) then
@@ -2782,6 +2783,17 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T
   if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, diag, alt_h = h_pre_dyn)
 
 end subroutine post_transport_diagnostics
+
+!> Indicate whether it is necessary to save and recalculate the grid for finding
+!! remapped transports.
+function transport_remap_grid_needed(CS) result(needed)
+  type(MOM_control_struct), intent(in)    :: CS  !< control structure
+  logical :: needed
+
+  needed = .false.
+  needed = needed .or. (CS%id_uhtr > 0) .or. (CS%id_vhtr > 0)
+  needed = needed .or. (CS%id_umo > 0)  .or. (CS%id_vmo > 0)
+end function transport_remap_grid_needed
 
 !> Post diagnostics of temperatures and salinities, their fluxes, and tendencies.
 subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
