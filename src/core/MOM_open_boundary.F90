@@ -356,9 +356,9 @@ subroutine open_boundary_config(G, param_file, OBC)
            fail_if_missing=.true.)
       segment_str = remove_spaces(segment_str)
       if (segment_str(1:2) == 'I=') then
-        call setup_u_point_obc(OBC, G, segment_str, l)
+        call setup_u_point_obc(OBC, G, segment_str, l, param_file)
       elseif (segment_str(1:2) == 'J=') then
-        call setup_v_point_obc(OBC, G, segment_str, l)
+        call setup_v_point_obc(OBC, G, segment_str, l, param_file)
       else
         call MOM_error(FATAL, "MOM_open_boundary.F90, open_boundary_config: "//&
              "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
@@ -658,13 +658,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
-  type(param_file_type), intent(in) , optional :: PF
+  type(param_file_type), intent(in)  :: PF
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
   character(len=32) :: action_str(5)
   character(len=128) :: seg_str, segment_param_str
-  real, dimension(2)  :: tnudge
+  real, allocatable, dimension(:)  :: tnudge
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
@@ -713,6 +713,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%nudged = .true.
       write(segment_param_str(1:22),"('OBC_SEGMENT_',i3.3,'_TNUDGE')") l_seg
       print *,'segment_param_str= ',segment_param_str(1:22)
+      allocate(tnudge(2))
       call get_param(PF, mdl, segment_param_str(1:22), tnudge, &
            "Timescales in seconds for nudging along a segment", &
                 fail_if_missing=.true.,default=0.,units="days")
@@ -721,6 +722,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 !      call parse_segment_param(seg_str, 'TNUDGE_UNITS',OBC%segment(l_seg)%Tnudge_in)
       OBC%segment(l_seg)%Tnudge_in = 1.0/(tnudge(1)*86400.)
       OBC%segment(l_seg)%Tnudge_out = 1.0/(tnudge(2)*86400.)
+      deallocate(tnudge)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
@@ -765,11 +767,12 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
 end subroutine setup_u_point_obc
 
 !> Parse an OBC_SEGMENT_%%% string starting with "J=" and configure placement and type of OBC accordingly
-subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
+subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "J=%,I=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
+  type(param_file_type), intent(in)  :: PF
   ! Local variables
   integer :: J_obc, Is_obc, Ie_obc ! Position of segment in global index space
   integer :: i, a_loop
