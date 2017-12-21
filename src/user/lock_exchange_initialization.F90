@@ -24,7 +24,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -83,7 +83,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, param_file, just_read_pa
       eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
     enddo
     do k=nz,1,-1
-      h(i,j,k) = eta1D(K) - eta1D(K+1)
+      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 

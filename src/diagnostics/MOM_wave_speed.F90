@@ -34,7 +34,7 @@ type, public :: wave_speed_CS ; private
                                        !! can be overridden by optional arguments.
   type(remapping_CS) :: remapping_CS   !< Used for vertical remapping when calculating equivalent barotropic
                                        !! mode structure.
-  type(diag_ctrl), pointer :: diag !< Diagnostics control structure
+  type(diag_ctrl), pointer :: diag     !< Diagnostics control structure
 end type wave_speed_CS
 
 contains
@@ -42,9 +42,9 @@ contains
 !> Calculates the wave speed of the first baroclinic mode.
 subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
                       mono_N2_column_fraction, mono_N2_depth, modal_structure)
-  type(ocean_grid_type),                    intent(in)  :: G !< Ocean grid structure
+  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h !< Layer thickness (m or kg/m2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h  !< Layer thickness in units of H (m or kg/m2)
   type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)),         intent(out) :: cg1 !< First mode internal wave speed (m/s)
   type(wave_speed_CS),                      pointer     :: CS !< Control structure for MOM_wave_speed
@@ -443,7 +443,10 @@ subroutine wave_speed(h, tv, G, GV, cg1, CS, full_halos, use_ebt_mode, &
             else
               mode_struct(1:kc)=0.
             endif
-            call remapping_core_h(CS%remapping_CS, kc, Hc, mode_struct, nz, h(i,j,:), modal_structure(i,j,:))
+            ! Note that remapping_core_h requires that the same units be used
+            ! for both the source and target grid thicknesses.
+            call remapping_core_h(CS%remapping_CS, kc, Hc, mode_struct, &
+                                  nz, GV%H_to_m*h(i,j,:), modal_structure(i,j,:))
           endif
         else
           cg1(i,j) = 0.0
