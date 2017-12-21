@@ -653,16 +653,18 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
 end subroutine setup_segment_indices
 
 !> Parse an OBC_SEGMENT_%%% string starting with "I=" and configure placement and type of OBC accordingly
-subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
+subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
   type(dyn_horgrid_type),  intent(in) :: G !< Ocean grid structure
   character(len=*),        intent(in) :: segment_str !< A string in form of "I=%,J=%:%,string"
   integer,                 intent(in) :: l_seg !< which segment is this?
+  type(param_file_type), intent(in) , optional :: PF
   ! Local variables
   integer :: I_obc, Js_obc, Je_obc ! Position of segment in global index space
   integer :: j, a_loop
   character(len=32) :: action_str(5)
-
+  character(len=128) :: seg_str, segment_param_str
+  real, dimension(2)  :: tnudge
   ! This returns the global indices for the segment
   call parse_segment_str(G%ieg, G%jeg, segment_str, I_obc, Js_obc, Je_obc, action_str )
 
@@ -709,8 +711,16 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%open_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'NUDGED') then
       OBC%segment(l_seg)%nudged = .true.
-      OBC%segment(l_seg)%Tnudge_in = 1.0/(3*86400)
-      OBC%segment(l_seg)%Tnudge_out = 1.0/(360*86400)
+      write(segment_param_str(1:22),"('OBC_SEGMENT_',i3.3,'_TNUDGE')") l_seg
+      print *,'segment_param_str= ',segment_param_str(1:22)
+      call get_param(PF, mdl, segment_param_str(1:22), tnudge, &
+           "Timescales in seconds for nudging along a segment", &
+                fail_if_missing=.true.,default=0.,units="days")
+!      tnudge(1)=1.0;tnudge(2)=30.
+      print *,'tnudge=',tnudge
+!      call parse_segment_param(seg_str, 'TNUDGE_UNITS',OBC%segment(l_seg)%Tnudge_in)
+      OBC%segment(l_seg)%Tnudge_in = 1.0/(tnudge(1)*86400.)
+      OBC%segment(l_seg)%Tnudge_out = 1.0/(tnudge(2)*86400.)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
       OBC%segment(l_seg)%gradient = .true.
@@ -1031,6 +1041,90 @@ end subroutine parse_segment_str
  987 call MOM_error(FATAL,'Error while parsing segment data specification! '//trim(segment_str))
 
  end subroutine parse_segment_data_str
+
+
+!> Parse an OBC_SEGMENT_%%%_PARAMS string
+ subroutine parse_segment_param_real(segment_str, var, param_value, debug )
+   character(len=*), intent(in)             :: segment_str !< A string in form of "VAR1=file:foo1.nc(varnam1),VAR2=file:foo2.nc(varnam2),..."
+   character(len=*), intent(in)             :: var         !< The name of the variable for which parameters are needed
+   real,             intent(out)            :: param_value !< The value of the parameter
+   logical, intent(in), optional            :: debug
+   ! Local variables
+   character(len=128) :: word1, word2, word3, method
+   integer :: lword, nfields, n, m, orient
+   logical :: continue,dbg
+   character(len=32), dimension(MAX_OBC_FIELDS) :: flds
+
+   nfields=0
+   continue=.true.
+   dbg=.false.
+   if (PRESENT(debug)) dbg=debug
+
+   do while (continue)
+      word1 = extract_word(segment_str,',',nfields+1)
+      if (trim(word1) == '') exit
+      nfields=nfields+1
+      word2 = extract_word(word1,'=',1)
+      flds(nfields) = trim(word2)
+   enddo
+
+   ! if (PRESENT(fields)) then
+   !   do n=1,nfields
+   !     fields(n) = flds(n)
+   !   enddo
+   ! endif
+
+   ! if (PRESENT(num_fields)) then
+   !    num_fields=nfields
+   !    return
+   ! endif
+
+   m=0
+!   if (PRESENT(var)) then
+     do n=1,nfields
+       if (trim(var)==trim(flds(n))) then
+          m=n
+          exit
+       endif
+     enddo
+     if (m==0) then
+        call abort()
+     endif
+
+     print *,'00001x'
+    ! Process first word which will start with the fieldname
+     word3 = extract_word(segment_str,',',m)
+!     word1 = extract_word(word3,':',1)
+!     if (trim(word1) == '') exit
+     word2 = extract_word(word1,'=',1)
+     if (trim(word2) == trim(var)) then
+        method=trim(extract_word(word1,'=',2))
+        lword=len_trim(method)
+        read(method(1:lword),*,err=987) param_value
+        print *,'00002x'
+        ! if (method(lword-3:lword) == 'file') then
+        !    ! raise an error id filename/fieldname not in argument list
+        !    word1 = extract_word(word3,':',2)
+        !    filenam = extract_word(word1,'(',1)
+        !    fieldnam = extract_word(word1,'(',2)
+        !    lword=len_trim(fieldnam)
+        !    fieldnam = fieldnam(1:lword-1)  ! remove trailing parenth
+        !    value=-999.
+        ! elseif (method(lword-4:lword) == 'value') then
+        !    filenam = 'none'
+        !    fieldnam = 'none'
+        !    word1 = extract_word(word3,':',2)
+        !    lword=len_trim(word1)
+        !    read(word1(1:lword),*,end=986,err=987) value
+        ! endif
+      endif
+!    endif
+
+   return
+ 986 call MOM_error(FATAL,'End of record while parsing segment data specification! '//trim(segment_str))
+ 987 call MOM_error(FATAL,'Error while parsing segment parameter specification! '//trim(segment_str))
+
+ end subroutine parse_segment_param_real
 
 !> Initialize open boundary control structure
 subroutine open_boundary_init(G, param_file, OBC)
