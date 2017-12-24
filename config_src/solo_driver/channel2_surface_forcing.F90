@@ -109,7 +109,7 @@ subroutine channel2_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
   real :: y, latext        ! ND latitude, latitudinal range
-  real :: den, rhos = 1037.347, rhon = 1034.152     ! sothern and northern boundary densities of the channel2
+  real :: den, rhos = 1037.370, rhon = 1034.209     ! sothern and northern boundary densities of the channel2
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 

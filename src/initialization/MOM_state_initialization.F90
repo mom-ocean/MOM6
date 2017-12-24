@@ -60,6 +60,7 @@ use channel_initialization, only : channel_initialize_thickness
 use channel_initialization, only: channel_initialize_sponges
 use channelssp_initialization, only: channelssp_initialize_sponges
 use channel2_initialization, only: channel2_initialize_sponges
+use channel4_initialization, only: channel4_initialize_sponges
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
 use lock_exchange_initialization, only : lock_exchange_initialize_thickness
 use external_gwave_initialization, only : external_gwave_initialize_thickness
@@ -517,6 +518,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t BFB - Sponge at the southern boundary of the domain\n"//&
                  " \t channel - Sponge at the northern boundary of the domain\n"//&
                  " \t channel2 - Sponge at the northern boundary of the domain\n"//&
+                 " \t channel4 - Sponge at the northern boundary of the domain\n"//&
                  " \t channelssp - Sponge at the northern boundary of the domain but avoid e/w boundaries\n"//&
                  " \t\t for buoyancy-forced basin case.\n"//&
                  " \t USER - call a user modified routine.", default="file")
@@ -535,6 +537,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
       case ("channelssp"); call channelssp_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
       case ("channel2"); call channel2_initialize_sponges(G, GV, use_temperature, &
+                                                tv, PF, sponge_CSp, h)
+      case ("channel4"); call channel4_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
