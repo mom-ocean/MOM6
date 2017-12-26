@@ -614,7 +614,7 @@ contains
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
-         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
+         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, tv%internal_heat, fluxes%frunoff, sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
     ! usually in ALE mode
