@@ -2,27 +2,27 @@ module regional_dyes
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_hor_index, only : hor_index_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
-use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
-use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_tracer_Z_init, only : tracer_Z_init
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_diag_mediator,      only : post_data, register_diag_field, safe_alloc_ptr
+use MOM_diag_mediator,      only : diag_ctrl
+use MOM_diag_to_Z,          only : register_Z_tracer, diag_to_Z_CS
+use MOM_error_handler,      only : MOM_error, FATAL, WARNING
+use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,       only : forcing
+use MOM_grid,               only : ocean_grid_type
+use MOM_hor_index,          only : hor_index_type
+use MOM_io,                 only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary,      only : ocean_OBC_type
+use MOM_restart,            only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_sponge,             only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,       only : time_type, get_time
+use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
+use MOM_tracer_registry,    only : add_tracer_diagnostics, add_tracer_OBC_values
+use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_tracer_Z_init,      only : tracer_Z_init
+use MOM_variables,          only : surface
+use MOM_verticalGrid,       only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
+use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
