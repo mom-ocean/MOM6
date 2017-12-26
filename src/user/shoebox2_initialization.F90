@@ -72,7 +72,6 @@ subroutine shoebox2_initialize_topography(D, G, param_file, max_depth)
     x=(G%geoLonT(i,j)-G%west_lon) / lonext      ! non-dimensional longitude
     y=(G%geoLatT(i,j)-G%south_lat) / latext     ! non-dimensional latitude
 
-    !  This sets topography that has a reentrant channel to the south and a basin in the north
 
     D(i,j) = 1.0 - spike(x-dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &                 ! Patagonia, west
                 -spike(x-1.0+dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &               ! Patagonia, east, original
@@ -81,13 +80,13 @@ subroutine shoebox2_initialize_topography(D, G, param_file, max_depth)
                 -spike(x-1.0+dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &               ! Antarctic Peninsula, east, original
                 -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-4.0/latext, 2.5/latext) &                   ! Antarctic Peninsula, east, extra slope
                 -spike(y, ll/latext) &                                                                   ! Antarctica
-                -spike(y-1.0, ll/latext) &                                                               ! Northern Wall
+                -spike(1.0-y, ll/latext) &                                                               ! Northern Wall
                 - sa *cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &              !Scotia Arc East, center
                 - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
                 - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.) & !Scotia Arc East, south slope
-                - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
+                - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext-ep, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
                 - sa * cosbell(y-12.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext) &             !Scotia Arc North, west half
-                - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
+                - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext-ep, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
                 - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
 
     ! make sure no deeper than max depth and no shallower than Scotia Arc top IN the ocean interior
@@ -113,6 +112,17 @@ end subroutine shoebox2_initialize_topography
 
 ! -----------------------------------------------------------------------------
 ! define functions used in the above subroutines
+
+!> Returns the value of a sinusoidal bell function 
+  real function spike(x,L)
+
+    real, intent(in) :: x
+    real, intent(in) :: L
+    real             :: PI = 4.0*atan(1.0)
+
+    spike = 1-sin(PI*min(abs(x)/L, 0.5))
+
+  end function spike
 
 !> Returns the value of a cosine-bell function evaluated at x/L
  real function cosbell(x,L)
@@ -160,7 +170,7 @@ end subroutine shoebox2_initialize_topography
         xx = x
       endif
 
-     cosbellhnew  = 0.5*(1+cos(PI*MIN(xx/L, 1.0)))
+     cosbellhnew  = 0.5*(1+cos(PI*MIN((xx)/L, 1.0)))
     end function cosbellhnew
 
 

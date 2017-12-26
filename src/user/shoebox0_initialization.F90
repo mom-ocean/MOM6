@@ -1,4 +1,4 @@
-module shoebox3_initialization
+module shoebox0_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -17,22 +17,22 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public shoebox3_initialize_topography
+public shoebox0_initialize_topography
 
 contains
 
 ! -----------------------------------------------------------------------------
-!> This subroutine sets up the shoebox3 test case topography.
-!> Differences from shoebox: added continental slopes ONLY along east/west boundaries
+!> This subroutine sets up the shoebox0 test case topography.
+!> difference from shoebox: explicitly specify a meridional wall in the east
 
-subroutine shoebox3_initialize_topography(D, G, param_file, max_depth)
+subroutine shoebox0_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
                                       intent(out) :: D !< Ocean bottom depth in m
   type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
   real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
 
-! This subroutine sets up the shoebox3 test case topography
+! This subroutine sets up the shoebox0 test case topography
   real :: PI = 4.0*atan(1.0)   ! 3.1415926... calculated as 4*atan(1)
   real :: latext, lonext       ! latitude extent of the model area
   real :: ep = epsilon(1.)     ! an infinitesimally small quantity
@@ -42,12 +42,10 @@ subroutine shoebox3_initialize_topography(D, G, param_file, max_depth)
   real :: dx                   ! non-dimensional longitudinal grid scale
   real :: reentrants, reentrantn  ! the non-dimensional latitudes of the southern and northern
                                   ! boundary of the reentrant channel
-  real :: sdp = 6.0, ll=6.0, ssp = 2.0    ! the width of the slope in Drake Passage, the half width of continental slope, and sponge width
 
- 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=40)  :: mod = "shoebox3_initialize_topography" ! This subroutine's name.
+  character(len=40)  :: mod = "shoebox0_initialize_topography" ! This subroutine's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -57,12 +55,10 @@ subroutine shoebox3_initialize_topography(D, G, param_file, max_depth)
   lonext = G%len_lon
   reentrants = 6.0/latext          ! non-dimensional southern bound of the reentrant zone
   reentrantn = 10.0/latext         ! non-dimensional northern bound of the reentrant zone
-  sdp = sdp/latext
-  ssp = ssp/latext
   D = 0.0
   dx = (G%geoLonT(is+1,js) - G%geoLonT(is, js)) / lonext
 
-  call MOM_mesg("  shoebox3_initialization.F90, shoebox3_initialize_topography: setting topography", 5)
+  call MOM_mesg("  shoebox0_initialization.F90, shoebox0_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mod, version, "")
 
@@ -74,41 +70,34 @@ subroutine shoebox3_initialize_topography(D, G, param_file, max_depth)
 
     !  This sets topography that has a reentrant channel to the south and a basin in the north
 
-    D(i,j) = 1.0 - spike(x-dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &                 ! Patagonia, west
-                -spike(x-1.0+dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &               ! Patagonia, east, original
-                -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-12.0/latext, 2.5/latext) &                  ! Patagonia, east, extra slope
-                -spike(x-dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &                   ! Antarctic Peninsula, west
-                -spike(x-1.0+dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &               ! Antarctic Peninsula, east, original
-                -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-4.0/latext, 2.5/latext) &                   ! Antarctic Peninsula, east, extra slope
-                - sa *cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &              !Scotia Arc East, center
-                - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
-                - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.) & !Scotia Arc East, south slope
-                - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
-                - sa * cosbell(y-12.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext) &             !Scotia Arc North, west half
-                - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
-                - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
+    D(i,j) = 1.0 - sa *cosbell(x-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &           !Scotia Arc East, center
+              - sa * cosbell(x-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
+              - sa * cosbell(x-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.)&  !Scotia Arc East, south slope
+              - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-18.0/lonext-ep, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
+              - sa * cosbell(y-12.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext) &             !Scotia Arc North, west half
+              - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-18.0/lonext-ep, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
+              - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
 
-    ! make sure no deeper than max depth and no shallower than Scotia Arc top IN the ocean interior
-    if (D(i,j)<1.0 - sa .and. x>=dx/1.5+ll/2/lonext .and. x<=1.0-ll/2/lonext-dx/1.5 &
-        .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
+    ! make sure no deeper than max depth and no shallower than Scotia Arc top
+    if (D(i,j) < 1 - sa) then
       D(i,j) = 1 - sa
-    else if (D(i,j) > 1.0) then
+    elseif (D(i,j) > 1.0) then
       D(i,j) = 1.0
     endif
 
-      ! make sure the model is not zonally reentrant outside of Drake Passage
-      if (((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x<dx/1.5) &
-                .or. ((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x>1.0-dx/1.5)) then
-        D(i,j) = 0.0
-      endif
+    ! meridional walls outside of the reentrant channel, in the west boundary
+    if ((x <= dx .or. x >= 1-dx) .and. y <= reentrants) then     ! the wall south of Drake Passage
+      D(i,j) = 0.0
+    elseif ((x <= dx .or. x >= 1-dx) .and. y >= reentrantn) then ! the wall north of Drake Passage
+      D(i,j) = 0.0
+    endif
 
     D(i,j) = D(i,j) * max_depth
   enddo
   enddo
 
 
-end subroutine shoebox3_initialize_topography
-
+end subroutine shoebox0_initialize_topography
 ! -----------------------------------------------------------------------------
 ! define functions used in the above subroutines
 
@@ -142,25 +131,6 @@ end subroutine shoebox3_initialize_topography
     cosbellh  = cos(PI/2.0*MIN(abs(xx)/L, 1.0))
   end function cosbellh
 
-  !< similar to cosbellh but takes a different shape of bell
-    real function cosbellhnew(x, L, dir)
-
-      real, intent(in) :: x       !< non-dimensional position
-      real, intent(in) :: L       !< non-dimensional width
-      real             :: PI, xx  !< 3.1415926... calculated as 4*atan(1)
-      real, intent(in) :: dir     !< direction flag; 1 for east/north; -1 for west/south
-      PI        = 4.0*atan(1.0)
-
-      !< if the grid falls on the opposite side of the bell, override x to be so big that x/L > 1
-      if (x*dir .lt. 0.0) then
-        xx = L+1
-      else
-        xx = x
-      endif
-
-     cosbellhnew  = 0.5*(1+cos(PI*MIN(xx/L, 1.0)))
-    end function cosbellhnew
-
 
  !< make sure the depth within L is homogeneous
    real function homo(x, L)
@@ -176,4 +146,4 @@ end subroutine shoebox3_initialize_topography
     endif
    end function homo
 
-end module shoebox3_initialization
+end module shoebox0_initialization
