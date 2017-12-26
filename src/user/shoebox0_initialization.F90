@@ -1,0 +1,149 @@
+module shoebox0_initialization
+
+! This file is part of MOM6. See LICENSE.md for the license.
+
+use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
+use MOM_dyn_horgrid, only : dyn_horgrid_type
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
+use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_get_input, only : directories
+use MOM_grid, only : ocean_grid_type
+use MOM_tracer_registry, only : tracer_registry_type
+use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
+implicit none ; private
+
+#include <MOM_memory.h>
+
+public shoebox0_initialize_topography
+
+contains
+
+! -----------------------------------------------------------------------------
+!> This subroutine sets up the shoebox0 test case topography.
+!> difference from shoebox: explicitly specify a meridional wall in the east
+
+subroutine shoebox0_initialize_topography(D, G, param_file, max_depth)
+  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                      intent(out) :: D !< Ocean bottom depth in m
+  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
+  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
+
+! This subroutine sets up the shoebox0 test case topography
+  real :: PI = 4.0*atan(1.0)   ! 3.1415926... calculated as 4*atan(1)
+  real :: latext, lonext       ! latitude extent of the model area
+  real :: ep = epsilon(1.)     ! an infinitesimally small quantity
+  real :: x, y, sa_dim = 1500.0! dimensional height of Scotia Arc
+  real :: sa                   ! the non-dimensional height of Scotia Arc top;
+                               ! default value is 1500/4000=0.375
+  real :: dx                   ! non-dimensional longitudinal grid scale
+  real :: reentrants, reentrantn  ! the non-dimensional latitudes of the southern and northern
+                                  ! boundary of the reentrant channel
+
+! This include declares and sets the variable "version".
+#include "version_variable.h"
+  character(len=40)  :: mod = "shoebox0_initialize_topography" ! This subroutine's name.
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+  sa = sa_dim / max_depth
+  latext = G%len_lat
+  lonext = G%len_lon
+  reentrants = 6.0/latext          ! non-dimensional southern bound of the reentrant zone
+  reentrantn = 10.0/latext         ! non-dimensional northern bound of the reentrant zone
+  D = 0.0
+  dx = (G%geoLonT(is+1,js) - G%geoLonT(is, js)) / lonext
+
+  call MOM_mesg("  shoebox0_initialization.F90, shoebox0_initialize_topography: setting topography", 5)
+
+  call log_version(param_file, mod, version, "")
+
+  !  Calculate the depth of the bottom.
+  do j=js,je                ! meridional grid points
+  do i=is,ie                ! zonal grid points
+    x=(G%geoLonT(i,j)-G%west_lon) / lonext      ! non-dimensional longitude
+    y=(G%geoLatT(i,j)-G%south_lat) / latext     ! non-dimensional latitude
+
+    !  This sets topography that has a reentrant channel to the south and a basin in the north
+
+    D(i,j) = 1.0 - sa *cosbell(x-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &           !Scotia Arc East, center
+              - sa * cosbell(x-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
+              - sa * cosbell(x-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.)&  !Scotia Arc East, south slope
+              - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-18.0/lonext-ep, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
+              - sa * cosbell(y-12.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext) &             !Scotia Arc North, west half
+              - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-18.0/lonext-ep, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
+              - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
+
+    ! make sure no deeper than max depth and no shallower than Scotia Arc top
+    if (D(i,j) < 1 - sa) then
+      D(i,j) = 1 - sa
+    elseif (D(i,j) > 1.0) then
+      D(i,j) = 1.0
+    endif
+
+    ! meridional walls outside of the reentrant channel, in the west boundary
+    if ((x <= dx .or. x >= 1-dx) .and. y <= reentrants) then     ! the wall south of Drake Passage
+      D(i,j) = 0.0
+    elseif ((x <= dx .or. x >= 1-dx) .and. y >= reentrantn) then ! the wall north of Drake Passage
+      D(i,j) = 0.0
+    endif
+
+    D(i,j) = D(i,j) * max_depth
+  enddo
+  enddo
+
+
+end subroutine shoebox0_initialize_topography
+! -----------------------------------------------------------------------------
+! define functions used in the above subroutines
+
+!> Returns the value of a cosine-bell function evaluated at x/L
+ real function cosbell(x,L)
+
+   real , intent(in) :: x                         !< non-dimensional position
+   real , intent(in) :: L                         !< non-dimensional width
+   real              :: PI = 4.0 * atan(1.0)      !< 3.1415926... calculated as 4*atan(1)
+
+   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
+ end function cosbell
+
+!< Return the value of a half-cosine-bell function evaluated at x/L;
+!< i.e. from peak to trough only on one side of the bell
+ real function cosbellh(x, L, dir)
+
+  real, intent(in) :: x       !< non-dimensional position
+  real, intent(in) :: L       !< non-dimensional width
+  real             :: PI, xx  !< 3.1415926... calculated as 4*atan(1)
+  real, intent(in) :: dir     !< direction flag; 1 for east/north; -1 for west/south
+  PI        = 4.0*atan(1.0)
+
+    !< if the grid falls on the opposite side of the bell, override x to be so big that x/L > 1
+    if (x*dir .lt. 0.0) then
+      xx = L+1
+    else
+      xx = x
+    endif
+
+    cosbellh  = cos(PI/2.0*MIN(abs(xx)/L, 1.0))
+  end function cosbellh
+
+
+ !< make sure the depth within L is homogeneous
+   real function homo(x, L)
+
+     real, intent(in) :: x       !< non-dimensional position
+     real, intent(in) :: L       !< non-dimensional width
+
+     !< if x falls within -L ~ L, assign 1 to the non-dimensional depth
+    if (abs(x) .le. L) then
+      homo = 1.0
+    else
+      homo = 0.0
+    endif
+   end function homo
+
+end module shoebox0_initialization
