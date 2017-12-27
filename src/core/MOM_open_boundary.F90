@@ -21,6 +21,7 @@ use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tracer_registry,      only : tracer_registry_type
 use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : time_interp_external_init
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
@@ -181,6 +182,7 @@ type, public :: ocean_OBC_type
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
   logical :: extend_segments = .false.                !< If True, extend OBC segments (for testing)
+  logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -402,6 +404,9 @@ subroutine open_boundary_config(G, param_file, OBC)
               OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
+  else
+    ! Need this for ocean_only mode boundary interpolation.
+    call time_interp_external_init()
   endif
 
 end subroutine open_boundary_config
@@ -432,9 +437,6 @@ subroutine initialize_segment_data(G, OBC, PF)
   integer :: current_pe
   integer, dimension(1) :: single_pelist
   !will be able to dynamically switch between sub-sampling refined grid data or model grid
-  logical :: brushcutter_mode
-
-
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -463,6 +465,9 @@ subroutine initialize_segment_data(G, OBC, PF)
           "If true, the values on the intermediate grid used for remapping\n"//&
           "are forced to be bounded, which might not be the case due to\n"//&
           "round off.", default=.false.,do_not_log=.true.)
+    call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
+         "If true, read external OBC data on the supergrid.", &
+         default=.false.)
 
   allocate(OBC%remap_CS)
   call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
@@ -470,7 +475,6 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
   if (OBC%user_BCs_set_globally) return
-
 
   !< temporarily disable communication in order to read segment data independently
 
@@ -513,9 +517,6 @@ subroutine initialize_segment_data(G, OBC, PF)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
-    ! this is hard-coded for now - needs cleanup ###
-    brushcutter_mode = .false.
-
     do m=1,num_fields
       call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
       if (trim(filename) /= 'none') then
@@ -532,13 +533,13 @@ subroutine initialize_segment_data(G, OBC, PF)
         call field_size(filename,fieldname,siz,no_domain=.true.)
         if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
-          if (brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
+          if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
             call MOM_error(FATAL,'segment data are not on the supergrid')
           endif
           siz2(1)=1
 
           if (siz(1)>1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               siz2(1)=(siz(1)-1)/2
             else
               siz2(1)=siz(1)
@@ -546,7 +547,7 @@ subroutine initialize_segment_data(G, OBC, PF)
           endif
           siz2(2)=1
           if (siz(2)>1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               siz2(2)=(siz(2)-1)/2
             else
               siz2(2)=siz(2)
@@ -2046,7 +2047,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:), pointer :: seg_vel => NULL()  ! pointer to segment velocity array
   real, dimension(:,:), pointer :: seg_trans => NULL()  ! pointer to segment transport array
   real, dimension(:,:,:), allocatable :: tmp_buffer
-  logical :: brushcutter_mode
   integer :: subsample_factor
   integer :: is_obc2, js_obc2
 
@@ -2057,9 +2057,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
   if (.not. associated(OBC)) return
 
-  !will be able to dynamically switch between sub-sampling refined grid data or model grid
-  brushcutter_mode = .false.
-  if (brushcutter_mode) then
+  if (OBC%brushcutter_mode) then
     subsample_factor = 2
   else
     subsample_factor = 1
@@ -2076,7 +2074,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     js_obc = max(segment%js_obc,jsd-1)
     je_obc = min(segment%je_obc,jed)
 
-    if (brushcutter_mode) then
+    if (OBC%brushcutter_mode) then
       if (segment%is_E_or_W) then
         nj_seg=nj_seg-1
         js_obc=js_obc+1
@@ -2138,7 +2136,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (.not.associated(segment%field(m)%buffer_dst)) then
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
           if (segment%field(m)%nk_src > 1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               if (segment%is_E_or_W) then
@@ -2148,7 +2146,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
               endif
             endif
           else
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               if (segment%is_E_or_W) then
@@ -2172,7 +2170,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
 
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
-        if (brushcutter_mode) then
+        if (OBC%brushcutter_mode) then
           if (siz(1)==1) then
             segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
           else
@@ -2187,7 +2185,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
         if (segment%field(m)%nk_src > 1) then
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer)
-          if (brushcutter_mode) then
+          if (OBC%brushcutter_mode) then
             if (siz(1)==1) then
               segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
             else
