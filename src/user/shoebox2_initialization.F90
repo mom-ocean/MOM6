@@ -5,7 +5,7 @@ module shoebox2_initialization
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_version, param_file_type, read_param
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
@@ -43,7 +43,7 @@ subroutine shoebox2_initialize_topography(D, G, param_file, max_depth)
   real :: reentrants, reentrantn  ! the non-dimensional latitudes of the southern and northern
                                   ! boundary of the reentrant channel
   real :: sdp = 6.0, ll=6.0, ssp = 2.0    ! the width of the slope in Drake Passage, the half width of continental slope, and sponge width
-
+  real :: min_depth
  
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -52,6 +52,9 @@ subroutine shoebox2_initialize_topography(D, G, param_file, max_depth)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+    call read_param(param_file, "MINIMUM_DEPTH", min_depth)       ! read in min_depth value
+
+ 
   sa = sa_dim / max_depth
   latext = G%len_lat
   lonext = G%len_lon
@@ -100,7 +103,7 @@ subroutine shoebox2_initialize_topography(D, G, param_file, max_depth)
       ! make sure the model is not zonally reentrant outside of Drake Passage
       if (((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x<dx/1.5) &
                 .or. ((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x>1.0-dx/1.5)) then
-        D(i,j) = 0.0
+        D(i,j) = min_depth/max_depth
       endif
 
     D(i,j) = D(i,j) * max_depth
