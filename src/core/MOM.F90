@@ -2338,7 +2338,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
   real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
 
-  real :: conv2watt, conv2salt
+  real :: conv2watt, conv2salt, H_convert
   character(len=48) :: thickness_units, flux_units, S_flux_units
   type(diag_ctrl), pointer :: diag
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
@@ -2351,8 +2351,13 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   flux_units      = get_flux_units(GV)
   S_flux_units    = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
   conv2watt       = GV%H_to_kg_m2 * C_p
-  conv2salt       = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001 and remove the following line?
-  if (.not.GV%Boussinesq) conv2salt = GV%H_to_kg_m2
+  if (GV%Boussinesq) then
+    conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
+    H_convert = GV%H_to_m
+  else
+    conv2salt = GV%H_to_kg_m2
+    H_convert = GV%H_to_kg_m2
+  endif
 
   !Initialize the diagnostics mask arrays.
   !This has to be done after MOM_initialize_state call.
@@ -2365,7 +2370,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
       'Meridional velocity', 'm s-1', cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
   CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units, v_extensive=.true.)
+      'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
 
   CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
@@ -2479,7 +2484,8 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
       'Diffusive Zonal Flux of Salt', S_flux_units, &
       v_extensive = .true., conversion = conv2salt)
   CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salt', S_flux_units, v_extensive = .true.)
+      'Diffusive Meridional Flux of Salt', S_flux_units, &
+      v_extensive = .true., conversion = conv2salt)
   if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
   if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
   if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
@@ -2488,13 +2494,17 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   ! vertically integrated lateral heat advective and diffusive fluxes
   CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Heat', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Advective Zonal Flux of Heat', 'W m-2', &
+      conversion = conv2watt)
   CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Heat', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Advective Meridional Flux of Heat', 'W m-2', &
+      conversion = conv2watt)
   CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Heat', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Diffusive Zonal Flux of Heat', 'W m-2', &
+      conversion = conv2watt)
   CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Heat', 'W m-2', conversion = conv2watt)
+      'Vertically Integrated Diffusive Meridional Flux of Heat', 'W m-2', &
+      conversion = conv2watt)
   if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
   if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
   if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
@@ -2527,10 +2537,10 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
   ! Diagnostics related to tracer transport
   CS%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
-      y_cell_method='sum', v_extensive=.true.)
+      y_cell_method='sum', v_extensive=.true., conversion=H_convert)
   CS%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
-      x_cell_method='sum', v_extensive=.true.)
+      x_cell_method='sum', v_extensive=.true., conversion=H_convert)
   CS%id_umo = register_diag_field('ocean_model', 'umo', &
       diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
