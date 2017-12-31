@@ -222,14 +222,15 @@ end function
 !! target grid whenever T/S change.
 subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
-  type(ocean_grid_type), pointer :: G !< The ocean's grid type
+  type(ocean_grid_type),    pointer    :: G !< The ocean's grid type
   real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
-  type(EOS_type), pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
+  type(EOS_type),  pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
-  integer :: i, j, k, nz
   real, dimension(remap_cs%nz + 1) :: zInterfaces
   real, dimension(remap_cs%nz) :: resolution
+  real :: h_neglect, h_neglect_edge
+  integer :: i, j, k, nz
 
   ! Note that coordinateMode('LAYER') is never 'configured' so will
   ! always return here.
@@ -237,6 +238,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     return
   endif
 
+  h_neglect = 1.0e-30 ; h_neglect_edge = 1.0e-10 !### Try using values from GV?
   nz = remap_cs%nz
 
   if (.not. remap_cs%initialized) then
@@ -265,7 +267,7 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
       elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
         call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
                               G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
-                              eqn_of_state, zInterfaces)
+                              eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
       elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
 !       call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
 !                             G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
