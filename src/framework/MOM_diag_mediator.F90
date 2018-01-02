@@ -818,7 +818,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     call MOM_error(FATAL,"post_data_2d_low: peculiar size in j-direction")
   endif
 
-  if (diag%conversion_factor/=0.) then
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
     do j=jsv,jev ; do i=isv,iev
       if (field(i,j) == diag_cs%missing_value) then
@@ -862,7 +862,8 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
                        weight=diag_cs%time_int)
     endif
   endif
-  if (diag%conversion_factor/=0.) deallocate( locfield )
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+    deallocate( locfield )
 
 end subroutine post_data_2d_low
 
@@ -1040,7 +1041,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     call MOM_error(FATAL,"post_data_3d_low: peculiar size in j-direction")
   endif
 
-  if (diag%conversion_factor/=0.) then
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     ks = lbound(field,3) ; ke = ubound(field,3)
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
     do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
@@ -1091,7 +1092,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if (diag%fms_xyave_diag_id>0) then
     call post_xy_average(diag_cs, diag, locfield)
   endif
-  if (diag%conversion_factor/=0.) deallocate( locfield )
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+    deallocate( locfield )
 
 end subroutine post_data_3d_low
 
