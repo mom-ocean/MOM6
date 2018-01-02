@@ -2081,7 +2081,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   diag => CS%diag
   ! Initialize the diag mediator.
-  call diag_mediator_init(G, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
+  call diag_mediator_init(G, GV, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
   ! Initialize the diagnostics masks for native arrays.
   ! This step has to be done after call to MOM_initialize_state
