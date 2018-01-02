@@ -181,6 +181,7 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: S => null()
   type(EOS_type),  pointer :: eqn_of_state => null()
   type(ocean_grid_type), pointer :: G => null()
+  type(verticalGrid_type), pointer :: GV => null()
 
   ! The volume cell measure (special diagnostic) manager id
   integer :: volume_cell_measure_dm_id = -1
@@ -2062,8 +2063,9 @@ end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
 !! diagnostics file, if appropriate.
-subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
+subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
+  type(verticalGrid_type), target, intent(in)  :: GV !< The ocean vertical grid structure
   integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
@@ -2130,6 +2132,7 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
+  diag_cs%GV => GV
   diag_cs%h => null()
   diag_cs%T => null()
   diag_cs%S => null()
@@ -2241,7 +2244,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, h_diag, T_diag, S_diag, &
+                           diag_cs%G, diag_cs%GV, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 

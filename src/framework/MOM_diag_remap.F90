@@ -29,7 +29,7 @@ use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping
 use MOM_remapping,        only : remapping_core_h
 use MOM_regridding,       only : regridding_CS, initialize_regridding
-use MOM_regridding,       only : set_regrid_params, get_regrid_size, uniformResolution
+use MOM_regridding,       only : set_regrid_params, get_regrid_size
 use MOM_regridding,       only : getCoordinateInterfaces
 use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
 use regrid_consts,        only : coordinateMode
@@ -220,15 +220,15 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
+subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),    pointer    :: G !< The ocean's grid type
+  type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
   real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
   type(EOS_type),  pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces
-  real, dimension(remap_cs%nz) :: resolution
   real :: h_neglect, h_neglect_edge
   integer :: i, j, k, nz
 
@@ -238,7 +238,12 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
     return
   endif
 
-  h_neglect = 1.0e-30 ; h_neglect_edge = 1.0e-10 !### Try using values from GV?
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
   nz = remap_cs%nz
 
   if (.not. remap_cs%initialized) then
@@ -251,35 +256,34 @@ subroutine diag_remap_update(remap_cs, G, h, T, S, eqn_of_state)
   ! Calculate remapping thicknesses for different target grids based on
   ! nominal/target interface locations. This happens for every call on the
   ! assumption that h, T, S has changed.
-  do j=G%jsc-1, G%jec+1
-    do i=G%isc-1, G%iec+1
-      if (G%mask2dT(i,j)==0.) then
-        remap_cs%h(i,j,:) = 0.
-        cycle
-      endif
+  do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
+    if (G%mask2dT(i,j)==0.) then
+      remap_cs%h(i,j,:) = 0.
+      cycle
+    endif
 
-      if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
-        call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
-                              G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
-      elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-        call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
-                                G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
-      elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
-        call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
-                              G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
-                              eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
-      elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
-!       call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
-!                             G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
-        call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
-      elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
-!       call build_hycom1_column(remap_cs%regrid_cs, nz, &
-!                             G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
-        call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
-      endif
-      remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
-    enddo
-  enddo
+    if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
+      call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
+                              G%bathyT(i,j)*GV%m_to_H, sum(h(i,j,:)), &
+                              zInterfaces, zScale=GV%m_to_H)
+    elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
+      call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
+                              GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+    elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
+      call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
+                            G%bathyT(i,j), h(i,j,:), T(i, j, :), S(i, j, :), &
+                            eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
+    elseif (remap_cs%vertical_coord == coordinateMode('SLIGHT')) then
+!     call build_slight_column(remap_cs%regrid_cs,remap_cs%remap_cs, nz, &
+!                           G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+      call MOM_error(FATAL,"diag_remap_update: SLIGHT coordinate not coded for diagnostics yet!")
+    elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
+!     call build_hycom1_column(remap_cs%regrid_cs, nz, &
+!                           G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
+      call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
+    endif
+    remap_cs%h(i,j,:) = zInterfaces(1:nz) - zInterfaces(2:nz+1)
+  enddo ; enddo
 
 end subroutine diag_remap_update
 
