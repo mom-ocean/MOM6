@@ -1,8 +1,12 @@
-!> Wind and buoyancy forcing for the channel2 configurations
+!> Wind and buoyancy forcing for the channel3 configurations
 !> difference from channel: adjusted surface buoyancy profile so that the
 !> sigma_2 value is used, not surface value 
 
-module channel2_surface_forcing
+!> difference from channel2: 
+!> surface wind is turned off, so as to compare the result from using no
+!diapycnal diffusivity but with wind
+
+module channel3_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -20,16 +24,16 @@ use MOM_variables, only : surface
 
 implicit none ; private
 
-public channel2_wind_forcing
-public channel2_buoyancy_forcing
-public channel2_surface_forcing_init
+public channel3_wind_forcing
+public channel3_buoyancy_forcing
+public channel3_surface_forcing_init
 
 
 !> This control structure should be used to store any run-time variables
-!! associated with the channel2 forcing.  It can be readily modified
+!! associated with the channel3 forcing.  It can be readily modified
 !! for a specific case, and because it is private there will be no changes
 !! needed in other code (although they will have to be recompiled).
-type, public :: channel2_surface_forcing_CS ; private
+type, public :: channel3_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
@@ -42,77 +46,47 @@ type, public :: channel2_surface_forcing_CS ; private
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
-  logical :: first_call = .true. !< True until channel2_buoyancy_forcing has been called
-end type channel2_surface_forcing_CS
+  logical :: first_call = .true. !< True until channel3_buoyancy_forcing has been called
+end type channel3_surface_forcing_CS
 
 
 contains
 
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
-!! channel2 forcing configuration.
-subroutine channel2_wind_forcing(sfc_state, forces, day, G, CS)
+!! channel3 forcing configuration.
+subroutine channel3_wind_forcing(sfc_state, forces, day, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
-  type(channel2_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
-  ! Local variable
-  integer :: i, j, is, ie, js, je
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  type(channel3_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
 
-  real :: x, y
-  real :: PI = 4.0*atan(1.0), wp_SO, wp2, latext, lonext
-
-  wp_SO = 0.13961 ! westerly peak in SO;  53 S
-  wp2 = -0.07871  ! easterly peak in Southern subtropics; 11.75S
+  ! wind stress is 0 everywhere
   forces%taux = 0.0
-  latext = G%len_lat
-  lonext = G%len_lon
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true.)
 
-  !  Set the surface wind stresses, in units of Pa.  A positive taux
-  !  accelerates the ocean to the (pseudo-)east.
-  do j = js, je
-      y=(G%geoLatT(is, j)-G%south_lat)/latext                                 ! non-dimensional latitudes
-      forces%taux(is, j) = wp_SO*cosbellh(y-12.0/latext, 12.0/latext, -1.0) & ! south of the ACC peak
-                        + wp2*cosbell(y-54.0/latext, 22.0/latext)             ! profile in Southern subtropics
 
-      if (y > 12.0/latext) then              ! north of the ACC peak
-        forces%taux(is, j) = forces%taux(is, j)+ wp_SO*cosbell(y-12.0/latext, 25.0/latext)
-      endif
-
-      do i = is+1, ie
-        forces%taux(i, j) = forces%taux(is, j)                ! same wind stress for other longitudes
-      enddo
-  enddo
-
-end subroutine channel2_wind_forcing
+end subroutine channel3_wind_forcing
 
 
-!> Surface fluxes of buoyancy for the channel2 configurations.
-subroutine channel2_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+!> Surface fluxes of buoyancy for the channel3 configurations.
+subroutine channel3_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   real,                          intent(in)    :: dt !< Forcing time step (s).
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
-  type(channel2_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
+  type(channel3_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
   real :: y, latext        ! ND latitude, latitudinal range
-  real :: den, rhos = 1037.370, rhon = 1034.209     ! sothern and northern boundary densities of the channel2
+  real :: den, rhos = 1037.370, rhon = 1034.209     ! sothern and northern boundary densities of the channel3
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -123,7 +97,7 @@ subroutine channel2_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call MOM_error(FATAL, "channel2_buoyancy_forcing: " // &
+    call MOM_error(FATAL, "channel3_buoyancy_forcing: " // &
         "Temperature and salinity mode not coded!" )
   else
     ! This is the buoyancy only mode.
@@ -149,7 +123,7 @@ subroutine channel2_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   ! compute the buoyancy flux needed to restore current density to target density
   if (CS%restorebuoy) then
     if (CS%use_temperature) then      ! if temperature is used to restore buoyancy
-      call MOM_error(FATAL, "channel2_buoyancy_surface_forcing: " // &
+      call MOM_error(FATAL, "channel3_buoyancy_surface_forcing: " // &
         "Temperature/salinity restoring not coded!" )
 
     else      ! density is used to restore buoyancy
@@ -164,7 +138,7 @@ subroutine channel2_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     endif
   endif
 
-end subroutine channel2_buoyancy_forcing
+end subroutine channel3_buoyancy_forcing
 
 !> If ptr is not associated, this routine allocates it with the given size
 !! and zeros out its contents.  This is equivalent to safe_alloc_ptr in
@@ -178,22 +152,22 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   endif
 end subroutine alloc_if_needed
 
-!> Initializes the channel2 control structure.
-subroutine channel2_surface_forcing_init(Time, G, param_file, diag, CS)
+!> Initializes the channel3 control structure.
+subroutine channel3_surface_forcing_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in) :: Time       !< The current model time.
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file to parse for
                                                     !! model parameter values.
   type(diag_ctrl), target, intent(in) :: diag       !< A structure that is used to regulate diagnostic output.
-  type(channel2_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
+  type(channel3_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
                                                     !! for this module
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "channel2_surface_forcing" ! This module's name.
+  character(len=40)  :: mod = "channel3_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "channel2_surface_forcing_init called with an associated "// &
+    call MOM_error(WARNING, "channel3_surface_forcing_init called with an associated "// &
                              "control structure.")
     return
   endif
@@ -234,7 +208,7 @@ subroutine channel2_surface_forcing_init(Time, G, param_file, diag, CS)
     CS%flux_const = CS%flux_const / 86400.0
   endif
 
-end subroutine channel2_surface_forcing_init
+end subroutine channel3_surface_forcing_init
 
 !------------------------------ defines the functions to used from above ----------------
   !> Returns the value of a cosine-bell function evaluated at x/L
@@ -269,4 +243,4 @@ end subroutine channel2_surface_forcing_init
      end function cosbellh
 
 
-end module channel2_surface_forcing
+end module channel3_surface_forcing

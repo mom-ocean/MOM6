@@ -2,7 +2,6 @@ module channel5_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_sponge, only : sponge_CS, initialize_sponge, set_up_sponge_field, Apply_sponge
 use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe
@@ -32,7 +31,9 @@ contains
 !> 2) the sponge layer has no slope
 !> 3) the slope on west/east boundaries decay abruptly to zero at the edge of sponge
 !> 4) the shape of Drake Passage in the east is modified so as to match that in the west
-!> 5) remove the slope along Antarctica: to see if only continental slope in west/east boundries work
+!> 5) the only difference from channel 4: Antarctica continental slope reaches
+!> the southernmost latitude at surface, i.e. not halfway below sea surface, 
+!> by introducing a factor of dy (similar to dx)
 
 subroutine channel5_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
@@ -47,7 +48,7 @@ subroutine channel5_initialize_topography(D, G, param_file, max_depth)
   real :: x, y, sa_dim = 1500.0! dimensional height of Scotia Arc
   real :: sa                   ! the non-dimensional height of Scotia Arc top;
                                ! default value is 1500/4000=0.375
-  real :: dx                   ! non-dimensional longitudinal grid scale
+  real :: dx, dy               ! non-dimensional longitudinal/latitudinal grid scale
   real :: reentrants, reentrantn  ! the non-dimensional latitudes of the southern and northern
                                   ! boundary of the reentrant channel
   real :: sdp = 6.0, ll=6.0, ssp = 2.0    ! the width of the slope in Drake Passage, the half width of continental slope, and sponge width
@@ -65,6 +66,9 @@ subroutine channel5_initialize_topography(D, G, param_file, max_depth)
   ssp = ssp/latext
   D = 0.0
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/lonext
+  dy = (G%geoLatT(is,js+1)-G%geoLatT(is,js))/latext
+
+  print *, 'dy=', dy
 
   call MOM_mesg("  channel5_initialization.F90, channel5_initialize_topography: setting topography", 5)
 
@@ -83,6 +87,7 @@ subroutine channel5_initialize_topography(D, G, param_file, max_depth)
                 -spike(x-dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &                   ! Antarctic Peninsula, west
                 -spike(x-1.0+dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &               ! Antarctic Peninsula, east, original
                 -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-4.0/latext, 2.5/latext) &                   ! Antarctic Peninsula, east, extra slope
+                -spike(y-dy, ll/latext) &                                                                   ! Antarctica
                 - sa *cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &              !Scotia Arc East, center
                 - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
                 - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.) & !Scotia Arc East, south slope
@@ -117,7 +122,6 @@ subroutine channel5_initialize_topography(D, G, param_file, max_depth)
 end subroutine channel5_initialize_topography
 
 
-!---------------------------------------------------------------
 ! define functions used in the above subroutines
 
 
