@@ -41,6 +41,8 @@ type, public :: vertvisc_CS ; private
 
   real    :: maxvel          !< Velocity components greater than maxvel,
                              !! in m s-1, are truncated.
+  real    :: vel_underflow   !< Velocity components smaller than vel_underflow
+                             !! are set to 0, in m s-1.
   logical :: CFL_based_trunc !< If true, base truncations on CFL numbers, not
                              !! absolute velocities.
   real    :: CFL_trunc       !< Velocity components will be truncated when they
@@ -1300,6 +1302,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
       if (CS%CFL_based_trunc) then
         do I=Isq,Ieq ; vel_report(i,j) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do I=Isq,Ieq
+          if (abs(u(I,j,k)) < CS%vel_underflow) u(I,j,k) = 0.0
           if (u(I,j,k) < 0.0) then
             CFL = (-u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
           else
@@ -1313,9 +1316,12 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         enddo ; enddo
       else
         do I=Isq,Ieq; vel_report(I,j) = maxvel; enddo
-        do k=1,nz ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
-          dowrite(I,j) = .true. ; trunc_any = .true.
-        endif ;enddo ; enddo
+        do k=1,nz ; do I=Isq,Ieq
+          if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
+          elseif (abs(u(I,j,k)) > maxvel) then
+            dowrite(I,j) = .true. ; trunc_any = .true.
+          endif
+        enddo ; enddo
       endif
 
       do I=Isq,Ieq ; if (dowrite(I,j)) then
@@ -1339,11 +1345,12 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! j-loop
-  else
+  else  ! Do not report accelerations leading to large velocities.
     if (CS%CFL_based_trunc) then
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,dt,G,CS,h,H_report)
       do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-        if ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
+        if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
+        elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
           u(I,j,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
           if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i,j) > CS%CFL_trunc) then
@@ -1353,10 +1360,13 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
       enddo ; enddo ; enddo
     else
 !$OMP parallel do default(none) shared(nz,js,je,Isq,Ieq,u,G,CS,truncvel,maxvel,h,H_report)
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq ; if (abs(u(I,j,k)) > maxvel) then
-        u(I,j,k) = SIGN(truncvel,u(I,j,k))
-        if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-      endif ; enddo ; enddo ; enddo
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
+        elseif (abs(u(I,j,k)) > maxvel) then
+          u(I,j,k) = SIGN(truncvel,u(I,j,k))
+          if (h(i,j,k) + h(i+1,j,k) > H_report) CS%ntrunc = CS%ntrunc + 1
+        endif
+      enddo ; enddo ; enddo
     endif
   endif
 
@@ -1378,6 +1388,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
       if (CS%CFL_based_trunc) then
         do i=is,ie ; vel_report(i,J) = 3.0e8 ; enddo ! Speed of light default.
         do k=1,nz ; do i=is,ie
+          if (abs(v(i,J,k)) < CS%vel_underflow) v(i,J,k) = 0.0
           if (v(i,J,k) < 0.0) then
             CFL = (-v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
           else
@@ -1391,9 +1402,12 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         enddo ; enddo
       else
         do i=is,ie ; vel_report(i,J) = maxvel ; enddo
-        do k=1,nz ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
-          dowrite(i,J) = .true. ; trunc_any = .true.
-        endif ; enddo ; enddo
+        do k=1,nz ; do i=is,ie
+          if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
+          elseif (abs(v(i,J,k)) > maxvel) then
+            dowrite(i,J) = .true. ; trunc_any = .true.
+          endif
+        enddo ; enddo
       endif
 
       do i=is,ie ; if (dowrite(i,J)) then
@@ -1417,11 +1431,12 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         endif ; enddo ;  enddo
       endif ; endif
     enddo ! J-loop
-  else
+  else  ! Do not report accelerations leading to large velocities.
     if (CS%CFL_based_trunc) then
-!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,dt,G,CS,h,H_report)
+      !$OMP parallel do default(shared)
       do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-        if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
+        if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
+        elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
           if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
         elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j) > CS%CFL_trunc) then
@@ -1430,11 +1445,14 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
         endif
       enddo ; enddo ; enddo
     else
-!$OMP parallel do default(none) shared(is,ie,Jsq,Jeq,nz,v,G,CS,h,truncvel,maxvel,H_report)
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (abs(v(i,J,k)) > maxvel) then
-        v(i,J,k) = SIGN(truncvel,v(i,J,k))
-        if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
-      endif ; enddo ; enddo ; enddo
+      !$OMP parallel do default(shared)
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
+        elseif (abs(v(i,J,k)) > maxvel) then
+          v(i,J,k) = SIGN(truncvel,v(i,J,k))
+          if (h(i,j,k) + h(i,j+1,k) > H_report) CS%ntrunc = CS%ntrunc + 1
+        endif
+      enddo ; enddo ; enddo
     endif
   endif
 
@@ -1594,6 +1612,11 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
+  call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
+                 "A negligibly small velocity magnitude below which velocity \n"//&
+                 "components are set to 0.  A reasonable value might be \n"//&
+                 "1e-30 m/s, which is less than an Angstrom divided by \n"//&
+                 "the age of the universe.", units="m s-1", default=0.0)
 
   ALLOC_(CS%a_u(IsdB:IedB,jsd:jed,nz+1)) ; CS%a_u(:,:,:) = 0.0
   ALLOC_(CS%h_u(IsdB:IedB,jsd:jed,nz))   ; CS%h_u(:,:,:) = 0.0
