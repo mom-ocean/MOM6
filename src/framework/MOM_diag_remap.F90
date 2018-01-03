@@ -288,26 +288,35 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
 end subroutine diag_remap_update
 
 !> Remap diagnostic field to alternative vertical grid.
-subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
+subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_y, &
                                mask, missing_value, field, remapped_field)
-  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
-  type(ocean_grid_type),  intent(in) :: G !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses
-  logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
-  logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
-  real, dimension(:,:,:), pointer    :: mask !< A mask for the field
-  real,                   intent(in) :: missing_value !< A missing_value to assign land/vanished points
-  real, dimension(:,:,:), intent(in) :: field(:,:,:) !< The diagnostic field to be remapped
-  real, dimension(:,:,:), intent(inout) :: remapped_field !< Field remapped to new coordinate
+  type(diag_remap_ctrl),   intent(in) :: remap_cs !< Diagnostic coodinate control structure
+  type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
+  real, dimension(:,:,:),  intent(in) :: h  !< The current thicknesses
+  logical,                 intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                 intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(:,:,:),  pointer    :: mask !< A mask for the field
+  real,                    intent(in) :: missing_value !< A missing_value to assign land/vanished points
+  real, dimension(:,:,:),  intent(in) :: field(:,:,:) !< The diagnostic field to be remapped
+  real, dimension(:,:,:),  intent(inout) :: remapped_field !< Field remapped to new coordinate
   ! Local variables
   real, dimension(remap_cs%nz) :: h_dest
   real, dimension(size(h,3)) :: h_src
+  real :: h_neglect, h_neglect_edge
   integer :: nz_src, nz_dest
   integer :: i, j, k
 
   call assert(remap_cs%initialized, 'diag_remap_do_remap: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
               'diag_remap_do_remap: Remap field and thickness z-axes do not match.')
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz_src = size(field,3)
   nz_dest = remap_cs%nz
@@ -323,7 +332,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:))
+                              nz_dest, h_dest(:), remapped_field(I,j,:), &
+                              h_neglect, h_neglect_edge)
       enddo
     enddo
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -336,7 +346,8 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:) )
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:))
+                              nz_dest, h_dest(:), remapped_field(i,J,:), &
+                              h_neglect, h_neglect_edge)
       enddo
     enddo
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -348,8 +359,9 @@ subroutine diag_remap_do_remap(remap_cs, G, h, staggered_in_x, staggered_in_y, &
         endif
         h_src(:) = h(i,j,:)
         h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
-                              nz_dest, h_dest(:), remapped_field(i,j,:))
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,j,:), &
+                              nz_dest, h_dest(:), remapped_field(i,j,:), &
+                              h_neglect, h_neglect_edge)
       enddo
     enddo
   else
