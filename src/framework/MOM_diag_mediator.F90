@@ -943,7 +943,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
+              diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
               diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
@@ -1006,8 +1006,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
+  logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
-  integer :: isv, iev, jsv, jev, ks, ke, i, j, k
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1044,7 +1045,23 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     ks = lbound(field,3) ; ke = ubound(field,3)
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
-    do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
+    ! locfield(:,:,:) = 0.0  ! Zeroing out this array would be a good idea, but it appears not to be necessary.
+    isv_c = isv ; jsv_c = jsv
+    if (diag%fms_xyave_diag_id>0) then
+      staggered_in_x = diag%axes%is_u_point .or. diag%axes%is_q_point
+      staggered_in_y = diag%axes%is_v_point .or. diag%axes%is_q_point
+      ! When averaging a staggered field, edge points are always required.
+      if (staggered_in_x) isv_c = iev - (diag_cs%ie - diag_cs%is) - 1
+      if (staggered_in_y) jsv_c = jev - (diag_cs%je - diag_cs%js) - 1
+      if (isv_c < lbound(locfield,1)) call MOM_error(FATAL, &
+        "It is an error to average a staggered diagnostic field that does not "//&
+        "have i-direction space to represent the symmetric computational domain.")
+      if (jsv_c < lbound(locfield,2)) call MOM_error(FATAL, &
+        "It is an error to average a staggered diagnostic field that does not "//&
+        "have j-direction space to represent the symmetric computational domain.")
+    endif
+
+    do k=ks,ke ; do j=jsv_c,jev ; do i=isv_c,iev
       if (field(i,j,k) == diag_cs%missing_value) then
         locfield(i,j,k) = diag_cs%missing_value
       else
