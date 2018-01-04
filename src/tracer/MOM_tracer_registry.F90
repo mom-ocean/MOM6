@@ -54,6 +54,8 @@ type, public :: tracer_type
                                                               !! in units of (conc * m3/s or conc * kg/s)
 
   real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
+  real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
+                                                              !! timestep used for diagnostics
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
@@ -75,6 +77,7 @@ type, public :: tracer_type
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
+  integer :: id_tendency = -1
 end type tracer_type
 
 !> Type to carry basic tracer information
@@ -335,9 +338,10 @@ subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
   character(len=72) :: cmorname ! The CMOR name of that variable.
   character(len=120) :: cmor_longname ! The CMOR long name of that variable.
   type(tracer_type), pointer :: Tr=>NULL()
-  integer :: m
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
+  integer :: i, j, k, is, ie, js, je, nz, m
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed 
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
@@ -433,6 +437,17 @@ subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
     if ((Tr%id_adv_xy > 0) .or. (Tr%id_adv_xy_2d > 0)) &
       call safe_alloc_ptr(Tr%advection_xy,isd,ied,jsd,jed,nz)
 
+    Tr%id_tendency = register_diag_field('ocean_model', trim(shortnm)//'_tendency', &
+        diag%axesTL, Time, &
+        'Net time tendency for '//trim(lowercase(longname)), trim(units)//' s-1')
+
+    if (Tr%id_tendency > 0) then
+      call safe_alloc_ptr(Tr%t_prev,isd,ied,jsd,jed,nz)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        Tr%t_prev(i,j,k) = Tr%t(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+
 !    call register_Z_tracer(Tr%t, name, longname, units, &
 !                           Time, G, diag_to_Z_CSp)
   endif ; enddo
@@ -441,16 +456,21 @@ end subroutine register_tracer_diagnostics
 
 !> post_tracer_diagnostics does post_data calls for any diagnostics that are
 !! being handled via the tracer registry.
-subroutine post_tracer_diagnostics(Reg, diag, G, GV)
+subroutine post_tracer_diagnostics(Reg, diag, G, GV, dt)
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  real,                       intent(in) :: dt   !< total time step for tracer updates
 
+  real    :: work3d(SZI_(G),SZJ_(G),SZK_(G))
   real    :: work2d(SZI_(G),SZJ_(G))
+  real    :: Idt
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
@@ -471,7 +491,16 @@ subroutine post_tracer_diagnostics(Reg, diag, G, GV)
       enddo ; enddo ; enddo
       call post_data(Tr%id_adv_xy_2d, work2d, diag)
     endif
+    if (Tr%id_tendency > 0) then
+      work3d(:,:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work3d(i,j,k)    = (Tr%t(i,j,k) - Tr%t_prev(i,j,k))*Idt
+        tr%t_prev(i,j,k) =  Tr%t(i,j,k)
+      enddo ; enddo ; enddo
+      call post_data(Tr%id_tendency, work3d, diag)
+    endif
   endif ; enddo
+
 end subroutine post_tracer_diagnostics
 
 !> This subroutine writes out chksums for tracers.
