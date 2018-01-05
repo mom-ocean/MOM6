@@ -279,9 +279,6 @@ type, public :: MOM_control_struct
     vd_T, &   !< vardesc array describing potential temperature
     vd_S      !< vardesc array describing salinity
 
-  real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies
-    Th_prev        => NULL(), Sh_prev        => NULL()
-
   real, pointer, dimension(:,:,:) :: & !< diagnostic arrays for variance decay through ALE
     T_squared => NULL(), S_squared => NULL()
 
@@ -320,12 +317,6 @@ type, public :: MOM_control_struct
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-
-  ! tendencies for temp/heat and saln/salt
-  integer :: id_Th_tendency       = -1
-  integer :: id_Th_tendency_2d    = -1
-  integer :: id_Sh_tendency       = -1
-  integer :: id_Sh_tendency_2d    = -1
 
   ! variance decay for temp and heat
   integer :: id_T_vardec = -1
@@ -899,7 +890,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp, &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, G, GV, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call post_TS_diagnostics(CS, G, GV, CS%tv, CS%diag, CS%t_dyn_rel_diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -1861,12 +1852,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                            CS%vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W m-2', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
-                           convergence_scale=conv2watt, diag_form=2)
+                           convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
       call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, &
                            CS%vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
-                           convergence_scale=0.001*GV%H_to_kg_m2, diag_form=2)
+                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
     endif
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, CS%tv, CS%vd_T, CS%vd_S, param_file)
@@ -2184,8 +2175,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! now register some diagnostics since tracer registry is locked
   call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
-  call register_tracer_diagnostics(CS%tracer_Reg, Time, diag, G, GV)
-  call register_diags_TS_tendency(Time, G, CS)
+  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif
@@ -2461,64 +2451,6 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 end subroutine register_diags
 
 
-!> Initialize diagnostics for temp/heat and saln/salt tendencies.
-subroutine register_diags_TS_tendency(Time, G, CS)
-  type(time_type),           intent(in)    :: Time  !< current model time
-  type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structure
-  type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
-
-  type(diag_ctrl), pointer :: diag
-  integer :: i, j, k
-  integer :: isd, ied, jsd, jed, nz
-  integer :: is, ie, js, je
-
-  diag => CS%diag
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
-  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
-
-  ! net temperature and heat tendencies
-  CS%id_Th_tendency = register_diag_field('ocean_model', 'Th_tendency', diag%axesTL, Time,        &
-      'Net time tendency for heat', 'W m-2',                                                      &
-      cmor_field_name="opottemptend",                                                             &
-      cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
-      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
-      v_extensive=.true.)
-  CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
-      'Vertical sum of net time tendency for heat', 'W m-2',                                                  &
-      cmor_field_name="opottemptend_2d",                                                                      &
-      cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
-      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%Th_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%Th_prev(i,j,k) = CS%tv%T(i,j,k) * CS%h(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-
-  ! net salinity and salt tendencies
-  CS%id_Sh_tendency = register_diag_field('ocean_model', 'Sh_tendency', diag%axesTL, Time,&
-      'Net time tendency for salt', 'kg m-2 s-1',                                         &
-      cmor_field_name="osalttend",                                                        &
-      cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
-      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
-      v_extensive=.true.)
-  CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
-      'Vertical sum of net time tendency for salt', 'kg m-2 s-1',                                &
-      cmor_field_name="osalttend_2d",                                                            &
-      cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
-      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%Sh_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%Sh_prev(i,j,k) = CS%tv%S(i,j,k) * CS%h(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-
-end subroutine register_diags_TS_tendency
-
-
 !> Initialize diagnostics for the variance decay of temp/salt
 !! across regridding/remapping
 subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
@@ -2702,49 +2634,6 @@ subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, pracSal, diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), diag, mask=G%mask2dT)
       if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), diag, mask=G%mask2dT)
-    endif
-  endif
-
-  if(.not. CS%tendency_diagnostics) return
-
-  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
-  ppt2mks       = 0.001
-  work3d(:,:,:) = 0.0
-  work2d(:,:)   = 0.0
-
-  ! diagnose net tendency for heat content of a grid cell over a time step and update Th_prev
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * (GV%H_to_kg_m2 * tv%C_p)
-      CS%Th_prev(i,j,k) =  tv%T(i,j,k)*CS%h(i,j,k)
-    enddo ; enddo ; enddo
-    if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, diag)
-    if (CS%id_Th_tendency_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_Th_tendency_2d, work2d, diag)
-    endif
-  endif
-
-  ! diagnose net tendency for salt content of a grid cell over a time step and update Sh_prev
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * (GV%H_to_kg_m2 * ppt2mks)
-      CS%Sh_prev(i,j,k) =  tv%S(i,j,k)*CS%h(i,j,k)
-    enddo ; enddo ; enddo
-    if (CS%id_Sh_tendency    > 0) call post_data(CS%id_Sh_tendency, work3d, diag)
-    if (CS%id_Sh_tendency_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_Sh_tendency_2d, work2d, diag)
     endif
   endif
 
