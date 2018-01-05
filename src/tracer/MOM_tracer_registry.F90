@@ -56,6 +56,8 @@ type, public :: tracer_type
   real, dimension(:,:,:), pointer :: advection_xy   => NULL() !< convergence of lateral advective tracer fluxes
   real, dimension(:,:,:), pointer :: t_prev         => NULL() !< tracer concentration array at a previous
                                                               !! timestep used for diagnostics
+  real, dimension(:,:,:), pointer :: Trxh_prev      => NULL() !< layer integrated tracer concentration array
+                                                              !! at a previous timestep used for diagnostics
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
   type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
@@ -71,13 +73,16 @@ type, public :: tracer_type
   character(len=48)               :: conv_units = ""          !< The units for the flux convergence of this tracer.
   real                            :: conv_scale = 1.0         !< A scaling factor used to convert the flux
                                                               !! convergence of this tracer to its desired units.
+  character(len=48)               :: cmor_tendname = ""       !< The CMOR variable name for tendencies of this
+                                                              !! tracer, required because CMOR does not follow any
+                                                              !! discernable pattern for these names.
 
   integer :: diag_form = 1  !< An integer indicating which template is to be used to label diagnostics.
   integer :: id_tr = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
-  integer :: id_tendency = -1
+  integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
 end type tracer_type
 
 !> Type to carry basic tracer information
@@ -98,7 +103,7 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
                            df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
                            flux_nameroot, flux_longname, flux_units, flux_scale, &
-                           convergence_units, convergence_scale, diag_form)
+                           convergence_units, convergence_scale, cmor_tendname, diag_form)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), target :: tr1    !< pointer to the tracer (concentration units)
@@ -141,6 +146,7 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   character(len=*),     optional, intent(in)    :: convergence_units   !< The units for the flux convergence of this tracer.
   real,                 optional, intent(in)    :: convergence_scale !< A scaling factor used to convert the flux
                                                                 !! convergence of this tracer to its desired units.
+  character(len=*),     optional, intent(in)    :: cmor_tendname !< The CMOR name for the layer-integrated tendencies of this tracer.
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
                                                                 !! string template to use in labeling diagnostics
   integer :: ntr
@@ -188,6 +194,9 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
 
   Reg%Tr(ntr)%conv_units = ""
   if (present(convergence_units)) Reg%Tr(ntr)%conv_units = convergence_units
+
+  Reg%Tr(ntr)%cmor_tendname = ""
+  if (present(cmor_tendname)) Reg%Tr(ntr)%cmor_tendname = cmor_tendname
 
   Reg%Tr(ntr)%conv_scale = 1.0
   if (present(convergence_scale)) then
@@ -318,12 +327,14 @@ end subroutine add_tracer_diagnostics
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
-subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
-  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
-  type(time_type),            intent(in) :: Time !< current model time
-  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in) :: h    !< Layer thicknesses
+  type(time_type),            intent(in) :: Time !< current model time
+  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
 
   character(len=24) :: name     ! A variable's name in a NetCDF file.
   character(len=24) :: shortnm  ! A shortened version of a variable's name for
@@ -335,8 +346,11 @@ subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
                                 ! [units] m3 s-1 or [units] kg s-1.
   character(len=48) :: conv_units ! The units for flux convergences, either
                                 ! [units] m2 s-1 or [units] kg s-1.
-  character(len=72) :: cmorname ! The CMOR name of that variable.
+  character(len=72)  :: cmorname ! The CMOR name of that variable.
   character(len=120) :: cmor_longname ! The CMOR long name of that variable.
+  character(len=120) :: var_lname      ! A temporary longname for a diagnostic.
+  character(len=120) :: cmor_var_lname ! The temporary CMOR long name for a diagnostic
+  character(len=72)  :: cmor_varname ! The temporary CMOR name for a diagnostic
   type(tracer_type), pointer :: Tr=>NULL()
   integer :: i, j, k, is, ie, js, je, nz, m
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -448,6 +462,34 @@ subroutine register_tracer_diagnostics(Reg, Time, diag, G, GV)
       enddo ; enddo ; enddo
     endif
 
+    var_lname = "Net time tendency for "//lowercase(flux_longname)
+    if (len_trim(Tr%cmor_tendname) == 0) then
+      Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
+          diag%axesTL, Time, var_lname, conv_units, &
+          v_extensive=.true.)
+      Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
+    else
+      cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//trim(flux_longname)//" Content"
+      Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
+          diag%axesTL, Time, var_lname, conv_units, &
+          cmor_field_name=Tr%cmor_tendname, &
+          cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
+          v_extensive=.true., conversion=Tr%conv_scale)
+      cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
+      Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
+          cmor_field_name=trim(Tr%cmor_tendname)//"_2d", &
+          cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
+          conversion=Tr%conv_scale)
+    endif
+    if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
+      call safe_alloc_ptr(Tr%Trxh_prev,isd,ied,jsd,jed,nz)
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        Tr%Trxh_prev(i,j,k) = Tr%t(i,j,k) * h(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+
 !    call register_Z_tracer(Tr%t, name, longname, units, &
 !                           Time, G, diag_to_Z_CSp)
   endif ; enddo
@@ -456,14 +498,16 @@ end subroutine register_tracer_diagnostics
 
 !> post_tracer_diagnostics does post_data calls for any diagnostics that are
 !! being handled via the tracer registry.
-subroutine post_tracer_diagnostics(Reg, diag, G, GV, dt)
-  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
-  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in) :: h    !< Layer thicknesses
+  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
   real,                       intent(in) :: dt   !< total time step for tracer updates
 
-  real    :: work3d(SZI_(G),SZJ_(G),SZK_(G))
+  real    :: work3d(SZI_(G),SZJ_(G),SZK_(GV))
   real    :: work2d(SZI_(G),SZJ_(G))
   real    :: Idt
   type(tracer_type), pointer :: Tr=>NULL()
@@ -498,6 +542,20 @@ subroutine post_tracer_diagnostics(Reg, diag, G, GV, dt)
         tr%t_prev(i,j,k) =  Tr%t(i,j,k)
       enddo ; enddo ; enddo
       call post_data(Tr%id_tendency, work3d, diag)
+    endif
+    if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work3d(i,j,k)     = (Tr%t(i,j,k)*h(i,j,k) - Tr%Trxh_prev(i,j,k)) * Idt
+        Tr%Trxh_prev(i,j,k) =  Tr%t(i,j,k) * h(i,j,k)
+      enddo ; enddo ; enddo
+      if (Tr%id_trxh_tendency > 0) call post_data(Tr%id_trxh_tendency, work3d, diag)
+      if (Tr%id_trxh_tendency_2d > 0) then
+        work2d(:,:) = 0.0
+        do k=1,nz ; do j=js,je ; do i=is,ie
+          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
+        enddo ; enddo ; enddo
+        call post_data(Tr%id_trxh_tendency_2d, work2d, diag)
+      endif
     endif
   endif ; enddo
 
