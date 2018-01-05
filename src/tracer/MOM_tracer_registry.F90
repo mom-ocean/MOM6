@@ -355,7 +355,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
   integer :: i, j, k, is, ie, js, je, nz, m
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed 
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
