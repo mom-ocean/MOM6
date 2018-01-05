@@ -279,19 +279,6 @@ type, public :: MOM_control_struct
     vd_T, &   !< vardesc array describing potential temperature
     vd_S      !< vardesc array describing salinity
 
-  real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays of advective/diffusive tracer fluxes
-    T_adx => NULL(), T_ady => NULL(), T_diffx => NULL(), T_diffy => NULL(), &
-    S_adx => NULL(), S_ady => NULL(), S_diffx => NULL(), S_diffy => NULL()
-
-  real, pointer, dimension(:,:) :: & !< diagnostic arrays of vertically integrated advective/diffusive fluxes
-    T_adx_2d => NULL(), T_ady_2d => NULL(), T_diffx_2d => NULL(), T_diffy_2d => NULL(), &
-    S_adx_2d => NULL(), S_ady_2d => NULL(), S_diffx_2d => NULL(), S_diffy_2d => NULL()
-
-  real, pointer, dimension(:,:,:) :: &  !< diagnostic arrays for advection tendencies and total tendencies
-    T_advection_xy => NULL(), S_advection_xy => NULL(),  &
-    T_prev         => NULL(), S_prev         => NULL(),  &
-    Th_prev        => NULL(), Sh_prev        => NULL()
-
   real, pointer, dimension(:,:,:) :: & !< diagnostic arrays for variance decay through ALE
     T_squared => NULL(), S_squared => NULL()
 
@@ -303,15 +290,13 @@ type, public :: MOM_control_struct
   integer :: id_u  = -1
   integer :: id_v  = -1
   integer :: id_h  = -1
-  integer :: id_T  = -1
-  integer :: id_S  = -1
-  integer :: id_Tcon  = -1
-  integer :: id_Sabs  = -1
+  integer :: id_Tpot  = -1
+  integer :: id_Sprac  = -1
 
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
-  integer :: id_volo     = -1
+  integer :: id_volo     = -1;
   integer :: id_ssh      = -1
   integer :: id_ssh_ga   = -1
   integer :: id_sst      = -1
@@ -332,36 +317,6 @@ type, public :: MOM_control_struct
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-
-  ! transport of temperature and salinity
-  integer :: id_Tadx      = -1
-  integer :: id_Tady      = -1
-  integer :: id_Tdiffx    = -1
-  integer :: id_Tdiffy    = -1
-  integer :: id_Sadx      = -1
-  integer :: id_Sady      = -1
-  integer :: id_Sdiffx    = -1
-  integer :: id_Sdiffy    = -1
-  integer :: id_Tadx_2d   = -1
-  integer :: id_Tady_2d   = -1
-  integer :: id_Tdiffx_2d = -1
-  integer :: id_Tdiffy_2d = -1
-  integer :: id_Sadx_2d   = -1
-  integer :: id_Sady_2d   = -1
-  integer :: id_Sdiffx_2d = -1
-  integer :: id_Sdiffy_2d = -1
-
-  ! tendencies for temp/heat and saln/salt
-  integer :: id_T_advection_xy    = -1
-  integer :: id_T_advection_xy_2d = -1
-  integer :: id_T_tendency        = -1
-  integer :: id_Th_tendency       = -1
-  integer :: id_Th_tendency_2d    = -1
-  integer :: id_S_advection_xy    = -1
-  integer :: id_S_advection_xy_2d = -1
-  integer :: id_S_tendency        = -1
-  integer :: id_Sh_tendency       = -1
-  integer :: id_Sh_tendency_2d    = -1
 
   ! variance decay for temp and heat
   integer :: id_T_vardec = -1
@@ -935,7 +890,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp, &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, G, GV, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, CS%diag, G, GV)
+      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call post_TS_diagnostics(CS, G, GV, CS%tv, CS%diag, CS%t_dyn_rel_diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -1481,6 +1436,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
+  real :: conv2watt, conv2salt, H_convert
+  character(len=48) :: thickness_units, flux_units, S_flux_units
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -1865,15 +1822,42 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
-    CS%vd_T = var_desc(name="T",units="degC",longname="Potential Temperature", &
-                       cmor_field_name="thetao",                               &
+    if (CS%use_conT_absS) then
+      CS%vd_T = var_desc(name="contemp", units="Celsius", longname="Conservative Temperature", &
+                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
                        conversion=CS%tv%C_p)
-    CS%vd_S = var_desc(name="S",units="psu",longname="Salinity",&
-                       cmor_field_name="so",                    &
+      CS%vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
+                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
                        conversion=0.001)
+    else
+      CS%vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
+                       cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
+                       conversion=CS%tv%C_p)
+      CS%vd_S = var_desc(name="salt",units="psu",longname="Salinity", &
+                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
+                       conversion=0.001)
+    endif
     if(CS%advect_TS) then
-      call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_T)
-      call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, CS%vd_S)
+
+      S_flux_units = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
+      conv2watt    = GV%H_to_kg_m2 * CS%tv%C_p
+      if (GV%Boussinesq) then
+        conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
+        H_convert = GV%H_to_m
+      else
+        conv2salt = GV%H_to_kg_m2
+        H_convert = GV%H_to_kg_m2
+      endif
+      call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, &
+                           CS%vd_T, registry_diags=.true., flux_nameroot='T', &
+                           flux_units='W m-2', flux_longname='Heat', &
+                           flux_scale=conv2watt, convergence_units='W m-2', &
+                           convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
+      call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, &
+                           CS%vd_S, registry_diags=.true., flux_nameroot='S', &
+                           flux_units=S_flux_units, flux_longname='Salt', &
+                           flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
+                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
     endif
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, CS%tv, CS%vd_T, CS%vd_S, param_file)
@@ -2191,22 +2175,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! now register some diagnostics since tracer registry is locked
   call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
-  call register_tracer_diagnostics(CS%tracer_Reg, Time, diag, G, GV)
-  call register_diags_TS_tendency(Time, G, CS)
+  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif
 
   ! If need a diagnostic field, then would have been allocated in register_diags.
   if (CS%use_temperature) then
-    if(CS%advect_TS) then
-      call add_tracer_diagnostics("T", CS%tracer_Reg, CS%T_adx, CS%T_ady, &
-                        CS%T_diffx, CS%T_diffy, CS%T_adx_2d, CS%T_ady_2d, &
-                        CS%T_diffx_2d, CS%T_diffy_2d, CS%T_advection_xy)
-      call add_tracer_diagnostics("S", CS%tracer_Reg, CS%S_adx, CS%S_ady, &
-                        CS%S_diffx, CS%S_diffy, CS%S_adx_2d, CS%S_ady_2d, &
-                        CS%S_diffx_2d, CS%S_diffy_2d, CS%S_advection_xy)
-    endif
     call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
                       G, CS%diag_to_Z_CSp, cmor_field_name="thetao",                 &
                       cmor_standard_name="sea_water_potential_temperature",          &
@@ -2349,7 +2324,7 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
 
   thickness_units = get_thickness_units(GV)
   flux_units      = get_flux_units(GV)
-  S_flux_units    = get_tr_flux_units(GV, "psu") ! Could change to "kg m-2 s-1"?
+  S_flux_units    = get_tr_flux_units(GV, "psu") ! Could change to "kg s-1"?
   conv2watt       = GV%H_to_kg_m2 * C_p
   if (GV%Boussinesq) then
     conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
@@ -2396,15 +2371,6 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
       'Sea Surface Speed', 'm s-1', CS%missing)
 
   if (CS%use_temperature) then
-    CS%id_T = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
-        'Potential Temperature', 'degC',                                    &
-         cmor_field_name="thetao",                                          &
-         cmor_standard_name="sea_water_potential_temperature",              &
-         cmor_long_name ="Sea Water Potential Temperature")
-    CS%id_S = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
-        long_name='Salinity', units='psu', cmor_field_name='so',            &
-        cmor_long_name='Sea Water Salinity',                                &
-        cmor_standard_name='sea_water_salinity')
     CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
         long_name='Sea Water Potential Temperature at Sea Floor',                    &
         standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
@@ -2428,10 +2394,10 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
         cmor_long_name='Square of Sea Surface Salinity ',                     &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (CS%use_conT_absS) then
-      CS%id_Tcon = register_diag_field('ocean_model', 'contemp', diag%axesTL, Time, &
-          'Conservative Temperature', 'Celsius')
-      CS%id_Sabs = register_diag_field('ocean_model', 'abssalt', diag%axesTL, Time, &
-          long_name='Absolute Salinity', units='g kg-1')
+      CS%id_Tpot = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
+          'Potential Temperature', 'degC')
+      CS%id_Sprac = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
+          'Salinity', 'psu')
       CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
           'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
       CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
@@ -2452,78 +2418,6 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
          'Heat flux into ocean from mass flux into ocean', 'W m-2')
   CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
          'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
-
-
-  ! lateral heat advective and diffusive fluxes
-  CS%id_Tadx = register_diag_field('ocean_model', 'T_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Heat', 'W m-2', &
-      v_extensive = .true., conversion = conv2watt)
-  CS%id_Tady = register_diag_field('ocean_model', 'T_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Heat', 'W m-2', &
-      v_extensive = .true., conversion = conv2watt)
-  CS%id_Tdiffx = register_diag_field('ocean_model', 'T_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Heat', 'W m-2', &
-      v_extensive = .true., conversion = conv2watt)
-  CS%id_Tdiffy = register_diag_field('ocean_model', 'T_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Heat', 'W m-2', &
-      v_extensive = .true., conversion = conv2watt)
-  if (CS%id_Tadx   > 0) call safe_alloc_ptr(CS%T_adx,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_Tady   > 0) call safe_alloc_ptr(CS%T_ady,isd,ied,JsdB,JedB,nz)
-  if (CS%id_Tdiffx > 0) call safe_alloc_ptr(CS%T_diffx,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_Tdiffy > 0) call safe_alloc_ptr(CS%T_diffy,isd,ied,JsdB,JedB,nz)
-
-
-  ! lateral salt advective and diffusive fluxes
-  CS%id_Sadx = register_diag_field('ocean_model', 'S_adx', diag%axesCuL, Time, &
-      'Advective (by residual mean) Zonal Flux of Salt', S_flux_units, &
-      v_extensive = .true., conversion = conv2salt)
-  CS%id_Sady = register_diag_field('ocean_model', 'S_ady', diag%axesCvL, Time, &
-      'Advective (by residual mean) Meridional Flux of Salt', S_flux_units, &
-      v_extensive = .true., conversion = conv2salt)
-  CS%id_Sdiffx = register_diag_field('ocean_model', 'S_diffx', diag%axesCuL, Time, &
-      'Diffusive Zonal Flux of Salt', S_flux_units, &
-      v_extensive = .true., conversion = conv2salt)
-  CS%id_Sdiffy = register_diag_field('ocean_model', 'S_diffy', diag%axesCvL, Time, &
-      'Diffusive Meridional Flux of Salt', S_flux_units, &
-      v_extensive = .true., conversion = conv2salt)
-  if (CS%id_Sadx   > 0) call safe_alloc_ptr(CS%S_adx,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_Sady   > 0) call safe_alloc_ptr(CS%S_ady,isd,ied,JsdB,JedB,nz)
-  if (CS%id_Sdiffx > 0) call safe_alloc_ptr(CS%S_diffx,IsdB,IedB,jsd,jed,nz)
-  if (CS%id_Sdiffy > 0) call safe_alloc_ptr(CS%S_diffy,isd,ied,JsdB,JedB,nz)
-
-
-  ! vertically integrated lateral heat advective and diffusive fluxes
-  CS%id_Tadx_2d = register_diag_field('ocean_model', 'T_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Heat', 'W m-2', &
-      conversion = conv2watt)
-  CS%id_Tady_2d = register_diag_field('ocean_model', 'T_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Heat', 'W m-2', &
-      conversion = conv2watt)
-  CS%id_Tdiffx_2d = register_diag_field('ocean_model', 'T_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Heat', 'W m-2', &
-      conversion = conv2watt)
-  CS%id_Tdiffy_2d = register_diag_field('ocean_model', 'T_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Heat', 'W m-2', &
-      conversion = conv2watt)
-  if (CS%id_Tadx_2d   > 0) call safe_alloc_ptr(CS%T_adx_2d,IsdB,IedB,jsd,jed)
-  if (CS%id_Tady_2d   > 0) call safe_alloc_ptr(CS%T_ady_2d,isd,ied,JsdB,JedB)
-  if (CS%id_Tdiffx_2d > 0) call safe_alloc_ptr(CS%T_diffx_2d,IsdB,IedB,jsd,jed)
-  if (CS%id_Tdiffy_2d > 0) call safe_alloc_ptr(CS%T_diffy_2d,isd,ied,JsdB,JedB)
-
-  ! vertically integrated lateral salt advective and diffusive fluxes
-  CS%id_Sadx_2d = register_diag_field('ocean_model', 'S_adx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Advective Zonal Flux of Salt', S_flux_units, conversion = conv2salt)
-  CS%id_Sady_2d = register_diag_field('ocean_model', 'S_ady_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Advective Meridional Flux of Salt', S_flux_units, conversion = conv2salt)
-  CS%id_Sdiffx_2d = register_diag_field('ocean_model', 'S_diffx_2d', diag%axesCu1, Time, &
-      'Vertically Integrated Diffusive Zonal Flux of Salt', S_flux_units, conversion = conv2salt)
-  CS%id_Sdiffy_2d = register_diag_field('ocean_model', 'S_diffy_2d', diag%axesCv1, Time, &
-      'Vertically Integrated Diffusive Meridional Flux of Salt', S_flux_units, conversion = conv2salt)
-  if (CS%id_Sadx_2d   > 0) call safe_alloc_ptr(CS%S_adx_2d,IsdB,IedB,jsd,jed)
-  if (CS%id_Sady_2d   > 0) call safe_alloc_ptr(CS%S_ady_2d,isd,ied,JsdB,JedB)
-  if (CS%id_Sdiffx_2d > 0) call safe_alloc_ptr(CS%S_diffx_2d,IsdB,IedB,jsd,jed)
-  if (CS%id_Sdiffy_2d > 0) call safe_alloc_ptr(CS%S_diffy_2d,isd,ied,JsdB,JedB)
-
 
   if (CS%debug_truncations) then
     call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
@@ -2555,104 +2449,6 @@ subroutine register_diags(Time, G, GV, CS, ADp, C_p)
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
 
 end subroutine register_diags
-
-
-!> Initialize diagnostics for temp/heat and saln/salt tendencies.
-subroutine register_diags_TS_tendency(Time, G, CS)
-  type(time_type),           intent(in)    :: Time  !< current model time
-  type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structure
-  type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
-
-  type(diag_ctrl), pointer :: diag
-  integer :: i, j, k
-  integer :: isd, ied, jsd, jed, nz
-  integer :: is, ie, js, je
-
-  diag => CS%diag
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
-  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
-
-
-  ! heat tendencies from lateral advection
-  CS%id_T_advection_xy = register_diag_field('ocean_model', 'T_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean heat advective fluxes', 'W m-2',v_extensive=.true.)
-  CS%id_T_advection_xy_2d = register_diag_field('ocean_model', 'T_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean heat advective fluxes', 'W m-2')
-  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
-    call safe_alloc_ptr(CS%T_advection_xy,isd,ied,jsd,jed,nz)
-    CS%tendency_diagnostics = .true.
-  endif
-
-  ! net temperature and heat tendencies
-  CS%id_T_tendency = register_diag_field('ocean_model', 'T_tendency', diag%axesTL, Time, &
-      'Net time tendency for temperature', 'degC s-1')
-  CS%id_Th_tendency = register_diag_field('ocean_model', 'Th_tendency', diag%axesTL, Time,        &
-      'Net time tendency for heat', 'W m-2',                                                      &
-      cmor_field_name="opottemptend",                                                             &
-      cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content", &
-      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content",    &
-      v_extensive=.true.)
-  CS%id_Th_tendency_2d = register_diag_field('ocean_model', 'Th_tendency_2d', diag%axesT1, Time,              &
-      'Vertical sum of net time tendency for heat', 'W m-2',                                                  &
-      cmor_field_name="opottemptend_2d",                                                                      &
-      cmor_standard_name="tendency_of_sea_water_potential_temperature_expressed_as_heat_content_vertical_sum",&
-      cmor_long_name ="Tendency of Sea Water Potential Temperature Expressed as Heat Content Vertical Sum")
-  if (CS%id_T_tendency > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%T_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%T_prev(i,j,k) = CS%tv%T(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%Th_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%Th_prev(i,j,k) = CS%tv%T(i,j,k) * CS%h(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-
-
-  ! salt tendencies from lateral advection
-  CS%id_S_advection_xy = register_diag_field('ocean_model', 'S_advection_xy', diag%axesTL, Time, &
-      'Horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1', v_extensive=.true.)
-  CS%id_S_advection_xy_2d = register_diag_field('ocean_model', 'S_advection_xy_2d', diag%axesT1, Time,&
-      'Vertical sum of horizontal convergence of residual mean salt advective fluxes', 'kg m-2 s-1')
-  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
-    call safe_alloc_ptr(CS%S_advection_xy,isd,ied,jsd,jed,nz)
-    CS%tendency_diagnostics = .true.
-  endif
-
-  ! net salinity and salt tendencies
-  CS%id_S_tendency = register_diag_field('ocean_model', 'S_tendency', diag%axesTL, Time, &
-      'Net time tendency for salinity', 'psu s-1')
-  CS%id_Sh_tendency = register_diag_field('ocean_model', 'Sh_tendency', diag%axesTL, Time,&
-      'Net time tendency for salt', 'kg m-2 s-1',                                         &
-      cmor_field_name="osalttend",                                                        &
-      cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content",      &
-      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content",         &
-      v_extensive=.true.)
-  CS%id_Sh_tendency_2d = register_diag_field('ocean_model', 'Sh_tendency_2d', diag%axesT1, Time, &
-      'Vertical sum of net time tendency for salt', 'kg m-2 s-1',                                &
-      cmor_field_name="osalttend_2d",                                                            &
-      cmor_standard_name="tendency_of_sea_water_salinity_expressed_as_salt_content_vertical_sum",&
-      cmor_long_name ="Tendency of Sea Water Salinity Expressed as Salt Content Vertical Sum")
-  if (CS%id_S_tendency > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%S_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%S_prev(i,j,k) = CS%tv%S(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
-    CS%tendency_diagnostics = .true.
-    call safe_alloc_ptr(CS%Sh_prev,isd,ied,jsd,jed,nz)
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      CS%Sh_prev(i,j,k) = CS%tv%S(i,j,k) * CS%h(i,j,k)
-    enddo ; enddo ; enddo
-  endif
-
-end subroutine register_diags_TS_tendency
 
 
 !> Initialize diagnostics for the variance decay of temp/salt
@@ -2822,143 +2618,22 @@ subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   if (.NOT. CS%use_conT_absS) then
-    !Internal T&S variables are assumed to be potential&practical
-    if (CS%id_T > 0) call post_data(CS%id_T, tv%T, diag)
-    if (CS%id_S > 0) call post_data(CS%id_S, tv%S, diag)
-
+    ! Internal T&S variables are potential temperature & practical salinity
     if (CS%id_tob > 0) call post_data(CS%id_tob, tv%T(:,:,G%ke), diag, mask=G%mask2dT)
     if (CS%id_sob > 0) call post_data(CS%id_sob, tv%S(:,:,G%ke), diag, mask=G%mask2dT)
   else
-    !Internal T&S variables are assumed to be conservative&absolute
-    if (CS%id_Tcon > 0) call post_data(CS%id_Tcon, tv%T, diag)
-    if (CS%id_Sabs > 0) call post_data(CS%id_Sabs, tv%S, diag)
-    !Using TEOS-10 function calls convert T&S diagnostics
-    !from conservative temp to potential temp and
-    !from absolute salinity to practical salinity
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      pracSal(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
-      potTemp(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
-    enddo; enddo ; enddo
-    if (CS%id_T > 0) call post_data(CS%id_T, potTemp, diag)
-    if (CS%id_S > 0) call post_data(CS%id_S, pracSal, diag)
-    if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), diag, mask=G%mask2dT)
-    if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), diag, mask=G%mask2dT)
-  endif
-
-  if (CS%id_Tadx   > 0) call post_data(CS%id_Tadx,   CS%T_adx,   diag)
-  if (CS%id_Tady   > 0) call post_data(CS%id_Tady,   CS%T_ady,   diag)
-  if (CS%id_Tdiffx > 0) call post_data(CS%id_Tdiffx, CS%T_diffx, diag)
-  if (CS%id_Tdiffy > 0) call post_data(CS%id_Tdiffy, CS%T_diffy, diag)
-
-  if (CS%id_Sadx   > 0) call post_data(CS%id_Sadx,   CS%S_adx,   diag)
-  if (CS%id_Sady   > 0) call post_data(CS%id_Sady,   CS%S_ady,   diag)
-  if (CS%id_Sdiffx > 0) call post_data(CS%id_Sdiffx, CS%S_diffx, diag)
-  if (CS%id_Sdiffy > 0) call post_data(CS%id_Sdiffy, CS%S_diffy, diag)
-
-  if (CS%id_Tadx_2d   > 0) call post_data(CS%id_Tadx_2d,   CS%T_adx_2d,   diag)
-  if (CS%id_Tady_2d   > 0) call post_data(CS%id_Tady_2d,   CS%T_ady_2d,   diag)
-  if (CS%id_Tdiffx_2d > 0) call post_data(CS%id_Tdiffx_2d, CS%T_diffx_2d, diag)
-  if (CS%id_Tdiffy_2d > 0) call post_data(CS%id_Tdiffy_2d, CS%T_diffy_2d, diag)
-
-  if (CS%id_Sadx_2d   > 0) call post_data(CS%id_Sadx_2d,   CS%S_adx_2d,   diag)
-  if (CS%id_Sady_2d   > 0) call post_data(CS%id_Sady_2d,   CS%S_ady_2d,   diag)
-  if (CS%id_Sdiffx_2d > 0) call post_data(CS%id_Sdiffx_2d, CS%S_diffx_2d, diag)
-  if (CS%id_Sdiffy_2d > 0) call post_data(CS%id_Sdiffy_2d, CS%S_diffy_2d, diag)
-
-  if(.not. CS%tendency_diagnostics) return
-
-  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
-  ppt2mks       = 0.001
-  work3d(:,:,:) = 0.0
-  work2d(:,:)   = 0.0
-
-  ! Diagnose tendency of heat from convergence of lateral advective,
-  ! fluxes, where advective transport arises from residual mean velocity.
-  if (CS%id_T_advection_xy > 0 .or. CS%id_T_advection_xy_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%T_advection_xy(i,j,k) * GV%H_to_kg_m2 * tv%C_p
-    enddo ; enddo ; enddo
-    if (CS%id_T_advection_xy    > 0) call post_data(CS%id_T_advection_xy, work3d, diag)
-    if (CS%id_T_advection_xy_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_T_advection_xy_2d, work2d, diag)
-    endif
-  endif
-
-  ! Diagnose tendency of salt from convergence of lateral advective
-  ! fluxes, where advective transport arises from residual mean velocity.
-  if (CS%id_S_advection_xy > 0 .or. CS%id_S_advection_xy_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k) = CS%S_advection_xy(i,j,k) * GV%H_to_kg_m2 * ppt2mks
-    enddo ; enddo ; enddo
-    if (CS%id_S_advection_xy    > 0) call post_data(CS%id_S_advection_xy, work3d, diag)
-    if (CS%id_S_advection_xy_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_S_advection_xy_2d, work2d, diag)
-    endif
-  endif
-
-  ! diagnose net tendency for temperature over a time step and update T_prev
-  if (CS%id_T_tendency > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)    = (tv%T(i,j,k) - CS%T_prev(i,j,k))*Idt
-      CS%T_prev(i,j,k) =  tv%T(i,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_T_tendency, work3d, diag)
-  endif
-
-  ! diagnose net tendency for salinity over a time step and update S_prev
-  if (CS%id_S_tendency > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)    = (tv%S(i,j,k) - CS%S_prev(i,j,k))*Idt
-      CS%S_prev(i,j,k) =  tv%S(i,j,k)
-    enddo ; enddo ; enddo
-    call post_data(CS%id_S_tendency, work3d, diag)
-  endif
-
-  ! diagnose net tendency for heat content of a grid cell over a time step and update Th_prev
-  if (CS%id_Th_tendency > 0 .or. CS%id_Th_tendency_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (tv%T(i,j,k)*CS%h(i,j,k) - CS%Th_prev(i,j,k)) * Idt * GV%H_to_kg_m2 * tv%C_p
-      CS%Th_prev(i,j,k) =  tv%T(i,j,k)*CS%h(i,j,k)
-    enddo ; enddo ; enddo
-    if (CS%id_Th_tendency    > 0) call post_data(CS%id_Th_tendency, work3d, diag)
-    if (CS%id_Th_tendency_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_Th_tendency_2d, work2d, diag)
-    endif
-  endif
-
-  ! diagnose net tendency for salt content of a grid cell over a time step and update Sh_prev
-  if (CS%id_Sh_tendency > 0 .or. CS%id_Sh_tendency_2d > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work3d(i,j,k)     = (tv%S(i,j,k)*CS%h(i,j,k) - CS%Sh_prev(i,j,k)) * Idt * GV%H_to_kg_m2 * ppt2mks
-      CS%Sh_prev(i,j,k) =  tv%S(i,j,k)*CS%h(i,j,k)
-    enddo ; enddo ; enddo
-    if (CS%id_Sh_tendency    > 0) call post_data(CS%id_Sh_tendency, work3d, diag)
-    if (CS%id_Sh_tendency_2d > 0) then
-      do j=js,je ; do i=is,ie
-        work2d(i,j) = 0.0
-        do k=1,nz
-          work2d(i,j) = work2d(i,j) + work3d(i,j,k)
-        enddo
-      enddo ; enddo
-      call post_data(CS%id_Sh_tendency_2d, work2d, diag)
+    ! Internal T&S variables are conservative temperature & absolute salinity,
+    ! so they need to converted to potential temperature and practical salinity
+    ! for some diagnostics using TEOS-10 function calls.
+    if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0) .or. (CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        pracSal(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
+        potTemp(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
+      enddo; enddo ; enddo
+      if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, potTemp, diag)
+      if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, pracSal, diag)
+      if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), diag, mask=G%mask2dT)
+      if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), diag, mask=G%mask2dT)
     endif
   endif
 
