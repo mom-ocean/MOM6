@@ -1829,7 +1829,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
       CS%vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
                        cmor_field_name="so", cmor_longname="Sea Water Salinity", &
                        conversion=0.001)
-    else 
+    else
       CS%vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
                        cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
                        conversion=CS%tv%C_p)
