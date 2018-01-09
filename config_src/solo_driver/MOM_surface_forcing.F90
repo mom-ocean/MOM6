@@ -81,6 +81,8 @@ use Neverland_surface_forcing, only : Neverland_wind_forcing, Neverland_buoyancy
 use Neverland_surface_forcing, only : Neverland_surface_forcing_init, Neverland_surface_forcing_CS
 use shoebox_surface_forcing, only : shoebox_wind_forcing, shoebox_buoyancy_forcing
 use shoebox_surface_forcing, only : shoebox_surface_forcing_init, shoebox_surface_forcing_CS
+use shoebox3_surface_forcing, only : shoebox3_buoyancy_forcing, shoebox3_wind_forcing
+use shoebox3_surface_forcing, only : shoebox3_surface_forcing_init, shoebox3_surface_forcing_CS
 use channel_surface_forcing, only : channel_wind_forcing, channel_buoyancy_forcing
 use channel_surface_forcing, only : channel_surface_forcing_init, channel_surface_forcing_CS
 use channel2_surface_forcing, only : channel2_wind_forcing, channel2_buoyancy_forcing
@@ -213,6 +215,7 @@ type, public :: surface_forcing_CS ; private
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
   type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
   type(shoebox_surface_forcing_CS), pointer :: shoebox_forcing_CSp => NULL()
+  type(shoebox3_surface_forcing_CS), pointer :: shoebox3_forcing_CSp => NULL()
   type(channel_surface_forcing_CS), pointer :: channel_forcing_CSp => NULL()
   type(channel2_surface_forcing_CS), pointer :: channel2_forcing_CSp => NULL()
   type(channel3_surface_forcing_CS), pointer :: channel3_forcing_CSp => NULL()
@@ -304,6 +307,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call Neverland_wind_forcing(sfc_state, forces, day_center, G, CS%Neverland_forcing_CSp)
     elseif (trim(CS%wind_config) == "shoebox") then
       call shoebox_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox_forcing_CSp)
+    elseif (trim(CS%wind_config) == "shoebox3") then
+      call shoebox3_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel") then
       call channel_wind_forcing(sfc_state, forces, day_center, G, CS%channel_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel2") then
@@ -344,6 +349,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call Neverland_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%Neverland_forcing_CSp)
     elseif (trim(CS%buoy_config) == "shoebox") then
       call shoebox_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "shoebox3") then
+      call shoebox3_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel") then
       call channel_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel2") then
@@ -1835,6 +1842,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call Neverland_surface_forcing_init(Time, G, param_file, diag, CS%Neverland_forcing_CSp)
   elseif (trim(CS%wind_config) == "shoebox") then
     call shoebox_surface_forcing_init(Time, G, param_file, diag, CS%shoebox_forcing_CSp)
+  elseif (trim(CS%wind_config) == "shoebox3") then
+    call shoebox3_surface_forcing_init(Time, G, param_file, diag, CS%shoebox3_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel") then
     call channel_surface_forcing_init(Time, G, param_file, diag, CS%channel_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel2") then

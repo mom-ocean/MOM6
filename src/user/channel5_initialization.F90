@@ -66,7 +66,7 @@ subroutine channel5_initialize_topography(D, G, param_file, max_depth)
   ssp = ssp/latext
   D = 0.0
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/lonext
-  dy = (G%geoLatT(is,js+1)-G%geoLatT(is,js))/latext
+  dy = (G%geoLatT(is,2)-G%geoLatT(is,1))/latext
 
   print *, 'dy=', dy
 
