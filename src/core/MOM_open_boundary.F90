@@ -180,7 +180,8 @@ type, public :: ocean_OBC_type
                                                       !! in the strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
-  logical :: extend_segments = .false.                !< If True, extend OBC segments (for testing)
+! logical :: extend_segments = .false.                !< If True, extend OBC segments (for testing)
+  logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -278,10 +279,10 @@ subroutine open_boundary_config(G, param_file, OBC)
 
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
 
-  call get_param(param_file, mdl, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
-                   "If true, extend OBC segments. This option is used to recover\n"//&
-                   "legacy solutions dependent on an incomplete implementaion of OBCs.\n"//&
-                   "This option will be obsoleted in the future.", default=.false.)
+! call get_param(param_file, mdl, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
+!                  "If true, extend OBC segments. This option is used to recover\n"//&
+!                  "legacy solutions dependent on an incomplete implementaion of OBCs.\n"//&
+!                  "This option will be obsoleted in the future.", default=.false.)
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mdl, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
@@ -657,13 +658,13 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
 
   ! Hack to extend segment by one point
-  if (OBC%extend_segments) then
-    if (Js_obc<Je_obc) then
-      Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
-    else
-      Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
-    endif
-  endif
+! if (OBC%extend_segments) then
+!   if (Js_obc<Je_obc) then
+!     Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
+!   else
+!     Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
+!   endif
+! endif
 
   if (Je_obc>Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
@@ -709,10 +710,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) then
-        Js_obc = Js_obc + 1
-        Je_obc = Je_obc - 1
-      endif
+!     if (OBC%extend_segments) then
+!       Js_obc = Js_obc + 1
+!       Je_obc = Je_obc - 1
+!     endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
@@ -759,13 +760,13 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
   Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
 
   ! Hack to extend segment by one point
-  if (OBC%extend_segments) then
-    if (Is_obc<Ie_obc) then
-      Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
-    else
-      Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
-    endif
-  endif
+! if (OBC%extend_segments) then
+!   if (Is_obc<Ie_obc) then
+!     Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
+!   else
+!     Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
+!   endif
+! endif
 
   if (Ie_obc>Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_S
@@ -811,10 +812,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg)
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
       ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) then
-        Is_obc = Is_obc + 1
-        Ie_obc = Ie_obc - 1
-      endif
+!     if (OBC%extend_segments) then
+!       Is_obc = Is_obc + 1
+!       Ie_obc = Ie_obc - 1
+!     endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
