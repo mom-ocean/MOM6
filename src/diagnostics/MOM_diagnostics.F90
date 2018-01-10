@@ -10,8 +10,6 @@ module MOM_diagnostics
 !*  that are not calculated in the various subroutines.  Diagnostic    *
 !*  quantities are requested by allocating them memory.                *
 !*                                                                     *
-!*  Macros written all in capital letters are defined in MOM_memory.h. *
-!*                                                                     *
 !*     A small fragment of the grid is shown below:                    *
 !*                                                                     *
 !*    j+1  x ^ x ^ x   At x:  q, CoriolisBu                            *
@@ -599,7 +597,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
     if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
 
-    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
+    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   endif
 
 end subroutine calculate_diagnostic_fields
@@ -799,8 +797,10 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
 end subroutine calculate_vertical_integrals
 
 !> This subroutine calculates terms in the mechanical energy budget.
-subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
+subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
+                                                                   !! structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
                                                                    !! in m s-1.
@@ -879,8 +879,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%dKE_dt(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%dKE_dt(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
+            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     if (CS%id_dKEdt > 0) call post_data(CS%id_dKEdt, CS%dKE_dt, CS%diag)
@@ -897,7 +897,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%PE_to_KE(i,j,k) = 0.5 * G%IareaT(i,j) * &
+        CS%PE_to_KE(i,j,k) = GV%H_to_m * 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -919,8 +919,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_CorAdv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%KE_CorAdv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
+            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     if (CS%id_KE_Coradv > 0) call post_data(CS%id_KE_Coradv, CS%KE_Coradv, CS%diag)
@@ -941,8 +941,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_adv(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%KE_adv(i,j,k) = GV%H_to_m * (KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
+            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     if (CS%id_KE_adv > 0) call post_data(CS%id_KE_adv, CS%KE_adv, CS%diag)
@@ -959,8 +959,8 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_visc(i,j,k) = 0.5 * G%IareaT(i,j) * &
-            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+        CS%KE_visc(i,j,k) = GV%H_to_m * (0.5 * G%IareaT(i,j) * &
+            (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     if (CS%id_KE_visc > 0) call post_data(CS%id_KE_visc, CS%KE_visc, CS%diag)
@@ -977,7 +977,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_horvisc(i,j,k) = 0.5 * G%IareaT(i,j) * &
+        CS%KE_horvisc(i,j,k) = GV%H_to_m * 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -999,7 +999,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, CS)
       if (.not.G%symmetric) &
          call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
-        CS%KE_dia(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) * &
+        CS%KE_dia(i,j,k) = KE_h(i,j) + GV%H_to_m * 0.5 * G%IareaT(i,j) * &
             (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
       enddo ; enddo
     enddo
@@ -1110,7 +1110,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 #include "version_variable.h"
 
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
-  real :: omega, f2_min
+  real :: omega, f2_min, convert_H
   character(len=48) :: thickness_units, flux_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
@@ -1141,9 +1141,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
                  units='m', default=-1.)
 
   if (GV%Boussinesq) then
-    thickness_units = "m" ; flux_units = "m3 s-1"
+    thickness_units = "m" ; flux_units = "m3 s-1" ; convert_H = GV%H_to_m
   else
-    thickness_units = "kg m-2" ; flux_units = "kg s-1"
+    thickness_units = "kg m-2" ; flux_units = "kg s-1" ; convert_H = GV%H_to_kg_m2
   endif
 
   CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', diag%axesZL, Time, &
@@ -1237,25 +1237,28 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   ! layer thickness variables
   !if (GV%nk_rho_varies > 0) then
     CS%id_h_Rlay = register_diag_field('ocean_model', 'h_rho', diag%axesTL, Time, &
-        'Layer thicknesses in pure potential density coordinates', thickness_units)
+        'Layer thicknesses in pure potential density coordinates', thickness_units, &
+        conversion=convert_H)
     if (CS%id_h_Rlay>0) call safe_alloc_ptr(CS%h_Rlay,isd,ied,jsd,jed,nz)
 
     CS%id_uh_Rlay = register_diag_field('ocean_model', 'uh_rho', diag%axesCuL, Time, &
-        'Zonal volume transport in pure potential density coordinates', flux_units)
+        'Zonal volume transport in pure potential density coordinates', flux_units, &
+        conversion=convert_H)
     if (CS%id_uh_Rlay>0) call safe_alloc_ptr(CS%uh_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vh_Rlay = register_diag_field('ocean_model', 'vh_rho', diag%axesCvL, Time, &
-        'Meridional volume transport in pure potential density coordinates', flux_units)
+        'Meridional volume transport in pure potential density coordinates', flux_units, &
+        conversion=convert_H)
     if (CS%id_vh_Rlay>0) call safe_alloc_ptr(CS%vh_Rlay,isd,ied,JsdB,JedB,nz)
 
     CS%id_uhGM_Rlay = register_diag_field('ocean_model', 'uhGM_rho', diag%axesCuL, Time, &
         'Zonal volume transport due to interface height diffusion in pure potential &
-        &density coordinates', flux_units)
+        &density coordinates', flux_units, conversion=convert_H)
     if (CS%id_uhGM_Rlay>0) call safe_alloc_ptr(CS%uhGM_Rlay,IsdB,IedB,jsd,jed,nz)
 
     CS%id_vhGM_Rlay = register_diag_field('ocean_model', 'vhGM_rho', diag%axesCvL, Time, &
         'Meridional volume transport due to interface height diffusion in pure &
-        &potential density coordinates', flux_units)
+        &potential density coordinates', flux_units, conversion=convert_H)
     if (CS%id_vhGM_Rlay>0) call safe_alloc_ptr(CS%vhGM_Rlay,isd,ied,JsdB,JedB,nz)
   !endif
 
