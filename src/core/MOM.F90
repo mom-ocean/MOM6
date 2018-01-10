@@ -2184,23 +2184,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
-  ! now register some diagnostics since tracer registry is locked
+  ! now register some diagnostics since the tracer registry is now locked
   call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%tv%C_p, CS%missing, CS%tv)
-  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV)
+  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
+                                   CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
-  endif
-
-  ! If need a diagnostic field, then would have been allocated in register_diags.
-  if (CS%use_temperature) then
-    call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao",                 &
-                      cmor_standard_name="sea_water_potential_temperature",          &
-                      cmor_long_name ="Sea Water Potential Temperature")
-    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "psu", Time,               &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="so",                   &
-                      cmor_standard_name="sea_water_salinity",                     &
-                      cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.
