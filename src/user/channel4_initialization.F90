@@ -157,11 +157,12 @@ subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, C
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/G%len_lon
 
   ! target interface heights: all negative values
-  ! corresponds to rho 7
-  eta0 = (/0.0,0.0,0.0,-49.0,-99.0,-152.0,-211.0,-281.0,-361.0,-450.0, &
-                -550.0,-659.0,-779.0,-909.0,-1048.0,-1197.0,-1356.0, &
-                -1527.0,-1706.0,-1896.0,-2095.0,-2311.0,-2529.0,-2753.0, &
-                -2995.0,-3246.0,-3498.0,-3746.0,-4000.0,-4000.0,-4000.0 /)
+  ! corresponds to rho 8
+  eta0 = (/0., 0., 0., 0., 0., &
+                -64.,-140.,-244.,-372.,-520.,-676.,-834.,-996., &
+                -1161.,-1328.,-1501.,-1675.,-1851.,-2030.,-2214.,-2399., &
+                -2592.,-2779.,-2979.,-3179.,-3382.,-3583.,-3786., &
+                -4000., -4000., -4000. /)
 
   if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.

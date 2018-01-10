@@ -56,7 +56,7 @@ subroutine shoebox3_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
   real :: y, latext, sslat, eqlat ! dimensional: 65S; non-dimensional: 30S, Equator, 30N
-  real :: den, rho1 = 1037.5, rho2 = 1031.3, rho3 = 1037.25 ! south, equator, north
+  real :: den, rho1 = 1037.5, rho2 = 1031.3, rho3 = 1037.5 ! south, equator, north
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 

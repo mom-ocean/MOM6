@@ -1,10 +1,8 @@
-!> Wind and buoyancy forcing for the channel3 configurations
+!> Wind and buoyancy forcing for the channel 3 configurations
 !> difference from channel: adjusted surface buoyancy profile so that the
 !> sigma_2 value is used, not surface value 
-
-!> difference from channel2: 
-!> surface wind is turned off, so as to compare the result from using no
-!diapycnal diffusivity but with wind
+!> difference from channel 2: new surface density profile is used,
+!> to be used in conjunction with rho 8
 
 module channel3_surface_forcing
 
@@ -62,13 +60,43 @@ subroutine channel3_wind_forcing(sfc_state, forces, day, G, CS)
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
   type(channel3_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
+  ! Local variable
+  integer :: i, j, is, ie, js, je
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
-  ! wind stress is 0 everywhere
+  real :: x, y
+  real :: PI = 4.0*atan(1.0), wp_SO, wp2, latext, lonext
+
+  wp_SO = 0.13961 ! westerly peak in SO;  53 S
+  wp2 = -0.07871  ! easterly peak in Southern subtropics; 11.75S
   forces%taux = 0.0
+  latext = G%len_lat
+  lonext = G%len_lon
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true.)
 
+  !  Set the surface wind stresses, in units of Pa.  A positive taux
+  !  accelerates the ocean to the (pseudo-)east.
+  do j = js, je
+      y=(G%geoLatT(is, j)-G%south_lat)/latext                                 ! non-dimensional latitudes
+      forces%taux(is, j) = wp_SO*cosbellh(y-12.0/latext, 12.0/latext, -1.0) & ! south of the ACC peak
+                        + wp2*cosbell(y-54.0/latext, 22.0/latext)             ! profile in Southern subtropics
+
+      if (y > 12.0/latext) then              ! north of the ACC peak
+        forces%taux(is, j) = forces%taux(is, j)+ wp_SO*cosbell(y-12.0/latext, 25.0/latext)
+      endif
+
+      do i = is+1, ie
+        forces%taux(i, j) = forces%taux(is, j)                ! same wind stress for other longitudes
+      enddo
+  enddo
 
 end subroutine channel3_wind_forcing
 
@@ -86,7 +114,7 @@ subroutine channel3_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
   real :: y, latext        ! ND latitude, latitudinal range
-  real :: den, rhos = 1037.370, rhon = 1034.209     ! sothern and northern boundary densities of the channel3
+  real :: den, rhos = 1037.5, rhon = 1034.162     ! sothern and northern boundary densities of the channel3
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
