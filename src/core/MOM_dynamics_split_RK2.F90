@@ -950,6 +950,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
   character(len=48) :: thickness_units, flux_units, eta_rest_name
+  real :: H_convert
   type(group_pass_type) :: pass_av_h_uvh
   logical :: use_tides, debug_truncations
 
@@ -1108,10 +1109,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   call cpu_clock_end(id_clock_pass_init)
 
   flux_units = get_flux_units(GV)
+  H_convert = GV%H_to_m ; if (.not.GV%Boussinesq) H_convert = GV%H_to_kg_m2
   CS%id_uh = register_diag_field('ocean_model', 'uh', diag%axesCuL, Time, &
-      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true.)
+      'Zonal Thickness Flux', flux_units, y_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
   CS%id_vh = register_diag_field('ocean_model', 'vh', diag%axesCvL, Time, &
-      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true.)
+      'Meridional Thickness Flux', flux_units, x_cell_method='sum', v_extensive=.true., &
+      conversion=H_convert)
 
   CS%id_CAu = register_diag_field('ocean_model', 'CAu', diag%axesCuL, Time, &
       'Zonal Coriolis and Advective Acceleration', 'm s-2')

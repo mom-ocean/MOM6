@@ -873,7 +873,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, fluxes, optics, h, Temp, Salt, tv, j, 
                                 dRhodT, dRhodS, start, npts, tv%eqn_of_state)
 
   ! Adjust netSalt to reflect dilution effect of FW flux
-  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) * GV%H_to_m ! ppt H/s
+  netSalt(G%isc:G%iec) = netSalt(G%isc:G%iec) - Salt(G%isc:G%iec,j,1) * netH(G%isc:G%iec) ! ppt H/s
 
   ! Add in the SW heating for purposes of calculating the net
   ! surface buoyancy flux affecting the top layer.

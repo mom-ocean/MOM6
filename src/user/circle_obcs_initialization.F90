@@ -25,7 +25,7 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -69,15 +69,15 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_z
-        h(i,j,k) = GV%Angstrom_z
+        h(i,j,k) = GV%Angstrom
       else
-        h(i,j,k) = eta1D(K) - eta1D(K+1)
+        h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
       endif
     enddo
   enddo ; enddo
 
   ! Perturb base state by circular anomaly in center
-  k=Nz
+  k=nz
   latC = G%south_lat + 0.5*G%len_lat
   lonC = G%west_lon + 0.5*G%len_lon
   do j=js,je ; do i=is,ie
@@ -85,14 +85,14 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )
     rad = min( rad, 1. ) ! Flatten outside radius of diskrad
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi
-    if (Nz==1) then
+    if (nz==1) then
       ! The model is barotropic
-      h(i,j,k) = h(i,j,k) + 1.0*0.5*(1.+cos(rad)) ! cosine bell
+      h(i,j,k) = h(i,j,k) + GV%m_to_H * 1.0*0.5*(1.+cos(rad)) ! cosine bell
     else
       ! The model is baroclinic
-      do k = 1, Nz
-        h(i,j,k) = h(i,j,k) - 0.5*(1.+cos(rad)) & ! cosine bell
-            * 5.0 * real( 2*k-Nz )
+      do k = 1, nz
+        h(i,j,k) = h(i,j,k) - GV%m_to_H * 0.5*(1.+cos(rad)) & ! cosine bell
+            * 5.0 * real( 2*k-nz )
       enddo
     endif
   enddo ; enddo
