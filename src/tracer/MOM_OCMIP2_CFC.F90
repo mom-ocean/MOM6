@@ -36,9 +36,9 @@ module MOM_OCMIP2_CFC
 !*     A small fragment of the horizontal grid is shown below:         *
 !*                                                                     *
 !*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tr_ady, tr_dfy                        *
-!*    j    x ^ x ^ x   At >:  u, tr_adx, tr_dfx                        *
-!*    j    > o > o >   At o:  h, tr, CFC11, CFC12                      *
+!*    j+1  > o > o >   At ^:  v,                                       *
+!*    j    x ^ x ^ x   At >:  u                                        *
+!*    j    > o > o >   At o:  h, CFC11, CFC12                          *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -48,7 +48,7 @@ module MOM_OCMIP2_CFC
 !********+*********+*********+*********+*********+*********+*********+**
 
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -203,8 +203,6 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%CFC11_name = "CFC11" ; CS%CFC12_name = "CFC12"
   CS%CFC11_desc = var_desc(CS%CFC11_name,"mol m-3","CFC-11 Concentration", caller=mdl)
   CS%CFC12_desc = var_desc(CS%CFC12_name,"mol m-3","CFC-12 Concentration", caller=mdl)
-
-  ! This needs to be changed if the units of tracer are changed above.
   if (GV%Boussinesq) then ; flux_units = "mol s-1"
   else ; flux_units = "mol m-3 kg s-1" ; endif
 
@@ -220,14 +218,14 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
   call register_tracer(tr_ptr, CS%CFC11_desc, param_file, HI, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC11_desc, registry_diags=.true., &
-                       flux_units=flux_units, diag_form=1)
+                       flux_units=flux_units)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   call register_tracer(tr_ptr, CS%CFC12_desc, param_file, HI, GV, tr_Reg, &
                        tr_desc_ptr=CS%CFC12_desc, registry_diags=.true., &
-                       flux_units=flux_units, diag_form=1)
+                       flux_units=flux_units)
 
   ! Set and read the various empirical coefficients.
 
