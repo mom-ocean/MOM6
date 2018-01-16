@@ -380,6 +380,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   type(ESMF_time)     :: current_time      !< Current time
   type(ESMF_time)     :: time_in_ESMF      !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
+  integer             :: ncouple_per_day
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=240)  :: runid             !< Run ID
   character(len=240)  :: runtype           !< Run type
@@ -395,7 +396,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   logical             :: ldiag_cpl = .false.
   integer             :: isc, iec, jsc, jec, ni, nj     !< Indices for the start and end of the domain
                                                         !! in the x and y dir., respectively.
-  ! runi-time params
+  ! runtime params
   type(param_file_type) :: param_file           !< A structure to parse for run-time parameters
   type(directories)     :: dirs_tmp             !< A structure containing several relevant directory paths
   character(len=40)     :: mdl = "ocn_comp_mct" !< This module's name.
@@ -424,16 +425,13 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   character(len=16)   :: inst_name
   character(len=16)   :: inst_suffix
 
-  !!!DANGER!!!: change the following vars with the corresponding MOM6 vars
+  ! TODO: Change the following vars with the corresponding MOM6 vars
   integer :: km=1                   !< Number of vertical levels
-  integer :: nx_block=0, ny_block=0 !< Size of block domain in x,y dir including ghost cells
-  integer :: max_blocks_clinic=0    !< Max. number of blocks per processor in each distribution
-  integer :: ncouple_per_day
-  logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
+  !logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
                                     !! (partially-coupled option)
   character(len=128) :: err_msg     !< Error message
 
-  ! set (actually, get from mct) the cdata pointers:
+  ! set the cdata pointers:
   call seq_cdata_setptrs(cdata_o, id=MOM_MCT_ID, mpicom=mpicom_ocn, &
                          gsMap=MOM_MCT_gsMap, dom=MOM_MCT_dom, infodata=glb%infodata)
 
