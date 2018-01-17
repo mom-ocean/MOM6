@@ -529,9 +529,8 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
   endif
 
-  runtype = get_runtype()
-
   ! Initialize the MOM6 model
+  runtype = get_runtype()
   if (runtype == "initial") then ! startup (new run) - 'n' is needed below since we don't
                                  ! specify input_filename in input.nml
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
@@ -1521,7 +1520,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod      !< Controls if restart files must be written
-  logical :: debug=.true.
+  logical :: debug=.false.
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg        !< Error message
@@ -1547,29 +1546,30 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
-  ! Query the coupling interval length
+  ! Query the coupling interval duration
   call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
   call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
   coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
 
   ! The following if-block is to correct monthly mean outputs:
-  ! With this change, MOM6 starts at the same date as the other components, and runs for the same 
+  ! With this change, MOM6 starts at the same date as the other components, and runs for the same
   ! duration as other components, unlike POP, which would have one missing interval due to ocean
   ! lag. MOM6 accounts for this lag by doubling the duration of the first coupling interval.
   if (firstCall) then
-  
-    if (debug .and. is_root_pe()) then
-      write(glb%stdout,*) 'doubling first interval duration!'
-    endif
 
     runtype = get_runtype()
     if (runtype /= "continue" .and. runtype /= "branch") then
+
+      if (debug .and. is_root_pe()) then
+        write(glb%stdout,*) 'doubling first interval duration!'
+      endif
+
       ! shift back the start time by one coupling interval (to align the start time with other components)
       time_start = time_start-coupling_timestep
       ! double the first coupling interval (to account for the missing coupling interval to due to lag)
       coupling_timestep = coupling_timestep*2
     end if
-  
+
     firstCall = .false.
   end if
 
