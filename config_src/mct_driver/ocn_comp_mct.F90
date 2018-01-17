@@ -53,7 +53,7 @@ use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
 use MOM_error_handler,    only: callTree_enter, callTree_leave
 use MOM_time_manager,     only: time_type, set_date, set_time, set_calendar_type, NOLEAP, get_date
 use MOM_time_manager,     only: operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,     only: operator(/=), operator(>), get_time
+use MOM_time_manager,     only: operator(==), operator(/=), operator(>), get_time
 use MOM_file_parser,      only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,        only: Get_MOM_Input, directories
 use MOM_diag_mediator,    only: diag_ctrl, enable_averaging, disable_averaging
@@ -375,20 +375,18 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   character(len=*), optional  , intent(in)    :: NLFilename  !< Namelist filename
 
   !  local variables
-  type(time_type)     :: time_init         !< Start time of coupled model's calendar
-  type(time_type)     :: time_in           !< Time at the beginning of the first ocn coupling interval
-  type(ESMF_time)     :: current_time      !< Current time
+  type(time_type)     :: time0             !< Model start time
+  type(ESMF_time)     :: time_var          !< ESMF_time variable to query time
   type(ESMF_time)     :: time_in_ESMF      !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
   integer             :: ncouple_per_day
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=240)  :: runid             !< Run ID
-  character(len=240)  :: runtype           !< Run type
+  character(len=32)   :: runtype           !< Run type
   character(len=240)  :: restartfile       !< Path/Name of restart file
   integer             :: nu                !< i/o unit to read pointer file
   character(len=240)  :: restart_pointer_file !< File name for restart pointer file
   character(len=240)  :: restartpath       !< Path of the restart file
-  character(len=32)   :: starttype         !< infodata start type
   integer             :: mpicom_ocn        !< MPI ocn communicator
   integer             :: npes, pe0         !< # of processors and current processor
   integer             :: i, errorCode
@@ -440,19 +438,6 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call seq_infodata_GetData( glb%infodata, case_name=runid )
 
-  call seq_infodata_GetData( glb%infodata, start_type=starttype)
-
-  if (     trim(starttype) == trim(seq_infodata_start_type_start)) then
-     runtype = "initial"
-  else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
-     runtype = "continue"
-  else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
-     runtype = "branch"
-  else
-     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
-     call exit(0)
-  end if
-
   ! instance control
   inst_name   = seq_comm_name(MOM_MCT_ID)
   inst_index  = seq_comm_inst(MOM_MCT_ID)
@@ -482,36 +467,22 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
-  ! Get the ESMF clock instance (assigned by CESM for MOM6)
-  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
-
-  ! Get the initial CESM time
-  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-  time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
-
-  ! Compute time_in: time at the beginning of the first ocn coupling interval
-  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  if (runtype /= "continue" .and. runtype /= "branch") then
-    ! In startup runs, take the one ocn coupling interval lag into account to
-    ! compute the initial ocn time.  (time_in = time_init + ocn_cpl_interval)
-    time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
-  else
-    time_in_ESMF = current_time
-  endif
-  call ESMF_TimeGet(time_in_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+  ! Get the initial time
+  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  time0 = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
     write(glb%stdout,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
@@ -558,10 +529,12 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
   endif
 
+  runtype = get_runtype()
+
   ! Initialize the MOM6 model
   if (runtype == "initial") then ! startup (new run) - 'n' is needed below since we don't
                                  ! specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = 'n')
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
   else                           ! hybrid or branch or continuos runs
     ! output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
@@ -576,7 +549,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     !endif
     call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
   endif
 
   ! Initialize ocn_state%state out of sight
@@ -1544,12 +1517,11 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(mct_aVect),  intent(inout) :: x2o_o   !< Fluxes from coupler to ocean, computed by ocean
   type(mct_aVect),  intent(inout) :: o2x_o   !< Fluxes from ocean to coupler, computed by ocean
   ! Local variables
-  type(ESMF_time) :: current_time             !< Time to be reached at the end of ocean cpl interval
-  type(ESMF_time) :: time_start_ESMF          !< Time at the start of the coupling interval
+  type(ESMF_time) :: time_var                 !< ESMF_time variable to query time
   type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod      !< Controls if restart files must be written
-  logical :: debug=.false.
+  logical :: debug=.true.
   type(time_type) :: time_start        !< Start of coupled time interval to pass to MOM6
   type(time_type) :: coupling_timestep !< Coupled time interval to pass to MOM6
   character(len=128) :: err_msg        !< Error message
@@ -1557,9 +1529,11 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   character(len=384) :: restartname    !< The restart file name (no dir)
   character(len=384) :: restart_pointer_file !< File name for restart pointer file
   character(len=384) :: runid                !< Run ID
+  character(len=32)  :: runtype              !< Run type
   integer            :: nu                   !< i/o unit to write pointer file
   integer            :: shrlogunit ! original log file unit
   integer            :: shrloglev  ! original log level
+  logical, save      :: firstCall = .true.
 
   ! reset shr logging to ocn log file:
   if (is_root_pe()) then
@@ -1568,36 +1542,57 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     call shr_file_setLogUnit(glb%stdout)
   endif
 
-  ! Compute the time at the start of this coupling interval
-  call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
-  call ESMF_TimeGet(time_start_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  ! Query the beginning time of the current coupling interval
+  call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Query the coupling interval length
+  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+  coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
+
+  ! The following if-block is to correct monthly mean outputs:
+  ! With this change, MOM6 starts at the same date as the other components, and runs for the same 
+  ! duration as other components, unlike POP, which would have one missing interval due to ocean
+  ! lag. MOM6 accounts for this lag by doubling the duration of the first coupling interval.
+  if (firstCall) then
+  
+    if (debug .and. is_root_pe()) then
+      write(glb%stdout,*) 'doubling first interval duration!'
+    endif
+
+    runtype = get_runtype()
+    if (runtype /= "continue" .and. runtype /= "branch") then
+      ! shift back the start time by one coupling interval (to align the start time with other components)
+      time_start = time_start-coupling_timestep
+      ! double the first coupling interval (to account for the missing coupling interval to due to lag)
+      coupling_timestep = coupling_timestep*2
+    end if
+  
+    firstCall = .false.
+  end if
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
-    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, CurrTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
-  ! Translate the coupling time interval
-  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-  coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
-
-  ! set (actually, get from mct) the cdata pointers:
+  ! set the cdata pointers:
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
   ! GMM, check if  this is needed!
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
@@ -1617,8 +1612,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     ! case name
     call seq_infodata_GetData( glb%infodata, case_name=runid )
     ! add time stamp to the restart filename
-    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, CurrTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     seconds = seconds + hour*3600 + minute*60
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
@@ -2602,6 +2597,27 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   deallocate(idata)
 
 end subroutine ocn_domain_mct
+
+!> Returns the CESM run type
+character(32) function get_runtype()
+  character(len=32)   :: starttype         !< infodata start type
+
+  call seq_infodata_GetData( glb%infodata, start_type=starttype)
+
+    if (   trim(starttype) == trim(seq_infodata_start_type_start)) then
+     get_runtype = "initial"
+  else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
+     get_runtype = "continue"
+  else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
+     get_runtype = "branch"
+  else
+     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
+     call exit(0)
+  end if
+  return
+
+end function
+
 
 !> \namespace ocn_comp_mct
 !!
