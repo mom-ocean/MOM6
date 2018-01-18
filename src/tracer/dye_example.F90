@@ -148,15 +148,14 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29) &
     call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
 
+
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+
   do m = 1, CS%ntr
     write(var_name(:),'(A,I3.3)') "dye",m
     write(desc_name(:),'(A,I3.3)') "Dye Tracer ",m
     CS%tr_desc(m) = var_desc(trim(var_name), "conc", trim(desc_name), caller=mdl)
-  enddo
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
-
-  do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
@@ -166,8 +165,8 @@ function register_dye_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m), registry_diags=.true.)
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                         tr_desc=CS%tr_desc(m), registry_diags=.true.)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will

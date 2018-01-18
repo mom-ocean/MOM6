@@ -224,9 +224,8 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     call register_restart_field(tr_ptr, CS%tr_desc(m), &
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m), registry_diags=.true., &
-                         diag_form=1)
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=CS%tr_desc(m), &
+                         registry_diags=.true.)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will

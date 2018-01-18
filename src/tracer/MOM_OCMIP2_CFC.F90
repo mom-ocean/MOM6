@@ -216,15 +216,15 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call register_restart_field(tr_ptr, CS%CFC11_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
   ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, HI, GV, tr_Reg, &
-                       tr_desc_ptr=CS%CFC11_desc, registry_diags=.true., &
+  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                       tr_desc=CS%CFC11_desc, registry_diags=.true., &
                        flux_units=flux_units)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
   call register_restart_field(tr_ptr, CS%CFC12_desc, &
                               .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, HI, GV, tr_Reg, &
-                       tr_desc_ptr=CS%CFC12_desc, registry_diags=.true., &
+  call register_tracer(tr_ptr, Tr_Reg, param_file, HI, GV, &
+                       tr_desc=CS%CFC12_desc, registry_diags=.true., &
                        flux_units=flux_units)
 
   ! Set and read the various empirical coefficients.
