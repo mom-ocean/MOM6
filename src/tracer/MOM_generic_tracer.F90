@@ -209,7 +209,9 @@ contains
        ! the vardesc type, a pointer to this type can not be set as a target
        ! for register_tracer to use.
        if (g_tracer_is_prog(g_tracer)) &
-         call register_tracer(tr_ptr, vdesc, param_file, HI, GV, tr_Reg)
+         call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                              name=g_tracer_name, longname=longname, units=units, &
+                              registry_diags=.false.)  !### CHANGE TO TRUE?
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)

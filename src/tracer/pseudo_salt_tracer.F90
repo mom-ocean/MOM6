@@ -139,9 +139,12 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! Register the tracer for the restart file.
   call register_restart_field(tr_ptr, CS%tr_desc, &
                               .not. CS%pseudo_salt_may_reinit, restart_CS)
-  ! Register the tracer for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%tr_desc, param_file, HI, GV, tr_Reg, &
-                       tr_desc_ptr=CS%tr_desc, registry_diags=.true.)
+  ! Register the tracer for horizontal advection & diffusion.  For now, either form works.
+!  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+!                       tr_desc=CS%tr_desc, registry_diags=.true.)
+  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, name="pseudo_salt", &
+                       longname="Pseudo salt passive tracer", units="psu", &
+                       registry_diags=.true.)
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS

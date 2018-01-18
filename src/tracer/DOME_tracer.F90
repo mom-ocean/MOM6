@@ -122,9 +122,9 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! Register the tracer for the restart file.
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m), registry_diags=.true., &
-                         flux_units=flux_units)
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                         name=name, longname=longname, units="kg kg-1", &
+                         registry_diags=.true., flux_units=flux_units)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will

@@ -61,9 +61,14 @@ type, public :: tracer_type
                                                               !! at a previous timestep used for diagnostics
 
   character(len=32)               :: name                     !< tracer name used for diagnostics and error messages
-  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
+  character(len=64)               :: units                    !< Physical dimensions of the variable
+  character(len=240)              :: longname                 !< Long name of the variable
+!  type(vardesc), pointer          :: vd             => NULL() !< metadata describing the tracer
   logical                         :: registry_diags = .false. !< If true, use the registry to set up the
                                                               !! diagnostics associated with this tracer.
+  character(len=64)               :: cmor_name                !< CMOR name of this tracer
+  character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
+  character(len=240)              :: cmor_longname            !< CMOR long name of the tracer
   character(len=32)               :: flux_nameroot = ""       !< Short tracer name snippet used construct the
                                                               !! names of flux diagnostics.
   character(len=64)               :: flux_longname = ""       !< A word or phrase used construct the long
@@ -92,7 +97,7 @@ type, public :: tracer_registry_type
   type(tracer_type)        :: Tr(MAX_FIELDS_)   !< array of registered tracers
 ! type(diag_ctrl), pointer :: diag              !< structure to regulate timing of diagnostics
   logical                  :: locked = .false.  !< New tracers may be registered if locked=.false.
-                                                !! When locked=.true.,no more tracers can be registered,
+                                                !! When locked=.true., no more tracers can be registered,
                                                 !! at which point common diagnostics can be set up
                                                 !! for the registered tracers.
 end type tracer_registry_type
@@ -100,27 +105,25 @@ end type tracer_registry_type
 contains
 
 !> This subroutine registers a tracer to be advected and laterally diffused.
-subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, ad_x, ad_y,&
-                           df_x, df_y, OBC_inflow, OBC_in_u, OBC_in_v,            &
+subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, units, &
+                           cmor_name, cmor_units, cmor_longname, tr_desc, &
+                           OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, df_x, df_y, &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
                            flux_nameroot, flux_longname, flux_units, flux_scale, &
                            convergence_units, convergence_scale, cmor_tendname, diag_form)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
-  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), target :: tr1    !< pointer to the tracer (concentration units)
-  type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
-  type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
-  type(tracer_registry_type), pointer           :: Reg          !< pointer to the tracer registry
-  type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
-                                                                !! stored value of tr%tr_desc.  This target must be an
-                                                                !! enduring part of the control structure, because the tracer
-                                                                !! registry will use this memory, but it also means that any
-                                                                !! updates to this structure in the calling module will be
-                                                                !! available subsequently to the tracer registry.
-  real, pointer, dimension(:,:,:), optional     :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
+  type(tracer_registry_type),     pointer       :: Reg          !< pointer to the tracer registry
+  real, dimension(SZI_(HI),SZJ_(HI),SZK_(GV)), &
+                                  target        :: tr_ptr       !< target or pointer to the tracer array
+  type(param_file_type), intent(in)             :: param_file   !< file to parse for model parameter values
+  character(len=*),     optional, intent(in)    :: name         !< Short tracer name
+  character(len=*),     optional, intent(in)    :: longname     !< The long tracer name
+  character(len=*),     optional, intent(in)    :: units        !< The units of this tracer
+  character(len=*),     optional, intent(in)    :: cmor_name    !< CMOR name
+  character(len=*),     optional, intent(in)    :: cmor_units   !< CMOR physical dimensions of variable
+  character(len=*),     optional, intent(in)    :: cmor_longname !< CMOR long name
+  type(vardesc),        optional, intent(in)    :: tr_desc      !< A structure with metadata about the tracer
 
   real, intent(in),                optional     :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u
                                                                 !! or OBC_in_v are not specified (units of tracer CONC)
@@ -129,6 +132,11 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   real, pointer, dimension(:,:,:), optional     :: OBC_in_v     !< tracer at inflows through v-faces of
                                                                 !! tracer cells (units of tracer CONC)
 
+  ! The following are probably not necessary if registry_diags is present and true.
+  real, pointer, dimension(:,:,:), optional     :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, pointer, dimension(:,:,:), optional     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:),   pointer, optional     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:),   pointer, optional     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
   real, dimension(:,:),   pointer, optional     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
@@ -150,9 +158,7 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
   character(len=*),     optional, intent(in)    :: cmor_tendname !< The CMOR name for the layer-integrated tendencies of this tracer.
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
                                                                 !! string template to use in labeling diagnostics
-  integer :: ntr
-  type(tracer_type) :: temp
-  character(len=72) :: longname ! The long name of a variable.
+  type(tracer_type), pointer :: Tr=>NULL()
   character(len=256) :: mesg    ! Message for error messages.
 
   if (.not. associated(Reg)) call tracer_registry_init(param_file, Reg)
@@ -163,72 +169,89 @@ subroutine register_tracer(tr1, tr_desc, param_file, HI, GV, Reg, tr_desc_ptr, a
     call MOM_error(FATAL,"MOM register_tracer: "//mesg)
   endif
   Reg%ntr = Reg%ntr + 1
-  ntr     = Reg%ntr
 
-  if (present(tr_desc_ptr)) then
-    Reg%Tr(ntr)%vd => tr_desc_ptr
+  Tr => Reg%Tr(Reg%ntr)
+
+  if (present(name)) then
+    Tr%name = name
+    Tr%longname = name ; if (present(longname)) Tr%longname = longname
+    Tr%units = "Conc" ; if (present(units)) Tr%units = units
+
+    Tr%cmor_name = ""
+    if (present(cmor_name)) Tr%cmor_name = cmor_name
+
+    Tr%cmor_units = Tr%units
+    if (present(cmor_units)) Tr%cmor_units = cmor_units
+
+    Tr%cmor_longname = ""
+    if (present(cmor_longname)) Tr%cmor_longname = cmor_longname
+
+    if (present(tr_desc)) call MOM_error(WARNING, "MOM register_tracer: "//&
+      "It is a bad idea to use both name and tr_desc when registring "//trim(name))
+  elseif (present(tr_desc)) then
+    call query_vardesc(tr_desc, name=Tr%name, units=Tr%units, &
+                       longname=Tr%longname, cmor_field_name=Tr%cmor_name, &
+                       cmor_longname=Tr%cmor_longname, caller="register_tracer")
+    Tr%cmor_units = Tr%units
   else
-    allocate(Reg%Tr(ntr)%vd) ; Reg%Tr(ntr)%vd = tr_desc
+    call MOM_error(FATAL,"MOM register_tracer: Either name or "//&
+                   "tr_desc must be present when registering a tracer.")
   endif
-
-  call query_vardesc(Reg%Tr(ntr)%vd, name=Reg%Tr(ntr)%name, longname=longname)
 
   if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_tracer was called for variable "//trim(Reg%Tr(ntr)%name)//&
+      "MOM register_tracer was called for variable "//trim(Tr%name)//&
       " with a locked tracer registry.")
 
-  Reg%Tr(ntr)%flux_nameroot = Reg%Tr(ntr)%name
+  Tr%flux_nameroot = Tr%name
   if (present(flux_nameroot)) then
-    if (len_trim(flux_nameroot) > 0) Reg%Tr(ntr)%flux_nameroot = flux_nameroot
+    if (len_trim(flux_nameroot) > 0) Tr%flux_nameroot = flux_nameroot
   endif
 
-  Reg%Tr(ntr)%flux_longname = longname
+  Tr%flux_longname = Tr%longname
   if (present(flux_longname)) then
-    if (len_trim(flux_longname) > 0) Reg%Tr(ntr)%flux_longname = flux_longname
+    if (len_trim(flux_longname) > 0) Tr%flux_longname = flux_longname
   endif
 
-  Reg%Tr(ntr)%flux_units = ""
-  if (present(flux_units)) Reg%Tr(ntr)%flux_units = flux_units
+  Tr%flux_units = ""
+  if (present(flux_units)) Tr%flux_units = flux_units
 
-  Reg%Tr(ntr)%flux_scale = 1.0
-  if (present(flux_scale)) Reg%Tr(ntr)%flux_scale = flux_scale
+  Tr%flux_scale = 1.0
+  if (present(flux_scale)) Tr%flux_scale = flux_scale
 
-  Reg%Tr(ntr)%conv_units = ""
-  if (present(convergence_units)) Reg%Tr(ntr)%conv_units = convergence_units
+  Tr%conv_units = ""
+  if (present(convergence_units)) Tr%conv_units = convergence_units
 
-  Reg%Tr(ntr)%cmor_tendname = ""
-  if (present(cmor_tendname)) Reg%Tr(ntr)%cmor_tendname = cmor_tendname
+  Tr%cmor_tendname = ""
+  if (present(cmor_tendname)) Tr%cmor_tendname = cmor_tendname
 
-  Reg%Tr(ntr)%conv_scale = 1.0
+  Tr%conv_scale = 1.0
   if (present(convergence_scale)) then
-    Reg%Tr(ntr)%conv_scale = convergence_scale
+    Tr%conv_scale = convergence_scale
   elseif (present(flux_scale)) then
-    Reg%Tr(ntr)%conv_scale = flux_scale
+    Tr%conv_scale = flux_scale
   endif
 
-  Reg%Tr(ntr)%diag_form = 1
-  if (present(diag_form)) Reg%Tr(ntr)%diag_form = diag_form
+  Tr%diag_form = 1
+  if (present(diag_form)) Tr%diag_form = diag_form
 
-  Reg%Tr(ntr)%t => tr1
+  Tr%t => tr_ptr
 
-  if (present(ad_x)) then ; if (associated(ad_x)) Reg%Tr(ntr)%ad_x => ad_x ; endif
-  if (present(ad_y)) then ; if (associated(ad_y)) Reg%Tr(ntr)%ad_y => ad_y ; endif
-  if (present(df_x)) then ; if (associated(df_x)) Reg%Tr(ntr)%df_x => df_x ; endif
-  if (present(df_y)) then ; if (associated(df_y)) Reg%Tr(ntr)%df_y => df_y ; endif
-  if (present(OBC_inflow)) Reg%Tr(ntr)%OBC_inflow_conc = OBC_inflow
+  if (present(registry_diags)) Tr%registry_diags = registry_diags
+
+  if (present(ad_x)) then ; if (associated(ad_x)) Tr%ad_x => ad_x ; endif
+  if (present(ad_y)) then ; if (associated(ad_y)) Tr%ad_y => ad_y ; endif
+  if (present(df_x)) then ; if (associated(df_x)) Tr%df_x => df_x ; endif
+  if (present(df_y)) then ; if (associated(df_y)) Tr%df_y => df_y ; endif
+  if (present(OBC_inflow)) Tr%OBC_inflow_conc = OBC_inflow
   if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-                                    Reg%Tr(ntr)%OBC_in_u => OBC_in_u ; endif
+                                    Tr%OBC_in_u => OBC_in_u ; endif
   if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-                                    Reg%Tr(ntr)%OBC_in_v => OBC_in_v ; endif
-  if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(ntr)%ad2d_x => ad_2d_x ; endif
-  if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(ntr)%ad2d_y => ad_2d_y ; endif
-  if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(ntr)%df2d_x => df_2d_x ; endif
+                                    Tr%OBC_in_v => OBC_in_v ; endif
+  if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Tr%ad2d_x => ad_2d_x ; endif
+  if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Tr%ad2d_y => ad_2d_y ; endif
+  if (present(df_2d_x)) then ; if (associated(df_2d_x)) Tr%df2d_x => df_2d_x ; endif
 
-  if (present(advection_xy)) then ; if (associated(advection_xy)) Reg%Tr(ntr)%advection_xy => advection_xy ; endif
-
-  if (present(registry_diags)) then
-    Reg%Tr(ntr)%registry_diags = registry_diags
-  endif
+  if (present(advection_xy)) then ; if (associated(advection_xy)) Tr%advection_xy => advection_xy ; endif
 
 end subroutine register_tracer
 
@@ -366,9 +389,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, diag_to_Z_CSp)
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
-    call query_vardesc(Tr%vd, name, units=units, longname=longname, &
-                       cmor_field_name=cmorname, cmor_longname=cmor_longname, &
-                       caller="register_tracer_diagnostics")
+!    call query_vardesc(Tr%vd, name, units=units, longname=longname, &
+!                       cmor_field_name=cmorname, cmor_longname=cmor_longname, &
+!                       caller="register_tracer_diagnostics")
+    name = Tr%name ; units=Tr%units ; longname = Tr%longname
+    cmorname = Tr%cmor_name ; cmor_longname = Tr%cmor_longname
     shortnm = Tr%flux_nameroot
     flux_longname = Tr%flux_longname
     if (len_trim(cmor_longname) == 0) cmor_longname = longname
@@ -387,7 +412,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, diag_to_Z_CSp)
     else
       Tr%id_tr = register_diag_field("ocean_model", trim(name), diag%axesTL, &
         Time, trim(longname), trim(units), cmor_field_name=cmorname, &
-        cmor_standard_name=cmor_long_std(cmor_longname), cmor_long_name=cmor_longname)
+        cmor_long_name=cmor_longname, cmor_units=Tr%cmor_units, &
+        cmor_standard_name=cmor_long_std(cmor_longname))
     endif
     if (Tr%diag_form == 1) then
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &

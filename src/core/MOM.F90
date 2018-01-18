@@ -1853,13 +1853,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
         conv2salt = GV%H_to_kg_m2
         H_convert = GV%H_to_kg_m2
       endif
-      call register_tracer(CS%tv%T, CS%vd_T, param_file, dG%HI, GV, CS%tracer_Reg, &
-                           CS%vd_T, registry_diags=.true., flux_nameroot='T', &
+      call register_tracer(CS%tv%T, CS%tracer_Reg, param_file, dG%HI, GV, &
+                           tr_desc=CS%vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W m-2', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
                            convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
-      call register_tracer(CS%tv%S, CS%vd_S, param_file, dG%HI, GV, CS%tracer_Reg, &
-                           CS%vd_S, registry_diags=.true., flux_nameroot='S', &
+      call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
+                           tr_desc=CS%vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
                            convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
@@ -2445,7 +2445,6 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS, IDs, diag)
   type(diag_ctrl),         intent(inout) :: diag !< regulates diagnostic output
 
   integer :: isd, ied, jsd, jed, nz
-  type(vardesc) :: vd_tmp
 
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
 
@@ -2456,8 +2455,9 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS, IDs, diag)
     call safe_alloc_ptr(CS%T_squared,isd,ied,jsd,jed,nz)
     CS%T_squared(:,:,:) = 0.
 
-    vd_tmp = var_desc(name="T2", units="degC2", longname="Squared Potential Temperature")
-    call register_tracer(CS%T_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
+    call register_tracer(CS%T_squared, CS%tracer_reg, param_file, HI, GV, &
+             name="T2", units="degC2", longname="Squared Potential Temperature", &
+             registry_diags=.false.)
   endif
 
   IDs%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
@@ -2466,8 +2466,9 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS, IDs, diag)
     call safe_alloc_ptr(CS%S_squared,isd,ied,jsd,jed,nz)
     CS%S_squared(:,:,:) = 0.
 
-    vd_tmp = var_desc(name="S2", units="psu2", longname="Squared Salinity")
-    call register_tracer(CS%S_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
+    call register_tracer(CS%S_squared, CS%tracer_reg, param_file, HI, GV, &
+             name="S2", units="psu2", longname="Squared Salinity", &
+             registry_diags=.false.)
   endif
 
 end subroutine register_diags_TS_vardec
