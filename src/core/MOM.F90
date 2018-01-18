@@ -146,6 +146,46 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+!> A structure with diagnostic IDs
+type MOM_diag_IDs
+  ! diagnostic ids
+
+  ! 3-d state fields
+  integer :: id_u  = -1, id_v  = -1, id_h  = -1
+  integer :: id_Tpot  = -1, id_Sprac  = -1
+
+  ! 2-d surface and bottom fields
+  integer :: id_zos      = -1
+  integer :: id_zossq    = -1
+  integer :: id_volo     = -1
+  integer :: id_ssh      = -1
+  integer :: id_ssh_ga   = -1
+  integer :: id_sst      = -1
+  integer :: id_sst_sq   = -1
+  integer :: id_sss      = -1
+  integer :: id_sss_sq   = -1
+  integer :: id_ssu      = -1
+  integer :: id_ssv      = -1
+  integer :: id_speed    = -1
+  integer :: id_ssh_inst = -1
+  integer :: id_tob      = -1
+  integer :: id_sob      = -1
+  integer :: id_sstcon   = -1
+  integer :: id_sssabs   = -1
+
+  integer :: id_T_vardec = -1, id_S_vardec = -1
+
+  ! heat and salt flux fields
+  integer :: id_fraz         = -1
+  integer :: id_salt_deficit = -1
+  integer :: id_Heat_PmE     = -1
+  integer :: id_intern_heat  = -1
+
+  ! Diagnostics for tracer horizontal transport
+  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
+  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
+end type MOM_diag_IDs
+
 !> Control structure for this module
 type, public :: MOM_control_struct
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
@@ -196,10 +236,6 @@ type, public :: MOM_control_struct
                                      !! with nkml sublayers and nkbl buffer layer.
   logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
                                      !! processes before time stepping the dynamics.
-  logical :: use_conT_absS           !< If true, , the prognostics T&S are the conservative temperature
-                                     !! and absolute salinity. Care should be taken to convert them
-                                     !! to potential temperature and practical salinity before
-                                     !! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
@@ -284,48 +320,7 @@ type, public :: MOM_control_struct
 
   logical :: tendency_diagnostics = .false.
 
-  ! diagnostic ids
-
-  ! 3-d state fields
-  integer :: id_u  = -1
-  integer :: id_v  = -1
-  integer :: id_h  = -1
-  integer :: id_Tpot  = -1
-  integer :: id_Sprac  = -1
-
-  ! 2-d surface and bottom fields
-  integer :: id_zos      = -1
-  integer :: id_zossq    = -1
-  integer :: id_volo     = -1;
-  integer :: id_ssh      = -1
-  integer :: id_ssh_ga   = -1
-  integer :: id_sst      = -1
-  integer :: id_sst_sq   = -1
-  integer :: id_sss      = -1
-  integer :: id_sss_sq   = -1
-  integer :: id_ssu      = -1
-  integer :: id_ssv      = -1
-  integer :: id_speed    = -1
-  integer :: id_ssh_inst = -1
-  integer :: id_tob      = -1
-  integer :: id_sob      = -1
-  integer :: id_sstcon   = -1
-  integer :: id_sssabs   = -1
-
-  ! heat and salt flux fields
-  integer :: id_fraz         = -1
-  integer :: id_salt_deficit = -1
-  integer :: id_Heat_PmE     = -1
-  integer :: id_intern_heat  = -1
-
-  ! variance decay for temp and heat
-  integer :: id_T_vardec = -1
-  integer :: id_S_vardec = -1
-
-
-  ! Diagnostics for tracer horizontal transport
-  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = 1
-  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = 1
+  type(MOM_diag_IDs) :: IDs
 
   ! The remainder provides pointers to child module control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -410,6 +405,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
                                       ! metrics and related information
   type(verticalGrid_type),  pointer :: GV => NULL()
+  type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
   integer, save :: nt_debug = 1 ! running number of iterations, for debugging only.
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
   integer       :: n_max  ! number of steps to take in this call
@@ -461,7 +457,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   ! These are used for group halo passes.
   logical :: do_pass_Ray, do_pass_kv_bbl_thick
 
-  G => CS%G ; GV => CS%GV
+  G => CS%G ; GV => CS%GV ; IDs => CS%IDs
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -721,7 +717,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     endif
 
     ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    if (transport_remap_grid_needed(CS)) then
+    if (transport_remap_grid_needed(IDs)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
         h_pre_dyn(i,j,k) = h(i,j,k)
         if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
@@ -878,10 +874,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
     call enable_averaging(dt, Time_local, CS%diag)
     ! These diagnostics are available every time step.
-    if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
-    if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
-    if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
-    if (CS%id_ssh_inst > 0) call post_data(CS%id_ssh_inst, ssh, CS%diag)
+    if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
+    if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
+    if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
+    if (IDs%id_ssh_inst > 0) call post_data(IDs%id_ssh_inst, ssh, CS%diag)
     call disable_averaging(CS%diag)
 
     if (CS%t_dyn_rel_adv == 0.0) then
@@ -891,7 +887,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp, &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, G, GV, CS%diagnostics_CSp)
       call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag, G, GV, CS%t_dyn_rel_diag)
-      call post_TS_diagnostics(CS, G, GV, CS%tv, CS%diag, CS%t_dyn_rel_diag)
+      call post_TS_diagnostics(IDs, G, GV, CS%tv, CS%diag, CS%t_dyn_rel_diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
       CS%t_dyn_rel_diag = 0.0
@@ -921,7 +917,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
     ssh(i,j) = CS%ave_ssh(i,j)
   enddo ; enddo
-  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS%tv, G, GV, CS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
@@ -933,8 +929,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   ! Do diagnostics that only occur at the end of a complete forcing step.
   call cpu_clock_begin(id_clock_diagnostics)
   call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_integrated_diagnostics(CS, G, GV, CS%diag, dt*n_max, CS%tv, ssh, fluxes)
-  call post_surface_diagnostics(CS, G, CS%diag, sfc_state)
+  call post_integrated_diagnostics(IDs, G, GV, CS%diag, dt*n_max, CS%tv, ssh, fluxes)
+  call post_surface_diagnostics(IDs, G, CS%diag, sfc_state, CS%tv)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics)
 
@@ -993,7 +989,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-  call post_transport_diagnostics(G, GV, CS, CS%diag, CS%t_dyn_rel_adv, h, &
+  call post_transport_diagnostics(G, GV, CS, CS%IDs, CS%diag, CS%t_dyn_rel_adv, h, &
                                   h_pre_dyn, T_pre_dyn, S_pre_dyn)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
@@ -1145,7 +1141,8 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
     ! happen after the H update and before the next post_data.
     call diag_update_remap_grids(CS%diag)
 
-    call post_diags_TS_vardec(G, CS, dtdia)
+    call post_diags_TS_vardec(G, CS, CS%IDs, CS%diag, dtdia)
+
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
       call hchksum(h, "Post-diabatic h", G%HI, haloshift=1, scale=GV%H_to_m)
@@ -1364,7 +1361,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
 
   endif
 
-  call adjust_ssh_for_p_atm(CS, G, GV, CS%ave_ssh, forces%p_surf_SSH)
+  call adjust_ssh_for_p_atm(CS%tv, G, GV, CS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
   call calculate_surface_state(sfc_state, CS%u, CS%v, CS%h, CS%ave_ssh, G, GV, CS)
 
   call disable_averaging(CS%diag)
@@ -1424,6 +1421,10 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   logical :: save_IC           ! If true, save the initial conditions.
   logical :: do_unit_tests     ! If true, call unit tests.
   logical :: test_grid_copy = .false.
+  logical :: use_conT_absS     ! If true, the prognostics T & S are conservative temperature
+                               ! and absolute salinity. Care should be taken to convert them
+                               ! to potential temperature and practical salinity before
+                               ! exchanging them with the coupler and/or reporting T&S diagnostics.
   logical :: use_ice_shelf     ! Needed for ALE
   logical :: global_indexing   ! If true use global horizontal index values instead
                                ! of having the data domain on each processor start at 1.
@@ -1510,12 +1511,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                  "If true, apply diabatic and thermodynamic processes, \n"//&
                  "including buoyancy forcing and mass gain or loss, \n"//&
                  "before stepping the dynamics forward.", default=.false.)
-  call get_param(param_file, "MOM", "USE_CONTEMP_ABSSAL", CS%use_conT_absS, &
-                 "If true, , the prognostics T&S are the conservative temperature \n"//&
+  call get_param(param_file, "MOM", "USE_CONTEMP_ABSSAL", use_conT_absS, &
+                 "If true, the prognostics T&S are the conservative temperature \n"//&
                  "and absolute salinity. Care should be taken to convert them \n"//&
-                 "to potential temperature and practical salinity before  \n"//&
-                 "exchanging them with the coupler and/or reporting T&S diagnostics. \n"&
-                 , default=.false.)
+                 "to potential temperature and practical salinity before \n"//&
+                 "exchanging them with the coupler and/or reporting T&S diagnostics.\n", &
+                 default=.false.)
+  CS%tv%T_is_conT = use_conT_absS ; CS%tv%S_is_absS = use_conT_absS
   call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
@@ -1822,17 +1824,20 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
     CS%tv%T => CS%T ; CS%tv%S => CS%S
-    if (CS%use_conT_absS) then
+    if (CS%tv%T_is_conT) then
       CS%vd_T = var_desc(name="contemp", units="Celsius", longname="Conservative Temperature", &
                        cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
                        conversion=CS%tv%C_p)
-      CS%vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
-                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
-                       conversion=0.001)
     else
       CS%vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
                        cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
                        conversion=CS%tv%C_p)
+    endif
+    if (CS%tv%S_is_absS) then
+      CS%vd_S = var_desc(name="abssalt",units="g kg-1",longname="Absolute Salinity", &
+                       cmor_field_name="so", cmor_longname="Sea Water Salinity", &
+                       conversion=0.001)
+    else
       CS%vd_S = var_desc(name="salt",units="psu",longname="Salinity", &
                        cmor_field_name="so", cmor_longname="Sea Water Salinity", &
                        conversion=0.001)
@@ -1889,6 +1894,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
     allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
+    call safe_alloc_ptr(CS%ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
+    call safe_alloc_ptr(CS%ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
+    if (.not.CS%adiabatic) then
+      call safe_alloc_ptr(CS%ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
+      call safe_alloc_ptr(CS%ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
+    endif
   endif
 
   MOM_internal_state%u => CS%u ; MOM_internal_state%v => CS%v
@@ -2168,28 +2179,17 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   if (CS%use_ALE_algorithm) &
-    call register_diags_TS_vardec(Time, G%HI, GV, param_file, CS)
+    call register_diags_TS_vardec(Time, G%HI, GV, param_file, CS, CS%IDs, CS%diag)
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
-  ! now register some diagnostics since tracer registry is locked
-  call register_diags(Time, G, GV, CS, CS%ADp, CS%tv%C_p)
-  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV)
+  ! now register some diagnostics since the tracer registry is now locked
+  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%tv%C_p, CS%missing, CS%tv)
+  call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
+                                   CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
-  endif
-
-  ! If need a diagnostic field, then would have been allocated in register_diags.
-  if (CS%use_temperature) then
-    call register_Z_tracer(CS%tv%T, "temp", "Potential Temperature", "degC", Time,   &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="thetao",                 &
-                      cmor_standard_name="sea_water_potential_temperature",          &
-                      cmor_long_name ="Sea Water Potential Temperature")
-    call register_Z_tracer(CS%tv%S, "salt", "Salinity", "psu", Time,               &
-                      G, CS%diag_to_Z_CSp, cmor_field_name="so",                   &
-                      cmor_standard_name="sea_water_salinity",                     &
-                      cmor_long_name ="Sea Water Salinity")
   endif
 
   ! This subroutine initializes any tracer packages.
@@ -2304,147 +2304,129 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 
 end subroutine finish_MOM_initialization
 
-!> Register the diagnostics
-subroutine register_diags(Time, G, GV, CS, ADp, C_p)
-  type(time_type),           intent(in)    :: Time  !< current model time
-  type(ocean_grid_type),     intent(inout) :: G     !< ocean grid structu
-  type(verticalGrid_type),   intent(inout) :: GV    !< ocean vertical grid structure
-  type(MOM_control_struct),  pointer       :: CS    !< control structure set up by initialize_MOM
-  type(accel_diag_ptrs),     intent(inout) :: ADp   !< structure pointing to accelerations in momentum equation
-  real,                      intent(in)    :: C_p   !< Heat capacity used in conversion to watts
+!> Register certain diagnostics
+subroutine register_diags(Time, G, GV, IDs, diag, C_p, missing, tv)
+  type(time_type),         intent(in)    :: Time  !< current model time
+  type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
+  type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
+  real,                    intent(in)    :: C_p   !< Heat capacity used in conversion to watts
+  real,                    intent(in)    :: missing !< The value to use to fill in missing data
+  type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
 
-  real :: conv2watt, conv2salt, H_convert
-  character(len=48) :: thickness_units, flux_units, S_flux_units
-  type(diag_ctrl), pointer :: diag
+  real :: H_convert
+  character(len=48) :: thickness_units
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  diag => CS%diag
-
   thickness_units = get_thickness_units(GV)
-  flux_units      = get_flux_units(GV)
-  S_flux_units    = get_tr_flux_units(GV, "psu") ! Could change to "kg s-1"?
-  conv2watt       = GV%H_to_kg_m2 * C_p
   if (GV%Boussinesq) then
-    conv2salt = GV%H_to_m ! Could change to GV%H_to_kg_m2 * 0.001?
     H_convert = GV%H_to_m
   else
-    conv2salt = GV%H_to_kg_m2
     H_convert = GV%H_to_kg_m2
   endif
 
-  !Initialize the diagnostics mask arrays.
-  !This has to be done after MOM_initialize_state call.
-  !call diag_masks_set(G, CS%missing)
-
-  CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
+  IDs%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
       'Zonal velocity', 'm s-1', cmor_field_name='uo', &
       cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
-  CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
+  IDs%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
       'Meridional velocity', 'm s-1', cmor_field_name='vo', &
       cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
-  CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
+  IDs%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
 
-  CS%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
+  IDs%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
       long_name='Total volume of liquid ocean', units='m3',            &
       standard_name='sea_water_volume')
-  CS%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
+  IDs%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='m', missing_value=CS%missing)
-  CS%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
+      long_name= 'Sea surface height above geoid', units='m', missing_value=missing)
+  IDs%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
       standard_name='square_of_sea_surface_height_above_geoid',             &
-      long_name='Square of sea surface height above geoid', units='m2', missing_value=CS%missing)
-  CS%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'm', CS%missing)
-  CS%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
+      long_name='Square of sea surface height above geoid', units='m2', missing_value=missing)
+  IDs%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
+      'Sea Surface Height', 'm', missing)
+  IDs%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
-  CS%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
-      'Instantaneous Sea Surface Height', 'm', CS%missing)
-  CS%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'm s-1', CS%missing)
-  CS%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'm s-1', CS%missing)
-  CS%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'm s-1', CS%missing)
+  IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
+      'Instantaneous Sea Surface Height', 'm', missing)
+  IDs%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
+      'Sea Surface Zonal Velocity', 'm s-1', missing)
+  IDs%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
+      'Sea Surface Meridional Velocity', 'm s-1', missing)
+  IDs%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
+      'Sea Surface Speed', 'm s-1', missing)
 
-  if (CS%use_temperature) then
-    CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
+  if (associated(tv%T)) then
+    IDs%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time,          &
         long_name='Sea Water Potential Temperature at Sea Floor',                    &
         standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
-    CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
+    IDs%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time,           &
         long_name='Sea Water Salinity at Sea Floor',                                 &
         standard_name='sea_water_salinity_at_sea_floor', units='psu')
-    CS%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'degC', CS%missing, cmor_field_name='tos', &
+    IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
+        'Sea Surface Temperature', 'degC', missing, cmor_field_name='tos', &
         cmor_long_name='Sea Surface Temperature',                                &
         cmor_standard_name='sea_surface_temperature')
-    CS%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'degC2', CS%missing, cmor_field_name='tossq', &
+    IDs%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
+        'Sea Surface Temperature Squared', 'degC2', missing, cmor_field_name='tossq', &
         cmor_long_name='Square of Sea Surface Temperature ',                      &
         cmor_standard_name='square_of_sea_surface_temperature')
-    CS%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'psu', CS%missing, cmor_field_name='sos', &
+    IDs%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
+        'Sea Surface Salinity', 'psu', missing, cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity',                            &
         cmor_standard_name='sea_surface_salinity')
-    CS%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'psu', CS%missing, cmor_field_name='sossq', &
+    IDs%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
+        'Sea Surface Salinity Squared', 'psu', missing, cmor_field_name='sossq', &
         cmor_long_name='Square of Sea Surface Salinity ',                     &
         cmor_standard_name='square_of_sea_surface_salinity')
-    if (CS%use_conT_absS) then
-      CS%id_Tpot = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
+    if (tv%T_is_conT) then
+      IDs%id_Tpot = register_diag_field('ocean_model', 'temp', diag%axesTL, Time, &
           'Potential Temperature', 'degC')
-      CS%id_Sprac = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
+      IDs%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
+          'Sea Surface Conservative Temperature', 'Celsius', missing)
+    endif
+    if (tv%S_is_absS) then
+      IDs%id_Sprac = register_diag_field('ocean_model', 'salt', diag%axesTL, Time, &
           'Salinity', 'psu')
-      CS%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-          'Sea Surface Conservative Temperature', 'Celsius', CS%missing)
-      CS%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g kg-1', CS%missing)
+      IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
+          'Sea Surface Absolute Salinity', 'g kg-1', missing)
+    endif
+    if (ASSOCIATED(tv%frazil)) then
+      IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
+            'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
+            cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
+            cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
     endif
   endif
 
-  if (CS%use_temperature .and. CS%use_frazil) then
-    CS%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time,  &
-          'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
-          cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
-          cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
-  endif
-
-  CS%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
+  IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
          'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
-  CS%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
+  IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
          'Heat flux into ocean from mass flux into ocean', 'W m-2')
-  CS%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
+  IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
          'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
 
-  if (CS%debug_truncations) then
-    call safe_alloc_ptr(ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
-    call safe_alloc_ptr(ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    if (.not.CS%adiabatic) then
-      call safe_alloc_ptr(ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
-      call safe_alloc_ptr(ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
-    endif
-  endif
-
   ! Diagnostics related to tracer transport
-  CS%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
+  IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
       'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
       y_cell_method='sum', v_extensive=.true., conversion=H_convert)
-  CS%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
+  IDs%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
       'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
       x_cell_method='sum', v_extensive=.true., conversion=H_convert)
-  CS%id_umo = register_diag_field('ocean_model', 'umo', &
+  IDs%id_umo = register_diag_field('ocean_model', 'umo', &
       diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
       standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
-  CS%id_vmo = register_diag_field('ocean_model', 'vmo', &
+  IDs%id_vmo = register_diag_field('ocean_model', 'vmo', &
       diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg s-1', &
       standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
-  CS%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
+  IDs%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
       diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
-  CS%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
+  IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
 
@@ -2453,24 +2435,24 @@ end subroutine register_diags
 
 !> Initialize diagnostics for the variance decay of temp/salt
 !! across regridding/remapping
-subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
+subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS, IDs, diag)
   type(time_type),         intent(in) :: Time     !< current model time
   type(hor_index_type),    intent(in) :: HI       !< horizontal index type
   type(verticalGrid_type), intent(in) :: GV       !< ocean vertical grid structure
   type(param_file_type),   intent(in) :: param_file !< parameter file
   type(MOM_control_struct), pointer :: CS   !< control structure for MOM
+  type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
+  type(diag_ctrl),         intent(inout) :: diag !< regulates diagnostic output
 
   integer :: isd, ied, jsd, jed, nz
   type(vardesc) :: vd_tmp
-  type(diag_ctrl), pointer :: diag
 
-  diag => CS%diag
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
 
   ! variancy decay through ALE operation
-  CS%id_T_vardec = register_diag_field('ocean_model', 'T_vardec', diag%axesTL, Time, &
+  IDs%id_T_vardec = register_diag_field('ocean_model', 'T_vardec', diag%axesTL, Time, &
       'ALE variance decay for temperature', 'degC2 s-1')
-  if (CS%id_T_vardec > 0) then
+  if (IDs%id_T_vardec > 0) then
     call safe_alloc_ptr(CS%T_squared,isd,ied,jsd,jed,nz)
     CS%T_squared(:,:,:) = 0.
 
@@ -2478,9 +2460,9 @@ subroutine register_diags_TS_vardec(Time, HI, GV, param_file, CS)
     call register_tracer(CS%T_squared, vd_tmp, param_file, HI, GV, CS%tracer_reg)
   endif
 
-  CS%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
+  IDs%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
       'ALE variance decay for salinity', 'psu2 s-1')
-  if (CS%id_S_vardec > 0) then
+  if (IDs%id_S_vardec > 0) then
     call safe_alloc_ptr(CS%S_squared,isd,ied,jsd,jed,nz)
     CS%S_squared(:,:,:) = 0.
 
@@ -2522,10 +2504,12 @@ end subroutine MOM_timing_init
 
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+subroutine post_transport_diagnostics(G, GV, CS, IDs, diag, dt_trans, h, &
+                                      h_pre_dyn, T_pre_dyn, S_pre_dyn)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(MOM_control_struct), intent(in)    :: CS  !< control structure
+  type(MOM_diag_IDs),       intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
   real                    , intent(in)    :: dt_trans !< total time step associated with the transports, in s.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
@@ -2552,58 +2536,58 @@ subroutine post_transport_diagnostics(G, GV, CS, diag, dt_trans, h, h_pre_dyn, T
 
   ! Post mass transports, including SGS
   ! Build the remap grids using the layer thicknesses from before the dynamics
-  if (transport_remap_grid_needed(CS)) &
+  if (transport_remap_grid_needed(IDs)) &
     call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
 
   H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
-  if (CS%id_umo_2d > 0) then
+  if (IDs%id_umo_2d > 0) then
     umo2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo2d(I,j) = umo2d(I,j) + CS%uhtr(I,j,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(CS%id_umo_2d, umo2d, diag)
+    call post_data(IDs%id_umo_2d, umo2d, diag)
   endif
-  if (CS%id_umo > 0) then
+  if (IDs%id_umo > 0) then
     ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo(I,j,k) =  CS%uhtr(I,j,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(CS%id_umo, umo, diag, alt_h = h_pre_dyn)
+    call post_data(IDs%id_umo, umo, diag, alt_h = h_pre_dyn)
   endif
-  if (CS%id_vmo_2d > 0) then
+  if (IDs%id_vmo_2d > 0) then
     vmo2d(:,:) = 0.0
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo2d(i,J) = vmo2d(i,J) + CS%vhtr(i,J,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(CS%id_vmo_2d, vmo2d, diag)
+    call post_data(IDs%id_vmo_2d, vmo2d, diag)
   endif
-  if (CS%id_vmo > 0) then
+  if (IDs%id_vmo > 0) then
     ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo(i,J,k) = CS%vhtr(i,J,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(CS%id_vmo, vmo, diag, alt_h = h_pre_dyn)
+    call post_data(IDs%id_vmo, vmo, diag, alt_h = h_pre_dyn)
   endif
 
-  if (CS%id_uhtr > 0) call post_data(CS%id_uhtr, CS%uhtr, diag, alt_h = h_pre_dyn)
-  if (CS%id_vhtr > 0) call post_data(CS%id_vhtr, CS%vhtr, diag, alt_h = h_pre_dyn)
+  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, CS%uhtr, diag, alt_h = h_pre_dyn)
+  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, CS%vhtr, diag, alt_h = h_pre_dyn)
 
 end subroutine post_transport_diagnostics
 
 !> Indicate whether it is necessary to save and recalculate the grid for finding
 !! remapped transports.
-function transport_remap_grid_needed(CS) result(needed)
-  type(MOM_control_struct), intent(in)    :: CS  !< control structure
+function transport_remap_grid_needed(IDs) result(needed)
+  type(MOM_diag_IDs),       intent(in)    :: IDs !< A structure with the diagnostic IDs
   logical :: needed
 
   needed = .false.
-  needed = needed .or. (CS%id_uhtr > 0) .or. (CS%id_vhtr > 0)
-  needed = needed .or. (CS%id_umo > 0)  .or. (CS%id_vmo > 0)
+  needed = needed .or. (IDs%id_uhtr > 0) .or. (IDs%id_vhtr > 0)
+  needed = needed .or. (IDs%id_umo > 0)  .or. (IDs%id_vmo > 0)
 end function transport_remap_grid_needed
 
 !> Post diagnostics of temperatures and salinities, their fluxes, and tendencies.
-subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
-  type(MOM_control_struct), intent(inout) :: CS  !< control structure
+subroutine post_TS_diagnostics(IDs, G, GV, tv, diag, dt)
+  type(MOM_diag_IDs),       intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   type(thermo_var_ptrs),    intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
@@ -2617,32 +2601,45 @@ subroutine post_TS_diagnostics(CS, G, GV, tv, diag, dt)
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
-  if (.NOT. CS%use_conT_absS) then
+  if (.NOT.tv%T_is_conT) then
     ! Internal T&S variables are potential temperature & practical salinity
-    if (CS%id_tob > 0) call post_data(CS%id_tob, tv%T(:,:,G%ke), diag, mask=G%mask2dT)
-    if (CS%id_sob > 0) call post_data(CS%id_sob, tv%S(:,:,G%ke), diag, mask=G%mask2dT)
+    if (IDs%id_tob > 0) call post_data(IDs%id_tob, tv%T(:,:,G%ke), diag, mask=G%mask2dT)
   else
     ! Internal T&S variables are conservative temperature & absolute salinity,
     ! so they need to converted to potential temperature and practical salinity
     ! for some diagnostics using TEOS-10 function calls.
-    if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0) .or. (CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
+    if ((IDs%id_Tpot > 0) .or. (IDs%id_tob > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
-        pracSal(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
         potTemp(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
       enddo; enddo ; enddo
-      if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, potTemp, diag)
-      if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, pracSal, diag)
-      if (CS%id_tob > 0) call post_data(CS%id_tob, potTemp(:,:,G%ke), diag, mask=G%mask2dT)
-      if (CS%id_sob > 0) call post_data(CS%id_sob, pracSal(:,:,G%ke), diag, mask=G%mask2dT)
+      if (IDs%id_Tpot > 0) call post_data(IDs%id_Tpot, potTemp, diag)
+      if (IDs%id_tob > 0) call post_data(IDs%id_tob, potTemp(:,:,G%ke), diag, mask=G%mask2dT)
+    endif
+  endif
+  if (.NOT.tv%S_is_absS) then
+    ! Internal T&S variables are potential temperature & practical salinity
+    if (IDs%id_sob > 0) call post_data(IDs%id_sob, tv%S(:,:,G%ke), diag, mask=G%mask2dT)
+  else
+    ! Internal T&S variables are conservative temperature & absolute salinity,
+    ! so they need to converted to potential temperature and practical salinity
+    ! for some diagnostics using TEOS-10 function calls.
+    if ((IDs%id_Sprac > 0) .or. (IDs%id_sob > 0)) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        pracSal(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
+      enddo; enddo ; enddo
+      if (IDs%id_Sprac > 0) call post_data(IDs%id_Sprac, pracSal, diag)
+      if (IDs%id_sob > 0) call post_data(IDs%id_sob, pracSal(:,:,G%ke), diag, mask=G%mask2dT)
     endif
   endif
 
 end subroutine post_TS_diagnostics
 
 !> Calculate and post variance decay diagnostics for temp/salt
-subroutine post_diags_TS_vardec(G, CS, dt)
+subroutine post_diags_TS_vardec(G, CS, IDs, diag, dt)
   type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
   type(MOM_control_struct), intent(in) :: CS   !< control structure
+  type(MOM_diag_IDs),       intent(in) :: IDs  !< A structure with the diagnostic IDs.
+  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
   real, intent(in) :: dt                       !< total time step
 
   real :: work(SZI_(G),SZJ_(G),SZK_(G))
@@ -2652,33 +2649,33 @@ subroutine post_diags_TS_vardec(G, CS, dt)
 
   Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
-  if (CS%id_T_vardec > 0) then
+  if (IDs%id_T_vardec > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work(i,j,k) = (CS%T_squared(i,j,k) - CS%tv%T(i,j,k)**2) * Idt
     enddo ; enddo ; enddo
-    call post_data(CS%id_T_vardec, work, CS%diag)
+    call post_data(IDs%id_T_vardec, work, diag)
   endif
 
-  if (CS%id_S_vardec > 0) then
+  if (IDs%id_S_vardec > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
       work(i,j,k) = (CS%S_squared(i,j,k) - CS%tv%S(i,j,k)**2) * Idt
     enddo ; enddo ; enddo
-    call post_data(CS%id_S_vardec, work, CS%diag)
+    call post_data(IDs%id_S_vardec, work, diag)
   endif
 end subroutine post_diags_TS_vardec
 
 !> This routine posts diagnostics of various integrated quantities.
-subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, ssh, fluxes)
-  type(MOM_control_struct), intent(in) :: CS  !< control structure
+subroutine post_integrated_diagnostics(IDs, G, GV, diag, dt_int, tv, ssh, fluxes)
+  type(MOM_diag_IDs),       intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
-  real,                     intent(in) :: dt_int  !< total time step associated with these diagnostics, in s.
+  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics, in s.
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
                             intent(in) :: ssh !< Time mean surface height without
                                               !! corrections for ice displacement(m)
-  type(forcing),            intent(in) :: fluxes  !< pointers to forcing fields
+  type(forcing),            intent(in) :: fluxes !< pointers to forcing fields
 
   real, allocatable, dimension(:,:) :: &
     tmp,              & ! temporary 2d field
@@ -2699,19 +2696,19 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, ssh, fluxes)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
   ! area mean SSH
-  if (CS%id_ssh_ga > 0) then
+  if (IDs%id_ssh_ga > 0) then
     ssh_ga = global_area_mean(ssh, G)
-    call post_data(CS%id_ssh_ga, ssh_ga, diag)
+    call post_data(IDs%id_ssh_ga, ssh_ga, diag)
   endif
 
   I_time_int = 1.0 / dt_int
-  if (CS%id_ssh > 0) &
-    call post_data(CS%id_ssh, ssh, diag, mask=G%mask2dT)
+  if (IDs%id_ssh > 0) &
+    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
 
   ! post the dynamic sea level, zos, and zossq.
   ! zos is ave_ssh with sea ice inverse barometer removed,
   ! and with zero global area mean.
-  if(CS%id_zos > 0 .or. CS%id_zossq > 0) then
+  if(IDs%id_zos > 0 .or. IDs%id_zossq > 0) then
      allocate(zos(G%isd:G%ied,G%jsd:G%jed))
      zos(:,:) = 0.0
      do j=js,je ; do i=is,ie
@@ -2727,80 +2724,81 @@ subroutine post_integrated_diagnostics(CS, G, GV, diag, dt_int, tv, ssh, fluxes)
      do j=js,je ; do i=is,ie
        zos(i,j) = zos(i,j) - G%mask2dT(i,j)*zos_area_mean
      enddo ; enddo
-     if(CS%id_zos > 0) then
-       call post_data(CS%id_zos, zos, diag, mask=G%mask2dT)
+     if(IDs%id_zos > 0) then
+       call post_data(IDs%id_zos, zos, diag, mask=G%mask2dT)
      endif
-     if(CS%id_zossq > 0) then
+     if(IDs%id_zossq > 0) then
        allocate(zossq(G%isd:G%ied,G%jsd:G%jed))
        zossq(:,:) = 0.0
        do j=js,je ; do i=is,ie
          zossq(i,j) = zos(i,j)*zos(i,j)
        enddo ; enddo
-       call post_data(CS%id_zossq, zossq, diag, mask=G%mask2dT)
+       call post_data(IDs%id_zossq, zossq, diag, mask=G%mask2dT)
        deallocate(zossq)
      endif
      deallocate(zos)
   endif
 
   ! post total volume of the liquid ocean
-  if(CS%id_volo > 0) then
+  if(IDs%id_volo > 0) then
     allocate(tmp(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
       tmp(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
     volo = global_area_integral(tmp, G)
-    call post_data(CS%id_volo, volo, diag)
+    call post_data(IDs%id_volo, volo, diag)
     deallocate(tmp)
   endif
 
   ! post frazil
-  if (ASSOCIATED(tv%frazil) .and. (CS%id_fraz > 0)) then
+  if (ASSOCIATED(tv%frazil) .and. (IDs%id_fraz > 0)) then
     allocate(frazil_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
       frazil_ave(i,j) = tv%frazil(i,j) * I_time_int
     enddo ; enddo
-    call post_data(CS%id_fraz, frazil_ave, diag, mask=G%mask2dT)
+    call post_data(IDs%id_fraz, frazil_ave, diag, mask=G%mask2dT)
     deallocate(frazil_ave)
   endif
 
   ! post the salt deficit
-  if (ASSOCIATED(tv%salt_deficit) .and. (CS%id_salt_deficit > 0)) then
+  if (ASSOCIATED(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
     allocate(salt_deficit_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
       salt_deficit_ave(i,j) = tv%salt_deficit(i,j) * I_time_int
     enddo ; enddo
-    call post_data(CS%id_salt_deficit, salt_deficit_ave, diag, mask=G%mask2dT)
+    call post_data(IDs%id_salt_deficit, salt_deficit_ave, diag, mask=G%mask2dT)
     deallocate(salt_deficit_ave)
   endif
 
   ! post temperature of P-E+R
-  if (ASSOCIATED(tv%TempxPmE) .and. (CS%id_Heat_PmE > 0)) then
+  if (ASSOCIATED(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
     allocate(Heat_PmE_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
       Heat_PmE_ave(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
     enddo ; enddo
-    call post_data(CS%id_Heat_PmE, Heat_PmE_ave, diag, mask=G%mask2dT)
+    call post_data(IDs%id_Heat_PmE, Heat_PmE_ave, diag, mask=G%mask2dT)
     deallocate(Heat_PmE_ave)
   endif
 
   ! post geothermal heating or internal heat source/sinks
-  if (ASSOCIATED(tv%internal_heat) .and. (CS%id_intern_heat > 0)) then
+  if (ASSOCIATED(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
     allocate(intern_heat_ave(G%isd:G%ied,G%jsd:G%jed))
     do j=js,je ; do i=is,ie
       intern_heat_ave(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
     enddo ; enddo
-    call post_data(CS%id_intern_heat, intern_heat_ave, diag, mask=G%mask2dT)
+    call post_data(IDs%id_intern_heat, intern_heat_ave, diag, mask=G%mask2dT)
     deallocate(intern_heat_ave)
   endif
 
 end subroutine post_integrated_diagnostics
 
 !> This routine posts diagnostics of various ocean surface quantities.
-subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
-  type(MOM_control_struct), intent(in)    :: CS  !< control structure
-  type(ocean_grid_type),    intent(in)    :: G   !< ocean grid structure
-  type(diag_ctrl),          intent(in)    :: diag  !< regulates diagnostic output
-  type(surface),            intent(in)    :: sfc_state !< ocean surface state
+subroutine post_surface_diagnostics(IDs, G, diag, sfc_state, tv)
+  type(MOM_diag_IDs),       intent(in) :: IDs !< A structure with the diagnostic IDs.
+  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
+  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
+  type(surface),            intent(in) :: sfc_state !< ocean surface state
+  type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     potTemp, &  ! TEOS10 potential temperature (deg C)
@@ -2813,49 +2811,57 @@ subroutine post_surface_diagnostics(CS, G, diag, sfc_state)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  if (.NOT.CS%use_conT_absS) then
-    !Internal T&S variables are assumed to be potential&practical
-    if (CS%id_sst > 0) call post_data(CS%id_sst, sfc_state%SST, diag, mask=G%mask2dT)
-    if (CS%id_sss > 0) call post_data(CS%id_sss, sfc_state%SSS, diag, mask=G%mask2dT)
+  if (.NOT.tv%T_is_conT) then
+    ! Internal T&S variables are potential temperature & practical salinity
+    if (IDs%id_sst > 0) call post_data(IDs%id_sst, sfc_state%SST, diag, mask=G%mask2dT)
   else
-    !Internal T&S variables are assumed to be conservative&absolute
-    if (CS%id_sstcon > 0) call post_data(CS%id_sstcon, sfc_state%SST, diag, mask=G%mask2dT)
-    if (CS%id_sssabs > 0) call post_data(CS%id_sssabs, sfc_state%SSS, diag, mask=G%mask2dT)
-    !Using TEOS-10 function calls convert T&S diagnostics
-    !from conservative temp to potential temp and
-    !from absolute salinity to practical salinity
+    ! Internal T&S variables are conservative temperature & absolute salinity
+    if (IDs%id_sstcon > 0) call post_data(IDs%id_sstcon, sfc_state%SST, diag, mask=G%mask2dT)
+    ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
+    ! to potential temperature.
     do j=js,je ; do i=is,ie
-      pracSal(i,j) = gsw_sp_from_sr(sfc_state%SSS(i,j))
       potTemp(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j),sfc_state%SST(i,j))
     enddo ; enddo
-    if (CS%id_sst > 0) call post_data(CS%id_sst, potTemp, diag, mask=G%mask2dT)
-    if (CS%id_sss > 0) call post_data(CS%id_sss, pracSal, diag, mask=G%mask2dT)
+    if (IDs%id_sst > 0) call post_data(IDs%id_sst, potTemp, diag, mask=G%mask2dT)
+  endif
+  if (.NOT.tv%S_is_absS) then
+    ! Internal T&S variables are potential temperature & practical salinity
+    if (IDs%id_sss > 0) call post_data(IDs%id_sss, sfc_state%SSS, diag, mask=G%mask2dT)
+  else
+    ! Internal T&S variables are conservative temperature & absolute salinity
+    if (IDs%id_sssabs > 0) call post_data(IDs%id_sssabs, sfc_state%SSS, diag, mask=G%mask2dT)
+    ! Use TEOS-10 function calls convert T&S diagnostics from absolute salinity
+    ! to practical salinity.
+    do j=js,je ; do i=is,ie
+      pracSal(i,j) = gsw_sp_from_sr(sfc_state%SSS(i,j))
+    enddo ; enddo
+    if (IDs%id_sss > 0) call post_data(IDs%id_sss, pracSal, diag, mask=G%mask2dT)
   endif
 
-  if (CS%id_sst_sq > 0) then
+  if (IDs%id_sst_sq > 0) then
     do j=js,je ; do i=is,ie
       SST_sq(i,j) = sfc_state%SST(i,j)*sfc_state%SST(i,j)
     enddo ; enddo
-    call post_data(CS%id_sst_sq, SST_sq, diag, mask=G%mask2dT)
+    call post_data(IDs%id_sst_sq, SST_sq, diag, mask=G%mask2dT)
   endif
-  if (CS%id_sss_sq > 0) then
+  if (IDs%id_sss_sq > 0) then
     do j=js,je ; do i=is,ie
       SSS_sq(i,j) = sfc_state%SSS(i,j)*sfc_state%SSS(i,j)
     enddo ; enddo
-    call post_data(CS%id_sss_sq, SSS_sq, diag, mask=G%mask2dT)
+    call post_data(IDs%id_sss_sq, SSS_sq, diag, mask=G%mask2dT)
   endif
 
-  if (CS%id_ssu > 0) &
-    call post_data(CS%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
-  if (CS%id_ssv > 0) &
-    call post_data(CS%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
+  if (IDs%id_ssu > 0) &
+    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
+  if (IDs%id_ssv > 0) &
+    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
 
-  if (CS%id_speed > 0) then
+  if (IDs%id_speed > 0) then
     do j=js,je ; do i=is,ie
       sfc_speed(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
                             0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
     enddo ; enddo
-    call post_data(CS%id_speed, sfc_speed, diag, mask=G%mask2dT)
+    call post_data(IDs%id_speed, sfc_speed, diag, mask=G%mask2dT)
   endif
 
   call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
@@ -3087,33 +3093,38 @@ end subroutine set_restart_fields
 
 !> This subroutine applies a correction to the sea surface height to compensate
 !! for the atmospheric pressure (the inverse barometer).
-subroutine adjust_ssh_for_p_atm(CS, G, GV, ssh, p_atm)
-  type(MOM_control_struct),          intent(in)    :: CS     !< control structure
+subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
+  type(thermo_var_ptrs),             intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
   type(ocean_grid_type),             intent(in)    :: G      !< ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: ssh    !< time mean surface height (m)
   real, dimension(:,:),    optional, pointer       :: p_atm  !< atmospheric pressure (Pascal)
+  logical,                 optional, intent(in)    :: use_EOS !< If true, calculate the density for
+                                                       !! the SSH correction using the equation of state.
 
   real :: Rho_conv    ! The density used to convert surface pressure to
                       ! a corrected effective SSH, in kg m-3.
   real :: IgR0        ! The SSH conversion factor from Pa to m.
+  logical :: calc_rho
   integer :: i, j, is, ie, js, je
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
-  if (ASSOCIATED(p_atm)) then
+  if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
+    calc_rho = ASSOCIATED(tv%eqn_of_state)
+    if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
     ! Correct the output sea surface height for the contribution from the
     ! atmospheric pressure
     do j=js,je ; do i=is,ie
-      if ((ASSOCIATED(CS%tv%eqn_of_state)) .and. (CS%calc_rho_for_sea_lev)) then
-        call calculate_density(CS%tv%T(i,j,1), CS%tv%S(i,j,1), p_atm(i,j)/2.0, &
-                               Rho_conv, CS%tv%eqn_of_state)
+      if (calc_rho) then
+        call calculate_density(tv%T(i,j,1), tv%S(i,j,1), p_atm(i,j)/2.0, &
+                               Rho_conv, tv%eqn_of_state)
       else
         Rho_conv=GV%Rho0
       endif
       IgR0 = 1.0 / (Rho_conv * GV%g_Earth)
       ssh(i,j) = ssh(i,j) + p_atm(i,j) * IgR0
     enddo ; enddo
-  endif
+  endif ; endif
 
 end subroutine adjust_ssh_for_p_atm
 
@@ -3216,6 +3227,8 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, CS)
   sfc_state%frazil => CS%tv%frazil
   sfc_state%TempxPmE => CS%tv%TempxPmE
   sfc_state%internal_heat => CS%tv%internal_heat
+  sfc_state%T_is_conT = CS%tv%T_is_conT
+  sfc_state%S_is_absS = CS%tv%S_is_absS
   if (associated(CS%visc%taux_shelf)) sfc_state%taux_shelf => CS%visc%taux_shelf
   if (associated(CS%visc%tauy_shelf)) sfc_state%tauy_shelf => CS%visc%tauy_shelf
 
