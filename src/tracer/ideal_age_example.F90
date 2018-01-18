@@ -37,9 +37,8 @@ module ideal_age_example
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -71,10 +70,6 @@ public ideal_age_stock, ideal_age_example_end
 ! NTR_MAX is the maximum number of tracers in this module.
 integer, parameter :: NTR_MAX = 3
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: ideal_age_tracer_CS ; private
   integer :: ntr    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
@@ -88,11 +83,6 @@ type, public :: ideal_age_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR_MAX) :: &
-    tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
-    tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
-    tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
-    tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real, dimension(NTR_MAX) :: &
     IC_val = 0.0, &    ! The (uniform) initial condition value.
     young_val = 0.0, & ! The value assigned to tr at the surface.
@@ -107,10 +97,8 @@ type, public :: ideal_age_tracer_CS ; private
   logical :: tracer_ages(NTR_MAX)
 
   integer, dimension(NTR_MAX) :: &
-    ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
+    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
-    id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1, &
-    id_tr_dfx = -1, id_tr_dfy = -1
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -237,7 +225,8 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                                 .not.CS%tracers_may_reinit, restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m))
+                         tr_desc_ptr=CS%tr_desc(m), registry_diags=.true., &
+                         diag_form=1)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -348,47 +337,6 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   ! enddo
   endif
 
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "yr m3 s-1"
-  else ; flux_units = "yr kg s-1" ; endif
-
-  do m=1,CS%ntr
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       cmor_field_name=cmorname, caller="initialize_ideal_age_tracer")
-    if (len_trim(cmorname)==0) then
-      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units))
-    else
-      CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units), cmor_field_name=cmorname)
-    endif
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
-
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
-
 end subroutine initialize_ideal_age_tracer
 
 subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS, &
@@ -477,19 +425,6 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
       CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + G%mask2dT(i,j)*dt*Isecs_per_year
     enddo ; enddo ; enddo
   endif ; enddo
-
-  do m=1,CS%ntr
-    if (CS%id_tracer(m)>0) &
-      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
-  enddo
 
 end subroutine ideal_age_tracer_column_physics
 
@@ -586,13 +521,6 @@ subroutine ideal_age_example_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,CS%ntr
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
-
     deallocate(CS)
   endif
 end subroutine ideal_age_example_end
