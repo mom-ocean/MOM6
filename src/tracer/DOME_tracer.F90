@@ -2,9 +2,8 @@ module DOME_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -34,10 +33,6 @@ public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
 ! ntr is the number of tracers in this module.
 integer, parameter :: ntr = 11
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: DOME_tracer_CS ; private
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
@@ -47,11 +42,6 @@ type, public :: DOME_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR) :: &
-    tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
-    tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
-    tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
-    tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
   logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
 
@@ -61,8 +51,6 @@ type, public :: DOME_tracer_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
-  integer, dimension(NTR) :: id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1
-  integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
   type(vardesc) :: tr_desc(NTR)
 end type DOME_tracer_CS
@@ -85,6 +73,8 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "DOME_tracer" ! This module's name.
+  character(len=48) :: flux_units ! The units for tracer fluxes, usually
+                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
@@ -123,6 +113,8 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     else ; write(name,'("tr_D",I2.2)') m ; endif
     write(longname,'("Concentration of DOME Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
+    if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+    else ; flux_units = "kg s-1" ; endif
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
@@ -131,7 +123,8 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
     ! Register the tracer for horizontal advection & diffusion.
     call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m))
+                         tr_desc_ptr=CS%tr_desc(m), registry_diags=.true., &
+                         flux_units=flux_units)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -304,43 +297,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     enddo
   endif
 
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
-  else ; flux_units = "kg s-1" ; endif
-
-  do m=1,NTR
-    ! Register the tracer for the restart file.
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_DOME_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units))
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p, CS%tr_dfx(m)%p, CS%tr_dfy(m)%p)
-
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
-
 end subroutine initialize_DOME_tracer
 
 !> This subroutine applies diapycnal diffusion and any other column
@@ -395,19 +351,6 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
     enddo
   endif
 
-  do m=1,NTR
-    if (CS%id_tracer(m)>0) &
-      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
-  enddo
-
 end subroutine DOME_tracer_column_physics
 
 !> This subroutine extracts the surface fields from this tracer package that
@@ -450,13 +393,6 @@ subroutine DOME_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,NTR
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
-
     deallocate(CS)
   endif
 end subroutine DOME_tracer_end
