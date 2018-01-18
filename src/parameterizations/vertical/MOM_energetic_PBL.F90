@@ -1971,9 +1971,9 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
   real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
   real :: pi, u10
   pi = 4.0*atan(1.0)
-  ! Computing u10 based on u_star and COARE 3.5 relationships
-  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
-  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
+  if (ustar .gt. 0.0) then
+    ! Computing u10 based on u_star and COARE 3.5 relationships
+    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
     us = us_to_u10*u10
     !
