@@ -10,6 +10,7 @@ module MOM_tracer_registry
 use MOM_coms,          only : reproducing_sum
 use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : diag_ctrl, register_diag_field, post_data, safe_alloc_ptr
+use MOM_diag_to_Z,     only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type
@@ -327,7 +328,7 @@ end subroutine add_tracer_diagnostics
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
-subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
+subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, diag_to_Z_CSp)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
@@ -335,6 +336,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
                               intent(in) :: h    !< Layer thicknesses
   type(time_type),            intent(in) :: Time !< current model time
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+  type(diag_to_Z_CS),         pointer    :: diag_to_Z_CSp !< A pointer to the control structure
+                                                 !! for diagnostics in depth space.
 
   character(len=24) :: name     ! A variable's name in a NetCDF file.
   character(len=24) :: shortnm  ! A shortened version of a variable's name for
@@ -368,6 +371,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
                        caller="register_tracer_diagnostics")
     shortnm = Tr%flux_nameroot
     flux_longname = Tr%flux_longname
+    if (len_trim(cmor_longname) == 0) cmor_longname = longname
 
     if (len_trim(Tr%flux_units) > 0) then ; flux_units = Tr%flux_units
     elseif (GV%Boussinesq) then ; flux_units = trim(units)//" m3 s-1"
@@ -490,8 +494,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV)
       enddo ; enddo ; enddo
     endif
 
-!    call register_Z_tracer(Tr%t, name, longname, units, &
-!                           Time, G, diag_to_Z_CSp)
+    if (len_trim(cmorname) == 0) then
+      call register_Z_tracer(Tr%t, name, longname, units, Time, G, diag_to_Z_CSp)
+    else
+      call register_Z_tracer(Tr%t, name, longname, units, Time, G, diag_to_Z_CSp, &
+               cmor_field_name=cmorname, cmor_standard_name=cmor_long_std(cmor_longname), &
+               cmor_long_name=cmor_longname)
+    endif
   endif ; enddo
 
 end subroutine register_tracer_diagnostics
