@@ -16,6 +16,7 @@ use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_grid,          only : ocean_grid_type
 use MOM_io,            only : vardesc, query_vardesc, cmor_long_std
+use MOM_restart,       only : register_restart_field, MOM_restart_CS
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type
 use MOM_verticalGrid,  only : verticalGrid_type
@@ -110,7 +111,8 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                            OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, df_x, df_y, &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
                            flux_nameroot, flux_longname, flux_units, flux_scale, &
-                           convergence_units, convergence_scale, cmor_tendname, diag_form)
+                           convergence_units, convergence_scale, cmor_tendname, diag_form, &
+                           restart_CS, mandatory)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(tracer_registry_type),     pointer       :: Reg          !< pointer to the tracer registry
@@ -125,24 +127,24 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: cmor_longname !< CMOR long name
   type(vardesc),        optional, intent(in)    :: tr_desc      !< A structure with metadata about the tracer
 
-  real, intent(in),                optional     :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u
+  real,                 optional, intent(in)    :: OBC_inflow   !< the tracer for all inflows via OBC for which OBC_in_u
                                                                 !! or OBC_in_v are not specified (units of tracer CONC)
-  real, pointer, dimension(:,:,:), optional     :: OBC_in_u     !< tracer at inflows through u-faces of
+  real, dimension(:,:,:), optional, pointer     :: OBC_in_u     !< tracer at inflows through u-faces of
                                                                 !! tracer cells (units of tracer CONC)
-  real, pointer, dimension(:,:,:), optional     :: OBC_in_v     !< tracer at inflows through v-faces of
+  real, dimension(:,:,:), optional, pointer     :: OBC_in_v     !< tracer at inflows through v-faces of
                                                                 !! tracer cells (units of tracer CONC)
 
   ! The following are probably not necessary if registry_diags is present and true.
-  real, pointer, dimension(:,:,:), optional     :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, pointer, dimension(:,:,:), optional     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), optional, pointer     :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), optional, pointer     :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), optional, pointer     :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:,:), optional, pointer     :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
+  real, dimension(:,:),   optional, pointer     :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
 
-  real, pointer, dimension(:,:,:), optional     :: advection_xy !< convergence of lateral advective tracer fluxes
+  real, dimension(:,:,:), optional, pointer     :: advection_xy !< convergence of lateral advective tracer fluxes
   logical,              optional, intent(in)    :: registry_diags !< If present and true, use the registry for
                                                                 !! the diagnostics of this tracer.
   character(len=*),     optional, intent(in)    :: flux_nameroot !< Short tracer name snippet used construct the
@@ -150,7 +152,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: flux_longname !< A word or phrase used construct the long
                                                                 !! names of flux diagnostics.
   character(len=*),     optional, intent(in)    :: flux_units   !< The units for the fluxes of this tracer.
-  real,                 optional, intent(in)    :: flux_scale !< A scaling factor used to convert the fluxes
+  real,                 optional, intent(in)    :: flux_scale   !< A scaling factor used to convert the fluxes
                                                                 !! of this tracer to its desired units.
   character(len=*),     optional, intent(in)    :: convergence_units   !< The units for the flux convergence of this tracer.
   real,                 optional, intent(in)    :: convergence_scale !< A scaling factor used to convert the flux
@@ -158,6 +160,13 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: cmor_tendname !< The CMOR name for the layer-integrated tendencies of this tracer.
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
                                                                 !! string template to use in labeling diagnostics
+  type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure;
+                                                                !! this tracer will be registered for
+                                                                !! restarts if this argument is present
+  logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read
+                                                                !! from a restart file.
+                                                                 
+  logical :: mand
   type(tracer_type), pointer :: Tr=>NULL()
   character(len=256) :: mesg    ! Message for error messages.
 
@@ -252,6 +261,14 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   if (present(df_2d_x)) then ; if (associated(df_2d_x)) Tr%df2d_x => df_2d_x ; endif
 
   if (present(advection_xy)) then ; if (associated(advection_xy)) Tr%advection_xy => advection_xy ; endif
+
+  if (present(restart_CS)) then ; if (associated(restart_CS)) then
+    ! Register this tracer to be read from and written to restart files.
+    mand = .true. ; if (present(mandatory)) mand = mandatory
+
+    call register_restart_field(tr_ptr, Tr%name, mand, restart_CS, &
+                                longname=Tr%longname, units=Tr%units)
+  endif ; endif
 
 end subroutine register_tracer
 
