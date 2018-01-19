@@ -472,7 +472,6 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
     Sal, &      ! The salinity after a timestep of mixing, in psu.
     u_test, v_test, T_test, S_test
 
- 
   real, dimension(nzc+1) :: &
     N2, &       ! The squared buoyancy frequency at an interface, in s-2.
     dz_Int, &   ! The extent of a finite-volume space surrounding an interface,
