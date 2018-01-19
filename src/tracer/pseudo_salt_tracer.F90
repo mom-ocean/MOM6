@@ -46,7 +46,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -136,15 +136,11 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   tr_ptr => CS%ps(:,:,:)
   call query_vardesc(CS%tr_desc, name=var_name, caller="register_pseudo_salt_tracer")
-  ! Register the tracer for the restart file.
-  call register_restart_field(tr_ptr, CS%tr_desc, &
-                              .not. CS%pseudo_salt_may_reinit, restart_CS)
-  ! Register the tracer for horizontal advection & diffusion.  For now, either form works.
-!  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
-!                       tr_desc=CS%tr_desc, registry_diags=.true.)
+  ! Register the tracer for horizontal advection, diffusion, and restarts.
   call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, name="pseudo_salt", &
                        longname="Pseudo salt passive tracer", units="psu", &
-                       registry_diags=.true.)
+                       registry_diags=.true., restart_CS=restart_CS, &
+                       mandatory=.not.CS%pseudo_salt_may_reinit)
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS

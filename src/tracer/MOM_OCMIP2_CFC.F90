@@ -56,7 +56,7 @@ use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
@@ -212,20 +212,17 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! This pointer assignment is needed to force the compiler not to do a copy in
   ! the registration calls.  Curses on the designers and implementers of F90.
   tr_ptr => CS%CFC11
-  ! Register CFC11 for the restart file.
-  call register_restart_field(tr_ptr, CS%CFC11_desc, &
-                              .not.CS%tracers_may_reinit, restart_CS)
-  ! Register CFC11 for horizontal advection & diffusion.
+  ! Register CFC11 for horizontal advection, diffusion, and restarts.
   call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC11_desc, registry_diags=.true., &
-                       flux_units=flux_units)
+                       flux_units=flux_units, &
+                       restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
-  call register_restart_field(tr_ptr, CS%CFC12_desc, &
-                              .not.CS%tracers_may_reinit, restart_CS)
   call register_tracer(tr_ptr, Tr_Reg, param_file, HI, GV, &
                        tr_desc=CS%CFC12_desc, registry_diags=.true., &
-                       flux_units=flux_units)
+                       flux_units=flux_units, &
+                       restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
   ! Set and read the various empirical coefficients.
 
