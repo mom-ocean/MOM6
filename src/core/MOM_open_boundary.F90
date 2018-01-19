@@ -2646,6 +2646,10 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
        call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
+  ! *** This is a temporary work around for restarts with OBC segments.
+  ! This implementation uses 3D arrays solely for restarts. We need
+  ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
+  ! so much memory and disk space. ***
   if (OBC_CS%radiation_BCs_exist_globally) then
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
     OBC_CS%rx_normal(:,:,:) = 0.0
