@@ -304,6 +304,8 @@ type, public :: barotropic_CS ; private
                              ! desperate debugging measure.
   logical :: debug           ! If true, write verbose checksums for debugging purposes.
   logical :: debug_bt        ! If true, write verbose checksums for debugging purposes.
+  real    :: vel_underflow   !< Velocity components smaller than vel_underflow
+                             !! are set to 0, in m s-1.
   real    :: maxvel          ! Velocity components greater than maxvel are
                              ! truncated to maxvel, in m s-1.
   real    :: CFL_trunc       ! If clip_velocity is true, velocity components will
@@ -634,6 +636,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   real :: u_max_cor, v_max_cor ! The maximum corrective velocities, in m s-1.
   real :: Htot        ! The total thickness, in units of H.
   real :: eta_cor_max ! The maximum fluid that can be added as a correction to eta, in H.
+  real :: accel_underflow ! An acceleration that is so small it should be zeroed out.
 
   real, allocatable, dimension(:) :: wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2
   real :: sum_wt_vel, sum_wt_eta, sum_wt_accel, sum_wt_trans
@@ -662,6 +665,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   MS%isdw = CS%isdw ; MS%iedw = CS%iedw ; MS%jsdw = CS%jsdw ; MS%jedw = CS%jedw
   Idt = 1.0 / dt
+  accel_underflow = CS%vel_underflow * Idt
 
   use_BT_cont = .false.
   if (present(BT_cont)) use_BT_cont = (associated(BT_cont))
@@ -1092,13 +1096,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       enddo ; enddo
     endif
     if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
-!GOMP do
+      !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
         uhbt0(I,j) = 0.0
       endif ; enddo ; enddo
     endif
     if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
-!GOMP do
+      !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
         vhbt0(i,J) = 0.0
       endif ; enddo ; enddo
@@ -1122,6 +1126,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   do J=js-1,je ; do k=1,nz ; do i=is,ie
     vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
   enddo ; enddo ;  enddo
+  !$OMP parallel do default(shared)
+  do j=js,je ; do I=is-1,ie
+    if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
+  enddo ; enddo
+  !$OMP parallel do default(shared)
+  do J=js-1,je ; do i=is,ie
+    if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
+  enddo ; enddo
 
   if (apply_OBCs) then
     ubt_first(:,:) = ubt(:,:) ; vbt_first(:,:) = vbt(:,:)
@@ -1132,11 +1144,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
     do j=js,je ; do I=is-1,ie
       BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - CS%ubt_IC(I,j)) * Idt
       ubt(I,j) = CS%ubt_IC(I,j)
+      if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-1,je ; do i=is,ie
       BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - CS%vbt_IC(i,J)) * Idt
       vbt(i,J) = CS%vbt_IC(i,J)
+      if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
     enddo ; enddo
   endif
 
@@ -1768,6 +1782,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vel_prev = ubt(I,j)
         ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
              dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
+        if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
 
         if (CS%linear_wave_drag) then
@@ -1826,6 +1841,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vel_prev = ubt(I,j)
         ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
              dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
+        if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
         if (CS%linear_wave_drag) then
           u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel(n) * &
@@ -1893,6 +1909,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
         vel_prev = vbt(i,J)
         vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
              dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
+        if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
 
         if (CS%linear_wave_drag) then
@@ -2135,11 +2152,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
       accel_layer_u(I,j,k) = u_accel_bt(I,j) - &
            ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
             (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j)
+      if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       accel_layer_v(i,J,k) = v_accel_bt(i,J) - &
            ((pbce(i,j+1,k) - gtot_S(i,j+1))*e_anom(i,j+1) - &
             (pbce(i,j,k) - gtot_N(i,j))*e_anom(i,j)) * CS%IdyCv(i,J)
+      if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
     enddo ; enddo
   enddo
 
@@ -4057,6 +4076,11 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "barotropic accelerations from the summed velocities \n"//&
                  "times the time-derivatives of thicknesses.", units="nondim", &
                  default=0.25)
+  call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
+                 "A negligibly small velocity magnitude below which velocity \n"//&
+                 "components are set to 0.  A reasonable value might be \n"//&
+                 "1e-30 m/s, which is less than an Angstrom divided by \n"//&
+                 "the age of the universe.", units="m s-1", default=0.0)
 
   call get_param(param_file, mdl, "DT_BT_FILTER", CS%dt_bt_filter, &
                  "A time-scale over which the barotropic mode solutions \n"//&

@@ -254,7 +254,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
   if (associated(OS)) then
     call MOM_error(WARNING, "ocean_model_init called with an associated "// &
-                    "ocean_state_type structure. Model is already initialized.")
+                   "ocean_state_type structure. Model is already initialized.")
     return
   endif
   allocate(OS)
@@ -264,7 +264,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
-      offline_tracer_mode=offline_tracer_mode)
+                      offline_tracer_mode=offline_tracer_mode)
   OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
   OS%C_p = OS%MOM_CSp%tv%C_p
   OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
@@ -408,8 +408,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
              OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
              OS%grid, OS%GV, OS%MOM_CSp)
 
-    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
-                                     OS%MOM_CSp%use_conT_absS)
+    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
   endif
 
@@ -625,8 +624,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
-                                   OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
   call coupler_type_send_data(Ocean_sfc%fields, OS%Time)
 
   call callTree_leave("update_ocean_model()")
@@ -904,14 +902,13 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
 
 end subroutine initialize_ocean_public_type
 
-subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, use_conT_absS, &
+subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, &
                                        patm, press_to_z)
   type(surface),           intent(inout) :: sfc_state !< A structure containing fields that
                                                       !! describe the surface state of the ocean.
   type(ocean_public_type), &
                    target, intent(inout) :: Ocean_sfc
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure
-  logical,                 intent(in)    :: use_conT_absS
   real,          optional, intent(in)    :: patm(:,:)
   real,          optional, intent(in)    :: press_to_z
 ! This subroutine translates the coupler's ocean_data_type into MOM's
@@ -936,17 +933,24 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, use_conT_absS, &
   endif
 
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  if (use_conT_absS) then
-    !If directed convert the surface T&S from conservative T to potential T and
-    !from absolute (reference) salinity to practical salinity
+  if (sfc_state%T_is_conT) then
+    ! Convert the surface T from conservative T to potential T.
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(sfc_state%SSS(i+i0,j+j0))
       Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(sfc_state%SSS(i+i0,j+j0), &
                                sfc_state%SST(i+i0,j+j0)) + CELSIUS_KELVIN_OFFSET
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%t_surf(i,j) = sfc_state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
+    enddo ; enddo
+  endif
+  if (sfc_state%S_is_absS) then
+    ! Convert the surface S from absolute salinity to practical salinity.
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(sfc_state%SSS(i+i0,j+j0))
+    enddo ; enddo
+  else
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%s_surf(i,j) = sfc_state%SSS(i+i0,j+j0)
     enddo ; enddo
   endif
@@ -1029,8 +1033,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
-                                   OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
 ! </SUBROUTINE NAME="ocean_model_init_sfc">
