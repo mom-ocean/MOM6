@@ -51,7 +51,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_file, fieldtype, file_exists, open_file, close_file
 use MOM_io, only : read_field, write_field, MOM_read_data, read_data, get_filename_appendix
 use MOM_io, only : get_file_info, get_file_atts, get_file_fields, get_file_times
-use MOM_io, only : vardesc, query_vardesc, modify_vardesc
+use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, NETCDF_FILE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_time_manager, only : time_type, get_time, get_date, set_date, set_time
@@ -121,11 +121,11 @@ type, public :: MOM_restart_CS ; private
 end type MOM_restart_CS
 
 interface register_restart_field
-  module procedure register_restart_field_ptr4d
-  module procedure register_restart_field_ptr3d
-  module procedure register_restart_field_ptr2d
-  module procedure register_restart_field_ptr1d
-  module procedure register_restart_field_ptr0d
+  module procedure register_restart_field_ptr4d, register_restart_field_4d
+  module procedure register_restart_field_ptr3d, register_restart_field_3d
+  module procedure register_restart_field_ptr2d, register_restart_field_2d
+  module procedure register_restart_field_ptr1d, register_restart_field_1d
+  module procedure register_restart_field_ptr0d, register_restart_field_0d
 end interface
 
 interface query_initialized
@@ -139,22 +139,14 @@ end interface
 
 contains
 
+!> Register a 3-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
-  real, dimension(:,:,:), target :: f_ptr
-  type(vardesc),      intent(in) :: var_desc
-  logical,            intent(in) :: mandatory
-  type(MOM_restart_CS),  pointer :: CS
-!  Set up a field that will be written to and read from restart
-!  files.
-!
-! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      var_desc - The descriptive structure for the field.
-!  (in)      mandatory - If .true. the run will abort if this field is not
-!                        successfully read from the restart file.  If .false.,
-!                        alternate techniques are provided to initialize this
-!                        field if it is cannot be read from the file.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
+  real, dimension(:,:,:),     target     :: f_ptr     !< A pointer to the field to be read or written
+  type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
@@ -177,22 +169,14 @@ subroutine register_restart_field_ptr3d(f_ptr, var_desc, mandatory, CS)
 
 end subroutine register_restart_field_ptr3d
 
+!> Register a 4-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
-  real, dimension(:,:,:,:), target :: f_ptr
-  type(vardesc),      intent(in) :: var_desc
-  logical,            intent(in) :: mandatory
-  type(MOM_restart_CS),  pointer :: CS
-!  Set up a field that will be written to and read from restart
-!  files.
-!
-! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      var_desc - The descriptive structure for the field.
-!  (in)      mandatory - If .true. the run will abort if this field is not
-!                        successfully read from the restart file.  If .false.,
-!                        alternate techniques are provided to initialize this
-!                        field if it is cannot be read from the file.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
+  real, dimension(:,:,:,:),   target     :: f_ptr     !< A pointer to the field to be read or written
+  type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
@@ -215,22 +199,14 @@ subroutine register_restart_field_ptr4d(f_ptr, var_desc, mandatory, CS)
 
 end subroutine register_restart_field_ptr4d
 
+!> Register a 2-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
-  real, dimension(:,:), target :: f_ptr
-  type(vardesc), intent(in) :: var_desc
-  logical, intent(in)       :: mandatory
-  type(MOM_restart_CS),  pointer :: CS
-!  Set up a field that will be written to and read from restart
-!  files.
-!
-! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      var_desc - The descriptive structure for the field.
-!  (in)      mandatory - If .true. the run will abort if this field is not
-!                        successfully read from the restart file.  If .false.,
-!                        alternate techniques are provided to initialize this
-!                        field if it is cannot be read from the file.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
+  real, dimension(:,:),       target     :: f_ptr     !< A pointer to the field to be read or written
+  type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
@@ -253,22 +229,14 @@ subroutine register_restart_field_ptr2d(f_ptr, var_desc, mandatory, CS)
 
 end subroutine register_restart_field_ptr2d
 
+!> Register a 1-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
-  real, dimension(:), target :: f_ptr
-  type(vardesc), intent(in) :: var_desc
-  logical, intent(in)       :: mandatory
-  type(MOM_restart_CS),  pointer :: CS
-!  Set up a field that will be written to and read from restart
-!  files.
-!
-! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      var_desc - The descriptive structure for the field.
-!  (in)      mandatory - If .true. the run will abort if this field is not
-!                        successfully read from the restart file.  If .false.,
-!                        alternate techniques are provided to initialize this
-!                        field if it is cannot be read from the file.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
+  real, dimension(:),         target     :: f_ptr     !< A pointer to the field to be read or written
+  type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
@@ -291,22 +259,14 @@ subroutine register_restart_field_ptr1d(f_ptr, var_desc, mandatory, CS)
 
 end subroutine register_restart_field_ptr1d
 
+!> Register a 0-d field for restarts, providing the metadata in a structure
 subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
-  real, target :: f_ptr
-  type(vardesc), intent(in) :: var_desc
-  logical, intent(in)       :: mandatory
-  type(MOM_restart_CS),  pointer :: CS
-!  Set up a field that will be written to and read from restart
-!  files.
-!
-! Arguments: f_ptr - A pointer to the field to be read or written.
-!  (in)      var_desc - The descriptive structure for the field.
-!  (in)      mandatory - If .true. the run will abort if this field is not
-!                        successfully read from the restart file.  If .false.,
-!                        alternate techniques are provided to initialize this
-!                        field if it is cannot be read from the file.
-!  (in/out)  CS - The control structure returned by a previous call to
-!                 restart_init.
+  real,                       target     :: f_ptr     !< A pointer to the field to be read or written
+  type(vardesc),              intent(in) :: var_desc  !< A structure with metadata about this variable
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "register_restart_field: Module must be initialized before it is used.")
 
@@ -329,6 +289,142 @@ subroutine register_restart_field_ptr0d(f_ptr, var_desc, mandatory, CS)
 
 end subroutine register_restart_field_ptr0d
 
+! The following provide alternate interfaces to register restarts.
+
+!> Register a 4-d field for restarts, providing the metadata as individual arguments
+subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units, &
+                                     hor_grid, z_grid, t_grid)
+  real, dimension(:,:,:,:),   target     :: f_ptr     !< A pointer to the field to be read or written
+  character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+
+  type(vardesc) :: vd
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_4d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS)
+
+end subroutine register_restart_field_4d
+
+!> Register a 3-d field for restarts, providing the metadata as individual arguments
+subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units, &
+                                     hor_grid, z_grid, t_grid)
+  real, dimension(:,:,:),     target     :: f_ptr     !< A pointer to the field to be read or written
+  character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+
+  type(vardesc) :: vd
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_3d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS)
+
+end subroutine register_restart_field_3d
+
+!> Register a 2-d field for restarts, providing the metadata as individual arguments
+subroutine register_restart_field_2d(f_ptr, name, mandatory, CS, longname, units, &
+                                     hor_grid, z_grid, t_grid)
+  real, dimension(:,:),       target     :: f_ptr     !< A pointer to the field to be read or written
+  character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, 'h' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, '1' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+
+  type(vardesc) :: vd
+  character(len=8) :: Zgrid
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_2d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+  zgrid = '1' ; if (present(z_grid)) zgrid = z_grid
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                z_grid=zgrid, t_grid=t_grid)
+
+  call register_restart_field_ptr2d(f_ptr, vd, mandatory, CS)
+
+end subroutine register_restart_field_2d
+
+!> Register a 1-d field for restarts, providing the metadata as individual arguments
+subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units, &
+                                     hor_grid, z_grid, t_grid)
+  real, dimension(:),         target     :: f_ptr     !< A pointer to the field to be read or written
+  character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+  character(len=*), optional, intent(in) :: hor_grid  !< variable horizonal staggering, '1' if absent
+  character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+
+  type(vardesc) :: vd
+  character(len=8) :: hgrid
+
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_3d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+  hgrid = '1' ; if (present(hor_grid)) hgrid = hor_grid
+  vd = var_desc(name, units=units, longname=longname, hor_grid=hgrid, &
+                z_grid=z_grid, t_grid=t_grid)
+
+  call register_restart_field_ptr1d(f_ptr, vd, mandatory, CS)
+
+end subroutine register_restart_field_1d
+
+!> Register a 0-d field for restarts, providing the metadata as individual arguments
+subroutine register_restart_field_0d(f_ptr, name, mandatory, CS, longname, units, &
+                                     t_grid)
+  real,                       target     :: f_ptr     !< A pointer to the field to be read or written
+  character(len=*),           intent(in) :: name      !< variable name to be used in the restart file
+  logical,                    intent(in) :: mandatory !< If true, the run will abort if this field is not
+                                                      !! successfully read from the restart file.
+  type(MOM_restart_CS),       pointer    :: CS        !< A pointer to a MOM_restart_CS object (intent in/out)
+  character(len=*), optional, intent(in) :: longname  !< variable long name
+  character(len=*), optional, intent(in) :: units     !< variable units
+  character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+
+  type(vardesc) :: vd
+  if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
+      "register_restart_field_0d: Module must be initialized before "//&
+      "it is used to register "//trim(name))
+  vd = var_desc(name, units=units, longname=longname, hor_grid='1', &
+                z_grid='1', t_grid=t_grid)
+
+  call register_restart_field_ptr0d(f_ptr, vd, mandatory, CS)
+
+end subroutine register_restart_field_0d
+
+
+!> query_initialized_name determines whether a named field has been successfully
+!! read from a restart file yet.
 function query_initialized_name(name, CS) result(query_initialized)
   character(len=*) :: name
   type(MOM_restart_CS), pointer :: CS
