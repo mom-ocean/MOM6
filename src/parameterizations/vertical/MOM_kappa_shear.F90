@@ -104,29 +104,29 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                  kv_io, dt, G, GV, CS, initialize_all)
   type(ocean_grid_type),   intent(in)    :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: u_in   !< Initial zonal velocity, in m s-1. (Intent in)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: v_in   !< Initial meridional velocity, in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   &
                            intent(in)    :: h      !< Layer thicknesses, in H (usually m or kg m-2).
   type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any
                                                    !! available thermodynamic fields. Absent fields
                                                    !! have NULL ptrs.
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface in Pa
                                                    !! (or NULL).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kappa_io !< The diapycnal diffusivity at each interface
                                                    !! (not layer!) in m2 s-1.  Initially this is the
                                                    !! value from the previous timestep, which may
                                                    !! accelerate the iteration toward convergence.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: tke_io !< The turbulent kinetic energy per unit mass at
                                                    !! each interface (not layer!) in m2 s-2.
                                                    !! Initially this is the value from the previous
                                                    !! timestep, which may accelerate the iteration
                                                    !! toward convergence.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
                                                    !! (not layer!) in m2 s-1. This discards any
                                                    !! previous value i.e. intent(out) and simply
@@ -164,12 +164,12 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                 kappa_shear_init.
 !  (in,opt)  initialize_all - If present and false, the previous value of
 !                             kappa is used to start the iterations.
-  real, dimension(SZI_(G),SZK_(G)) :: &
+  real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &                         ! A 2-D version of h, but converted to m.
     u_2d, v_2d, T_2d, S_2d, rho_2d  ! 2-D versions of u_in, v_in, T, S, and rho.
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
+  real, dimension(SZI_(G),SZK_(GV)+1) :: &
     kappa_2d, tke_2d              ! 2-D versions of various kappa_io and tke_io.
-  real, dimension(SZK_(G)) :: &
+  real, dimension(SZK_(GV)) :: &
     u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
     v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
     Idz, &      ! The inverse of the distance between TKE points, in m.
@@ -179,176 +179,86 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     u0xdz, &    ! The initial zonal velocity times dz, in m2 s-1.
     v0xdz, &    ! The initial meridional velocity times dz, in m2 s-1.
     T0xdz, &    ! The initial temperature times dz, in C m.
-    S0xdz, &    ! The initial salinity times dz, in PSU m.
-    u_test, v_test, T_test, S_test
-  real, dimension(SZK_(G)+1) :: &
-    N2, &       ! The squared buoyancy frequency at an interface, in s-2.
-    dz_Int, &   ! The extent of a finite-volume space surrounding an interface,
-                ! as used in calculating kappa and TKE, in m.
-    I_dz_int, & ! The inverse of the distance between velocity & density points
-                ! above and below an interface, in m-1.  This is used to
-                ! calculate N2, shear, and fluxes, and it might differ from
-                ! 1/dz_Int, as they have different uses.
-    S2, &       ! The squared shear at an interface, in s-2.
-    a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
-                ! velocity, and density equations, in m s-1 or m.
-    c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
-    k_src, &    ! The shear-dependent source term in the kappa equation, in s-1.
-    kappa_src, & ! The shear-dependent source term in the kappa equation in s-1.
+    S0xdz       ! The initial salinity times dz, in PSU m.
+  real, dimension(SZK_(GV)+1) :: &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface, in
                 ! units of m2 s-1.
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface,
                 ! in units of m2 s-2.
     kappa_avg, & ! The time-weighted average of kappa, in m2 s-1.
-    tke_avg, &  ! The time-weighted average of TKE, in m2 s-2.
-    kappa_out, & ! The kappa that results from the kappa equation, in m2 s-1.
-    kappa_mid, & ! The average of the initial and predictor estimates of kappa,
-                ! in units of m2 s-1.
-    tke_pred, & ! The value of TKE from a predictor step, in m2 s-2.
-    kappa_pred, & ! The value of kappa from a predictor step, in m2 s-1.
-    pressure, & ! The pressure at an interface, in Pa.
-    T_int, &    ! The temperature interpolated to an interface, in C.
-    Sal_int, &  ! The salinity interpolated to an interface, in psu.
-    dbuoy_dT, & ! The partial derivatives of buoyancy with changes in
-    dbuoy_dS, & ! temperature and salinity, in m s-2 K-1 and m s-2 psu-1.
-    I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
-                   ! distance to the top and bottom boundaries, in m-2.
-    K_Q, &         ! Diffusivity divided by TKE, in s.
-    K_Q_tmp, &     ! Diffusivity divided by TKE, in s.
-    local_src_avg, & ! The time-integral of the local source, nondim.
-    tol_min, & ! Minimum tolerated ksrc for the corrector step, in s-1.
-    tol_max, & ! Maximum tolerated ksrc for the corrector step, in s-1.
-    tol_chg, & ! The tolerated change integrated in time, nondim.
-    dist_from_top, &  ! The distance from the top surface, in m.
-    local_src     ! The sum of all sources of kappa, including kappa_src and
-                  ! sources from the elliptic term, in s-1.
+    tke_avg     ! The time-weighted average of TKE, in m2 s-2.
   real :: f2   ! The squared Coriolis parameter of each column, in s-2.
-  real :: dist_from_bot ! The distance from the bottom surface, in m.
-
-  real :: b1            ! The inverse of the pivot in the tridiagonal equations.
-  real :: bd1           ! A term in the denominator of b1.
-  real :: d1            ! 1 - c1 in the tridiagonal equations.
-  real :: gR0           ! Rho_0 times g in kg m-2 s-2.
-  real :: g_R0          ! g_R0 is g/Rho in m4 kg-1 s-2.
-  real :: Norm          ! A factor that normalizes two weights to 1, in m-2.
-  real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
-  real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
-                        ! within an iteration.  0 < tol_dksrc_low < 1.
-  real :: Ri_crit       !   The critical shear Richardson number for shear-
-                        ! driven mixing. The theoretical value is 0.25.
-  real :: dt_rem        !   The remaining time to advance the solution, in s.
-  real :: dt_now        !   The time step used in the current iteration, in s.
-  real :: dt_wt         !   The fractional weight of the current iteration, ND.
-  real :: dt_test       !   A time-step that is being tested for whether it
-                        ! gives acceptably small changes in k_src, in s.
-  real :: Idtt          !   Idtt = 1 / dt_test, in s-1.
-  real :: dt_inc        !   An increment to dt_test that is being tested, in s.
+  real :: surface_pres  ! The top surface pressure, in Pa.
 
   real :: dz_in_lay     !   The running sum of the thickness in a layer, in m.
   real :: k0dt          ! The background diffusivity times the timestep, in m2.
   real :: dz_massless   ! A layer thickness that is considered massless, in m.
-  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
-                        ! changes in k_src.
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
   logical :: new_kappa = .true. ! If true, ignore the value of kappa from the
                         ! last call to this subroutine.
 
-  integer, dimension(SZK_(G)+1) :: kc ! The index map between the original
+  integer, dimension(SZK_(GV)+1) :: kc ! The index map between the original
                         ! interfaces and the interfaces with massless layers
                         ! merged into nearby massive layers.
-  real, dimension(SZK_(G)+1) :: kf ! The fractional weight of interface kc+1 for
+  real, dimension(SZK_(GV)+1) :: kf ! The fractional weight of interface kc+1 for
                         ! interpolating back to the original index space, ND.
-  integer :: ks_kappa, ke_kappa  ! The k-range with nonzero kappas.
-  integer :: dt_halvings   ! The number of times that the time-step is halved
-                           ! in seeking an acceptable timestep.  If none is
-                           ! found, dt_rem*0.5^dt_halvings is used.
-  integer :: dt_refinements ! The number of 2-fold refinements that will be used
-                           ! to estimate the maximum permitted time step.  I.e.,
-                           ! the resolution is 1/2^dt_refinements.
-  integer :: is, ie, js, je, i, j, k, nz, nzc, itt, itt_dt
-
-  ! Arrays that are used in find_kappa_tke if it is included in this subroutine.
-  real, dimension(SZK_(G)) :: &
-    aQ, &       ! aQ is the coupling between adjacent interfaces in the TKE
-                ! equations, in m s-1.
-    dQdz        ! Half the partial derivative of TKE with depth, m s-2.
-  real, dimension(SZK_(G)+1) :: &
-    dK, &         ! The change in kappa, in m2 s-1.
-    dQ, &         ! The change in TKE, in m2 s-1.
-    cQ, cK, &     ! cQ and cK are the upward influences in the tridiagonal and
-                  ! hexadiagonal solvers for the TKE and kappa equations, ND.
-    I_Ld2, &      ! 1/Ld^2, where Ld is the effective decay length scale
-                  ! for kappa, in units of m-2.
-    TKE_decay, &  ! The local TKE decay rate in s-1.
-    dQmdK, &      ! With Newton's method the change in dQ(K-1) due to dK(K), s.
-    dKdQ, &       ! With Newton's method the change in dK(K) due to dQ(K), s-1.
-    e1            ! The fractional change in a layer TKE due to a change in the
-                  ! TKE of the layer above when all the kappas below are 0.
-                  ! e1 is nondimensional, and 0 < e1 < 1.
-
+  integer :: is, ie, js, je, i, j, k, nz, nzc
 
   ! Diagnostics that should be deleted?
 #ifdef ADD_DIAGNOSTICS
-  real, dimension(SZK_(G)+1) :: &  ! Additional diagnostics.
+  real, dimension(SZK_(GV)+1) :: &  ! Additional diagnostics.
     I_Ld2_1d
-  real, dimension(SZI_(G),SZK_(G)+1) :: & ! 2-D versions of diagnostics.
+  real, dimension(SZI_(G),SZK_(GV)+1) :: & ! 2-D versions of diagnostics.
     I_Ld2_2d, dz_Int_2d
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: & ! 3-D versions of diagnostics.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: & ! 3-D versions of diagnostics.
     I_Ld2_3d, dz_Int_3d
 #endif
 #ifdef DEBUG
   integer :: max_debug_itt ; parameter(max_debug_itt=20)
-  real :: wt(SZK_(G)+1), wt_tot, I_wt_tot, wt_itt
-  real, dimension(SZK_(G)+1) :: &
+  real :: wt(SZK_(GV)+1), wt_tot, I_wt_tot, wt_itt
+  real, dimension(SZK_(GV)+1) :: &
     Ri_k, tke_prev, dtke, dkappa, dtke_norm, &
     ksrc_av    ! The average through the iterations of k_src, in s-1.
-  real, dimension(SZK_(G)+1,0:max_debug_itt) :: &
+  real, dimension(SZK_(GV)+1,0:max_debug_itt) :: &
     tke_it1, N2_it1, Sh2_it1, ksrc_it1, kappa_it1, kprev_it1
-  real, dimension(SZK_(G)+1,1:max_debug_itt) :: &
+  real, dimension(SZK_(GV)+1,1:max_debug_itt) :: &
     dkappa_it1, wt_it1, K_Q_it1, d_dkappa_it1, dkappa_norm
-  real, dimension(SZK_(G),0:max_debug_itt) :: &
+  real, dimension(SZK_(GV),0:max_debug_itt) :: &
     u_it1, v_it1, rho_it1, T_it1, S_it1
   real, dimension(0:max_debug_itt) :: &
     dk_wt_it1, dkpos_wt_it1, dkneg_wt_it1, k_mag
   real, dimension(max_debug_itt) ::  dt_it1
 #endif
-  is = G%isc ; ie = G%iec; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! These are hard-coded for now.  Perhaps these could be made dynamic later?
   ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
-  tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
-  dt_refinements = 5 ! Selected so that 1/2^dt_refinements < 1-tol_dksrc_low
+!  tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
+!  dt_refinements = 5 ! Selected so that 1/2^dt_refinements < 1-tol_dksrc_low
 
   use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
   new_kappa = .true. ; if (present(initialize_all)) new_kappa = initialize_all
 
-  Ri_crit = CS%Rino_crit
-  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
+!  Ri_crit = CS%Rino_crit
+!  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
 
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt(k0dt)
 
 !$OMP parallel do default(none) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,new_kappa, &
-!$OMP                                  tv,G,GV,CS,kappa_io,dz_massless,k0dt,p_surf,gR0,g_R0, &
-!$OMP                                  dt,tol_dksrc,tol_dksrc_low,tol2,dt_refinements,       &
+!$OMP                                  tv,G,GV,CS,kappa_io,dz_massless,k0dt,p_surf,dt, &
 #ifdef ADD_DIAGNOSTICS
 !$OMP                                  I_Ld2_3d,dz_Int_3d,                                   &
 #endif
-!$OMP                                  Ri_crit,tke_io,kv_io)                                 &
+!$OMP                                  tke_io,kv_io)                                 &
 !$OMP                          private(h_2d,u_2d,v_2d,T_2d,S_2d,rho_2d,kappa_2d,nzc,dz,      &
-!$OMP                                  u0xdz,v0xdz,T0xdz,S0xdz,kc,Idz,kf,I_dz_int,dz_in_lay, &
-!$OMP                                  dist_from_top,a1,b1,u,v,T,Sal,c1,d1,bd1,dz_Int,Norm,  &
-!$OMP                                  dist_from_bot,I_L2_bdry,f2,pressure,T_int,Sal_int,    &
-!$OMP                                  dbuoy_dT,dbuoy_dS,kappa,K_Q,N2,S2,dt_rem,kappa_avg,   &
-!$OMP                                  tke_avg,local_src_avg,tke,kappa_out,kappa_src,        &
-!$OMP                                  local_src,ks_kappa,ke_kappa,dt_now,dt_test,tol_max,   &
-!$OMP                                  tol_min,tol_chg,u_test, v_test, T_test, S_test,       &
-!$OMP                                  valid_dt,Idtt,k_src,dt_inc,dt_wt,kappa_mid,K_Q_tmp,   &
+!$OMP                                  u0xdz,v0xdz,T0xdz,S0xdz,kc,Idz,kf,dz_in_lay, &
+!$OMP                                  u,v,T,Sal,f2,kappa,kappa_avg,tke_avg,tke,surface_pres,&
 #ifdef ADD_DIAGNOSTICS
 !$OMP                                  I_Ld2_1d,I_Ld2_2d, dz_Int_2d,                         &
 #endif
-!$OMP                                  tke_pred,kappa_pred,tke_2d)
+!$OMP                                  tke_2d)
 
   do j=js,je
     do k=1,nz ; do i=is,ie
@@ -400,6 +310,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
           endif
         enddo
         kc(nz+1) = nzc+1
+
         ! Set up Idz as the inverse of layer thicknesses.
         do k=1,nzc ; Idz(k) = 1.0 / dz(k) ; enddo
 
@@ -430,418 +341,30 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         endif
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
-        ! Set up Idz as the inverse of layer thicknesses.
-        do k=1,nzc ; Idz(k) = 1.0 / dz(k) ; enddo
       endif
-
-      !   Set up I_dz_int as the inverse of the distance between
-      ! adjacent layer centers.
-      I_dz_int(1) = 2.0 / dz(1)
-      dist_from_top(1) = 0.0
-      do K=2,nzc
-        I_dz_int(K) = 2.0 / (dz(k-1) + dz(k))
-        dist_from_top(K) = dist_from_top(K-1) + dz(k-1)
-      enddo
-      I_dz_int(nzc+1) = 2.0 / dz(nzc)
-
-      !   Determine the velocities and thicknesses after eliminating massless
-      ! layers and applying a time-step of background diffusion.
-      if (nzc > 1) then
-        a1(2) = k0dt*I_dz_int(2)
-        b1 = 1.0 / (dz(1)+a1(2))
-        u(1) = b1 * u0xdz(1) ; v(1) = b1 * v0xdz(1)
-        T(1) = b1 * T0xdz(1) ; Sal(1) = b1 * S0xdz(1)
-        c1(2) = a1(2) * b1 ; d1 = dz(1) * b1 ! = 1 - c1
-        do k=2,nzc-1
-          bd1 = dz(k) + d1*a1(k)
-          a1(k+1) = k0dt*I_dz_int(k+1)
-          b1 = 1.0 / (bd1 + a1(k+1))
-          u(k) = b1 * (u0xdz(k) + a1(k)*u(k-1))
-          v(k) = b1 * (v0xdz(k) + a1(k)*v(k-1))
-          T(k) = b1 * (T0xdz(k) + a1(k)*T(k-1))
-          Sal(k) = b1 * (S0xdz(k) + a1(k)*Sal(k-1))
-          c1(k+1) = a1(k+1) * b1 ; d1 = bd1 * b1 ! d1 = 1 - c1
-        enddo
-        ! rho or T and S have insulating boundary conditions, u & v use no-slip
-        ! bottom boundary conditions (if kappa0 > 0).
-        ! For no-slip bottom boundary conditions
-        b1 = 1.0 / ((dz(nzc) + d1*a1(nzc)) + k0dt*I_dz_int(nzc+1))
-        u(nzc) = b1 * (u0xdz(nzc) + a1(nzc)*u(nzc-1))
-        v(nzc) = b1 * (v0xdz(nzc) + a1(nzc)*v(nzc-1))
-        ! For insulating boundary conditions
-        b1 = 1.0 / (dz(nzc) + d1*a1(nzc))
-        T(nzc) = b1 * (T0xdz(nzc) + a1(nzc)*T(nzc-1))
-        Sal(nzc) = b1 * (S0xdz(nzc) + a1(nzc)*Sal(nzc-1))
-        do k=nzc-1,1,-1
-          u(k) = u(k) + c1(k+1)*u(k+1) ; v(k) = v(k) + c1(k+1)*v(k+1)
-          T(k) = T(k) + c1(k+1)*T(k+1) ; Sal(k) = Sal(k) + c1(k+1)*Sal(k+1)
-        enddo
-      else
-        ! This is correct, but probably unnecessary.
-        b1 = 1.0 / (dz(1) + k0dt*I_dz_int(2))
-        u(1) = b1 * u0xdz(1) ; v(1) = b1 * v0xdz(1)
-        b1 = 1.0 / dz(1)
-        T(1) = b1 * T0xdz(1) ; Sal(1) = b1 * S0xdz(1)
-      endif
-
-      ! This uses half the harmonic mean of thicknesses to provide two estimates
-      ! of the boundary between cells, and the inverse of the harmonic mean to
-      ! weight the two estimates.  The net effect is that interfaces around thin
-      ! layers have thin cells, and the total thickness adds up properly.
-      ! The top- and bottom- interfaces have zero thickness, consistent with
-      ! adding additional zero thickness layers.
-      dz_Int(1) = 0.0 ; dz_Int(2) = dz(1)
-      do K=2,nzc-1
-        Norm = 1.0 / (dz(k)*(dz(k-1)+dz(k+1)) + 2.0*dz(k-1)*dz(k+1))
-        dz_Int(K) = dz_Int(K) + dz(k) * ( ((dz(k)+dz(k+1)) * dz(k-1)) * Norm)
-        dz_Int(K+1) = dz(k) * ( ((dz(k-1)+dz(k)) * dz(k+1)) * Norm)
-      enddo
-      dz_Int(nzc) = dz_Int(nzc) + dz(nzc) ; dz_Int(nzc+1) = 0.0
-
-#ifdef ADD_DIAGNOSTICS
-      do K=1,nzc+1 ; I_Ld2_1d(K) = 0.0 ; enddo
-#endif
-
-      dist_from_bot = 0.0
-      do K=nzc,2,-1
-        dist_from_bot = dist_from_bot + dz(k)
-        I_L2_bdry(K) = (dist_from_top(K) + dist_from_bot)**2 / &
-                         (dist_from_top(K) * dist_from_bot)**2
-      enddo
       f2 = 0.25*((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
                  (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
-
-      ! Calculate thermodynamic coefficients and an initial estimate of N2.
-      if (use_temperature) then
-        pressure(1) = 0.0
-        if (associated(p_surf)) pressure(1) = p_surf(i,j)
-        do K=2,nzc
-          pressure(K) = pressure(K-1) + gR0*dz(k-1)
-          T_int(K) = 0.5*(T(k-1) + T(k))
-          Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
-        enddo
-        call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, &
-                                      dbuoy_dS, 2, nzc-1, tv%eqn_of_state)
-        do K=2,nzc
-          dbuoy_dT(K) = -G_R0*dbuoy_dT(K)
-          dbuoy_dS(K) = -G_R0*dbuoy_dS(K)
-        enddo
-      else
-        do K=1,nzc+1 ; dbuoy_dT(K) = -G_R0 ; dbuoy_dS(K) = 0.0 ; enddo
-      endif
+      surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
     ! ----------------------------------------------------
-    ! Calculate kappa, here defined at interfaces.
+    ! Set the initial guess for kappa, here defined at interfaces.
     ! ----------------------------------------------------
       if (new_kappa) then
-        do K=1,nzc+1 ; kappa(K) = 1.0 ; K_Q(K) = 0.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = 1.0 ; enddo
       else
-        do K=1,nzc+1 ; kappa(K) = kappa_2d(i,K) ; K_Q(K) = 0.0 ; enddo
+        do K=1,nzc+1 ; kappa(K) = kappa_2d(i,K) ; enddo
       endif
 
-#ifdef DEBUG
-      N2(1) = 0.0 ; N2(nzc+1) = 0.0
-      do K=2,nzc
-        N2(K) = max((dbuoy_dT(K) * (T0xdz(k-1)*Idz(k-1) - T0xdz(k)*Idz(k)) + &
-                     dbuoy_dS(K) * (S0xdz(k-1)*Idz(k-1) - S0xdz(k)*Idz(k))) * &
-                     I_dz_int(K), 0.0)
-      enddo
-      do k=1,nzc
-        u_it1(k,0) = u0xdz(k)*Idz(k) ; v_it1(k,0) = v0xdz(k)*Idz(k)
-        T_it1(k,0) = T0xdz(k)*Idz(k) ; S_it1(k,0) = S0xdz(k)*Idz(k)
-      enddo
-      do K=1,nzc+1
-        kprev_it1(K,0) = kappa(K) ; kappa_it1(K,0) = kappa(K)
-        tke_it1(K,0) = tke(K)
-        N2_it1(K,0) = N2(K) ; Sh2_it1(K,0) = S2(K) ; ksrc_it1(K,0) = k_src(K)
-      enddo
-      do k=nzc+1,nz
-        u_it1(k,0) = 0.0 ; v_it1(k,0) = 0.0
-        T_it1(k,0) = 0.0 ; S_it1(k,0) = 0.0
-        kprev_it1(K+1,0) = 0.0 ; kappa_it1(K+1,0) = 0.0 ; tke_it1(K+1,0) = 0.0
-        N2_it1(K+1,0) = 0.0 ; Sh2_it1(K+1,0) = 0.0 ; ksrc_it1(K+1,0) = 0.0
-      enddo
-      do itt=1,max_debug_itt
-        dt_it1(itt) = 0.0
-        do k=1,nz
-          u_it1(k,itt) = 0.0 ; v_it1(k,itt) = 0.0
-          T_it1(k,itt) = 0.0 ; S_it1(k,itt) = 0.0
-          rho_it1(k,itt) = 0.0
-        enddo
-        do K=1,nz+1
-          kprev_it1(K,itt) = 0.0 ; kappa_it1(K,itt) = 0.0 ; tke_it1(K,itt) = 0.0
-          N2_it1(K,itt) = 0.0 ; Sh2_it1(K,itt) = 0.0
-          ksrc_it1(K,itt) = 0.0
-          dkappa_it1(K,itt) = 0.0 ; wt_it1(K,itt) = 0.0
-          K_Q_it1(K,itt) = 0.0 ; d_dkappa_it1(K,itt) = 0.0
-        enddo
-      enddo
-      do K=1,nz+1 ; ksrc_av(K) = 0.0 ; enddo
-#endif
-
-      ! This call just calculates N2 and S2.
-      call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, &
-                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                     u, v, T, Sal, N2=N2, S2=S2)
-    ! ----------------------------------------------------
-    ! Iterate
-    ! ----------------------------------------------------
-      dt_rem = dt
-      do K=1,nzc+1
-        kappa_avg(K) = 0.0 ; tke_avg(K) = 0.0
-        local_src_avg(K) = 0.0
-        ! Use the grid spacings to scale errors in the source.
-        if ( dz_Int(K) > 0.0 ) &
-          local_src_avg(K) = 0.1 * k0dt * I_dz_int(K) / dz_Int(K)
-      enddo
-
-    ! call cpu_clock_end(id_clock_setup)
-
-!       do itt=1,CS%max_RiNo_it
-      do itt=1,CS%max_KS_it
-
-    ! ----------------------------------------------------
-    ! Calculate new values of u, v, rho, N^2 and S.
-    ! ----------------------------------------------------
-#ifdef DEBUG
-        do K=1,nzc+1
-          Ri_k(K) = 1e3 ; if (S2(K) > 1e-3*N2(K)) Ri_k(K) = N2(K) / S2(K)
-          tke_prev(K) = tke(K)
-        enddo
-#endif
-
-      ! call cpu_clock_begin(id_clock_KQ)
-        call find_kappa_tke(N2, S2, kappa, Idz, dz_Int, I_L2_bdry, f2, &
-                            nzc, CS, K_Q, tke, kappa_out, kappa_src, local_src)
-      ! call cpu_clock_end(id_clock_KQ)
-
-      ! call cpu_clock_begin(id_clock_avg)
-        ! Determine the range of non-zero values of kappa_out.
-        ks_kappa = nz+1 ; ke_kappa = 0
-        do K=2,nzc ; if (kappa_out(K) > 0.0) then
-          ks_kappa = K ; exit
-        endif ; enddo
-        do k=nzc,ks_kappa,-1 ; if (kappa_out(K) > 0.0) then
-          ke_kappa = K ; exit
-        endif ; enddo
-        if (ke_kappa == nzc) kappa_out(nzc+1) = 0.0
-      ! call cpu_clock_end(id_clock_avg)
-
-        ! Determine how long to use this value of kappa (dt_now).
-
-      ! call cpu_clock_begin(id_clock_project)
-        if ((ke_kappa < ks_kappa) .or. (itt==CS%max_RiNo_it)) then
-          dt_now = dt_rem
-        else
-          ! Limit dt_now so that |k_src(k)-kappa_src(k)| < tol * local_src(k)
-          dt_test = dt_rem
-          do K=2,nzc
-            tol_max(K) = kappa_src(K) + tol_dksrc * local_src(K)
-            tol_min(K) = kappa_src(K) - tol_dksrc_low * local_src(K)
-            tol_chg(K) = tol2 * local_src_avg(K)
-          enddo
-
-          do itt_dt=1,(CS%max_KS_it+1-itt)/2
-            !   The maximum number of times that the time-step is halved in
-            ! seeking an acceptable timestep is reduced with each iteration,
-            ! so that as the maximum number of iterations is approached, the
-            ! whole remaining timestep is used.  Typically, an acceptable
-            ! timestep is found long before the minimum is reached, so the
-            ! value of max_KS_it may be unimportant, especially if it is large
-            ! enough.
-            call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*dt_test, nzc, &
-                                           dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                           u_test, v_test, T_test, S_test, N2, S2, &
-                                           ks_int = ks_kappa, ke_int = ke_kappa)
-            valid_dt = .true.
-            Idtt = 1.0 / dt_test
-            do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
-              if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-                k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
-                           ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
-                 if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
-                     (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
-                  valid_dt = .false. ; exit
-                endif
-              else
-                if (0.0 < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K))) then
-                  valid_dt = .false. ; k_src(K) = 0.0 ; exit
-                endif
-              endif
-            enddo
-
-            if (valid_dt) exit
-            dt_test = 0.5*dt_test
-          enddo
-          if ((dt_test < dt_rem) .and. valid_dt) then
-            dt_inc = 0.5*dt_test
-            do itt_dt=1,dt_refinements
-              call calculate_projected_state(kappa_out, u, v, T, Sal, &
-                       0.5*(dt_test+dt_inc), nzc, dz, I_dz_int, dbuoy_dT, &
-                       dbuoy_dS, u_test, v_test, T_test, S_test, N2, S2, &
-                       ks_int = ks_kappa, ke_int = ke_kappa)
-              valid_dt = .true.
-              Idtt = 1.0 / (dt_test+dt_inc)
-              do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
-                if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
-                  k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
-                             ((Ri_crit*S2(K) - N2(K)) / &
-                              (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
-                   if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
-                       (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
-                    valid_dt = .false. ; exit
-                  endif
-                else
-                  if (0.0 < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K))) then
-                    valid_dt = .false. ; k_src(K) = 0.0 ; exit
-                  endif
-                endif
-              enddo
-
-              if (valid_dt) dt_test = dt_test + dt_inc
-              dt_inc = 0.5*dt_inc
-            enddo
-          else
-            dt_inc = 0.0
-          endif
-
-           dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc,dt_rem)
-          do K=2,nzc
-            local_src_avg(K) = local_src_avg(K) + dt_now * local_src(K)
-          enddo
-        endif  ! Are all the values of kappa_out 0?
-      ! call cpu_clock_end(id_clock_project)
-
-        ! The state has already been projected forward. Now find new values of kappa.
-
-        if (ke_kappa < ks_kappa) then
-          ! There is no mixing now, and will not be again.
-        ! call cpu_clock_begin(id_clock_avg)
-          dt_wt = dt_rem / dt ; dt_rem = 0.0
-          do K=1,nzc+1
-            kappa_mid(K) = 0.0
-            ! This would be here but does nothing.
-            ! kappa_avg(K) = kappa_avg(K) + kappa_mid(K)*dt_wt
-            tke_avg(K) = tke_avg(K) + dt_wt*tke(K)
-#ifdef DEBUG
-            tke_pred(K) = tke(K) ; kappa_pred(K) = 0.0 ; kappa(K) = 0.0
-#endif
-          enddo
-        ! call cpu_clock_end(id_clock_avg)
-        else
-        ! call cpu_clock_begin(id_clock_project)
-          call calculate_projected_state(kappa_out, u, v, T, Sal, dt_now, nzc, &
-                                         dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                         u_test, v_test, T_test, S_test, N2=N2, S2=S2, &
-                                         ks_int = ks_kappa, ke_int = ke_kappa)
-        ! call cpu_clock_end(id_clock_project)
-
-        ! call cpu_clock_begin(id_clock_KQ)
-          do K=1,nzc+1 ; K_Q_tmp(K) = K_Q(K) ; enddo
-          call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
-                              nzc, CS, K_Q_tmp, tke_pred, kappa_pred)
-        ! call cpu_clock_end(id_clock_KQ)
-
-          ks_kappa = nz+1 ; ke_kappa = 0
-          do K=1,nzc+1
-            kappa_mid(K) = 0.5*(kappa_out(K) + kappa_pred(K))
-            if ((kappa_mid(K) > 0.0) .and. (K<ks_kappa)) ks_kappa = K
-            if (kappa_mid(K) > 0.0) ke_kappa = K
-          enddo
-
-        ! call cpu_clock_begin(id_clock_project)
-          call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
-                                         dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                         u_test, v_test, T_test, S_test, N2=N2, S2=S2, &
-                                         ks_int = ks_kappa, ke_int = ke_kappa)
-        ! call cpu_clock_end(id_clock_project)
-
-        ! call cpu_clock_begin(id_clock_KQ)
-          call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
-                              nzc, CS, K_Q, tke_pred, kappa_pred)
-        ! call cpu_clock_end(id_clock_KQ)
-
-        ! call cpu_clock_begin(id_clock_avg)
-          dt_wt = dt_now / dt ; dt_rem = dt_rem - dt_now
-          do K=1,nzc+1
-            kappa_mid(K) = 0.5*(kappa_out(K) + kappa_pred(K))
-            kappa_avg(K) = kappa_avg(K) + kappa_mid(K)*dt_wt
-            tke_avg(K) = tke_avg(K) + dt_wt*0.5*(tke_pred(K) + tke(K))
-            kappa(K) = kappa_pred(K) ! First guess for the next iteration.
-          enddo
-        ! call cpu_clock_end(id_clock_avg)
-        endif
-
-        if (dt_rem > 0.0) then
-          ! Update the values of u, v, T, Sal, N2, and S2 for the next iteration.
-        ! call cpu_clock_begin(id_clock_project)
-          call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
-                                         dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
-                                         u, v, T, Sal, N2, S2)
-        ! call cpu_clock_end(id_clock_project)
-        endif
-
-#ifdef DEBUG
-        if (itt <= max_debug_itt) then
-          dt_it1(itt) = dt_now
-          dk_wt_it1(itt) = 0.0 ; dkpos_wt_it1(itt) = 0.0 ;  dkneg_wt_it1(itt) = 0.0
-          k_mag(itt) = 0.0
-          wt_itt = 1.0/real(itt) ; wt_tot = 0.0
-          do K=1,nzc+1
-            ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
-            wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
-          enddo
-          ! Use the 1/0=0 convention.
-          I_wt_tot = 0.0 ; if (wt_tot > 0.0) I_wt_tot = 1.0/wt_tot
-
-          do K=1,nzc+1
-            wt(K) = (dz_Int(K)*ksrc_av(K)) * I_wt_tot
-            k_mag(itt) = k_mag(itt) + wt(K)*kappa_mid(K)
-            dkappa_it1(K,itt) = kappa_pred(K) - kappa_out(K)
-            dk_wt_it1(itt) = dk_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
-            if (dk > 0.0) then
-              dkpos_wt_it1(itt) = dkpos_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
-            else
-              dkneg_wt_it1(itt) = dkneg_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
-            endif
-            wt_it1(K,itt) = wt(K)
-          enddo
-        endif
-        do K=1,nzc+1
-          Ri_k(K) = 1e3 ; if (N2(K) < 1e3 * S2(K)) Ri_k(K) = N2(K) / S2(K)
-          dtke(K) = tke_pred(K) - tke(K)
-          dtke_norm(K) = dtke(K) / (0.5*(tke(K) + tke_pred(K)))
-          dkappa(K) = kappa_pred(K) - kappa_out(K)
-        enddo
-        if (itt <= max_debug_itt) then
-          do k=1,nzc
-            u_it1(k,itt) = u(k) ; v_it1(k,itt) = v(k)
-            T_it1(k,itt) = T(k) ; S_it1(k,itt) = Sal(k)
-          enddo
-          do K=1,nzc+1
-            kprev_it1(K,itt)=kappa_out(K)
-            kappa_it1(K,itt)=kappa_mid(K) ; tke_it1(K,itt) = 0.5*(tke(K)+tke_pred(K))
-            N2_it1(K,itt)=N2(K) ; Sh2_it1(K,itt)=S2(K)
-            ksrc_it1(K,itt) = kappa_src(K)
-            K_Q_it1(K,itt) = kappa_out(K) / (TKE(K))
-            if (itt > 1) then
-              if (abs(dkappa_it1(K,itt-1)) > 1e-20) &
-                d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
-            endif
-            dkappa_norm(K,itt) = dkappa(K) / max(0.5*(Kappa_pred(K) + kappa_out(K)), 1e-100)
-          enddo
-        endif
-#endif
-
-        if (dt_rem <= 0.0) exit
-
-      enddo ! end itt loop
+      call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+                              dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
+                              tke_avg, tv, CS, GV)
 
     ! call cpu_clock_begin(id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
           kappa_2d(i,K) = kappa_avg(K)
+          !### Should this be tke_avg?
           tke_2d(i,K) = tke(K)
         enddo
       else
@@ -907,6 +430,523 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   return
 
 end subroutine Calculate_kappa_shear
+
+subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
+                              dz, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
+                              tke_avg, tv, CS, GV)
+  type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), &
+                     intent(inout) :: kappa !< The time-weighted average of kappa, in m2 s-1.
+  real, dimension(SZK_(GV)+1), &
+                     intent(inout) :: tke  !< The Turbulent Kinetic Energy per unit mass at
+                                           !! an interface, in units of m2 s-2.
+  integer,           intent(in)    :: nzc  !< The number of active layers in the column.
+  real,              intent(in)    :: f2   !< The square of the Coriolis parameter, in s-2.
+  real,              intent(in)    :: surface_pres  !< The surface pressure, in Pa.
+  real, dimension(SZK_(GV)), &
+                     intent(in)    :: dz   !< The layer thickness, in m.
+  real, dimension(SZK_(GV)), &
+                     intent(in)    :: u0xdz !< The initial zonal velocity times dz, in m2 s-1.
+  real, dimension(SZK_(GV)), &
+                     intent(in)    :: v0xdz !< The initial meridional velocity times dz, in m2 s-1.
+  real, dimension(SZK_(GV)), &
+                     intent(in)    :: T0xdz !< The initial temperature times dz, in C m.
+  real, dimension(SZK_(GV)), &
+                     intent(in)    :: S0xdz !< The initial salinity times dz, in PSU m.
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: kappa_avg !< The time-weighted average of kappa, in m2 s-1.
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: tke_avg  !< The time-weighted average of TKE, in m2 s-2.
+  real,                    intent(in)    :: dt !< Time increment, in s.
+  type(thermo_var_ptrs),   intent(in)    :: tv !< A structure containing pointers to any
+                                               !! available thermodynamic fields. Absent fields
+                                               !! have NULL ptrs.
+  type(Kappa_shear_CS),    pointer       :: CS !< The control structure returned by a previous
+                                               !! call to kappa_shear_init.
+
+  real, dimension(nzc) :: &
+    u, &        ! The zonal velocity after a timestep of mixing, in m s-1.
+    v, &        ! The meridional velocity after a timestep of mixing, in m s-1.
+    Idz, &      ! The inverse of the distance between TKE points, in m.
+    T, &        ! The potential temperature after a timestep of mixing, in C.
+    Sal, &      ! The salinity after a timestep of mixing, in psu.
+    u_test, v_test, T_test, S_test
+
+  real, dimension(nzc+1) :: &
+    N2, &       ! The squared buoyancy frequency at an interface, in s-2.
+    dz_Int, &   ! The extent of a finite-volume space surrounding an interface,
+                ! as used in calculating kappa and TKE, in m.
+    I_dz_int, & ! The inverse of the distance between velocity & density points
+                ! above and below an interface, in m-1.  This is used to
+                ! calculate N2, shear, and fluxes, and it might differ from
+                ! 1/dz_Int, as they have different uses.
+    S2, &       ! The squared shear at an interface, in s-2.
+    a1, &       ! a1 is the coupling between adjacent interfaces in the TKE,
+                ! velocity, and density equations, in m s-1 or m.
+    c1, &       ! c1 is used in the tridiagonal (and similar) solvers.
+    k_src, &    ! The shear-dependent source term in the kappa equation, in s-1.
+    kappa_src, & ! The shear-dependent source term in the kappa equation in s-1.
+    kappa_out, & ! The kappa that results from the kappa equation, in m2 s-1.
+    kappa_mid, & ! The average of the initial and predictor estimates of kappa,
+                ! in units of m2 s-1.
+    tke_pred, & ! The value of TKE from a predictor step, in m2 s-2.
+    kappa_pred, & ! The value of kappa from a predictor step, in m2 s-1.
+    pressure, & ! The pressure at an interface, in Pa.
+    T_int, &    ! The temperature interpolated to an interface, in C.
+    Sal_int, &  ! The salinity interpolated to an interface, in psu.
+    dbuoy_dT, & ! The partial derivatives of buoyancy with changes in
+    dbuoy_dS, & ! temperature and salinity, in m s-2 K-1 and m s-2 psu-1.
+    I_L2_bdry, &   ! The inverse of the square of twice the harmonic mean
+                   ! distance to the top and bottom boundaries, in m-2.
+    K_Q, &         ! Diffusivity divided by TKE, in s.
+    K_Q_tmp, &     ! Diffusivity divided by TKE, in s.
+    local_src_avg, & ! The time-integral of the local source, nondim.
+    tol_min, & ! Minimum tolerated ksrc for the corrector step, in s-1.
+    tol_max, & ! Maximum tolerated ksrc for the corrector step, in s-1.
+    tol_chg, & ! The tolerated change integrated in time, nondim.
+    dist_from_top, &  ! The distance from the top surface, in m.
+    local_src     ! The sum of all sources of kappa, including kappa_src and
+                  ! sources from the elliptic term, in s-1.
+
+  real :: dist_from_bot ! The distance from the bottom surface, in m.
+  real :: b1            ! The inverse of the pivot in the tridiagonal equations.
+  real :: bd1           ! A term in the denominator of b1.
+  real :: d1            ! 1 - c1 in the tridiagonal equations.
+  real :: gR0           ! Rho_0 times g in kg m-2 s-2.
+  real :: g_R0          ! g_R0 is g/Rho in m4 kg-1 s-2.
+  real :: Norm          ! A factor that normalizes two weights to 1, in m-2.
+  real :: tol_dksrc, tol2  ! ### Tolerances that need to be set better later.
+  real :: tol_dksrc_low ! The tolerance for the fractional decrease in ksrc
+                        ! within an iteration.  0 < tol_dksrc_low < 1.
+  real :: Ri_crit       !   The critical shear Richardson number for shear-
+                        ! driven mixing. The theoretical value is 0.25.
+  real :: dt_rem        !   The remaining time to advance the solution, in s.
+  real :: dt_now        !   The time step used in the current iteration, in s.
+  real :: dt_wt         !   The fractional weight of the current iteration, ND.
+  real :: dt_test       !   A time-step that is being tested for whether it
+                        ! gives acceptably small changes in k_src, in s.
+  real :: Idtt          !   Idtt = 1 / dt_test, in s-1.
+  real :: dt_inc        !   An increment to dt_test that is being tested, in s.
+
+  real :: k0dt          ! The background diffusivity times the timestep, in m2.
+  logical :: valid_dt   ! If true, all levels so far exhibit acceptably small
+                        ! changes in k_src.
+  logical :: use_temperature  !  If true, temperature and salinity have been
+                        ! allocated and are being used as state variables.
+  integer :: ks_kappa, ke_kappa  ! The k-range with nonzero kappas.
+  integer :: dt_halvings   ! The number of times that the time-step is halved
+                           ! in seeking an acceptable timestep.  If none is
+                           ! found, dt_rem*0.5^dt_halvings is used.
+  integer :: dt_refinements ! The number of 2-fold refinements that will be used
+                           ! to estimate the maximum permitted time step.  I.e.,
+                           ! the resolution is 1/2^dt_refinements.
+  integer :: k, itt, itt_dt
+
+  Ri_crit = CS%Rino_crit
+  gR0 = GV%Rho0*GV%g_Earth ; g_R0 = GV%g_Earth/GV%Rho0
+  k0dt = dt*CS%kappa_0
+  ! These are hard-coded for now.  Perhaps these could be made dynamic later?
+  ! tol_dksrc = 0.5*tol_ksrc_chg ; tol_dksrc_low = 1.0 - 1.0/tol_ksrc_chg ?
+  tol_dksrc = 10.0 ; tol_dksrc_low = 0.95 ; tol2 = 2.0*CS%kappa_tol_err
+  dt_refinements = 5 ! Selected so that 1/2^dt_refinements < 1-tol_dksrc_low
+  use_temperature = .false. ; if (associated(tv%T)) use_temperature = .true.
+
+
+  ! Set up Idz as the inverse of layer thicknesses.
+  do k=1,nzc ; Idz(k) = 1.0 / dz(k) ; enddo
+  !   Set up I_dz_int as the inverse of the distance between
+  ! adjacent layer centers.
+  I_dz_int(1) = 2.0 / dz(1)
+  dist_from_top(1) = 0.0
+  do K=2,nzc
+    I_dz_int(K) = 2.0 / (dz(k-1) + dz(k))
+    dist_from_top(K) = dist_from_top(K-1) + dz(k-1)
+  enddo
+  I_dz_int(nzc+1) = 2.0 / dz(nzc)
+
+  !   Determine the velocities and thicknesses after eliminating massless
+  ! layers and applying a time-step of background diffusion.
+  if (nzc > 1) then
+    a1(2) = k0dt*I_dz_int(2)
+    b1 = 1.0 / (dz(1)+a1(2))
+    u(1) = b1 * u0xdz(1) ; v(1) = b1 * v0xdz(1)
+    T(1) = b1 * T0xdz(1) ; Sal(1) = b1 * S0xdz(1)
+    c1(2) = a1(2) * b1 ; d1 = dz(1) * b1 ! = 1 - c1
+    do k=2,nzc-1
+      bd1 = dz(k) + d1*a1(k)
+      a1(k+1) = k0dt*I_dz_int(k+1)
+      b1 = 1.0 / (bd1 + a1(k+1))
+      u(k) = b1 * (u0xdz(k) + a1(k)*u(k-1))
+      v(k) = b1 * (v0xdz(k) + a1(k)*v(k-1))
+      T(k) = b1 * (T0xdz(k) + a1(k)*T(k-1))
+      Sal(k) = b1 * (S0xdz(k) + a1(k)*Sal(k-1))
+      c1(k+1) = a1(k+1) * b1 ; d1 = bd1 * b1 ! d1 = 1 - c1
+    enddo
+    ! rho or T and S have insulating boundary conditions, u & v use no-slip
+    ! bottom boundary conditions (if kappa0 > 0).
+    ! For no-slip bottom boundary conditions
+    b1 = 1.0 / ((dz(nzc) + d1*a1(nzc)) + k0dt*I_dz_int(nzc+1))
+    u(nzc) = b1 * (u0xdz(nzc) + a1(nzc)*u(nzc-1))
+    v(nzc) = b1 * (v0xdz(nzc) + a1(nzc)*v(nzc-1))
+    ! For insulating boundary conditions
+    b1 = 1.0 / (dz(nzc) + d1*a1(nzc))
+    T(nzc) = b1 * (T0xdz(nzc) + a1(nzc)*T(nzc-1))
+    Sal(nzc) = b1 * (S0xdz(nzc) + a1(nzc)*Sal(nzc-1))
+    do k=nzc-1,1,-1
+      u(k) = u(k) + c1(k+1)*u(k+1) ; v(k) = v(k) + c1(k+1)*v(k+1)
+      T(k) = T(k) + c1(k+1)*T(k+1) ; Sal(k) = Sal(k) + c1(k+1)*Sal(k+1)
+    enddo
+  else
+    ! This is correct, but probably unnecessary.
+    b1 = 1.0 / (dz(1) + k0dt*I_dz_int(2))
+    u(1) = b1 * u0xdz(1) ; v(1) = b1 * v0xdz(1)
+    b1 = 1.0 / dz(1)
+    T(1) = b1 * T0xdz(1) ; Sal(1) = b1 * S0xdz(1)
+  endif
+
+  ! This uses half the harmonic mean of thicknesses to provide two estimates
+  ! of the boundary between cells, and the inverse of the harmonic mean to
+  ! weight the two estimates.  The net effect is that interfaces around thin
+  ! layers have thin cells, and the total thickness adds up properly.
+  ! The top- and bottom- interfaces have zero thickness, consistent with
+  ! adding additional zero thickness layers.
+  dz_Int(1) = 0.0 ; dz_Int(2) = dz(1)
+  do K=2,nzc-1
+    Norm = 1.0 / (dz(k)*(dz(k-1)+dz(k+1)) + 2.0*dz(k-1)*dz(k+1))
+    dz_Int(K) = dz_Int(K) + dz(k) * ( ((dz(k)+dz(k+1)) * dz(k-1)) * Norm)
+    dz_Int(K+1) = dz(k) * ( ((dz(k-1)+dz(k)) * dz(k+1)) * Norm)
+  enddo
+  dz_Int(nzc) = dz_Int(nzc) + dz(nzc) ; dz_Int(nzc+1) = 0.0
+
+#ifdef ADD_DIAGNOSTICS
+  do K=1,nzc+1 ; I_Ld2_1d(K) = 0.0 ; enddo
+#endif
+
+  dist_from_bot = 0.0
+  do K=nzc,2,-1
+    dist_from_bot = dist_from_bot + dz(k)
+    I_L2_bdry(K) = (dist_from_top(K) + dist_from_bot)**2 / &
+                     (dist_from_top(K) * dist_from_bot)**2
+  enddo
+
+  ! Calculate thermodynamic coefficients and an initial estimate of N2.
+  if (use_temperature) then
+    pressure(1) = surface_pres
+    do K=2,nzc
+      pressure(K) = pressure(K-1) + gR0*dz(k-1)
+      T_int(K) = 0.5*(T(k-1) + T(k))
+      Sal_int(K) = 0.5*(Sal(k-1) + Sal(k))
+    enddo
+    call calculate_density_derivs(T_int, Sal_int, pressure, dbuoy_dT, &
+                                  dbuoy_dS, 2, nzc-1, tv%eqn_of_state)
+    do K=2,nzc
+      dbuoy_dT(K) = -G_R0*dbuoy_dT(K)
+      dbuoy_dS(K) = -G_R0*dbuoy_dS(K)
+    enddo
+  else
+    do K=1,nzc+1 ; dbuoy_dT(K) = -G_R0 ; dbuoy_dS(K) = 0.0 ; enddo
+  endif
+
+#ifdef DEBUG
+  N2(1) = 0.0 ; N2(nzc+1) = 0.0
+  do K=2,nzc
+    N2(K) = max((dbuoy_dT(K) * (T0xdz(k-1)*Idz(k-1) - T0xdz(k)*Idz(k)) + &
+                 dbuoy_dS(K) * (S0xdz(k-1)*Idz(k-1) - S0xdz(k)*Idz(k))) * &
+                 I_dz_int(K), 0.0)
+  enddo
+  do k=1,nzc
+    u_it1(k,0) = u0xdz(k)*Idz(k) ; v_it1(k,0) = v0xdz(k)*Idz(k)
+    T_it1(k,0) = T0xdz(k)*Idz(k) ; S_it1(k,0) = S0xdz(k)*Idz(k)
+  enddo
+  do K=1,nzc+1
+    kprev_it1(K,0) = kappa(K) ; kappa_it1(K,0) = kappa(K)
+    tke_it1(K,0) = tke(K)
+    N2_it1(K,0) = N2(K) ; Sh2_it1(K,0) = S2(K) ; ksrc_it1(K,0) = k_src(K)
+  enddo
+  do k=nzc+1,nz
+    u_it1(k,0) = 0.0 ; v_it1(k,0) = 0.0
+    T_it1(k,0) = 0.0 ; S_it1(k,0) = 0.0
+    kprev_it1(K+1,0) = 0.0 ; kappa_it1(K+1,0) = 0.0 ; tke_it1(K+1,0) = 0.0
+    N2_it1(K+1,0) = 0.0 ; Sh2_it1(K+1,0) = 0.0 ; ksrc_it1(K+1,0) = 0.0
+  enddo
+  do itt=1,max_debug_itt
+    dt_it1(itt) = 0.0
+    do k=1,nz
+      u_it1(k,itt) = 0.0 ; v_it1(k,itt) = 0.0
+      T_it1(k,itt) = 0.0 ; S_it1(k,itt) = 0.0
+      rho_it1(k,itt) = 0.0
+    enddo
+    do K=1,nz+1
+      kprev_it1(K,itt) = 0.0 ; kappa_it1(K,itt) = 0.0 ; tke_it1(K,itt) = 0.0
+      N2_it1(K,itt) = 0.0 ; Sh2_it1(K,itt) = 0.0
+      ksrc_it1(K,itt) = 0.0
+      dkappa_it1(K,itt) = 0.0 ; wt_it1(K,itt) = 0.0
+      K_Q_it1(K,itt) = 0.0 ; d_dkappa_it1(K,itt) = 0.0
+    enddo
+  enddo
+  do K=1,nz+1 ; ksrc_av(K) = 0.0 ; enddo
+#endif
+
+  ! This call just calculates N2 and S2.
+  call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, &
+                                 dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
+                                 u, v, T, Sal, N2=N2, S2=S2)
+! ----------------------------------------------------
+! Iterate
+! ----------------------------------------------------
+  dt_rem = dt
+  do K=1,nzc+1
+    K_Q(K) = 0.0
+    kappa_avg(K) = 0.0 ; tke_avg(K) = 0.0
+    local_src_avg(K) = 0.0
+    ! Use the grid spacings to scale errors in the source.
+    if ( dz_Int(K) > 0.0 ) &
+      local_src_avg(K) = 0.1 * k0dt * I_dz_int(K) / dz_Int(K)
+  enddo
+
+! call cpu_clock_end(id_clock_setup)
+
+! do itt=1,CS%max_RiNo_it
+  do itt=1,CS%max_KS_it
+
+! ----------------------------------------------------
+! Calculate new values of u, v, rho, N^2 and S.
+! ----------------------------------------------------
+#ifdef DEBUG
+    do K=1,nzc+1
+      Ri_k(K) = 1e3 ; if (S2(K) > 1e-3*N2(K)) Ri_k(K) = N2(K) / S2(K)
+      tke_prev(K) = tke(K)
+    enddo
+#endif
+
+  ! call cpu_clock_begin(id_clock_KQ)
+    call find_kappa_tke(N2, S2, kappa, Idz, dz_Int, I_L2_bdry, f2, &
+                        nzc, CS, K_Q, tke, kappa_out, kappa_src, local_src)
+  ! call cpu_clock_end(id_clock_KQ)
+
+  ! call cpu_clock_begin(id_clock_avg)
+    ! Determine the range of non-zero values of kappa_out.
+    ks_kappa = GV%ke+1 ; ke_kappa = 0
+    do K=2,nzc ; if (kappa_out(K) > 0.0) then
+      ks_kappa = K ; exit
+    endif ; enddo
+    do k=nzc,ks_kappa,-1 ; if (kappa_out(K) > 0.0) then
+      ke_kappa = K ; exit
+    endif ; enddo
+    if (ke_kappa == nzc) kappa_out(nzc+1) = 0.0
+  ! call cpu_clock_end(id_clock_avg)
+
+    ! Determine how long to use this value of kappa (dt_now).
+
+  ! call cpu_clock_begin(id_clock_project)
+    if ((ke_kappa < ks_kappa) .or. (itt==CS%max_RiNo_it)) then
+      dt_now = dt_rem
+    else
+      ! Limit dt_now so that |k_src(k)-kappa_src(k)| < tol * local_src(k)
+      dt_test = dt_rem
+      do K=2,nzc
+        tol_max(K) = kappa_src(K) + tol_dksrc * local_src(K)
+        tol_min(K) = kappa_src(K) - tol_dksrc_low * local_src(K)
+        tol_chg(K) = tol2 * local_src_avg(K)
+      enddo
+
+      do itt_dt=1,(CS%max_KS_it+1-itt)/2
+        !   The maximum number of times that the time-step is halved in
+        ! seeking an acceptable timestep is reduced with each iteration,
+        ! so that as the maximum number of iterations is approached, the
+        ! whole remaining timestep is used.  Typically, an acceptable
+        ! timestep is found long before the minimum is reached, so the
+        ! value of max_KS_it may be unimportant, especially if it is large
+        ! enough.
+        call calculate_projected_state(kappa_out, u, v, T, Sal, 0.5*dt_test, nzc, &
+                                       dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
+                                       u_test, v_test, T_test, S_test, N2, S2, &
+                                       ks_int = ks_kappa, ke_int = ke_kappa)
+        valid_dt = .true.
+        Idtt = 1.0 / dt_test
+        do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
+          if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
+            k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+                       ((Ri_crit*S2(K) - N2(K)) / (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
+             if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                 (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+              valid_dt = .false. ; exit
+            endif
+          else
+            if (0.0 < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K))) then
+              valid_dt = .false. ; k_src(K) = 0.0 ; exit
+            endif
+          endif
+        enddo
+
+        if (valid_dt) exit
+        dt_test = 0.5*dt_test
+      enddo
+      if ((dt_test < dt_rem) .and. valid_dt) then
+        dt_inc = 0.5*dt_test
+        do itt_dt=1,dt_refinements
+          call calculate_projected_state(kappa_out, u, v, T, Sal, &
+                   0.5*(dt_test+dt_inc), nzc, dz, I_dz_int, dbuoy_dT, &
+                   dbuoy_dS, u_test, v_test, T_test, S_test, N2, S2, &
+                   ks_int = ks_kappa, ke_int = ke_kappa)
+          valid_dt = .true.
+          Idtt = 1.0 / (dt_test+dt_inc)
+          do K=max(ks_kappa-1,2),min(ke_kappa+1,nzc)
+            if (N2(K) < Ri_crit * S2(K)) then ! Equivalent to Ri < Ri_crit.
+              k_src(K) = (2.0 * CS%Shearmix_rate * sqrt(S2(K))) * &
+                         ((Ri_crit*S2(K) - N2(K)) / &
+                          (Ri_crit*S2(K) + CS%FRi_curvature*N2(K)))
+               if ((k_src(K) > max(tol_max(K), kappa_src(K) + Idtt*tol_chg(K))) .or. &
+                   (k_src(K) < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K)))) then
+                valid_dt = .false. ; exit
+              endif
+            else
+              if (0.0 < min(tol_min(K), kappa_src(K) - Idtt*tol_chg(K))) then
+                valid_dt = .false. ; k_src(K) = 0.0 ; exit
+              endif
+            endif
+          enddo
+
+          if (valid_dt) dt_test = dt_test + dt_inc
+          dt_inc = 0.5*dt_inc
+        enddo
+      else
+        dt_inc = 0.0
+      endif
+
+       dt_now = min(dt_test*(1.0+CS%kappa_tol_err)+dt_inc,dt_rem)
+      do K=2,nzc
+        local_src_avg(K) = local_src_avg(K) + dt_now * local_src(K)
+      enddo
+    endif  ! Are all the values of kappa_out 0?
+  ! call cpu_clock_end(id_clock_project)
+
+    ! The state has already been projected forward. Now find new values of kappa.
+
+    if (ke_kappa < ks_kappa) then
+      ! There is no mixing now, and will not be again.
+    ! call cpu_clock_begin(id_clock_avg)
+      dt_wt = dt_rem / dt ; dt_rem = 0.0
+      do K=1,nzc+1
+        kappa_mid(K) = 0.0
+        ! This would be here but does nothing.
+        ! kappa_avg(K) = kappa_avg(K) + kappa_mid(K)*dt_wt
+        tke_avg(K) = tke_avg(K) + dt_wt*tke(K)
+#ifdef DEBUG
+        tke_pred(K) = tke(K) ; kappa_pred(K) = 0.0 ; kappa(K) = 0.0
+#endif
+      enddo
+    ! call cpu_clock_end(id_clock_avg)
+    else
+    ! call cpu_clock_begin(id_clock_project)
+      call calculate_projected_state(kappa_out, u, v, T, Sal, dt_now, nzc, &
+                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
+                                     u_test, v_test, T_test, S_test, N2=N2, S2=S2, &
+                                     ks_int = ks_kappa, ke_int = ke_kappa)
+    ! call cpu_clock_end(id_clock_project)
+
+    ! call cpu_clock_begin(id_clock_KQ)
+      do K=1,nzc+1 ; K_Q_tmp(K) = K_Q(K) ; enddo
+      call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
+                          nzc, CS, K_Q_tmp, tke_pred, kappa_pred)
+    ! call cpu_clock_end(id_clock_KQ)
+
+      ks_kappa = GV%ke+1 ; ke_kappa = 0
+      do K=1,nzc+1
+        kappa_mid(K) = 0.5*(kappa_out(K) + kappa_pred(K))
+        if ((kappa_mid(K) > 0.0) .and. (K<ks_kappa)) ks_kappa = K
+        if (kappa_mid(K) > 0.0) ke_kappa = K
+      enddo
+
+    ! call cpu_clock_begin(id_clock_project)
+      call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
+                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
+                                     u_test, v_test, T_test, S_test, N2=N2, S2=S2, &
+                                     ks_int = ks_kappa, ke_int = ke_kappa)
+    ! call cpu_clock_end(id_clock_project)
+
+    ! call cpu_clock_begin(id_clock_KQ)
+      call find_kappa_tke(N2, S2, kappa_out, Idz, dz_Int, I_L2_bdry, f2, &
+                          nzc, CS, K_Q, tke_pred, kappa_pred)
+    ! call cpu_clock_end(id_clock_KQ)
+
+    ! call cpu_clock_begin(id_clock_avg)
+      dt_wt = dt_now / dt ; dt_rem = dt_rem - dt_now
+      do K=1,nzc+1
+        kappa_mid(K) = 0.5*(kappa_out(K) + kappa_pred(K))
+        kappa_avg(K) = kappa_avg(K) + kappa_mid(K)*dt_wt
+        tke_avg(K) = tke_avg(K) + dt_wt*0.5*(tke_pred(K) + tke(K))
+        kappa(K) = kappa_pred(K) ! First guess for the next iteration.
+      enddo
+    ! call cpu_clock_end(id_clock_avg)
+    endif
+
+    if (dt_rem > 0.0) then
+      ! Update the values of u, v, T, Sal, N2, and S2 for the next iteration.
+    ! call cpu_clock_begin(id_clock_project)
+      call calculate_projected_state(kappa_mid, u, v, T, Sal, dt_now, nzc, &
+                                     dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
+                                     u, v, T, Sal, N2, S2)
+    ! call cpu_clock_end(id_clock_project)
+    endif
+
+#ifdef DEBUG
+    if (itt <= max_debug_itt) then
+      dt_it1(itt) = dt_now
+      dk_wt_it1(itt) = 0.0 ; dkpos_wt_it1(itt) = 0.0 ;  dkneg_wt_it1(itt) = 0.0
+      k_mag(itt) = 0.0
+      wt_itt = 1.0/real(itt) ; wt_tot = 0.0
+      do K=1,nzc+1
+        ksrc_av(K) = (1.0-wt_itt)*ksrc_av(K) + wt_itt*k_src(K)
+        wt_tot = wt_tot + dz_Int(K) * ksrc_av(K)
+      enddo
+      ! Use the 1/0=0 convention.
+      I_wt_tot = 0.0 ; if (wt_tot > 0.0) I_wt_tot = 1.0/wt_tot
+
+      do K=1,nzc+1
+        wt(K) = (dz_Int(K)*ksrc_av(K)) * I_wt_tot
+        k_mag(itt) = k_mag(itt) + wt(K)*kappa_mid(K)
+        dkappa_it1(K,itt) = kappa_pred(K) - kappa_out(K)
+        dk_wt_it1(itt) = dk_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
+        if (dk > 0.0) then
+          dkpos_wt_it1(itt) = dkpos_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
+        else
+          dkneg_wt_it1(itt) = dkneg_wt_it1(itt) + wt(K)*dkappa_it1(K,itt)
+        endif
+        wt_it1(K,itt) = wt(K)
+      enddo
+    endif
+    do K=1,nzc+1
+      Ri_k(K) = 1e3 ; if (N2(K) < 1e3 * S2(K)) Ri_k(K) = N2(K) / S2(K)
+      dtke(K) = tke_pred(K) - tke(K)
+      dtke_norm(K) = dtke(K) / (0.5*(tke(K) + tke_pred(K)))
+      dkappa(K) = kappa_pred(K) - kappa_out(K)
+    enddo
+    if (itt <= max_debug_itt) then
+      do k=1,nzc
+        u_it1(k,itt) = u(k) ; v_it1(k,itt) = v(k)
+        T_it1(k,itt) = T(k) ; S_it1(k,itt) = Sal(k)
+      enddo
+      do K=1,nzc+1
+        kprev_it1(K,itt)=kappa_out(K)
+        kappa_it1(K,itt)=kappa_mid(K) ; tke_it1(K,itt) = 0.5*(tke(K)+tke_pred(K))
+        N2_it1(K,itt)=N2(K) ; Sh2_it1(K,itt)=S2(K)
+        ksrc_it1(K,itt) = kappa_src(K)
+        K_Q_it1(K,itt) = kappa_out(K) / (TKE(K))
+        if (itt > 1) then
+          if (abs(dkappa_it1(K,itt-1)) > 1e-20) &
+            d_dkappa_it1(K,itt) = dkappa_it1(K,itt) / dkappa_it1(K,itt-1)
+        endif
+        dkappa_norm(K,itt) = dkappa(K) / max(0.5*(Kappa_pred(K) + kappa_out(K)), 1e-100)
+      enddo
+    endif
+#endif
+
+    if (dt_rem <= 0.0) exit
+
+  enddo ! end itt loop
+
+end subroutine kappa_shear_column
 
 subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, &
                                      dz, I_dz_int, dbuoy_dT, dbuoy_dS, &
