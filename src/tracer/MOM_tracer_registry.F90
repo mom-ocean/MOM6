@@ -165,7 +165,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                                                                 !! restarts if this argument is present
   logical,              optional, intent(in)    :: mandatory    !< If true, this tracer must be read
                                                                 !! from a restart file.
-                                                                 
+
   logical :: mand
   type(tracer_type), pointer :: Tr=>NULL()
   character(len=256) :: mesg    ! Message for error messages.
