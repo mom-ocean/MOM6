@@ -67,6 +67,8 @@ use sloshing_initialization, only : sloshing_initialize_thickness
 use sloshing_initialization, only : sloshing_initialize_temperature_salinity
 use seamount_initialization, only : seamount_initialize_thickness
 use seamount_initialization, only : seamount_initialize_temperature_salinity
+use dumbbell_initialization, only : dumbbell_initialize_thickness
+use dumbbell_initialization, only : dumbbell_initialize_temperature_salinity
 use Phillips_initialization, only : Phillips_initialize_thickness
 use Phillips_initialization, only : Phillips_initialize_velocity
 use Phillips_initialization, only : Phillips_initialize_sponges
@@ -83,6 +85,7 @@ use soliton_initialization, only : soliton_initialize_thickness
 use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
+use dumbbell_initialization, only : dumbbell_initialize_sponges
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -256,6 +259,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t adjustment2d - TBD AJA. \n"//&
              " \t sloshing - TBD AJA. \n"//&
              " \t seamount - TBD AJA. \n"//&
+             " \t dumbbell - TBD AJA. \n"//&
              " \t soliton - Equatorial Rossby soliton. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
@@ -297,6 +301,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                    just_read_params=just_read)
        case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF, &
                                    just_read_params=just_read)
+       case ("dumbbell"); call dumbbell_initialize_thickness(h, G, GV, PF, &
+                                   just_read_params=just_read)
        case ("soliton"); call soliton_initialize_thickness(h, G, GV)
        case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF, &
                                    just_read_params=just_read)
@@ -326,6 +332,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t adjustment2d - TBD AJA. \n"//&
              " \t sloshing - TBD AJA. \n"//&
              " \t seamount - TBD AJA. \n"//&
+             " \t dumbbell. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
              " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
@@ -354,6 +361,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
+                                    tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+        case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
@@ -514,6 +523,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
+      case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, tv, &
+                                               PF, useALE, sponge_CSp, ALE_sponge_CSp)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
       case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
