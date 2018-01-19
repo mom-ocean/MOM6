@@ -387,7 +387,7 @@ subroutine register_restart_field_1d(f_ptr, name, mandatory, CS, longname, units
 
   type(vardesc) :: vd
   character(len=8) :: hgrid
-  
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
       "it is used to register "//trim(name))
