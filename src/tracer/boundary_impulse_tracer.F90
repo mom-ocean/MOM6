@@ -134,12 +134,10 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
 
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_boundary_impulse_tracer")
-    ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), &
-                                .not. CS%tracers_may_reinit, restart_CS)
-    ! Register the tracer for horizontal advection & diffusion.
+    ! Register the tracer for horizontal advection, diffusion, and restarts.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=CS%tr_desc(m), &
-                         registry_diags=.true., flux_units=flux_units)
+                         registry_diags=.true., flux_units=flux_units, &
+                         restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -150,10 +148,9 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   enddo
   ! Register remaining source time as a restart field
   rem_time_ptr => CS%remaining_source_time
-  call register_restart_field(rem_time_ptr,                                                                 &
-                              var_desc(trim("bir_remain_time"), "s", "Remaining time to apply BIR source",  &
-                                             hor_grid = "1", z_grid = "1", caller=mdl),                     &
-                              .not. CS%tracers_may_reinit, restart_CS)
+  call register_restart_field(rem_time_ptr, "bir_remain_time", &
+                              .not.CS%tracers_may_reinit, restart_CS, &
+                              "Remaining time to apply BIR source", "s")
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
