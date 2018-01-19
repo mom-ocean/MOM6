@@ -1715,22 +1715,21 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 
 end subroutine set_tracer_data
 
+!> Needs documentation
 function lookup_seg_field(OBC_seg,field)
-  type(OBC_segment_type), pointer :: OBC_seg
-  character(len=32), intent(in) :: field ! The field name
+  type(OBC_segment_type), pointer :: OBC_seg !< OBC segment
+  character(len=32), intent(in) :: field !< The field name
   integer :: lookup_seg_field
-
-  integer :: n,m
+  ! Local variables
+  integer :: n
 
   lookup_seg_field=-1
   do n=1,OBC_seg%num_fields
-   if (trim(field) == OBC_seg%field(m)%name) then
+   if (trim(field) == OBC_seg%field(n)%name) then
      lookup_seg_field=n
      return
    endif
   enddo
-
-  return
 
 end function lookup_seg_field
 
