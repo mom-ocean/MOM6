@@ -953,27 +953,6 @@ subroutine MOM_io_init(param_file)
 
 end subroutine MOM_io_init
 
-!The following won't compile, otherwise I could have used it to write the checksum attribute for each field
-!MOM_io.F90(966): error #6292: The parent type of this field is use associated 
-!with the PRIVATE fields attribute.   [ID]
-!  call mpp_write_meta( unit, field%id, trim(meta_name), cval=meta_char )
-!-----------------------------------^
-!
-!subroutine write_meta(unit, field, meta_name, meta_value)
-!  integer,               intent(out)   :: unit       !< unit id of an open file or -1 on a
-!                                                     !! nonwriting PE with single file output
-!  type(fieldtype),       intent(in)    :: field      !< fieldtype for the variable that meta data should be added
-!  character(len=*),      intent(in)    :: meta_name   !< name of meta data to be added
-!  integer(kind=8),       intent(in)    :: meta_value  !< value of meta data corresponding to meta_name
-!
-!  character(len=64) :: meta_char
-!
-!  write (meta_char,'(Z16)') meta_value  
-!  call mpp_write_meta( unit, field%id, trim(meta_name), cval=meta_char )
-! 
-!end subroutine write_meta
-  
-
 
 !> \namespace mom_io
 !!

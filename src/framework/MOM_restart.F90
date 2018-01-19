@@ -59,7 +59,6 @@ use MOM_time_manager, only : days_in_month
 use MOM_verticalGrid, only : verticalGrid_type
 use mpp_mod,         only:  mpp_chksum
 use mpp_io_mod,      only:  mpp_attribute_exist, mpp_get_atts
-use mpp_domains_mod, only:  mpp_get_domain_shift
 
 implicit none ; private
 
@@ -740,9 +739,8 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   real :: restart_time
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
   integer :: length
-  integer(kind=8) :: check_val(CS%max_fields,1), checksum
-  integer ::  iadd,jadd,ishift, jshift, pos
-  integer :: isL,ieL,jsL,jeL,sizes(7)
+  integer(kind=8) :: check_val(CS%max_fields,1)
+  integer :: isL,ieL,jsL,jeL
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -844,42 +842,18 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
       call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
 
     !Prepare the checksum of the restart fields to be written to restart files
+    call get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
     do m=start_var,next_var-1
-      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="save_restart")
-      select case (hor_grid)
-        case ('q') ; pos = CORNER
-        case ('h') ; pos = CENTER
-        case ('u') ; pos = EAST_FACE
-        case ('v') ; pos = NORTH_FACE
-        case ('Bu') ; pos = CORNER
-        case ('T')  ; pos = CENTER
-        case ('Cu') ; pos = EAST_FACE
-        case ('Cv') ; pos = NORTH_FACE
-        case ('1') ; pos = 0
-        case default ; pos = 0
-      end select
-      call mpp_get_domain_shift(G%Domain%mpp_domain, ishift, jshift, pos)
-      iadd = G%iec-G%isc ! Size of the i-dimension on this processor (-1 as it is an increment)
-      jadd = G%jec-G%jsc ! Size of the j-dimension on this processor
-      if(G%iec == G%ieg) iadd = iadd + ishift
-      if(G%jec == G%jeg) jadd = jadd + jshift
-      isL=G%isc-G%isd+1
-      ieL=G%iec-G%isd+1
-      jsL=G%jsc-G%jsd+1
-      jeL=G%jec-G%jsd+1
-!       call get_file_atts(CS%restart_field(m)%vars,siz=sizes)
-!       call get_MOM_compute_domain(G,sizes,pos,isL,ieL,jsL,jeL)
-
       if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
-        check_val(m,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
       elseif (ASSOCIATED(CS%var_ptr2d(m)%p)) then
-        check_val(m,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
       elseif (ASSOCIATED(CS%var_ptr4d(m)%p)) then
-        check_val(m,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
       elseif (ASSOCIATED(CS%var_ptr1d(m)%p)) then
-        check_val(m,1) = mpp_chksum(CS%var_ptr1d(m)%p)
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr1d(m)%p)
       elseif (ASSOCIATED(CS%var_ptr0d(m)%p)) then
-        check_val(m,1) = mpp_chksum(CS%var_ptr0d(m)%p)
+        check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr0d(m)%p)
       endif
     enddo
 
@@ -969,7 +943,7 @@ subroutine restore_state(filename, directory, day, G, CS)
   logical                          :: check_exist, is_there_a_checksum
   integer(kind=8),dimension(1)     :: checksum_file
   integer(kind=8)                  :: checksum_data
-  integer ::  iadd,jadd,ishift, jshift
+
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
   if (CS%novars > CS%max_fields) call restart_error(CS)
@@ -1055,15 +1029,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         case default ; pos = 0
       end select
 
-      call mpp_get_domain_shift(G%Domain%mpp_domain, ishift, jshift, pos)
-      iadd = G%iec-G%isc ! Size of the i-dimension on this processor (-1 as it is an increment)
-      jadd = G%jec-G%jsc ! Size of the j-dimension on this processor
-      if(G%iec == G%ieg) iadd = iadd + ishift
-      if(G%jec == G%jeg) jadd = jadd + jshift
-      isL=G%isc-G%isd+1
-      ieL=G%iec-G%isd+1
-      jsL=G%jsc-G%jsd+1
-      jeL=G%jec-G%jsd+1
+      call get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
       
       do i=1, nvar
         call get_file_atts(fields(i),name=varname)
@@ -1190,7 +1156,6 @@ subroutine restore_state(filename, directory, day, G, CS)
             endif
           endif
 
- if(is_root_pe()) write(*,'(a,Z16,a,Z16)') "Checksums of input field "// trim(varname)//" ",checksum_data," ", checksum_file(1)
           if(is_root_pe() .and. is_there_a_checksum .and. (checksum_file(1) /= checksum_data)) then
              write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                                           " does not match value ", checksum_file(1), &
@@ -1200,12 +1165,10 @@ subroutine restore_state(filename, directory, day, G, CS)
 
           CS%restart_field(m)%initialized = .true.
           exit ! Start search for next restart variable.
-
-       endif
-
-     enddo
+        endif
+      enddo
       if (i>nvar) missing_fields = missing_fields+1
-   enddo
+    enddo
 
     deallocate(fields)
     if (missing_fields == 0) exit
@@ -1550,40 +1513,71 @@ subroutine restart_error(CS)
   endif
 end subroutine restart_error
 
-subroutine get_MOM_compute_domain(G,sizes,pos,isL,ieL,jsL,jeL)
+subroutine get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
+! use mpp_domains_mod, only:  mpp_get_domain_shift
   type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  integer , intent(in) :: sizes(:),pos
   integer , intent(out):: isL,ieL,jsL,jeL
-  integer :: is0,js0
-            !   NOTE: The index ranges f var_ptrs always start with 1, so with
-            ! symmetric memory the staggering is swapped from NE to SW!
-            is0 = 1-G%isd
-            if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
-            if (sizes(1) == G%iec-G%isc+1) then
-              isL = G%isc+is0 ; ieL = G%iec+is0
-            elseif (sizes(1) == G%IecB-G%IscB+1) then
-              isL = G%IscB+is0 ; ieL = G%IecB+is0
-            elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
-                    (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              isL = G%isc-1+is0 ; ieL = G%iec+is0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state,  i-size ")
-            endif
+!  integer , intent(in) :: sizes(:),pos
+!  integer :: is0,js0
+!  integer ::  iadd,jadd,ishift, jshift, pos,sizes(7)
 
-            js0 = 1-G%jsd
-            if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
-            if (sizes(2) == G%jec-G%jsc+1) then
-              jsL = G%jsc+js0 ; jeL = G%jec+js0
-            elseif (sizes(2) == G%jecB-G%jscB+1) then
-              jsL = G%jscB+js0 ; jeL = G%jecB+js0
-            elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
-                    (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
-              ! This is reading a symmetric file in a non-symmetric model.
-              jsL = G%jsc-1+js0 ; jeL = G%jec+js0
-            else
-              call MOM_error(WARNING, "MOM_restart restore_state,  wrong j-size ")
-            endif
+  !Simplistic way
+  isL=G%isc-G%isd+1
+  ieL=G%iec-G%isd+1
+  jsL=G%jsc-G%jsd+1
+  jeL=G%jec-G%jsd+1
+  
+  !Zhi's way
+!  call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="save_restart")
+!  select case (hor_grid)
+!  case ('q') ; pos = CORNER
+!  case ('h') ; pos = CENTER
+!  case ('u') ; pos = EAST_FACE
+!  case ('v') ; pos = NORTH_FACE
+!  case ('Bu') ; pos = CORNER
+!  case ('T')  ; pos = CENTER
+!  case ('Cu') ; pos = EAST_FACE
+!  case ('Cv') ; pos = NORTH_FACE
+!  case ('1') ; pos = 0
+!  case default ; pos = 0
+!  end select
+!  call mpp_get_domain_shift(G%Domain%mpp_domain, ishift, jshift, pos)
+!  iadd = G%iec-G%isc ! Size of the i-dimension on this processor (-1 as it is an increment)
+!  jadd = G%jec-G%jsc ! Size of the j-dimension on this processor
+!  if(G%iec == G%ieg) iadd = iadd + ishift
+!  if(G%jec == G%jeg) jadd = jadd + jshift
+!  ?  
+
+  !Bob's way
+  !   NOTE: The index ranges f var_ptrs always start with 1, so with
+  ! symmetric memory the staggering is swapped from NE to SW!
+!  is0 = 1-G%isd
+!  if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
+!  if (sizes(1) == G%iec-G%isc+1) then
+!     isL = G%isc+is0 ; ieL = G%iec+is0
+!  elseif (sizes(1) == G%IecB-G%IscB+1) then
+!     isL = G%IscB+is0 ; ieL = G%IecB+is0
+!  elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
+!       (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
+!     ! This is reading a symmetric file in a non-symmetric model.
+!     isL = G%isc-1+is0 ; ieL = G%iec+is0
+!  else
+!     call MOM_error(WARNING, "MOM_restart restore_state,  i-size ")
+!  endif
+!
+!  js0 = 1-G%jsd
+!  if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
+!  if (sizes(2) == G%jec-G%jsc+1) then
+!     jsL = G%jsc+js0 ; jeL = G%jec+js0
+!  elseif (sizes(2) == G%jecB-G%jscB+1) then
+!     jsL = G%jscB+js0 ; jeL = G%jecB+js0
+!  elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
+!       (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
+!     ! This is reading a symmetric file in a non-symmetric model.
+!     jsL = G%jsc-1+js0 ; jeL = G%jec+js0
+!  else
+!     call MOM_error(WARNING, "MOM_restart restore_state,  wrong j-size ")
+!  endif
 
 end subroutine get_MOM_compute_domain
 
