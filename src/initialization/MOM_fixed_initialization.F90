@@ -35,6 +35,7 @@ use DOME2d_initialization, only : DOME2d_initialize_topography
 use Kelvin_initialization, only : Kelvin_initialize_topography
 use sloshing_initialization, only : sloshing_initialize_topography
 use seamount_initialization, only : seamount_initialize_topography
+use dumbbell_initialization, only : dumbbell_initialize_topography
 use shelfwave_initialization, only : shelfwave_initialize_topography
 use supercritical_initialization, only : supercritical_initialize_topography
 use Phillips_initialization, only : Phillips_initialize_topography
@@ -201,6 +202,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t\t DOME2D gravity current/overflow test case. \n"//&
                  " \t Kelvin - flat but with rotated land mask.\n"//&
                  " \t seamount - Gaussian bump for spontaneous motion test case.\n"//&
+                 " \t dumbbell - Sloshing channel with reservoirs on both ends.\n"//&
                  " \t shelfwave - exponential slope for shelfwave test case.\n"//&
                  " \t supercritical - flat but with 8.95 degree land mask.\n"//&
                  " \t Phillips - ACC-like idealized topography used in the Phillips config.\n"//&
@@ -222,6 +224,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("Kelvin");    call Kelvin_initialize_topography(D, G, PF, max_depth)
     case ("sloshing");  call sloshing_initialize_topography(D, G, PF, max_depth)
     case ("seamount");  call seamount_initialize_topography(D, G, PF, max_depth)
+    case ("dumbbell");   call dumbbell_initialize_topography(D, G, PF, max_depth)
     case ("shelfwave"); call shelfwave_initialize_topography(D, G, PF, max_depth)
     case ("supercritical");  call supercritical_initialize_topography(D, G, PF, max_depth)
     case ("Phillips");  call Phillips_initialize_topography(D, G, PF, max_depth)
