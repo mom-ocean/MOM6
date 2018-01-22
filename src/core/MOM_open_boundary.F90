@@ -169,6 +169,7 @@ type, public :: ocean_OBC_type
                                                       !! in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points
                                                       !! in the global domain use specified BCs.
+  logical :: radiation_BCs_exist_globally = .false.   !< True if radiations BCs are in use anywhere.
   logical :: user_BCs_set_globally = .false.          !< True if any OBC_USER_CONFIG is set
                                                       !! for input from user directory.
   logical :: update_OBC = .false.                     !< Is OBC data time-dependent
@@ -692,6 +693,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
       OBC%segment(l_seg)%open = .true.
@@ -721,6 +723,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
@@ -729,9 +732,10 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
-    if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
+
+  if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
+  if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
 
   OBC%segment(l_seg)%on_pe = .true.
   OBC%segment(l_seg)%is_E_or_W = .true.
@@ -791,6 +795,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
       OBC%segment(l_seg)%open = .true.
@@ -810,6 +815,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%Flather = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
@@ -818,9 +824,10 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
-    if (Ie_obc<=G%HI%IsdB .or. Is_obc>=G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
+
+  if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
+  if (Ie_obc<=G%HI%IsdB .or. Is_obc>=G%HI%IedB) return ! Segment is not on tile
 
   OBC%segment(l_seg)%on_pe = .true.
   OBC%segment(l_seg)%is_N_or_S = .true.
@@ -1797,22 +1804,21 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 
 end subroutine set_tracer_data
 
+!> Needs documentation
 function lookup_seg_field(OBC_seg,field)
-  type(OBC_segment_type), pointer :: OBC_seg
-  character(len=32), intent(in) :: field ! The field name
+  type(OBC_segment_type), pointer :: OBC_seg !< OBC segment
+  character(len=32), intent(in) :: field !< The field name
   integer :: lookup_seg_field
-
-  integer :: n,m
+  ! Local variables
+  integer :: n
 
   lookup_seg_field=-1
   do n=1,OBC_seg%num_fields
-   if (trim(field) == OBC_seg%field(m)%name) then
+   if (trim(field) == OBC_seg%field(n)%name) then
      lookup_seg_field=n
      return
    endif
   enddo
-
-  return
 
 end function lookup_seg_field
 
@@ -2780,14 +2786,14 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 
 end subroutine flood_fill2
 
+!> Register OBC segment data for restarts
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
-  type(hor_index_type), intent(in) :: HI
-  type(verticalGrid_type), pointer, intent(in) :: GV
+  type(hor_index_type), intent(in) :: HI !< Horizontal indices
+  type(verticalGrid_type), pointer, intent(in) :: GV !< Container for vertical grid information
   type(ocean_OBC_type), pointer, intent(inout) :: OBC_CS !< OBC data structure
-  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp
+  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp !< Restart structure
+  ! Local variables
   type(vardesc) :: vd
-  logical :: rx_normal_associated
-  integer :: n
 
   if (.not. associated(OBC_CS)) &
        call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
@@ -2797,14 +2803,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
        call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
-
-  rx_normal_associated = .false.
-
-  do n=1,OBC_CS%number_of_segments
-    if (associated(OBC_CS%segment(n)%rx_normal)) rx_normal_associated = .true.
-  enddo
-
-  if (rx_normal_associated) then
+  ! *** This is a temporary work around for restarts with OBC segments.
+  ! This implementation uses 3D arrays solely for restarts. We need
+  ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
+  ! so much memory and disk space. ***
+  if (OBC_CS%radiation_BCs_exist_globally) then
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
     OBC_CS%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')
