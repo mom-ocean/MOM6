@@ -122,6 +122,7 @@ use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
+use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
 use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_type
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
@@ -172,10 +173,6 @@ type MOM_diag_IDs
   integer :: id_sob      = -1
   integer :: id_sstcon   = -1
   integer :: id_sssabs   = -1
-
-  integer :: id_T_vardec = -1, id_S_vardec = -1
-  real, pointer, dimension(:,:,:) :: & !< diagnostic arrays for variance decay through ALE
-    T_squared => NULL(), S_squared => NULL()
 
   ! heat and salt flux fields
   integer :: id_fraz         = -1
@@ -1100,7 +1097,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
 !         call pass_vector(u, v, G%Domain)
       call do_group_pass(CS%pass_T_S_h, G%Domain)
 
-      call preAle_tracer_diags(G, CS%IDs, tv)
+      call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
       if (CS%debug) then
         call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV)
@@ -1134,7 +1131,8 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
     ! happen after the H update and before the next post_data.
     call diag_update_remap_grids(CS%diag)
 
-    call post_diags_TS_vardec(G, CS%IDs, CS%diag, tv, dtdia)
+    !### Consider moving this up into the if ALE block.
+    call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, dtdia)
 
     if (CS%debug) then
       call uvchksum("Post-diabatic u", u, v, G%HI, haloshift=2)
@@ -2171,16 +2169,13 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
   call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
-  if (CS%use_ALE_algorithm) &
-    call register_diags_TS_vardec(Time, G%HI, GV, param_file, CS%IDs, CS%tracer_Reg, CS%diag)
-
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since the tracer registry is now locked
   call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%tv%C_p, CS%missing, CS%tv)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
-                                   CS%diag_to_Z_CSp)
+                                   CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
     call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
   endif
@@ -2425,47 +2420,6 @@ subroutine register_diags(Time, G, GV, IDs, diag, C_p, missing, tv)
 
 end subroutine register_diags
 
-
-!> Initialize diagnostics for the variance decay of temp/salt
-!! across regridding/remapping
-subroutine register_diags_TS_vardec(Time, HI, GV, param_file, IDs, tracer_Reg, diag)
-  type(time_type),         intent(in)    :: Time  !< current model time
-  type(hor_index_type),    intent(in)    :: HI    !< horizontal index type
-  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
-  type(param_file_type),   intent(in)    :: param_file !< parameter file
-  type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
-  type(tracer_registry_type), pointer    :: tracer_Reg !< A pointer to the MOM tracer registry
-  type(diag_ctrl),         intent(inout) :: diag !< regulates diagnostic output
-
-  integer :: isd, ied, jsd, jed, nz
-
-  isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
-
-  ! variancy decay through ALE operation
-  IDs%id_T_vardec = register_diag_field('ocean_model', 'T_vardec', diag%axesTL, Time, &
-      'ALE variance decay for temperature', 'degC2 s-1')
-  if (IDs%id_T_vardec > 0) then
-    call safe_alloc_ptr(IDs%T_squared,isd,ied,jsd,jed,nz)
-    IDs%T_squared(:,:,:) = 0.
-
-    call register_tracer(IDs%T_squared, tracer_reg, param_file, HI, GV, &
-             name="T2", units="degC2", longname="Squared Potential Temperature", &
-             registry_diags=.false.)
-  endif
-
-  IDs%id_S_vardec = register_diag_field('ocean_model', 'S_vardec', diag%axesTL, Time, &
-      'ALE variance decay for salinity', 'psu2 s-1')
-  if (IDs%id_S_vardec > 0) then
-    call safe_alloc_ptr(IDs%S_squared,isd,ied,jsd,jed,nz)
-    IDs%S_squared(:,:,:) = 0.
-
-    call register_tracer(IDs%S_squared, tracer_reg, param_file, HI, GV, &
-             name="S2", units="psu2", longname="Squared Salinity", &
-             registry_diags=.false.)
-  endif
-
-end subroutine register_diags_TS_vardec
-
 !> This subroutine sets up clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
   type(MOM_control_struct), intent(in) :: CS  !< control structure set up by initialize_MOM.
@@ -2633,57 +2587,6 @@ subroutine post_TS_diagnostics(IDs, G, GV, tv, diag, dt)
   endif
 
 end subroutine post_TS_diagnostics
-
-
-!> Calculate tracer diagnostic terms before the ALE update
-subroutine preAle_tracer_diags(G, IDs, tv)
-  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
-  type(MOM_diag_IDs),       intent(in) :: IDs  !< A structure with the diagnostic IDs.
-  type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  ! Update squared quantities
-  if (associated(IDs%S_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-    IDs%S_squared(i,j,k) = tv%S(i,j,k)**2
-  enddo ; enddo ; enddo ; endif
-  if (associated(IDs%T_squared)) then ; do k=1,nz ; do j=js,je ; do i=is,ie
-    IDs%T_squared(i,j,k) = tv%T(i,j,k)**2
-  enddo ; enddo ; enddo ; endif
-
-end subroutine preAle_tracer_diags
-
-
-!> Calculate and post variance decay diagnostics for temp/salt
-subroutine post_diags_TS_vardec(G, IDs, diag, tv, dt)
-  type(ocean_grid_type),    intent(in) :: G    !< ocean grid structure
-  type(MOM_diag_IDs),       intent(in) :: IDs  !< A structure with the diagnostic IDs.
-  type(diag_ctrl),          intent(in) :: diag !< regulates diagnostic output
-  type(thermo_var_ptrs),    intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-  real, intent(in) :: dt                       !< total time step
-
-  real :: work(SZI_(G),SZJ_(G),SZK_(G))
-  real :: Idt
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
-
-  if (IDs%id_T_vardec > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work(i,j,k) = (IDs%T_squared(i,j,k) - tv%T(i,j,k)**2) * Idt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_T_vardec, work, diag)
-  endif
-
-  if (IDs%id_S_vardec > 0) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      work(i,j,k) = (IDs%S_squared(i,j,k) - tv%S(i,j,k)**2) * Idt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_S_vardec, work, diag)
-  endif
-end subroutine post_diags_TS_vardec
 
 !> This routine posts diagnostics of various integrated quantities.
 subroutine post_integrated_diagnostics(IDs, G, GV, diag, dt_int, tv, ssh, fluxes)
