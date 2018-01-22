@@ -325,7 +325,7 @@ subroutine create_file(unit, filename, vars, novars, fields, threading, timeunit
     if(present(checksums)) then
        call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack, checksum=checksums(k,:))
-    else    
+    else
        call mpp_write_meta(unit, fields(k), axes(1:numaxes), vars(k)%name, vars(k)%units, &
            vars(k)%longname, pack = pack)
     endif

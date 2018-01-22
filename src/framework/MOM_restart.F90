@@ -1126,7 +1126,6 @@ subroutine restore_state(filename, directory, day, G, CS)
       end select
 
       call get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
-      
       do i=1, nvar
         call get_file_atts(fields(i),name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
@@ -1139,7 +1138,6 @@ subroutine restore_state(filename, directory, day, G, CS)
             is_there_a_checksum = .true.
           endif
           if (.NOT. checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
-           
 
           if (ASSOCIATED(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
@@ -1622,7 +1620,6 @@ subroutine get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
   ieL=G%iec-G%isd+1
   jsL=G%jsc-G%jsd+1
   jeL=G%jec-G%jsd+1
-  
   !Zhi's way
 !  call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="save_restart")
 !  select case (hor_grid)
@@ -1642,8 +1639,6 @@ subroutine get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
 !  jadd = G%jec-G%jsc ! Size of the j-dimension on this processor
 !  if(G%iec == G%ieg) iadd = iadd + ishift
 !  if(G%jec == G%jeg) jadd = jadd + jshift
-!  ?  
-
   !Bob's way
   !   NOTE: The index ranges f var_ptrs always start with 1, so with
   ! symmetric memory the staggering is swapped from NE to SW!
