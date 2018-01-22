@@ -750,7 +750,7 @@ subroutine reset_face_lengths_list(G, param_file)
 !                         model parameter values.
   character(len=120), pointer, dimension(:) :: lines => NULL()
   character(len=120) :: line
-  character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
+  character(len=200) :: filename, chan_file, inputdir, mesg ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
   real, pointer, dimension(:,:) :: &
     u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
@@ -908,9 +908,19 @@ subroutine reset_face_lengths_list(G, param_file)
       if (((lat >= u_lat(1,npt)) .and. (lat <= u_lat(2,npt))) .and. &
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
-           ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
+           ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-      G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        if ( G%mask2dCu(I,j) == 0.0 )  then
+          write(mesg,'(A,I4,A)') "read_face_lengths_list : G%mask2dCu is not defined for line ",npt, &
+              "Please update values in "//trim(filename)
+          call MOM_error(FATAL, mesg, all_print=.true.)
+        else
+          write(mesg,'(A54,2F8.2,A2,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
+                u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
+          call MOM_error(WARNING, mesg, all_print=.true.)
+        endif
+      endif
     enddo
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
@@ -927,8 +937,18 @@ subroutine reset_face_lengths_list(G, param_file)
       if (((lat >= v_lat(1,npt)) .and. (lat <= v_lat(2,npt))) .and. &
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
-           ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) &
+           ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
         G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        if ( G%mask2dCv(I,j) == 0.0 )  then
+          write(mesg,'(A,I4,A)') "read_face_lengths_list : G%mask2dCv is not defined for line ",npt, &
+              "Please update values in "//trim(filename)
+          call MOM_error(FATAL, mesg, all_print=.true.)
+        else
+          write(mesg,'(A54,2F8.2,A2,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
+                v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
+          call MOM_error(WARNING, mesg, all_print=.true.)
+        endif
+      endif
     enddo
 
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
@@ -1079,7 +1099,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
 !  (in)      directory - The directory into which to place the file.
   character(len=240) :: filepath
   character(len=40)  :: mdl = "write_ocean_geometry_file"
-  integer, parameter :: nFlds=23
+  integer, parameter :: nFlds=25
   type(vardesc) :: vars(nFlds)
   type(fieldtype) :: fields(nFlds)
   integer :: unit
@@ -1130,12 +1150,16 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   vars(18)= var_desc("dyCuo","m","Open meridional grid spacing at u points",'u','1','1')
   vars(19)= var_desc("wet", "nondim", "land or ocean?", 'h','1','1')
 
-  vars(20) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
-  vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
-  vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
-  vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
+  vars(20) = var_desc("dx_Cv","m","Modified Zonal grid spacing at v points",'v','1','1')
+  vars(21) = var_desc("dy_Cu","m","Modified Meridional grid spacing at u points",'u','1','1')
 
-  nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
+  vars(22) = var_desc("Dblock_u","m","Blocked depth at u points",'u','1','1')
+  vars(23) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
+  vars(24) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
+  vars(25) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
+
+
+  nFlds_used = 21 ; if (G%bathymetry_at_vel) nFlds_used = 25
 
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
@@ -1200,11 +1224,16 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   call write_field(unit, fields(18), G%Domain%mpp_domain, G%dy_Cu)
   call write_field(unit, fields(19), G%Domain%mpp_domain, G%mask2dT)
 
+  do J=Jsq,Jeq ; do i=is,ie ; out_v(i,J) = G%dx_Cv(i,J) ; enddo ; enddo
+  call write_field(unit, fields(20), G%Domain%mpp_domain, out_v)
+  do j=js,je ; do I=Isq,Ieq ; out_u(I,j) = G%dy_Cu(I,j) ; enddo ; enddo
+  call write_field(unit, fields(21), G%Domain%mpp_domain, out_u)
+
   if (G%bathymetry_at_vel) then
-    call write_field(unit, fields(20), G%Domain%mpp_domain, G%Dblock_u)
-    call write_field(unit, fields(21), G%Domain%mpp_domain, G%Dopen_u)
-    call write_field(unit, fields(22), G%Domain%mpp_domain, G%Dblock_v)
-    call write_field(unit, fields(23), G%Domain%mpp_domain, G%Dopen_v)
+    call write_field(unit, fields(22), G%Domain%mpp_domain, G%Dblock_u)
+    call write_field(unit, fields(23), G%Domain%mpp_domain, G%Dopen_u)
+    call write_field(unit, fields(24), G%Domain%mpp_domain, G%Dblock_v)
+    call write_field(unit, fields(25), G%Domain%mpp_domain, G%Dopen_v)
   endif
 
   call close_file(unit)
