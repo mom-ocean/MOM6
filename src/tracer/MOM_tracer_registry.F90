@@ -394,12 +394,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
                                 ! creating additional diagnostics.
   character(len=72) :: longname ! The long name of that tracer variable.
   character(len=72) :: flux_longname ! The tracer name in the long names of fluxes.
-  character(len=48) :: units    ! The dimensions of the variable.
+  character(len=48) :: units    ! The dimensions of the tracer.
   character(len=48) :: flux_units ! The units for fluxes, either
                                 ! [units] m3 s-1 or [units] kg s-1.
   character(len=48) :: conv_units ! The units for flux convergences, either
                                 ! [units] m2 s-1 or [units] kg s-1.
-  character(len=72)  :: cmorname ! The CMOR name of that variable.
+  character(len=48) :: unit2    ! The dimensions of the tracer squared
+  character(len=72)  :: cmorname ! The CMOR name of this tracer.
   character(len=120) :: cmor_longname ! The CMOR long name of that variable.
   character(len=120) :: var_lname      ! A temporary longname for a diagnostic.
   character(len=120) :: cmor_var_lname ! The temporary CMOR long name for a diagnostic
@@ -421,7 +422,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
 !    call query_vardesc(Tr%vd, name, units=units, longname=longname, &
 !                       cmor_field_name=cmorname, cmor_longname=cmor_longname, &
 !                       caller="register_tracer_diagnostics")
-    name = Tr%name ; units=Tr%units ; longname = Tr%longname
+    name = Tr%name ; units=adjustl(Tr%units) ; longname = Tr%longname
     cmorname = Tr%cmor_name ; cmor_longname = Tr%cmor_longname
     shortnm = Tr%flux_nameroot
     flux_longname = Tr%flux_longname
@@ -558,8 +559,10 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
     endif
 
     if (use_ALE .and. (Reg%ntr<MAX_FIELDS_) .and. Tr%remap_tr) then
+      unit2 = trim(units)//"2"
+      if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
       Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, Time, &
-        "ALE variance decay for "//lowercase(longname), "("//trim(units)//")2 s-1")
+        "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
       if (Tr%id_tr_vardec > 0) then
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
@@ -567,7 +570,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
         call safe_alloc_ptr(Reg%Tr(m2)%t,isd,ied,jsd,jed,nz) ; Reg%Tr(m2)%t(:,:,:) = 0.0
         Reg%Tr(m2)%name = trim(shortnm)//"2"
         Reg%Tr(m2)%longname = "Squared "//trim(longname)
-        Reg%Tr(m2)%units = "("//trim(units)//")2"
+        Reg%Tr(m2)%units = unit2
         Reg%Tr(m2)%registry_diags = .false.
         Reg%Tr(m2)%ind_tr_squared = -1
         ! Augment the total number of tracers, including the squared tracers.
