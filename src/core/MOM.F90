@@ -184,6 +184,8 @@ type MOM_diag_IDs
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
+  integer :: id_h_tendency_dyn = -1
+
 end type MOM_diag_IDs
 
 !> Control structure for this module
@@ -771,7 +773,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
     endif ! -------------------------------------------------- end SPLIT
-
 
     if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
       call cpu_clock_begin(id_clock_thick_diff)
@@ -2429,6 +2430,9 @@ subroutine register_diags(Time, G, GV, IDs, diag, C_p, missing, tv)
   IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
+  IDs%id_h_tendency_dyn = register_diag_field('ocean_model','h_tendency_dyn',      &
+      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
+      'm s-1', v_extensive = .true.)
 
 end subroutine register_diags
 
@@ -2526,9 +2530,14 @@ subroutine post_transport_diagnostics(G, GV, CS, IDs, diag, dt_trans, h, &
   real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport, in kg s-1
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport, in kg s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics m s-1
+  real :: Idt
   real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  Idt = 1. / dt_trans
+  H_to_kg_m2_dt = GV%H_to_kg_m2 * Idt
 
   call cpu_clock_begin(id_clock_Z_diag)
   call calculate_Z_transport(CS%uhtr, CS%vhtr, h, dt_trans, G, GV, &
@@ -2540,7 +2549,6 @@ subroutine post_transport_diagnostics(G, GV, CS, IDs, diag, dt_trans, h, &
   if (transport_remap_grid_needed(IDs)) &
     call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
 
-  H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
   if (IDs%id_umo_2d > 0) then
     umo2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -2572,6 +2580,15 @@ subroutine post_transport_diagnostics(G, GV, CS, IDs, diag, dt_trans, h, &
 
   if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, CS%uhtr, diag, alt_h = h_pre_dyn)
   if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, CS%vhtr, diag, alt_h = h_pre_dyn)
+
+  ! Post the change in thicknesses
+  if (IDs%id_h_tendency_dyn > 0) then
+    h_tend(:,:,:) = 0.
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      h_tend(i,j,k) = (h(i,j,k) - h_pre_dyn(i,j,k))*Idt
+    enddo ; enddo ; enddo
+    call post_data(IDs%id_h_tendency_dyn, h_tend, diag)
+  endif
 
 end subroutine post_transport_diagnostics
 
