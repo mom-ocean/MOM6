@@ -1254,7 +1254,7 @@ subroutine restore_state(filename, directory, day, G, CS)
              write (mesg,'(a,Z16,a,Z16,a)') "Checksum of input field "// trim(varname)//" ",checksum_data,&
                                           " does not match value ", checksum_file(1), &
                                           " stored in "//trim(unit_path(n)//"." )
-             call MOM_error(WARNING, "MOM_restart(restore_state): "//trim(mesg) )
+             call MOM_error(FATAL, "MOM_restart(restore_state): "//trim(mesg) )
           endif
 
           CS%restart_field(m)%initialized = .true.
