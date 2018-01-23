@@ -179,6 +179,7 @@ type, public:: diabatic_CS ; private
   integer :: id_diabatic_diff_salt_tend_2d  = -1
   logical :: diabatic_diff_tendency_diag    = .false.
 
+  integer :: id_boundary_forcing_h_tend       = -1
   integer :: id_boundary_forcing_temp_tend    = -1
   integer :: id_boundary_forcing_saln_tend    = -1
   integer :: id_boundary_forcing_heat_tend    = -1
@@ -1662,6 +1663,14 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
   work_3d(:,:,:) = 0.0
   work_2d(:,:)   = 0.0
 
+  ! Thickness tendency
+  if(CS%id_boundary_forcing_h_tend > 0) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      work_3d(i,j,k) = (h(i,j,k) - h_old(i,j,k))*Idt
+    enddo ; enddo ; enddo
+    call post_data(CS%id_boundary_forcing_h_tend, work_3d, CS%diag)
+  endif
+
   ! temperature tendency
   if(CS%id_boundary_forcing_temp_tend > 0) then
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -1688,7 +1697,6 @@ subroutine diagnose_boundary_forcing_tendency(tv, h, temp_old, saln_old, h_old, 
       call post_data(CS%id_boundary_forcing_heat_tend_2d, work_2d, CS%diag)
     endif
   endif
-
 
   ! salinity tendency
   if(CS%id_boundary_forcing_saln_tend > 0) then
@@ -2204,8 +2212,16 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
       CS%diabatic_diff_tendency_diag = .true.
     endif
 
-    ! diagnostics for tendencies of temp and saln due to boundary forcing;
+    ! diagnostics for tendencies of thickness temp and saln due to boundary forcing;
     ! available only for ALE algorithm.
+    CS%id_boundary_forcing_h_tend = register_diag_field('ocean_model',   &
+        'boundary_forcing_h_tendency', diag%axesTL, Time,                &
+        'Boundary forcing thickness tendency', 'm s-1',                  &
+         v_extensive = .true.)
+    if (CS%id_boundary_forcing_h_tend > 0) then
+      CS%boundary_forcing_tendency_diag = .true.
+    endif
+
     CS%id_boundary_forcing_temp_tend = register_diag_field('ocean_model',&
         'boundary_forcing_temp_tendency', diag%axesTL, Time,             &
         'Boundary forcing temperature tendency', 'degC s-1')
