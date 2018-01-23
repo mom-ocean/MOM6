@@ -256,10 +256,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t\t densities. This is not yet implemented. \n"//&
              " \t circle_obcs - the circle_obcs test case is used. \n"//&
              " \t DOME2D - 2D version of DOME initialization. \n"//&
-             " \t adjustment2d - TBD AJA. \n"//&
-             " \t sloshing - TBD AJA. \n"//&
-             " \t seamount - TBD AJA. \n"//&
-             " \t dumbbell - TBD AJA. \n"//&
+             " \t adjustment2d - 2D lock exchange thickness ICs. \n"//&
+             " \t sloshing - sloshing gravity thickness ICs. \n"//&
+             " \t seamount - no motion test with seamount ICs. \n"//&
+             " \t dumbbell - sloshing channel ICs. \n"//&
              " \t soliton - Equatorial Rossby soliton. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
@@ -329,10 +329,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t linear - linear in logical layer space. \n"//&
              " \t DOME2D - 2D DOME initialization. \n"//&
              " \t ISOMIP - ISOMIP initialization. \n"//&
-             " \t adjustment2d - TBD AJA. \n"//&
-             " \t sloshing - TBD AJA. \n"//&
-             " \t seamount - TBD AJA. \n"//&
-             " \t dumbbell. \n"//&
+             " \t adjustment2d - 2d lock exchange T/S ICs. \n"//&
+             " \t sloshing - sloshing mode T/S ICs. \n"//&
+             " \t seamount - no motion test with seamount ICs. \n"//&
+             " \t dumbbell - sloshing channel ICs. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
              " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
