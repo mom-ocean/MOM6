@@ -1156,7 +1156,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
 
 
-  nFlds_used = 21 ; if (G%bathymetry_at_vel) nFlds_used = 25
+  nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 
   if (present(geom_file)) then
     filepath = trim(directory) // trim(geom_file)
