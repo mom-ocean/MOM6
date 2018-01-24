@@ -1838,6 +1838,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 !  The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
+    allocate(eta(isd:ied,jsd:jed,nz+1))
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
@@ -1850,6 +1851,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
     call initialize_sponge(Idamp, eta, G, param_file, CSp)
+    deallocate(eta)
   else if (.not. new_sponges) then ! ALE mode
 
     call field_size(filename,eta_var,siz,no_domain=.true.)
@@ -1876,6 +1878,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
       h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
     enddo ; enddo; enddo
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
+    deallocate(eta)
+    deallocate(h)
   else
     ! Initialize sponges without supplying sponge grid
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
