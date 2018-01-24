@@ -146,13 +146,20 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-!> A structure with diagnostic IDs
+!> A structure with diagnostic IDs of the state variables
 type MOM_diag_IDs
-  ! diagnostic ids
-
   ! 3-d state fields
   integer :: id_u  = -1, id_v  = -1, id_h  = -1
+  ! 2-d state field
+  integer :: id_ssh_inst = -1
 
+  ! Diagnostics for tracer horizontal transport
+  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
+  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
+end type MOM_diag_IDs
+
+!> A structure with diagnostic IDs of the surface and integrated variables
+type surface_diag_IDs
   ! 2-d surface and bottom fields
   integer :: id_zos      = -1
   integer :: id_zossq    = -1
@@ -166,7 +173,6 @@ type MOM_diag_IDs
   integer :: id_ssu      = -1
   integer :: id_ssv      = -1
   integer :: id_speed    = -1
-  integer :: id_ssh_inst = -1
   integer :: id_sstcon   = -1
   integer :: id_sssabs   = -1
 
@@ -175,11 +181,7 @@ type MOM_diag_IDs
   integer :: id_salt_deficit = -1
   integer :: id_Heat_PmE     = -1
   integer :: id_intern_heat  = -1
-
-  ! Diagnostics for tracer horizontal transport
-  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
-  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-end type MOM_diag_IDs
+end type surface_diag_IDs
 
 !> Control structure for this module
 type, public :: MOM_control_struct
@@ -313,6 +315,7 @@ type, public :: MOM_control_struct
   logical :: tendency_diagnostics = .false.
 
   type(MOM_diag_IDs) :: IDs
+  type(surface_diag_IDs) :: sfc_IDs
 
   ! The remainder provides pointers to child module control structures.
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
@@ -920,7 +923,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   ! Do diagnostics that only occur at the end of a complete forcing step.
   call cpu_clock_begin(id_clock_diagnostics)
   call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_surface_diagnostics(IDs, G, GV, CS%diag, dt*n_max, sfc_state, CS%tv, ssh, fluxes)
+  call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, dt*n_max, sfc_state, CS%tv, ssh, fluxes)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics)
 
@@ -1423,7 +1426,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   real :: conv2watt, conv2salt, H_convert
-  character(len=48) :: thickness_units, flux_units, S_flux_units
+  character(len=48) :: flux_units, S_flux_units
 
   type(time_type)                 :: Start_time
   type(ocean_internal_state)      :: MOM_internal_state
@@ -2167,7 +2170,8 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! now register some diagnostics since the tracer registry is now locked
-  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%tv%C_p, CS%missing, CS%tv)
+  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, CS%tv)
+  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
@@ -2287,40 +2291,13 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 !> Register certain diagnostics
-subroutine register_diags(Time, G, GV, IDs, diag, C_p, missing, tv)
+subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
-  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
-  type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
+  type(surface_diag_IDs),  intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
-  real,                    intent(in)    :: C_p   !< Heat capacity used in conversion to watts
   real,                    intent(in)    :: missing !< The value to use to fill in missing data
-  type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various thermodynamic variables
-
-  real :: H_convert
-  character(len=48) :: thickness_units
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = G%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  thickness_units = get_thickness_units(GV)
-  if (GV%Boussinesq) then
-    H_convert = GV%H_to_m
-  else
-    H_convert = GV%H_to_kg_m2
-  endif
-
-  ! Diagnostics of the rapidly varying dynamic state
-  IDs%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
-      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
-      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
-  IDs%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
-      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
-      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
-  IDs%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
-  IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
-      'Instantaneous Sea Surface Height', 'm', missing)
+  type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various thermodynamic variables
 
   ! Vertically integrated, budget, and surface state diagnostics
   IDs%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
@@ -2383,6 +2360,39 @@ subroutine register_diags(Time, G, GV, IDs, diag, C_p, missing, tv)
          'Heat flux into ocean from mass flux into ocean', 'W m-2')
   IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
          'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
+
+end subroutine register_surface_diags
+
+!> Register certain diagnostics
+subroutine register_diags(Time, G, GV, IDs, diag, missing)
+  type(time_type),         intent(in)    :: Time  !< current model time
+  type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
+  type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
+  type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
+  real,                    intent(in)    :: missing !< The value to use to fill in missing data
+
+  real :: H_convert
+  character(len=48) :: thickness_units
+
+  thickness_units = get_thickness_units(GV)
+  if (GV%Boussinesq) then
+    H_convert = GV%H_to_m
+  else
+    H_convert = GV%H_to_kg_m2
+  endif
+
+  ! Diagnostics of the rapidly varying dynamic state
+  IDs%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
+      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
+      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
+  IDs%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
+      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
+      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
+  IDs%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
+      'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
+  IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
+      'Instantaneous Sea Surface Height', 'm', missing)
 
   ! Diagnostics related to tracer and mass transport
   IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
@@ -2529,7 +2539,7 @@ end function transport_remap_grid_needed
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
 subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, ssh, fluxes)
-  type(MOM_diag_IDs),       intent(in) :: IDs !< A structure with the diagnostic IDs.
+  type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
   type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
