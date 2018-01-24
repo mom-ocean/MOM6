@@ -32,6 +32,7 @@ use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
+use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_forcing_type,      only : forcing
@@ -105,8 +106,7 @@ type, public :: diagnostics_CS ; private
     KE_adv     => NULL(),&  ! KE source from along-layer advection
     KE_visc    => NULL(),&  ! KE source from vertical viscosity
     KE_horvisc => NULL(),&  ! KE source from horizontal viscosity
-    KE_dia     => NULL(),&  ! KE source from diapycnal diffusion
-    diag_tmp3d => NULL()    ! 3D re-usable arrays for diagnostics
+    KE_dia     => NULL()    ! KE source from diapycnal diffusion
 
   ! diagnostic IDs
   integer :: id_e              = -1, id_e_D            = -1
@@ -128,6 +128,8 @@ type, public :: diagnostics_CS ; private
   integer :: id_mass_wt        = -1, id_col_mass       = -1
   integer :: id_masscello      = -1, id_masso          = -1
   integer :: id_volcello       = -1
+  integer :: id_Tpot           = -1, id_Sprac          = -1
+  integer :: id_tob            = -1, id_sob            = -1
   integer :: id_thetaoga       = -1, id_soga           = -1
   integer :: id_sosga          = -1, id_tosga          = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
@@ -192,6 +194,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
 
   ! coordinate variable potential density, in kg m-3.
   real :: Rcv(SZI_(G),SZJ_(G),SZK_(G))
+  ! Two temporary work arrays
+  real :: work_3d(SZI_(G),SZJ_(G),SZK_(G))
+  real :: work_2d(SZI_(G),SZJ_(G))
 
   ! tmp array for surface properties
   real :: surface_field(SZI_(G),SZJ_(G))
@@ -253,17 +258,18 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   ! mass per area of grid cell (for Bouss, use Rho0)
   if (CS%id_masscello > 0) then
     do k=1,nz; do j=js,je ; do i=is,ie
-       CS%diag_tmp3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
+      work_3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)
     enddo ; enddo ; enddo
-    call post_data(CS%id_masscello, CS%diag_tmp3d, CS%diag)
+    call post_data(CS%id_masscello, work_3d, CS%diag)
   endif
 
   ! mass of liquid ocean (for Bouss, use Rho0)
   if (CS%id_masso > 0) then
-    do k=1,nz; do j=js,je ; do i=is,ie
-       CS%diag_tmp3d(i,j,k) = GV%H_to_kg_m2*h(i,j,k)*G%areaT(i,j)
+    work_2d(:,:) = 0.0
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      work_2d(i,j) = work_2d(i,j) + (GV%H_to_kg_m2*h(i,j,k)) * G%areaT(i,j)
     enddo ; enddo ; enddo
-    masso = (reproducing_sum(sum(CS%diag_tmp3d,3)))
+    masso = reproducing_sum(work_2d)
     call post_data(CS%id_masso, masso, CS%diag)
   endif
 
@@ -273,9 +279,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, GV%H_to_m*h, CS%diag)
       if (CS%id_volcello > 0) then ! volcello = h*area for Boussinesq
         do k=1,nz; do j=js,je ; do i=is,ie
-          CS%diag_tmp3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
+          work_3d(i,j,k) = ( GV%H_to_m*h(i,j,k) ) * G%areaT(i,j)
         enddo ; enddo ; enddo
-        call post_data(CS%id_volcello, CS%diag_tmp3d, CS%diag)
+        call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
@@ -292,25 +298,59 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
           do i=is,ie ! Pressure for EOS at the layer center (Pa)
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
-          ! Store in-situ density (kg/m3) in diag_tmp3d
+          ! Store in-situ density (kg/m3) in work_3d
           call calculate_density(tv%T(:,j,k),tv%S(:,j,k), pressure_1d, &
-                                 CS%diag_tmp3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
-          do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in diag_tmp3d
-            CS%diag_tmp3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k))/CS%diag_tmp3d(i,j,k)
+                                 work_3d(:,j,k), is, ie-is+1, tv%eqn_of_state)
+          do i=is,ie ! Cell thickness = dz = dp/(g*rho) (meter); store in work_3d
+            work_3d(i,j,k) = (GV%H_to_kg_m2*h(i,j,k)) / work_3d(i,j,k)
           enddo
           do i=is,ie ! Pressure for EOS at the bottom interface (Pa)
             pressure_1d(i) = pressure_1d(i) + 0.5*(GV%g_Earth*GV%H_to_kg_m2)*h(i,j,k)
           enddo
         enddo ! k
       enddo ! j
-      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, CS%diag_tmp3d, CS%diag)
+      if (CS%id_thkcello > 0) call post_data(CS%id_thkcello, work_3d, CS%diag)
       if (CS%id_volcello > 0) then
         do k=1,nz; do j=js,je ; do i=is,ie ! volcello = dp/(rho*g)*area for non-Boussinesq
-          CS%diag_tmp3d(i,j,k) = G%areaT(i,j) * CS%diag_tmp3d(i,j,k)
+          work_3d(i,j,k) = G%areaT(i,j) * work_3d(i,j,k)
         enddo ; enddo ; enddo
-        call post_data(CS%id_volcello, CS%diag_tmp3d, CS%diag)
+        call post_data(CS%id_volcello, work_3d, CS%diag)
       endif
     endif
+  endif
+
+  ! Calculate additional, potentially derived temperature diagnostics
+  if (tv%T_is_conT) then
+    ! Internal T&S variables are conservative temperature & absolute salinity,
+    ! so they need to converted to potential temperature and practical salinity
+    ! for some diagnostics using TEOS-10 function calls.
+    if ((CS%id_Tpot > 0) .or. (CS%id_tob > 0)) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work_3d(i,j,k) = gsw_pt_from_ct(tv%S(i,j,k),tv%T(i,j,k))
+      enddo; enddo ; enddo
+      if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
+      if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+    endif
+  else
+    ! Internal T&S variables are potential temperature & practical salinity
+    if (CS%id_tob > 0) call post_data(CS%id_tob, tv%T(:,:,nz), CS%diag, mask=G%mask2dT)
+  endif
+
+  ! Calculate additional, potentially derived salinity diagnostics
+  if (tv%S_is_absS) then
+    ! Internal T&S variables are conservative temperature & absolute salinity,
+    ! so they need to converted to potential temperature and practical salinity
+    ! for some diagnostics using TEOS-10 function calls.
+    if ((CS%id_Sprac > 0) .or. (CS%id_sob > 0)) then
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work_3d(i,j,k) = gsw_sp_from_sr(tv%S(i,j,k))
+      enddo; enddo ; enddo
+      if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
+      if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+    endif
+  else
+    ! Internal T&S variables are potential temperature & practical salinity
+    if (CS%id_sob > 0) call post_data(CS%id_sob, tv%S(:,:,nz), CS%diag, mask=G%mask2dT)
   endif
 
   ! volume mean potential temperature
@@ -1074,8 +1114,9 @@ subroutine calculate_derivs(dt, G, CS)
 
 end subroutine calculate_derivs
 
-! #@# This subroutine needs a doxygen description
-subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS)
+!> This subroutine registers various diagnostics and allocates space for fields
+!! that other diagnostis depend upon.
+subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS, tv)
   type(ocean_internal_state), intent(in)    :: MIS  !< For "MOM Internal State" a set of pointers to
                                                     !! the fields and accelerations that make up the
                                                     !! ocean's internal physical state.
@@ -1091,6 +1132,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   type(diag_ctrl), target,    intent(inout) :: diag !< Structure to regulate diagnostic output.
   type(diagnostics_CS),       pointer       :: CS   !< Pointer set to point to control structure
                                                     !! for this module.
+  type(thermo_var_ptrs),      intent(in)    :: tv   !< A structure pointing to various
+                                                    !! thermodynamic variables.
 
 ! Arguments
 !  (in)     MIS    - For "MOM Internal State" a set of pointers to the fields and
@@ -1112,6 +1155,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
   real :: omega, f2_min, convert_H
   character(len=48) :: thickness_units, flux_units
+  logical :: use_temperature
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz, nkml, nkbl
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
 
@@ -1128,6 +1172,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   allocate(CS)
 
   CS%diag => diag
+  use_temperature = ASSOCIATED(tv%T)
+
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
@@ -1146,12 +1192,6 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
     thickness_units = "kg m-2" ; flux_units = "kg s-1" ; convert_H = GV%H_to_kg_m2
   endif
 
-  CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', diag%axesZL, Time, &
-      'Layer Average Ocean Temperature', 'degC')
-
-  CS%id_salt_layer_ave = register_diag_field('ocean_model', 'salt_layer_ave', diag%axesZL, Time, &
-      'Layer Average Ocean Salinity', 'psu')
-
   CS%id_masscello = register_diag_field('ocean_model', 'masscello', diag%axesTL,&
       Time, 'Mass per unit area of liquid ocean grid cell', 'kg m-2',           &
       standard_name='sea_water_mass_per_unit_area', v_extensive=.true.)
@@ -1167,30 +1207,46 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   ! by this module.
   CS%id_volcello = diag_get_volume_cell_measure_dm_id(diag)
 
-  if ((((CS%id_masscello>0) .or. (CS%id_masso>0) .or. (CS%id_volcello>0) .or. &
-      (CS%id_thkcello>0.and..not.GV%Boussinesq)) ) .and. .not.ASSOCIATED(CS%diag_tmp3d)) then
-    call safe_alloc_ptr(CS%diag_tmp3d,isd,ied,jsd,jed,nz)
+  if (use_temperature) then
+    if (tv%T_is_conT) then
+      CS%id_Tpot = register_diag_field('ocean_model', 'temp', diag%axesTL, &
+          Time, 'Potential Temperature', 'degC')
+    endif
+    if (tv%S_is_absS) then
+      CS%id_Sprac = register_diag_field('ocean_model', 'salt', diag%axesTL, &
+          Time, 'Salinity', 'psu')
+    endif
+
+    CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time, &
+        long_name='Sea Water Potential Temperature at Sea Floor', &
+        standard_name='sea_water_potential_temperature_at_sea_floor', units='degC')
+    CS%id_sob = register_diag_field('ocean_model','sob',diag%axesT1, Time, &
+        long_name='Sea Water Salinity at Sea Floor', &
+        standard_name='sea_water_salinity_at_sea_floor', units='psu')
+
+    CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &
+        diag%axesZL, Time, 'Layer Average Ocean Temperature', 'degC')
+    CS%id_salt_layer_ave = register_diag_field('ocean_model', 'salt_layer_ave', &
+        diag%axesZL, Time, 'Layer Average Ocean Salinity', 'psu')
+
+    CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga', &
+        Time, diag, 'Global Mean Ocean Potential Temperature', 'degC',&
+        standard_name='sea_water_potential_temperature')
+    CS%id_soga = register_scalar_field('ocean_model', 'soga', &
+        Time, diag, 'Global Mean Ocean Salinity', 'psu', &
+        standard_name='sea_water_salinity')
+
+    CS%id_tosga = register_scalar_field('ocean_model', 'sst_global', Time, diag,&
+        long_name='Global Area Average Sea Surface Temperature',                &
+        units='degC', standard_name='sea_surface_temperature',                  &
+        cmor_field_name='tosga', cmor_standard_name='sea_surface_temperature',  &
+        cmor_long_name='Sea Surface Temperature')
+    CS%id_sosga = register_scalar_field('ocean_model', 'sss_global', Time, diag,&
+        long_name='Global Area Average Sea Surface Salinity',                   &
+        units='psu', standard_name='sea_surface_salinity',                      &
+        cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity',     &
+        cmor_long_name='Sea Surface Salinity')
   endif
-
-  CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga',    &
-      Time, diag, 'Global Mean Ocean Potential Temperature', 'degC',&
-      standard_name='sea_water_potential_temperature')
-
-  CS%id_soga = register_scalar_field('ocean_model', 'soga', &
-      Time, diag, 'Global Mean Ocean Salinity', 'psu',      &
-      standard_name='sea_water_salinity')
-
-  CS%id_tosga = register_scalar_field('ocean_model', 'sst_global', Time, diag,&
-      long_name='Global Area Average Sea Surface Temperature',                &
-      units='degC', standard_name='sea_surface_temperature',                  &
-      cmor_field_name='tosga', cmor_standard_name='sea_surface_temperature',  &
-      cmor_long_name='Sea Surface Temperature')
-
-  CS%id_sosga = register_scalar_field('ocean_model', 'sss_global', Time, diag,&
-      long_name='Global Area Average Sea Surface Salinity',                   &
-      units='psu', standard_name='sea_surface_salinity',                      &
-      cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity',     &
-      cmor_long_name='Sea Surface Salinity')
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'm')
@@ -1331,17 +1387,19 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time,  &
       'The column mass for calculating mass-weighted average properties', 'kg m-2')
 
-  CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time,                &
-      'Density weighted column integrated potential temperature', 'degC kg m-2',                    &
-      cmor_field_name='opottempmint',                                                               &
-      cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_potential_temperature',&
-      cmor_standard_name='Depth integrated density times potential temperature')
+  if (use_temperature) then
+    CS%id_temp_int = register_diag_field('ocean_model', 'temp_int', diag%axesT1, Time,                &
+        'Density weighted column integrated potential temperature', 'degC kg m-2',                    &
+        cmor_field_name='opottempmint',                                                               &
+        cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_potential_temperature',&
+        cmor_standard_name='Depth integrated density times potential temperature')
 
-  CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time,   &
-      'Density weighted column integrated salinity', 'psu kg m-2',                     &
-      cmor_field_name='somint',                                                        &
-      cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_salinity',&
-      cmor_standard_name='Depth integrated density times salinity')
+    CS%id_salt_int = register_diag_field('ocean_model', 'salt_int', diag%axesT1, Time,   &
+        'Density weighted column integrated salinity', 'psu kg m-2',                     &
+        cmor_field_name='somint',                                                        &
+        cmor_long_name='integral_wrt_depth_of_product_of_sea_water_density_and_salinity',&
+        cmor_standard_name='Depth integrated density times salinity')
+  endif
 
   CS%id_col_mass = register_diag_field('ocean_model', 'col_mass', diag%axesT1, Time, &
       'The column integrated in situ density', 'kg m-2')
@@ -1447,7 +1505,6 @@ subroutine MOM_diagnostics_end(CS, ADp)
   if (ASSOCIATED(CS%vh_Rlay))    deallocate(CS%vh_Rlay)
   if (ASSOCIATED(CS%uhGM_Rlay))  deallocate(CS%uhGM_Rlay)
   if (ASSOCIATED(CS%vhGM_Rlay))  deallocate(CS%vhGM_Rlay)
-  if (ASSOCIATED(CS%diag_tmp3d)) deallocate(CS%diag_tmp3d)
 
   if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
   if (ASSOCIATED(ADp%gradKEu))    deallocate(ADp%gradKEu)
