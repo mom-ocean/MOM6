@@ -30,7 +30,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
-  use MOM,                 only : step_offline
+  use MOM,                 only : MOM_state_type, step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -169,6 +169,7 @@ program MOM_main
                                  ! a previous integration of the prognostic model
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
+  type(MOM_state_type),      pointer :: MSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
@@ -279,20 +280,20 @@ program MOM_main
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
     ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
   endif
-  fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
+  fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
   Master_Time = Time
-  grid => MOM_CSp%G
-  GV   => MOM_CSp%GV
-  call calculate_surface_state(sfc_state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                               MOM_CSp%ave_ssh, grid, GV, MOM_CSp)
+  grid => MSp%G
+  GV   => MSp%GV
+  call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
+                               MOM_CSp%ave_ssh, grid, GV, MSp, MOM_CSp)
 
 
   call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
@@ -400,8 +401,8 @@ program MOM_main
   endif
 
 !  This has been moved inside the loop to be applied when n=1.
-!  call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-!                    MOM_CSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
+!  call write_energy(MSp%u, MSp%v, MSp%h, &
+!                    MSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   write_energy_time = Start_time + energysavedays * &
@@ -448,9 +449,9 @@ program MOM_main
     fluxes%dt_buoy_accum = time_step
 
     if (n==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
+      call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes)
 
-      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
+      call write_energy(MSp%u, MSp%v, MSp%h, MSp%tv, &
                         Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp, &
                         MOM_CSp%OBC)
     endif
@@ -458,9 +459,9 @@ program MOM_main
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
+      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
     else
-      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
     endif
 
 !   Time = Time + Time_step_ocean
@@ -504,8 +505,8 @@ program MOM_main
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
         (MOM_CSp%t_dyn_rel_adv == 0.0)) then
-      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                        MOM_CSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
+      call write_energy(MSp%u, MSp%v, MSp%h, &
+                        MSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
       write_energy_time = write_energy_time + energysavedays
@@ -587,7 +588,7 @@ program MOM_main
 
   call io_infra_end ; call MOM_infra_end
 
-  call MOM_end(MOM_CSp)
+  call MOM_end(MSp, MOM_CSp)
   if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
 
 end program MOM_main
