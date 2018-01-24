@@ -32,7 +32,7 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
 use MOM_coms,             only : reproducing_sum
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
-use MOM,                  only: initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+use MOM,                  only: initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
 use MOM,                  only: calculate_surface_state, allocate_surface_state
 use MOM,                  only: finish_MOM_initialization, step_offline
 use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
@@ -330,6 +330,7 @@ type, public :: ocean_state_type ; private
   type(verticalGrid_type), pointer :: GV => NULL() !< A pointer to a vertical grid
                               !! structure containing metrics and related information.
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
+  type(MOM_state_type),     pointer :: MSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
   type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
 end type ocean_state_type
@@ -825,11 +826,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, Time_in, &
       offline_tracer_mode=offline_tracer_mode, input_restart_file=input_restart_file)
-  OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
-  OS%C_p = OS%MOM_CSp%tv%C_p
-  OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
+  OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
+  OS%C_p = OS%MSp%tv%C_p
+  OS%fluxes%C_p = OS%MSp%tv%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -919,7 +920,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
   ! This call has been moved into the first call to update_ocean_model.
-!  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+!  call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
 !             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
@@ -938,9 +939,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
   if (present(gas_fields_ocn)) then
-    call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
-             OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
-             OS%grid, OS%GV, OS%MOM_CSp)
+    call calculate_surface_state(OS%state, OS%MSp%u, &
+             OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+             OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
   endif
@@ -968,9 +969,9 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%state, OS%MOM_CSp%u, &
-           OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
-           OS%grid, OS%GV, OS%MOM_CSp)
+  call calculate_surface_state(OS%state, OS%MSp%u, &
+           OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+           OS%grid, OS%GV, OS%Msp, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
@@ -1621,7 +1622,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                     glb%ocn_state%MOM_CSp%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
+                      glb%ocn_state%MOM_CSp%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()
@@ -1776,9 +1777,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   endif
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes)
 
-    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
   endif
@@ -1787,9 +1788,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   else
-    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
@@ -1812,7 +1813,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 !  See if it is time to write out the energy.
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
       (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
-    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
     OS%write_energy_time = OS%write_energy_time + OS%energysavedays
@@ -2454,7 +2455,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
   !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
   !GMM call save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
-  call MOM_end(Ocean_state%MOM_CSp)
+  call MOM_end(Ocean_state%MSp, Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
   !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
 

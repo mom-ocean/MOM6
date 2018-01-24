@@ -17,7 +17,7 @@ module ocean_model_mod
 ! in the same way as MOM4.
 !</OVERVIEW>
 
-use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
+use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
 use MOM, only : calculate_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
@@ -140,29 +140,29 @@ end type ocean_public_type
 type, public :: ocean_state_type ; private
   ! This type is private, and can therefore vary between different ocean models.
   logical :: is_ocean_PE = .false.  !< True if this is an ocean PE.
-  type(time_type) :: Time    ! The ocean model's time and master clock.
-  integer :: Restart_control ! An integer that is bit-tested to determine whether
-                             ! incremental restart files are saved and whether they
-                             ! have a time stamped name.  +1 (bit 0) for generic
-                             ! files and +2 (bit 1) for time-stamped files.  A
-                             ! restart file is saved at the end of a run segment
-                             ! unless Restart_control is negative.
+  type(time_type) :: Time    !< The ocean model's time and master clock.
+  integer :: Restart_control !< An integer that is bit-tested to determine whether
+                             !! incremental restart files are saved and whether they
+                             !! have a time stamped name.  +1 (bit 0) for generic
+                             !! files and +2 (bit 1) for time-stamped files.  A
+                             !! restart file is saved at the end of a run segment
+                             !! unless Restart_control is negative.
 
-  type(time_type) :: energysavedays            ! The interval between writing the energies
-                                               ! and other integral quantities of the run.
-  type(time_type) :: energysavedays_geometric  ! The starting interval for computing a geometric
-                                               ! progression of time deltas between calls to
-                                               ! write_energy. This interval will increase by a factor of 2.
-                                               ! after each call to write_energy.
-  logical         :: energysave_geometric      ! Logical to control whether calls to write_energy should
-                                               ! follow a geometric progression
-  type(time_type) :: write_energy_time         ! The next time to write to the energy file.
-  type(time_type) :: geometric_end_time        ! Time at which to stop the geometric progression
-                                               ! of calls to write_energy and revert to the standard
-                                               ! energysavedays interval
+  type(time_type) :: energysavedays            !< The interval between writing the energies
+                                               !! and other integral quantities of the run.
+  type(time_type) :: energysavedays_geometric  !< The starting interval for computing a geometric
+                                               !! progression of time deltas between calls to
+                                               !! write_energy. This interval will increase by a factor of 2.
+                                               !! after each call to write_energy.
+  logical         :: energysave_geometric      !< Logical to control whether calls to write_energy should
+                                               !! follow a geometric progression
+  type(time_type) :: write_energy_time         !< The next time to write to the energy file.
+  type(time_type) :: geometric_end_time        !< Time at which to stop the geometric progression
+                                               !! of calls to write_energy and revert to the standard
+                                               !! energysavedays interval
 
-  integer :: nstep = 0        ! The number of calls to update_ocean.
-  logical :: use_ice_shelf    ! If true, the ice shelf model is enabled.
+  integer :: nstep = 0        !< The number of calls to update_ocean.
+  logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
 
   ! Many of the following variables do not appear to belong here. -RWH
   logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
@@ -173,31 +173,41 @@ type, public :: ocean_state_type ; private
   real :: latent_heat_fusion  ! Latent heat of fusion
   real :: density_iceberg     ! A typical density of icebergs in kg/m3 (for ice rigidity)
 
-  type(ice_shelf_CS), pointer :: Ice_shelf_CSp => NULL()
-  logical :: restore_salinity ! If true, the coupled MOM driver adds a term to
-                              ! restore salinity to a specified value.
-  logical :: restore_temp     ! If true, the coupled MOM driver adds a term to
-                              ! restore sst to a specified value.
-  real :: press_to_z          ! A conversion factor between pressure and ocean
-                              ! depth in m, usually 1/(rho_0*g), in m Pa-1.
-  real :: C_p                 ! The heat capacity of seawater, in J K-1 kg-1.
+  logical :: restore_salinity !< If true, the coupled MOM driver adds a term to
+                              !! restore salinity to a specified value.
+  logical :: restore_temp     !< If true, the coupled MOM driver adds a term to
+                              !! restore sst to a specified value.
+  real :: press_to_z          !< A conversion factor between pressure and ocean
+                              !! depth in m, usually 1/(rho_0*g), in m Pa-1.
+  real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
 
-  type(directories) :: dirs   ! A structure containing several relevant directory paths.
+  type(directories) :: dirs   !< A structure containing several relevant directory paths.
   type(mech_forcing) :: forces !< A structure with the driving mechanical surface forces
-  type(forcing)   :: fluxes   ! A structure containing pointers to
-                              ! the thermodynamic ocean forcing fields.
-  type(forcing)   :: flux_tmp ! A secondary structure containing pointers to the
-                              ! ocean forcing fields for when multiple coupled
-                              ! timesteps are taken per thermodynamic step.
-  type(surface)   :: sfc_state ! A structure containing pointers to
-                              ! the ocean surface state fields.
-  type(ocean_grid_type), pointer :: grid => NULL() ! A pointer to a grid structure
-                              ! containing metrics and related information.
-  type(verticalGrid_type), pointer :: GV => NULL() ! A pointer to a vertical grid
-                              ! structure containing metrics and related information.
-  type(MOM_control_struct), pointer :: MOM_CSp => NULL()
-  type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
-  type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
+  type(forcing)   :: fluxes   !< A structure containing pointers to
+                              !! the thermodynamic ocean forcing fields.
+  type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
+                              !! ocean forcing fields for when multiple coupled
+                              !! timesteps are taken per thermodynamic step.
+  type(surface)   :: sfc_state !< A structure containing pointers to
+                              !! the ocean surface state fields.
+  type(ocean_grid_type), pointer :: &
+    grid => NULL()            !< A pointer to a grid structure containing metrics
+                              !! and related information.
+  type(verticalGrid_type), pointer :: &
+    GV => NULL()              !< A pointer to a structure containing information
+                              !! about the vertical grid.
+  type(MOM_control_struct), pointer :: &
+    MOM_CSp => NULL()         !< A pointer to the MOM control structure
+  type(MOM_state_type), pointer :: &
+    MSp => NULL()             !< A pointer to the MOM_state_type
+  type(ice_shelf_CS), pointer :: &
+    Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
+                              !! ice shelf model that couples with MOM6.  This
+                              !! is null if there is no ice shelf.
+  type(surface_forcing_CS), pointer :: &
+    forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
+  type(sum_output_CS), pointer :: &
+    sum_output_CSp => NULL()  !< A pointer to the MOM sum output control structure
 end type ocean_state_type
 
 contains
@@ -263,11 +273,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MOM_CSp, Time_in, &
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, Time_in, &
                       offline_tracer_mode=offline_tracer_mode)
-  OS%grid => OS%MOM_CSp%G ; OS%GV => OS%MOM_CSp%GV
-  OS%C_p = OS%MOM_CSp%tv%C_p
-  OS%fluxes%C_p = OS%MOM_CSp%tv%C_p
+  OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
+  OS%C_p = OS%MSp%tv%C_p
+  OS%fluxes%C_p = OS%MSp%tv%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -371,7 +381,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                             OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
   ! This call has been moved into the first call to update_ocean_model.
-  !  call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+  !  call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
   !             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   ! write_energy_time is the next integral multiple of energysavedays.
@@ -404,9 +414,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call coupler_type_set_diags(Ocean_sfc%fields, "ocean_sfc", &
                                 Ocean_sfc%axes(1:2), Time_in)
 
-    call calculate_surface_state(OS%sfc_state, OS%MOM_CSp%u, &
-             OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
-             OS%grid, OS%GV, OS%MOM_CSp)
+    call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
+             OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+             OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -560,9 +570,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes)
 
-    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
   endif
@@ -571,9 +581,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   else
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
@@ -598,7 +608,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%energysave_geometric) then
     if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%geometric_end_time) .and. &
         (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
-        call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+        call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                         OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                         OS%MOM_CSp%tracer_flow_CSp)
         OS%write_energy_time = OS%geometric_end_time + OS%energysavedays
@@ -608,7 +618,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
 
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
       (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
-    call write_energy(OS%MOM_CSp%u, OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%tv, &
+    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
     if (OS%energysave_geometric) then
@@ -803,7 +813,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
-  call MOM_end(Ocean_state%MOM_CSp)
+  call MOM_end(Ocean_state%MSp, Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
@@ -1029,9 +1039,9 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%sfc_state, OS%MOM_CSp%u, &
-           OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
-           OS%grid, OS%GV, OS%MOM_CSp)
+  call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
+           OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+           OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -1094,30 +1104,30 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
       to_mass = OS%GV%H_to_kg_m2
       if (OS%GV%Boussinesq) then
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-          value = value + to_mass*(OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j))
+          value = value + to_mass*(OS%MSp%h(i,j,k) * OS%grid%areaT(i,j))
         endif ; enddo ; enddo ; enddo
       else
         ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
         PSU_to_kg = 1.0e-3
         do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-          value = value + to_mass * ((1.0 - PSU_to_kg*OS%MOM_CSp%tv%S(i,j,k))*&
-                                  (OS%MOM_CSp%h(i,j,k) * OS%grid%areaT(i,j)))
+          value = value + to_mass * ((1.0 - PSU_to_kg*OS%MSp%tv%S(i,j,k))*&
+                                  (OS%MSp%h(i,j,k) * OS%grid%areaT(i,j)))
         endif ; enddo ; enddo ; enddo
       endif
     case (ISTOCK_HEAT)
       ! Return the heat content of the ocean on this PE in J.
       to_heat = OS%GV%H_to_kg_m2 * OS%C_p
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-        value = value + (to_heat * OS%MOM_CSp%tv%T(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
+        value = value + (to_heat * OS%MSp%tv%T(i,j,k)) * &
+                        (OS%MSp%h(i,j,k)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case (ISTOCK_SALT)
       ! Return the mass of the salt in the ocean on this PE in kg.
       ! The 1000 converts salinity in PSU to salt in kg kg-1.
       to_salt = OS%GV%H_to_kg_m2 / 1000.0
       do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-        value = value + (to_salt * OS%MOM_CSp%tv%S(i,j,k)) * &
-                        (OS%MOM_CSp%h(i,j,k)*OS%grid%areaT(i,j))
+        value = value + (to_salt * OS%MSp%tv%S(i,j,k)) * &
+                        (OS%MSp%h(i,j,k)*OS%grid%areaT(i,j))
       endif ; enddo ; enddo ; enddo
     case default ; value = 0.0
   end select
