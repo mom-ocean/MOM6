@@ -153,11 +153,14 @@ type MOM_diag_IDs
   integer :: id_u  = -1, id_v  = -1, id_h  = -1
   ! 2-d state field
   integer :: id_ssh_inst = -1
+end type MOM_diag_IDs
 
+!> A structure with diagnostic IDs of mass transport related diagnostics
+type transport_diag_IDs
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-end type MOM_diag_IDs
+end type transport_diag_IDs
 
 !> Control structure for this module
 type, public :: MOM_control_struct
@@ -291,6 +294,7 @@ type, public :: MOM_control_struct
   logical :: tendency_diagnostics = .false.
 
   type(MOM_diag_IDs) :: IDs
+  type(transport_diag_IDs) :: transport_IDs
   type(surface_diag_IDs) :: sfc_IDs
 
   ! The remainder provides pointers to child module control structures.
@@ -688,7 +692,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     endif
 
     ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    if (transport_remap_grid_needed(IDs)) then
+    if (transport_remap_grid_needed(CS%transport_IDs)) then
       do k=1,nz ; do j=jsd,jed ; do i=isd,ied
         h_pre_dyn(i,j,k) = h(i,j,k)
         if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
@@ -958,8 +962,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-  call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%IDs, CS%diag, CS%t_dyn_rel_adv, &
-                                  CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+  call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
+           CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -2148,6 +2152,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   ! now register some diagnostics since the tracer registry is now locked
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, CS%tv)
   call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
+  call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag, CS%missing)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
@@ -2296,6 +2301,26 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
       'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
       'Instantaneous Sea Surface Height', 'm', missing)
+end subroutine register_diags
+
+!> Register certain diagnostics related to transports
+subroutine register_transport_diags(Time, G, GV, IDs, diag, missing)
+  type(time_type),          intent(in)    :: Time  !< current model time
+  type(ocean_grid_type),    intent(in)    :: G     !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV    !< ocean vertical grid structure
+  type(transport_diag_IDs), intent(inout) :: IDs   !< A structure with the diagnostic IDs.
+  type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
+  real,                     intent(in)    :: missing !< The value to use to fill in missing data
+
+  real :: H_convert
+  character(len=48) :: thickness_units
+
+  thickness_units = get_thickness_units(GV)
+  if (GV%Boussinesq) then
+    H_convert = GV%H_to_m
+  else
+    H_convert = GV%H_to_kg_m2
+  endif
 
   ! Diagnostics related to tracer and mass transport
   IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
@@ -2317,7 +2342,7 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
 
-end subroutine register_diags
+end subroutine register_transport_diags
 
 !> This subroutine sets up clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
@@ -2363,7 +2388,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans,
                                                   !! used to advect tracers (m3 or kg)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h   !< The updated layer thicknesses, in H
-  type(MOM_diag_IDs),       intent(in)    :: IDs !< A structure with the diagnostic IDs.
+  type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
   real,                     intent(in)    :: dt_trans !< total time step associated with the transports, in s.
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
@@ -2430,7 +2455,7 @@ end subroutine post_transport_diagnostics
 !> Indicate whether it is necessary to save and recalculate the grid for finding
 !! remapped transports.
 function transport_remap_grid_needed(IDs) result(needed)
-  type(MOM_diag_IDs),       intent(in)    :: IDs !< A structure with the diagnostic IDs
+  type(transport_diag_IDs), intent(in)    :: IDs !< A structure with transport-related diagnostic IDs
   logical :: needed
 
   needed = .false.
