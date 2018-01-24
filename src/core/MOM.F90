@@ -76,7 +76,8 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_C
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
-use MOM_diagnostics,           only : diagnostics_CS
+use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs
+use MOM_diagnostics,           only : register_surface_diags, post_surface_diagnostics
 use MOM_diag_to_Z,             only : calculate_Z_diag_fields, calculate_Z_transport
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, register_Z_tracer, diag_to_Z_CS
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_end
@@ -157,31 +158,6 @@ type MOM_diag_IDs
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
 end type MOM_diag_IDs
-
-!> A structure with diagnostic IDs of the surface and integrated variables
-type surface_diag_IDs
-  ! 2-d surface and bottom fields
-  integer :: id_zos      = -1
-  integer :: id_zossq    = -1
-  integer :: id_volo     = -1
-  integer :: id_ssh      = -1
-  integer :: id_ssh_ga   = -1
-  integer :: id_sst      = -1
-  integer :: id_sst_sq   = -1
-  integer :: id_sss      = -1
-  integer :: id_sss_sq   = -1
-  integer :: id_ssu      = -1
-  integer :: id_ssv      = -1
-  integer :: id_speed    = -1
-  integer :: id_sstcon   = -1
-  integer :: id_sssabs   = -1
-
-  ! heat and salt flux fields
-  integer :: id_fraz         = -1
-  integer :: id_salt_deficit = -1
-  integer :: id_Heat_PmE     = -1
-  integer :: id_intern_heat  = -1
-end type surface_diag_IDs
 
 !> Control structure for this module
 type, public :: MOM_control_struct
@@ -2291,79 +2267,6 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes)
 end subroutine finish_MOM_initialization
 
 !> Register certain diagnostics
-subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
-  type(time_type),         intent(in)    :: Time  !< current model time
-  type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
-  type(surface_diag_IDs),  intent(inout) :: IDs   !< A structure with the diagnostic IDs.
-  type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
-  real,                    intent(in)    :: missing !< The value to use to fill in missing data
-  type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various thermodynamic variables
-
-  ! Vertically integrated, budget, and surface state diagnostics
-  IDs%id_volo = register_scalar_field('ocean_model', 'volo', Time, diag,&
-      long_name='Total volume of liquid ocean', units='m3',            &
-      standard_name='sea_water_volume')
-  IDs%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
-      standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='m', missing_value=missing)
-  IDs%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
-      standard_name='square_of_sea_surface_height_above_geoid',             &
-      long_name='Square of sea surface height above geoid', units='m2', missing_value=missing)
-  IDs%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'm', missing)
-  IDs%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
-      long_name='Area averaged sea surface height', units='m',            &
-      standard_name='area_averaged_sea_surface_height')
-  IDs%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'm s-1', missing)
-  IDs%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'm s-1', missing)
-  IDs%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'm s-1', missing)
-
-  if (associated(tv%T)) then
-    IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'degC', missing, cmor_field_name='tos', &
-        cmor_long_name='Sea Surface Temperature',                                &
-        cmor_standard_name='sea_surface_temperature')
-    IDs%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'degC2', missing, cmor_field_name='tossq', &
-        cmor_long_name='Square of Sea Surface Temperature ',                      &
-        cmor_standard_name='square_of_sea_surface_temperature')
-    IDs%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'psu', missing, cmor_field_name='sos', &
-        cmor_long_name='Sea Surface Salinity',                            &
-        cmor_standard_name='sea_surface_salinity')
-    IDs%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'psu', missing, cmor_field_name='sossq', &
-        cmor_long_name='Square of Sea Surface Salinity ',                     &
-        cmor_standard_name='square_of_sea_surface_salinity')
-    if (tv%T_is_conT) then
-      IDs%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-          'Sea Surface Conservative Temperature', 'Celsius', missing)
-    endif
-    if (tv%S_is_absS) then
-      IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g kg-1', missing)
-    endif
-    if (ASSOCIATED(tv%frazil)) then
-      IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
-            'Heat from frazil formation', 'W m-2', cmor_field_name='hfsifrazil', &
-            cmor_standard_name='heat_flux_into_sea_water_due_to_frazil_ice_formation', &
-            cmor_long_name='Heat Flux into Sea Water due to Frazil Ice Formation')
-    endif
-  endif
-
-  IDs%id_salt_deficit = register_diag_field('ocean_model', 'salt_deficit', diag%axesT1, Time, &
-         'Salt sink in ocean due to ice flux', 'psu m-2 s-1')
-  IDs%id_Heat_PmE = register_diag_field('ocean_model', 'Heat_PmE', diag%axesT1, Time, &
-         'Heat flux into ocean from mass flux into ocean', 'W m-2')
-  IDs%id_intern_heat = register_diag_field('ocean_model', 'internal_heat', diag%axesT1, Time,&
-         'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
-
-end subroutine register_surface_diags
-
-!> Register certain diagnostics
 subroutine register_diags(Time, G, GV, IDs, diag, missing)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
@@ -2534,167 +2437,6 @@ function transport_remap_grid_needed(IDs) result(needed)
   needed = needed .or. (IDs%id_uhtr > 0) .or. (IDs%id_vhtr > 0)
   needed = needed .or. (IDs%id_umo > 0)  .or. (IDs%id_vmo > 0)
 end function transport_remap_grid_needed
-
-
-!> This routine posts diagnostics of various ocean surface and integrated
-!! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, ssh, fluxes)
-  type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
-  type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
-  type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
-  type(diag_ctrl),          intent(in) :: diag  !< regulates diagnostic output
-  real,                     intent(in) :: dt_int !< total time step associated with these diagnostics, in s.
-  type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
-  type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
-  real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without
-                                              !! corrections for ice displacement(m)
-  type(forcing),            intent(in) :: fluxes !< pointers to forcing fields
-
-  real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    zos  ! dynamic sea lev (zero area mean) from inverse-barometer adjusted ssh (meter)
-  real :: I_time_int    ! The inverse of the time interval in s-1.
-  real :: zos_area_mean, volo, ssh_ga
-  integer :: i, j, is, ie, js, je
-
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  ! area mean SSH
-  if (IDs%id_ssh_ga > 0) then
-    ssh_ga = global_area_mean(ssh, G)
-    call post_data(IDs%id_ssh_ga, ssh_ga, diag)
-  endif
-
-  I_time_int = 1.0 / dt_int
-  if (IDs%id_ssh > 0) &
-    call post_data(IDs%id_ssh, ssh, diag, mask=G%mask2dT)
-
-  ! post the dynamic sea level, zos, and zossq.
-  ! zos is ave_ssh with sea ice inverse barometer removed,
-  ! and with zero global area mean.
-  if (IDs%id_zos > 0 .or. IDs%id_zossq > 0) then
-    zos(:,:) = 0.0
-    do j=js,je ; do i=is,ie
-      zos(i,j) = ssh(i,j)
-    enddo ; enddo
-    if (ASSOCIATED(fluxes%p_surf)) then
-      do j=js,je ; do i=is,ie
-        zos(i,j) = zos(i,j) + G%mask2dT(i,j)*fluxes%p_surf(i,j) / &
-                             (GV%Rho0 * GV%g_Earth)
-      enddo ; enddo
-    endif
-    zos_area_mean = global_area_mean(zos, G)
-    do j=js,je ; do i=is,ie
-      zos(i,j) = zos(i,j) - G%mask2dT(i,j)*zos_area_mean
-    enddo ; enddo
-    if (IDs%id_zos > 0) call post_data(IDs%id_zos, zos, diag, mask=G%mask2dT)
-    if (IDs%id_zossq > 0) then
-      do j=js,je ; do i=is,ie
-        work_2d(i,j) = zos(i,j)*zos(i,j)
-      enddo ; enddo
-      call post_data(IDs%id_zossq, work_2d, diag, mask=G%mask2dT)
-    endif
-  endif
-
-  ! post total volume of the liquid ocean
-  if (IDs%id_volo > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = G%mask2dT(i,j)*(ssh(i,j) + G%bathyT(i,j))
-    enddo ; enddo
-    volo = global_area_integral(work_2d, G)
-    call post_data(IDs%id_volo, volo, diag)
-  endif
-
-  ! post time-averaged rate of frazil formation
-  if (ASSOCIATED(tv%frazil) .and. (IDs%id_fraz > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%frazil(i,j) * I_time_int
-    enddo ; enddo
-    call post_data(IDs%id_fraz, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  ! post time-averaged salt deficit
-  if (ASSOCIATED(tv%salt_deficit) .and. (IDs%id_salt_deficit > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%salt_deficit(i,j) * I_time_int
-    enddo ; enddo
-    call post_data(IDs%id_salt_deficit, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  ! post temperature of P-E+R
-  if (ASSOCIATED(tv%TempxPmE) .and. (IDs%id_Heat_PmE > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%TempxPmE(i,j) * (tv%C_p * I_time_int)
-    enddo ; enddo
-    call post_data(IDs%id_Heat_PmE, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  ! post geothermal heating or internal heat source/sinks
-  if (ASSOCIATED(tv%internal_heat) .and. (IDs%id_intern_heat > 0)) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = tv%internal_heat(i,j) * (tv%C_p * I_time_int)
-    enddo ; enddo
-    call post_data(IDs%id_intern_heat, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  if (tv%T_is_conT) then
-    ! Internal T&S variables are conservative temperature & absolute salinity
-    if (IDs%id_sstcon > 0) call post_data(IDs%id_sstcon, sfc_state%SST, diag, mask=G%mask2dT)
-    ! Use TEOS-10 function calls convert T&S diagnostics from conservative temp
-    ! to potential temperature.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_pt_from_ct(sfc_state%SSS(i,j),sfc_state%SST(i,j))
-    enddo ; enddo
-    if (IDs%id_sst > 0) call post_data(IDs%id_sst, work_2d, diag, mask=G%mask2dT)
-  else
-    ! Internal T&S variables are potential temperature & practical salinity
-    if (IDs%id_sst > 0) call post_data(IDs%id_sst, sfc_state%SST, diag, mask=G%mask2dT)
-  endif
-
-  if (tv%S_is_absS) then
-    ! Internal T&S variables are conservative temperature & absolute salinity
-    if (IDs%id_sssabs > 0) call post_data(IDs%id_sssabs, sfc_state%SSS, diag, mask=G%mask2dT)
-    ! Use TEOS-10 function calls convert T&S diagnostics from absolute salinity
-    ! to practical salinity.
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = gsw_sp_from_sr(sfc_state%SSS(i,j))
-    enddo ; enddo
-    if (IDs%id_sss > 0) call post_data(IDs%id_sss, work_2d, diag, mask=G%mask2dT)
-  else
-    ! Internal T&S variables are potential temperature & practical salinity
-    if (IDs%id_sss > 0) call post_data(IDs%id_sss, sfc_state%SSS, diag, mask=G%mask2dT)
-  endif
-
-  if (IDs%id_sst_sq > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sfc_state%SST(i,j)*sfc_state%SST(i,j)
-    enddo ; enddo
-    call post_data(IDs%id_sst_sq, work_2d, diag, mask=G%mask2dT)
-  endif
-  if (IDs%id_sss_sq > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sfc_state%SSS(i,j)*sfc_state%SSS(i,j)
-    enddo ; enddo
-    call post_data(IDs%id_sss_sq, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  if (IDs%id_ssu > 0) &
-    call post_data(IDs%id_ssu, sfc_state%u, diag, mask=G%mask2dCu)
-  if (IDs%id_ssv > 0) &
-    call post_data(IDs%id_ssv, sfc_state%v, diag, mask=G%mask2dCv)
-
-  if (IDs%id_speed > 0) then
-    do j=js,je ; do i=is,ie
-      work_2d(i,j) = sqrt(0.5*(sfc_state%u(I-1,j)**2 + sfc_state%u(I,j)**2) + &
-                            0.5*(sfc_state%v(i,J-1)**2 + sfc_state%v(i,J)**2))
-    enddo ; enddo
-    call post_data(IDs%id_speed, work_2d, diag, mask=G%mask2dT)
-  endif
-
-  call coupler_type_send_data(sfc_state%tr_fields, get_diag_time_end(diag))
-
-end subroutine post_surface_diagnostics
 
 
 !> Offers the static fields in the ocean grid type
