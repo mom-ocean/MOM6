@@ -35,7 +35,7 @@ use MOM_forcing_type, only : forcing_diagnostics, mech_forcing_diags
 use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
-use MOM_restart, only : save_restart
+use MOM_restart, only : MOM_restart_CS, save_restart
 use MOM_sum_output, only : write_energy, accumulate_net_input
 use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
 use MOM_string_functions, only : uppercase
@@ -208,6 +208,9 @@ type, public :: ocean_state_type ; private
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(sum_output_CS), pointer :: &
     sum_output_CSp => NULL()  !< A pointer to the MOM sum output control structure
+  type(MOM_restart_CS), pointer :: &
+    restart_CSp => NULL()     !< A pointer set to the restart control structure
+                              !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
 end type ocean_state_type
@@ -275,8 +278,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, Time_in, &
-                      offline_tracer_mode=offline_tracer_mode, diag_ptr=OS%diag)
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, OS%restart_CSp, &
+                      Time_in, offline_tracer_mode=offline_tracer_mode, &
+                      diag_ptr=OS%diag)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
   OS%fluxes%C_p = OS%MSp%tv%C_p
@@ -573,7 +577,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes, &
+                                   OS%restart_CSp)
 
     call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
@@ -768,7 +773,7 @@ subroutine ocean_model_restart(OS, timestamp)
 
   if (BTEST(OS%Restart_control,1)) then
     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                      OS%MOM_CSp%restart_CSp, .true., GV=OS%GV)
+                      OS%restart_CSp, .true., GV=OS%GV)
     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                               OS%dirs%restart_output_dir, .true.)
     if (OS%use_ice_shelf) then
@@ -777,7 +782,7 @@ subroutine ocean_model_restart(OS, timestamp)
   endif
   if (BTEST(OS%Restart_control,0)) then
     call save_restart(OS%dirs%restart_output_dir, OS%Time, OS%grid, &
-                      OS%MOM_CSp%restart_CSp, GV=OS%GV)
+                      OS%restart_CSp, GV=OS%GV)
     call forcing_save_restart(OS%forcing_CSp, OS%grid, OS%Time, &
                               OS%dirs%restart_output_dir)
     if (OS%use_ice_shelf) then
@@ -853,7 +858,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   if (present(directory)) then ; restart_dir = directory
   else ; restart_dir = OS%dirs%restart_output_dir ; endif
 
-  call save_restart(restart_dir, Time, OS%grid, OS%MOM_CSp%restart_CSp, GV=OS%GV)
+  call save_restart(restart_dir, Time, OS%grid, OS%restart_CSp, GV=OS%GV)
 
   call forcing_save_restart(OS%forcing_CSp, OS%grid, Time, restart_dir)
 

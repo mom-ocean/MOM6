@@ -43,7 +43,7 @@ program MOM_main
   use MOM_io,              only : file_exists, open_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
-  use MOM_restart,         only : save_restart
+  use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
   use MOM_sum_output,      only : write_energy, accumulate_net_input
   use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
@@ -175,6 +175,9 @@ program MOM_main
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(MOM_restart_CS),      pointer :: &
+    restart_CSp => NULL()     !< A pointer set to the restart control structure
+                              !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
@@ -283,13 +286,14 @@ program MOM_main
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
     ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, segment_start_time, &
-                        offline_tracer_mode = offline_tracer_mode, diag_ptr=diag)
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
+                        diag_ptr=diag)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, &
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
                        offline_tracer_mode=offline_tracer_mode, diag_ptr=diag)
   endif
   fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
@@ -456,7 +460,7 @@ program MOM_main
     fluxes%dt_buoy_accum = time_step
 
     if (n==1) then
-      call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes)
+      call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes, restart_CSp)
 
       call write_energy(MSp%u, MSp%v, MSp%h, MSp%tv, &
                         Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp, &
@@ -524,7 +528,7 @@ program MOM_main
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, .true., GV=GV)
+                          restart_CSp, .true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -532,7 +536,7 @@ program MOM_main
       endif
       if (BTEST(Restart_control,0)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, GV=GV)
+                          restart_CSp, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -556,7 +560,7 @@ program MOM_main
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")
 
-    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=GV)
+    call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.

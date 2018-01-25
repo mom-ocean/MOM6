@@ -320,7 +320,6 @@ type, public :: MOM_control_struct
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
-  type(MOM_restart_CS),          pointer :: restart_CSp            => NULL()
   type(update_OBC_CS),           pointer :: update_OBC_CSp         => NULL()
   type(ocean_OBC_type),          pointer :: OBC                    => NULL()
   type(sponge_CS),               pointer :: sponge_CSp             => NULL()
@@ -1353,13 +1352,16 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, MS
 end subroutine step_offline
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
+subroutine initialize_MOM(Time, param_file, dirs, MS, CS, restart_CSp, Time_in, &
                           offline_tracer_mode, input_restart_file, diag_ptr)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_state_type),      pointer       :: MS          !< pointer set in this routine to structure describing the MOM state
   type(MOM_control_struct),  pointer       :: CS          !< pointer set in this routine to MOM control structure
+  type(MOM_restart_CS),      pointer       :: restart_CSp !< pointer set in this routine to the
+                                                          !! restart control structure that will
+                                                          !! be used for MOM.
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
   logical,         optional, intent(out)   :: offline_tracer_mode !< True if tracers are being run offline
@@ -1720,7 +1722,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
      ((dirs%input_filename(1:1)=='n') .and. (LEN_TRIM(dirs%input_filename)==1))))
 ! If the restart file type had been initialized, this could become:
 !  write_geom_files = ((write_geom==2) .or. &
-!                      ((write_geom==1) .and. is_new_run(CS%restart_CSp)))
+!                      ((write_geom==1) .and. is_new_run(restart_CSp)))
 
   ! Check for inconsistent parameter settings.
   if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
@@ -1920,30 +1922,30 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
 
   ! Set the fields that are needed for bitwise identical restarting
   ! the time stepping scheme.
-  call restart_init(param_file, CS%restart_CSp)
-  call set_restart_fields(GV, param_file, MS, CS)
+  call restart_init(param_file, restart_CSp)
+  call set_restart_fields(GV, param_file, MS, CS, restart_CSp)
   if (CS%split) then
     call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
-             CS%dyn_split_RK2_CSp, CS%restart_CSp, MS%uh, MS%vh)
+             CS%dyn_split_RK2_CSp, restart_CSp, MS%uh, MS%vh)
   elseif (CS%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
-           CS%dyn_unsplit_RK2_CSp, CS%restart_CSp)
+           CS%dyn_unsplit_RK2_CSp, restart_CSp)
   else
     call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
-           CS%dyn_unsplit_CSp, CS%restart_CSp)
+           CS%dyn_unsplit_CSp, restart_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
   ! Additional calls can be added to MOM_tracer_flow_control.F90.
   call call_tracer_register(dG%HI, GV, param_file, CS%tracer_flow_CSp, &
-                            CS%tracer_Reg, CS%restart_CSp)
+                            CS%tracer_Reg, restart_CSp)
 
-  call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, CS%restart_CSp)
-  call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, CS%restart_CSp)
-  call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, CS%restart_CSp)
+  call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, restart_CSp)
+  call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, restart_CSp)
+  call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, restart_CSp)
 
   if (associated(CS%OBC)) &
-    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, CS%restart_CSp)
+    call open_boundary_register_restarts(dg%HI, GV, CS%OBC, restart_CSp)
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
 
@@ -1976,7 +1978,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
   G%ke = GV%ke ; G%g_Earth = GV%g_Earth
 
   call MOM_initialize_state(MS%u, MS%v, MS%h, MS%tv, Time, G, GV, param_file, &
-                            dirs, CS%restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
+                            dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
                             CS%sponge_CSp, CS%ALE_sponge_CSp, CS%OBC, Time_in)
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("returned from MOM_initialize_state() (initialize_MOM)")
@@ -2009,7 +2011,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
   ! remainder of this subroutine is controlled by the parameters that have
   ! have already been set.
 
-  if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(MS%h,"h",CS%restart_CSp)) then
+  if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(MS%h,"h",restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
     ! \todo This block exists for legacy reasons and we should phase it out of
     ! all examples. !###
@@ -2104,25 +2106,25 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, CS%restart_CSp)
+  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
 
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
   call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp,CS%OBC)
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(MS%u, MS%v, MS%h, MS%uh, MS%vh, eta, Time, &
-              G, GV, param_file, diag, CS%dyn_split_RK2_CSp, CS%restart_CSp, &
+              G, GV, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp,    &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc)
   elseif (CS%use_RK2) then
     call initialize_dyn_unsplit_RK2(MS%u, MS%v, MS%h, Time, G, GV,         &
-            param_file, diag, CS%dyn_unsplit_RK2_CSp, CS%restart_CSp,      &
+            param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
             CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   else
     call initialize_dyn_unsplit(MS%u, MS%v, MS%h, Time, G, GV,             &
-            param_file, diag, CS%dyn_unsplit_CSp, CS%restart_CSp,          &
+            param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
             CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   endif
@@ -2180,7 +2182,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
   endif
 
   ! This subroutine initializes any tracer packages.
-  new_sim = is_new_run(CS%restart_CSp)
+  new_sim = is_new_run(restart_CSp)
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, MS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
              CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, MS%tv)
@@ -2221,18 +2223,18 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
   call neutral_diffusion_diag_init(Time, G, diag, MS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
 
   if (CS%use_frazil) then
-    if (.not.query_initialized(MS%tv%frazil,"frazil",CS%restart_CSp)) &
+    if (.not.query_initialized(MS%tv%frazil,"frazil",restart_CSp)) &
       MS%tv%frazil(:,:) = 0.0
   endif
 
   if (CS%interp_p_surf) then
     CS%p_surf_prev_set = &
-      query_initialized(CS%p_surf_prev,"p_surf_prev",CS%restart_CSp)
+      query_initialized(CS%p_surf_prev,"p_surf_prev",restart_CSp)
 
     if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
 
-  if (.not.query_initialized(MS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
+  if (.not.query_initialized(MS%ave_ssh,"ave_ssh",restart_CSp)) then
     if (CS%split) then
       call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, MS%ave_ssh, eta)
     else
@@ -2252,12 +2254,14 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
 end subroutine initialize_MOM
 
 !> This subroutine finishes initializing MOM and writes out the initial conditions.
-subroutine finish_MOM_initialization(Time, dirs, MS, CS, fluxes)
-  type(time_type),           intent(in)    :: Time        !< model time, used in this routine
-  type(directories),         intent(in)    :: dirs        !< structure with directory paths
-  type(MOM_state_type),      pointer       :: MS          !< pointer to structure describing the MOM state
-  type(MOM_control_struct),  pointer       :: CS          !< pointer to MOM control structure
-  type(forcing),             intent(inout) :: fluxes      !< pointers to forcing fields
+subroutine finish_MOM_initialization(Time, dirs, MS, CS, fluxes, restart_CSp)
+  type(time_type),          intent(in)    :: Time        !< model time, used in this routine
+  type(directories),        intent(in)    :: dirs        !< structure with directory paths
+  type(MOM_state_type),     pointer       :: MS          !< pointer to structure describing the MOM state
+  type(MOM_control_struct), pointer       :: CS          !< pointer to MOM control structure
+  type(forcing),            intent(inout) :: fluxes      !< pointers to forcing fields
+  type(MOM_restart_CS),     pointer       :: restart_CSp !< pointer to the restart control
+                                                         !! structure that will be used for MOM.
   ! Local variables
   type(ocean_grid_type), pointer :: G => NULL()
   type(verticalGrid_type), pointer :: GV => NULL()
@@ -2275,7 +2279,7 @@ subroutine finish_MOM_initialization(Time, dirs, MS, CS, fluxes)
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
-    restart_CSp_tmp = CS%restart_CSp
+    restart_CSp_tmp = restart_CSp
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(G)+1))
     call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, z_interface)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
@@ -2655,11 +2659,13 @@ end subroutine write_static_fields
 !! This routine should be altered if there are any changes to the
 !! time stepping scheme.  The CHECK_RESTART facility may be used to
 !! confirm that all needed restart fields have been included.
-subroutine set_restart_fields(GV, param_file, MS, CS)
+subroutine set_restart_fields(GV, param_file, MS, CS, restart_CSp)
   type(verticalGrid_type),  intent(inout) :: GV         !< ocean vertical grid structure
   type(param_file_type),    intent(in) :: param_file    !< opened file for parsing to get parameters
   type(MOM_state_type),     intent(in) :: MS            !< structure describing the MOM state
   type(MOM_control_struct), intent(in) :: CS            !< control structure set up by inialize_MOM
+  type(MOM_restart_CS),     pointer    :: restart_CSp   !< pointer to the restart control
+                                                        !! structure that will be used for MOM.
   ! Local variables
   logical :: use_ice_shelf ! Needed to determine whether to add CS%Hml to restarts
   character(len=48) :: thickness_units, flux_units
@@ -2670,37 +2676,37 @@ subroutine set_restart_fields(GV, param_file, MS, CS)
   flux_units = get_flux_units(GV)
 
   if (CS%use_temperature) then
-    call register_restart_field(MS%tv%T, "Temp", .true., CS%restart_CSp, &
+    call register_restart_field(MS%tv%T, "Temp", .true., restart_CSp, &
                                 "Potential Temperature", "degC")
-    call register_restart_field(MS%tv%S, "Salt", .true., CS%restart_CSp, &
+    call register_restart_field(MS%tv%S, "Salt", .true., restart_CSp, &
                                 "Salinity", "PPT")
   endif
 
-  call register_restart_field(MS%h, "h", .true., CS%restart_CSp, &
+  call register_restart_field(MS%h, "h", .true., restart_CSp, &
                               "Layer Thickness", thickness_units)
 
-  call register_restart_field(MS%u, "u", .true., CS%restart_CSp, &
+  call register_restart_field(MS%u, "u", .true., restart_CSp, &
                               "Zonal velocity", "m s-1", hor_grid='Cu')
 
-  call register_restart_field(MS%v, "v", .true., CS%restart_CSp, &
+  call register_restart_field(MS%v, "v", .true., restart_CSp, &
                               "Meridional velocity", "m s-1", hor_grid='Cv')
 
   if (CS%use_frazil) then
-    call register_restart_field(MS%tv%frazil, "frazil", .false., CS%restart_CSp, &
+    call register_restart_field(MS%tv%frazil, "frazil", .false., restart_CSp, &
                                 "Frazil heat flux into ocean", "J m-2")
   endif
 
   if (CS%interp_p_surf) then
-    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., CS%restart_CSp, &
+    call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, &
                                 "Previous ocean surface pressure", "Pa")
   endif
 
-  call register_restart_field(MS%ave_ssh, "ave_ssh", .false., CS%restart_CSp, &
+  call register_restart_field(MS%ave_ssh, "ave_ssh", .false., restart_CSp, &
                               "Time average sea surface height", "meter")
 
   ! hML is needed when using the ice shelf module
   if (use_ice_shelf .and. associated(CS%Hml)) then
-     call register_restart_field(CS%Hml, "hML", .false., CS%restart_CSp, &
+     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
                                  "Mixed layer thickness", "meter")
   endif
 
