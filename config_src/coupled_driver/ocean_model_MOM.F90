@@ -208,6 +208,8 @@ type, public :: ocean_state_type ; private
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(sum_output_CS), pointer :: &
     sum_output_CSp => NULL()  !< A pointer to the MOM sum output control structure
+  type(diag_ctrl), pointer :: &
+    diag => NULL()            !< A pointer to the diagnostic regulatory structure
 end type ocean_state_type
 
 contains
@@ -258,7 +260,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
-  logical :: offline_tracer_mode
+  logical :: offline_tracer_mode, use_temperature
   type(time_type) :: dt_geometric, dt_savedays, dt_from_base
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
@@ -274,10 +276,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, Time_in, &
-                      offline_tracer_mode=offline_tracer_mode)
+                      offline_tracer_mode=offline_tracer_mode, diag_ptr=OS%diag)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
   OS%fluxes%C_p = OS%MSp%tv%C_p
+  use_temperature = ASSOCIATED(OS%MSp%tv%T)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -360,15 +363,15 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
-  call allocate_surface_state(OS%sfc_state, OS%grid, OS%MOM_CSp%use_temperature, &
+  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
 
-  call surface_forcing_init(Time_in, OS%grid, param_file, OS%MOM_CSp%diag, &
+  call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp)
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%MOM_CSp%diag, OS%forces, OS%fluxes)
+                              OS%diag, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_apply_rigid_boundary)  then
     !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
@@ -401,11 +404,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%MOM_CSp%diag, maskmap=OS%grid%Domain%maskmap, &
+                                      OS%diag, maskmap=OS%grid%Domain%maskmap, &
                                       gas_fields_ocn=gas_fields_ocn)
   else
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%MOM_CSp%diag, gas_fields_ocn=gas_fields_ocn)
+                                      OS%diag, gas_fields_ocn=gas_fields_ocn)
   endif
 
   ! This call can only occur here if the coupler_bc_type variables have been
@@ -415,7 +418,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                                 Ocean_sfc%axes(1:2), Time_in)
 
     call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-             OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+             OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
              OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
@@ -423,7 +426,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   endif
 
   call close_param_file(param_file)
-  call diag_mediator_close_registration(OS%MOM_CSp%diag)
+  call diag_mediator_close_registration(OS%diag)
 
   if (is_root_pe()) &
     write(*,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
@@ -520,7 +523,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   weight = 1.0
 
   if (OS%fluxes%fluxes_used) then
-    call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag) ! Needed to allow diagnostics in convert_IOB
+    call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag) ! Needed to allow diagnostics in convert_IOB
     call convert_IOB_to_fluxes(Ice_ocean_boundary, OS%forces, OS%fluxes, index_bnds, OS%Time, &
                                OS%grid, OS%forcing_CSp, OS%sfc_state, OS%restore_salinity,OS%restore_temp)
 
@@ -577,7 +580,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                       OS%MOM_CSp%tracer_flow_CSp)
   endif
 
-  call disable_averaging(OS%MOM_CSp%diag)
+  call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
@@ -589,25 +592,25 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
-  call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
+  call enable_averaging(time_step, OS%Time, OS%diag)
   call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
-                          OS%MOM_CSp%diag, OS%forcing_CSp%handles)
-  call disable_averaging(OS%MOM_CSp%diag)
+                          OS%diag, OS%forcing_CSp%handles)
+  call disable_averaging(OS%diag)
 
   if (OS%fluxes%fluxes_used) then
-    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%MOM_CSp%diag)
+    call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
     call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
-                             OS%grid, OS%MOM_CSp%diag, OS%forcing_CSp%handles)
+                             OS%grid, OS%diag, OS%forcing_CSp%handles)
     call accumulate_net_input(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
                               OS%grid, OS%sum_output_CSp)
-    call disable_averaging(OS%MOM_CSp%diag)
+    call disable_averaging(OS%diag)
   endif
 
 !  See if it is time to write out the energy.
 
   if (OS%energysave_geometric) then
     if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%geometric_end_time) .and. &
-        (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
+        (OS%MSp%t_dyn_rel_adv==0.0)) then
         call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                         OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                         OS%MOM_CSp%tracer_flow_CSp)
@@ -617,7 +620,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   endif
 
   if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
-      (OS%MOM_CSp%t_dyn_rel_adv==0.0)) then
+      (OS%MSp%t_dyn_rel_adv==0.0)) then
     call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
                       OS%MOM_CSp%tracer_flow_CSp)
@@ -756,7 +759,7 @@ subroutine ocean_model_restart(OS, timestamp)
   type(ocean_state_type),        pointer :: OS
   character(len=*), intent(in), optional :: timestamp
 
-  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
        "with inconsistent dynamics and advective times.  Additional restart fields "//&
        "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
@@ -812,7 +815,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 !  (in)      Time - The model time, used for writing restarts.
 
   call ocean_model_save_restart(Ocean_state, Time)
-  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
+  call diag_mediator_end(Time, Ocean_state%diag)
   call MOM_end(Ocean_state%MSp, Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
@@ -840,7 +843,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (OS%MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
        "with inconsistent dynamics and advective times.  Additional restart fields "//&
        "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
@@ -1040,7 +1043,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-           OS%MSp%v, OS%MSp%h, OS%MOM_CSp%ave_ssh,&
+           OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
            OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)

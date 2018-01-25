@@ -27,7 +27,7 @@ program MOM_main
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
+  use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
   use MOM,                 only : MOM_state_type, step_offline
@@ -160,6 +160,7 @@ program MOM_main
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
+  logical :: debug               ! If true, write verbose checksums for debugging purposes.
   logical :: offline_tracer_mode ! If false, use the model in prognostic mode where
                                  ! the barotropic and baroclinic dynamics, thermodynamics,
                                  ! etc. are stepped forward integrated in time.
@@ -174,6 +175,8 @@ program MOM_main
   type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(diag_ctrl), pointer :: &
+    diag => NULL()            !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -280,12 +283,14 @@ program MOM_main
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
     ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, segment_start_time, &
+                        offline_tracer_mode = offline_tracer_mode, diag_ptr=diag)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
+    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, &
+                       offline_tracer_mode=offline_tracer_mode, diag_ptr=diag)
   endif
   fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
@@ -293,10 +298,10 @@ program MOM_main
   grid => MSp%G
   GV   => MSp%GV
   call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
-                               MOM_CSp%ave_ssh, grid, GV, MSp, MOM_CSp)
+                               MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
 
 
-  call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
+  call surface_forcing_init(Time, grid, param_file, diag, &
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
@@ -306,7 +311,7 @@ program MOM_main
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              MOM_CSp%diag, forces, fluxes)
+                              diag, forces, fluxes)
   endif
 
   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
@@ -380,12 +385,14 @@ program MOM_main
                  "The interval in units of TIMEUNIT between saves of the \n"//&
                  "energies of the run and other globally summed diagnostics.", &
                  default=set_time(int(time_step+0.5)), timeunit=Time_unit)
+  call get_param(param_file, "MOM", "DEBUG", debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
 
   call log_param(param_file, mod_name, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration(MOM_CSp%diag)
+  call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
   if (calendar_type /= NO_CALENDAR) then
@@ -434,7 +441,7 @@ program MOM_main
         call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
     endif
-    if (MOM_CSp%debug) then
+    if (debug) then
       call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
       call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
     endif
@@ -484,18 +491,18 @@ program MOM_main
     endif
     Time = Master_Time
 
-    call enable_averaging(time_step, Time, MOM_CSp%diag)
-    call mech_forcing_diags(forces, fluxes, time_step, grid, MOM_CSp%diag, &
+    call enable_averaging(time_step, Time, diag)
+    call mech_forcing_diags(forces, fluxes, time_step, grid, diag, &
                             surface_forcing_CSp%handles)
-    call disable_averaging(MOM_CSp%diag)
+    call disable_averaging(diag)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
-        call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
+        call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
         call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, &
-                                 MOM_CSp%diag, surface_forcing_CSp%handles)
+                                 diag, surface_forcing_CSp%handles)
         call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
-        call disable_averaging(MOM_CSp%diag)
+        call disable_averaging(diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
                "thermodynamic time steps that are longer than the coupling timestep.")
@@ -504,7 +511,7 @@ program MOM_main
 
 !  See if it is time to write out the energy.
     if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
-        (MOM_CSp%t_dyn_rel_adv == 0.0)) then
+        (MSp%t_dyn_rel_adv == 0.0)) then
       call write_energy(MSp%u, MSp%v, MSp%h, &
                         MSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
                         MOM_CSp%tracer_flow_CSp)
@@ -541,7 +548,7 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+    if (MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
          "with inconsistent dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
      if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
@@ -583,7 +590,7 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
-  call diag_mediator_end(Time, MOM_CSp%diag, end_diag_manager=.true.)
+  call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end
