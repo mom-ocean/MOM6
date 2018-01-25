@@ -333,6 +333,9 @@ type, public :: ocean_state_type ; private
   type(MOM_state_type),     pointer :: MSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
   type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
+  type(MOM_restart_CS), pointer :: &
+    restart_CSp => NULL()     !< A pointer set to the restart control structure
+                              !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
 end type ocean_state_type
@@ -828,9 +831,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, Time_in, &
-      offline_tracer_mode=offline_tracer_mode, input_restart_file=input_restart_file, &
-      diag_ptr=OS%diag)
+  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
+                      OS%restart_CSp, Time_in, offline_tracer_mode=offline_tracer_mode, &
+                      input_restart_file=input_restart_file,  diag_ptr=OS%diag)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
   OS%fluxes%C_p = OS%MSp%tv%C_p
@@ -1626,7 +1629,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
     call save_restart(glb%ocn_state%dirs%restart_output_dir, glb%ocn_state%Time, glb%grid, &
-                      glb%ocn_state%MOM_CSp%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
+                      glb%ocn_state%restart_CSp, .false., filename=restartname,GV=glb%ocn_state%GV)
 
     ! write name of restart file in the rpointer file
     nu = shr_file_getUnit()
@@ -1781,7 +1784,8 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   endif
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes)
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes, &
+                                   OS%restart_CSp)
 
     call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
