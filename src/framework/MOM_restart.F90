@@ -836,7 +836,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
   character(len=32) :: filename_appendix = '' !fms appendix to filename for ensemble runs
   integer :: length
   integer(kind=8) :: check_val(CS%max_fields,1)
-  integer :: isL,ieL,jsL,jeL
+  integer :: isL, ieL, jsL, jeL, pos
 
   if (.not.associated(CS)) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -932,13 +932,25 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV)
     do m=start_var,next_var-1
       vars(m-start_var+1) = CS%restart_field(m)%vars
     enddo
-    call query_vardesc(vars(1), t_grid=t_grid, caller="save_restart")
+    call query_vardesc(vars(1), t_grid=t_grid, hor_grid=hor_grid, caller="save_restart")
     t_grid = adjustl(t_grid)
     if (t_grid(1:1) /= 'p') &
       call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
+    select case (hor_grid)
+      case ('q') ; pos = CORNER
+      case ('h') ; pos = CENTER
+      case ('u') ; pos = EAST_FACE
+      case ('v') ; pos = NORTH_FACE
+      case ('Bu') ; pos = CORNER
+      case ('T')  ; pos = CENTER
+      case ('Cu') ; pos = EAST_FACE
+      case ('Cv') ; pos = NORTH_FACE
+      case ('1') ; pos = 0
+      case default ; pos = 0
+    end select
 
     !Prepare the checksum of the restart fields to be written to restart files
-    call get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
+    call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
     do m=start_var,next_var-1
       if (ASSOCIATED(CS%var_ptr3d(m)%p)) then
         check_val(m-start_var+1,1) = mpp_chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
@@ -1125,7 +1137,7 @@ subroutine restore_state(filename, directory, day, G, CS)
         case default ; pos = 0
       end select
 
-      call get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
+      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
       do i=1, nvar
         call get_file_atts(fields(i),name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
@@ -1607,69 +1619,31 @@ subroutine restart_error(CS)
   endif
 end subroutine restart_error
 
-subroutine get_MOM_compute_domain(G,isL,ieL,jsL,jeL)
-! use mpp_domains_mod, only:  mpp_get_domain_shift
-  type(ocean_grid_type), intent(in)  :: G         !< The ocean's grid structure
-  integer , intent(out):: isL,ieL,jsL,jeL
-!  integer , intent(in) :: sizes(:),pos
-!  integer :: is0,js0
-!  integer ::  iadd,jadd,ishift, jshift, pos,sizes(7)
+!> Return bounds for computing checksums to store in restart files
+subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
+  integer,               intent(in)  :: pos !< An integer indicating staggering of variable
+  integer,               intent(out) :: isL !< i-start for checksum
+  integer,               intent(out) :: ieL !< i-end for checksum
+  integer,               intent(out) :: jsL !< j-start for checksum
+  integer,               intent(out) :: jeL !< j-end for checksum
 
-  !Simplistic way
-  isL=G%isc-G%isd+1
-  ieL=G%iec-G%isd+1
-  jsL=G%jsc-G%jsd+1
-  jeL=G%jec-G%jsd+1
-  !Zhi's way
-!  call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, caller="save_restart")
-!  select case (hor_grid)
-!  case ('q') ; pos = CORNER
-!  case ('h') ; pos = CENTER
-!  case ('u') ; pos = EAST_FACE
-!  case ('v') ; pos = NORTH_FACE
-!  case ('Bu') ; pos = CORNER
-!  case ('T')  ; pos = CENTER
-!  case ('Cu') ; pos = EAST_FACE
-!  case ('Cv') ; pos = NORTH_FACE
-!  case ('1') ; pos = 0
-!  case default ; pos = 0
-!  end select
-!  call mpp_get_domain_shift(G%Domain%mpp_domain, ishift, jshift, pos)
-!  iadd = G%iec-G%isc ! Size of the i-dimension on this processor (-1 as it is an increment)
-!  jadd = G%jec-G%jsc ! Size of the j-dimension on this processor
-!  if(G%iec == G%ieg) iadd = iadd + ishift
-!  if(G%jec == G%jeg) jadd = jadd + jshift
-  !Bob's way
-  !   NOTE: The index ranges f var_ptrs always start with 1, so with
-  ! symmetric memory the staggering is swapped from NE to SW!
-!  is0 = 1-G%isd
-!  if ((pos == EAST_FACE) .or. (pos == CORNER)) is0 = 1-G%IsdB
-!  if (sizes(1) == G%iec-G%isc+1) then
-!     isL = G%isc+is0 ; ieL = G%iec+is0
-!  elseif (sizes(1) == G%IecB-G%IscB+1) then
-!     isL = G%IscB+is0 ; ieL = G%IecB+is0
-!  elseif (((pos == EAST_FACE) .or. (pos == CORNER)) .and. &
-!       (G%IscB == G%isc) .and. (sizes(1) == G%iec-G%isc+2)) then
-!     ! This is reading a symmetric file in a non-symmetric model.
-!     isL = G%isc-1+is0 ; ieL = G%iec+is0
-!  else
-!     call MOM_error(WARNING, "MOM_restart restore_state,  i-size ")
-!  endif
-!
-!  js0 = 1-G%jsd
-!  if ((pos == NORTH_FACE) .or. (pos == CORNER)) js0 = 1-G%JsdB
-!  if (sizes(2) == G%jec-G%jsc+1) then
-!     jsL = G%jsc+js0 ; jeL = G%jec+js0
-!  elseif (sizes(2) == G%jecB-G%jscB+1) then
-!     jsL = G%jscB+js0 ; jeL = G%jecB+js0
-!  elseif (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. &
-!       (G%JscB == G%jsc) .and. (sizes(2) == G%jec-G%jsc+2)) then
-!     ! This is reading a symmetric file in a non-symmetric model.
-!     jsL = G%jsc-1+js0 ; jeL = G%jec+js0
-!  else
-!     call MOM_error(WARNING, "MOM_restart restore_state,  wrong j-size ")
-!  endif
+  ! Regular non-symmetric compute domain
+  isL = G%isc-G%isd+1
+  ieL = G%iec-G%isd+1
+  jsL = G%jsc-G%jsd+1
+  jeL = G%jec-G%jsd+1
 
-end subroutine get_MOM_compute_domain
+  ! Expand range east or south for symmetric arrays
+  if (G%symmetric) then
+    if ((pos == EAST_FACE) .or. (pos == CORNER)) then ! For u-, q-points only
+      if (G%idg_offset == 0) isL = isL - 1 ! include western edge in checksums only for western PEs
+    endif
+    if ((pos == NORTH_FACE) .or. (pos == CORNER)) then ! For v-, q-points only
+      if (G%jdg_offset == 0) jsL = jsL - 1 ! include western edge in checksums only for southern PEs
+    endif
+  endif
+
+end subroutine get_checksum_loop_ranges
 
 end module MOM_restart
