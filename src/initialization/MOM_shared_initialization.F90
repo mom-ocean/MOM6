@@ -910,14 +910,14 @@ subroutine reset_face_lengths_list(G, param_file)
            ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
         G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
-        if ( G%mask2dCu(I,j) == 0.0 )  then
-          write(mesg,'(A,I4,A)') "read_face_lengths_list : G%mask2dCu is not defined for line ",npt, &
-              "Please update values in "//trim(filename)
-          call MOM_error(FATAL, mesg, all_print=.true.)
-        else
-          write(mesg,'(A54,2F8.2,A2,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
-                u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
-          call MOM_error(WARNING, mesg, all_print=.true.)
+        if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
+          if ( G%mask2dCu(I,j) == 0.0 )  then
+            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
+                u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
+          else
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
+                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
+          endif
         endif
       endif
     enddo
@@ -938,14 +938,14 @@ subroutine reset_face_lengths_list(G, param_file)
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
            ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
         G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
-        if ( G%mask2dCv(I,j) == 0.0 )  then
-          write(mesg,'(A,I4,A)') "read_face_lengths_list : G%mask2dCv is not defined for line ",npt, &
-              "Please update values in "//trim(filename)
-          call MOM_error(FATAL, mesg, all_print=.true.)
-        else
-          write(mesg,'(A54,2F8.2,A2,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
-                v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
-          call MOM_error(WARNING, mesg, all_print=.true.)
+        if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
+          if ( G%mask2dCv(i,J) == 0.0 )  then
+            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
+          else
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
+          endif
         endif
       endif
     enddo
