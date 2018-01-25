@@ -92,7 +92,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
   type(VarMix_CS),                       pointer       :: VarMix  !< Variable mixing type
   type(verticalGrid_type),               intent(in)    :: GV      !< ocean vertical grid structure
   type(tracer_hor_diff_CS),              pointer       :: CS      !< module control structure
-  type(tracer_registry_type),            intent(inout) :: Reg     !< registered tracers
+  type(tracer_registry_type),            pointer       :: Reg     !< registered tracers
   type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure containing pointers to any available
                                                                   !! thermodynamic fields, including potential temp and
                                                                   !! salinity or mixed layer density. Absent fields have
@@ -349,10 +349,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, CS, Reg, tv, do_online_fla
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      do m=1,ntr ! for each tracer
-        call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, Reg%Tr(m)%t, m, I_numitts*dt, &
-                               Reg%Tr(m)%name, CS%neutral_diffusion_CSp)
-      enddo ! m
+      call neutral_diffusion(G, GV,  h, Coef_x, Coef_y, I_numitts*dt, Reg, CS%neutral_diffusion_CSp)
     enddo ! itt
 
   else    ! following if not using neutral diffusion, but instead along-surface diffusion
