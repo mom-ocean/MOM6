@@ -176,11 +176,18 @@ type, public :: MOM_state_type
     v,  &     !< meridional velocity (m/s)
     vh, &     !< vh = v * h * dx at v grid points (m3/s or kg/s)
     vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
+  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
+    ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
 
   type(ocean_grid_type) :: G       !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: GV => NULL() !< structure containing vertical grid info
   type(thermo_var_ptrs) :: tv      !< structure containing pointers to available
                                    !! thermodynamic fields
+  real :: t_dyn_rel_adv            !< The time of the dynamics relative to tracer
+                                   !! advection and lateral mixing (in seconds), or
+                                   !! equivalently the elapsed time since advectively
+                                   !! updating the tracers.  t_dyn_rel_adv is invariably
+                                   !! positive and may span multiple coupling timesteps.
 end type MOM_state_type
 
 
@@ -195,8 +202,6 @@ type, public :: MOM_control_struct
                                    !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp     !< structure containing pointers continuity equation
                                    !! terms, for derived diagnostics (e.g., energy budgets)
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
   real, pointer, dimension(:,:)   :: Hml => NULL() !< active mixed layer depth, in m
   real, pointer, dimension(:,:,:) :: &
     u_prev => NULL(), &  !< previous value of u stored for diagnostics
@@ -238,11 +243,6 @@ type, public :: MOM_control_struct
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
-  real    :: t_dyn_rel_adv           !< The time of the dynamics relative to tracer
-                                     !! advection and lateral mixing (in seconds), or
-                                     !! equivalently the elapsed time since advectively
-                                     !! updating the tracers.  t_dyn_rel_adv is invariably
-                                     !! positive and may span multiple coupling timesteps.
   real    :: t_dyn_rel_thermo        !< The time of the dynamics relative to diabatic
                                      !! processes and remapping (in seconds).  t_dyn_rel_thermo
                                      !! can be negative or positive depending on whether
@@ -541,7 +541,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   CS%rel_time = 0.0
 
   tot_wt_ssh = 0.0
-  do j=js,je ; do i=is,ie ; CS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = CS%missing; enddo ; enddo
+  do j=js,je ; do i=is,ie ; MS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = CS%missing; enddo ; enddo
 
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
@@ -588,7 +588,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
-    if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0)) then ! do thermodynamics.
+    if (CS%diabatic_first .and. (MS%t_dyn_rel_adv==0.0)) then ! do thermodynamics.
 
       if (thermo_does_span_coupling) then
         dtdia = dt_therm
@@ -614,7 +614,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
-    endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
+    endif ! end of block "(CS%diabatic_first .and. (MS%t_dyn_rel_adv==0.0))"
 
     !===========================================================================
     ! This is the start of the dynamics stepping part of the algorithm.
@@ -622,7 +622,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
-    if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
+    if ((MS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
       if (thermo_does_span_coupling) then
         dtth = dt_therm
       else
@@ -648,11 +648,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     ! The bottom boundary layer properties are out-of-date and need to be
     ! recalculated.  This always occurs at the start of a coupling time
     ! step because the externally prescribed stresses may have changed.
-    do_calc_bbl = ((CS%t_dyn_rel_adv == 0.0) .or. (n==1))
+    do_calc_bbl = ((MS%t_dyn_rel_adv == 0.0) .or. (n==1))
     if (do_calc_bbl) then
       ! Calculate the BBL properties and store them inside visc (u,h).
       call cpu_clock_begin(id_clock_BBL_visc)
-      bbl_time_int = max(dt, min(dt_therm - CS%t_dyn_rel_adv, dt*(1+n_max-n)) )
+      bbl_time_int = max(dt, min(dt_therm - MS%t_dyn_rel_adv, dt*(1+n_max-n)) )
       call enable_averaging(bbl_time_int, &
                 Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
       call set_viscous_BBL(u, v, h, MS%tv, CS%visc, G, GV, CS%set_visc_CSp)
@@ -798,7 +798,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     call disable_averaging(CS%diag)
 
     ! Advance the dynamics time by dt.
-    CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
+    MS%t_dyn_rel_adv = MS%t_dyn_rel_adv + dt
     CS%t_dyn_rel_thermo = CS%t_dyn_rel_thermo + dt
     CS%t_dyn_rel_diag = CS%t_dyn_rel_diag + dt
 
@@ -808,7 +808,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     ! This is the start of the tracer advection part of the algorithm.
 
     if (thermo_does_span_coupling) then
-      do_advection = (CS%t_dyn_rel_adv + 0.5*dt > dt_therm)
+      do_advection = (MS%t_dyn_rel_adv + 0.5*dt > dt_therm)
     else
       do_advection = ((MOD(n,ntstep) == 0) .or. (n==n_max))
     endif
@@ -820,7 +820,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
     !===========================================================================
     ! This is the second place where the diabatic processes and remapping could occur.
-    if (CS%t_dyn_rel_adv == 0.0) then
+    if (MS%t_dyn_rel_adv == 0.0) then
       if (.not.CS%diabatic_first) then
         dtdia = CS%t_dyn_rel_thermo
         if (thermo_does_span_coupling .and. (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
@@ -845,7 +845,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     tot_wt_ssh = tot_wt_ssh + dt
     call find_eta(h, MS%tv, GV%g_Earth, G, GV, ssh, eta_av)
     do j=js,je ; do i=is,ie
-      CS%ave_ssh(i,j) = CS%ave_ssh(i,j) + dt*ssh(i,j)
+      MS%ave_ssh(i,j) = MS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
     call cpu_clock_end(id_clock_dynamics)
 
@@ -861,7 +861,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     if (IDs%id_ssh_inst > 0) call post_data(IDs%id_ssh_inst, ssh, CS%diag)
     call disable_averaging(CS%diag)
 
-    if (CS%t_dyn_rel_adv == 0.0) then
+    if (MS%t_dyn_rel_adv == 0.0) then
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
@@ -894,17 +894,17 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
   Itot_wt_ssh = 1.0/tot_wt_ssh
   do j=js,je ; do i=is,ie
-    CS%ave_ssh(i,j) = CS%ave_ssh(i,j)*Itot_wt_ssh
-    ssh(i,j) = CS%ave_ssh(i,j)
+    MS%ave_ssh(i,j) = MS%ave_ssh(i,j)*Itot_wt_ssh
+    ssh(i,j) = MS%ave_ssh(i,j)
   enddo ; enddo
-  call adjust_ssh_for_p_atm(MS%tv, G, GV, CS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
+  call adjust_ssh_for_p_atm(MS%tv, G, GV, MS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
 
   if (CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
 
   if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
-  call calculate_surface_state(sfc_state, u, v, h, CS%ave_ssh, G, GV, MS, CS)
+  call calculate_surface_state(sfc_state, u, v, h, MS%ave_ssh, G, GV, MS, CS)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   call cpu_clock_begin(id_clock_diagnostics)
@@ -959,18 +959,18 @@ subroutine step_MOM_tracer_dyn(MS, CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn
   endif
 
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
-  call enable_averaging(CS%t_dyn_rel_adv, Time_local, CS%diag)
+  call enable_averaging(MS%t_dyn_rel_adv, Time_local, CS%diag)
 
-  call advect_tracer(h, MS%uhtr, MS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, &
+  call advect_tracer(h, MS%uhtr, MS%vhtr, CS%OBC, MS%t_dyn_rel_adv, G, GV, &
                      CS%tracer_adv_CSp, CS%tracer_Reg)
-  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
+  call tracer_hordiff(h, MS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, MS%tv)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, MS%uhtr, MS%vhtr, h, CS%transport_IDs, &
-           CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+           CS%diag, MS%t_dyn_rel_adv, CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -983,7 +983,7 @@ subroutine step_MOM_tracer_dyn(MS, CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
   MS%uhtr(:,:,:) = 0.0
   MS%vhtr(:,:,:) = 0.0
-  CS%t_dyn_rel_adv = 0.0
+  MS%t_dyn_rel_adv = 0.0
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   if (CS%diabatic_first .and. CS%use_temperature) then
@@ -1338,8 +1338,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, MS
 
   endif
 
-  call adjust_ssh_for_p_atm(MS%tv, G, GV, CS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
-  call calculate_surface_state(sfc_state, MS%u, MS%v, MS%h, CS%ave_ssh, G, GV, MS, CS)
+  call adjust_ssh_for_p_atm(MS%tv, G, GV, MS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
+  call calculate_surface_state(sfc_state, MS%u, MS%v, MS%h, MS%ave_ssh, G, GV, MS, CS)
 
   call disable_averaging(CS%diag)
   call pass_var(MS%tv%T,G%Domain)
@@ -1353,7 +1353,8 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, MS
 end subroutine step_offline
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_tracer_mode, input_restart_file)
+subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, &
+                          offline_tracer_mode, input_restart_file, diag_ptr)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
@@ -1363,6 +1364,8 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_trace
                                                           !! model is not being started from a restart file
   logical,         optional, intent(out)   :: offline_tracer_mode !< True if tracers are being run offline
   character(len=*),optional, intent(in)    :: input_restart_file !< If present, name of restart file to read
+  type(diag_ctrl), optional, pointer       :: diag_ptr    !< A pointer set in this routine to the diagnostic
+                                                          !! regulatory structure
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -1873,7 +1876,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_trace
 
   ALLOC_(MS%uhtr(IsdB:IedB,jsd:jed,nz)) ; MS%uhtr(:,:,:) = 0.0
   ALLOC_(MS%vhtr(isd:ied,JsdB:JedB,nz)) ; MS%vhtr(:,:,:) = 0.0
-  CS%t_dyn_rel_adv = 0.0 ; CS%t_dyn_rel_thermo = 0.0 ; CS%t_dyn_rel_diag = 0.0
+  MS%t_dyn_rel_adv = 0.0 ; CS%t_dyn_rel_thermo = 0.0 ; CS%t_dyn_rel_diag = 0.0
 
   if (CS%debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz)) ; CS%u_prev(:,:,:) = 0.0
@@ -1899,7 +1902,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_trace
     allocate(CS%p_surf_prev(isd:ied,jsd:jed)) ; CS%p_surf_prev(:,:) = 0.0
   endif
 
-  ALLOC_(CS%ave_ssh(isd:ied,jsd:jed)) ; CS%ave_ssh(:,:) = 0.0
+  ALLOC_(MS%ave_ssh(isd:ied,jsd:jed)) ; MS%ave_ssh(:,:) = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -2061,6 +2064,7 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_trace
   diag => CS%diag
   ! Initialize the diag mediator.
   call diag_mediator_init(G, GV, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
+  if (present(diag_ptr)) diag_ptr => CS%diag
 
   ! Initialize the diagnostics masks for native arrays.
   ! This step has to be done after call to MOM_initialize_state
@@ -2228,11 +2232,11 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, Time_in, offline_trace
     if (CS%p_surf_prev_set) call pass_var(CS%p_surf_prev, G%domain)
   endif
 
-  if (.not.query_initialized(CS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
+  if (.not.query_initialized(MS%ave_ssh,"ave_ssh",CS%restart_CSp)) then
     if (CS%split) then
-      call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, CS%ave_ssh, eta)
+      call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, MS%ave_ssh, eta)
     else
-      call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, CS%ave_ssh)
+      call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, MS%ave_ssh)
     endif
   endif
   if (CS%split) deallocate(eta)
@@ -2691,7 +2695,7 @@ subroutine set_restart_fields(GV, param_file, MS, CS)
                                 "Previous ocean surface pressure", "Pa")
   endif
 
-  call register_restart_field(CS%ave_ssh, "ave_ssh", .false., CS%restart_CSp, &
+  call register_restart_field(MS%ave_ssh, "ave_ssh", .false., CS%restart_CSp, &
                               "Time average sea surface height", "meter")
 
   ! hML is needed when using the ice shelf module
@@ -3123,7 +3127,7 @@ subroutine MOM_end(MS, CS)
   else
     call end_dyn_unsplit(CS%dyn_unsplit_CSp)
   endif
-  DEALLOC_(CS%ave_ssh)
+  DEALLOC_(MS%ave_ssh)
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
 
   call verticalGridEnd(MS%GV)
