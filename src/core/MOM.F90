@@ -113,6 +113,8 @@ use MOM_PressureForce,         only : PressureForce, PressureForce_init, Pressur
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
+use MOM_sum_output,            only : write_energy, accumulate_net_input
+use MOM_sum_output,            only : MOM_sum_output_init, sum_output_CS
 use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
 use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
@@ -279,6 +281,10 @@ type, public :: MOM_control_struct
   character(len=120) :: IC_file      !< A file into which the initial conditions are
                                      !! written in a new run if SAVE_INITIAL_CONDS is true.
 
+  integer :: nstep_tot = 0           !< The total number of dynamic timesteps taken
+                                     !! so far in this run segment
+  logical :: count_calls = .false.   !< If true, count the calls to step_MOM, rather than the
+                                     !! number of dynamics steps in nstep_tot                     
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
   logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
   real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
@@ -326,6 +332,7 @@ type, public :: MOM_control_struct
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
   type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
+  type(sum_output_CS),           pointer :: sum_output_CSp         => NULL()
 
   ! These are used for group halo updates.
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -885,9 +892,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     endif
     call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
+    if (.not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
+
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
 
   enddo ! complete the n loop
+
+  if (CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
 
   call cpu_clock_begin(id_clock_other)
 
@@ -911,6 +922,17 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, dt*n_max, sfc_state, MS%tv, ssh, fluxes)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics)
+
+  ! Accumulate the surface fluxes for assessing conservation
+  if (fluxes%fluxes_used) &
+    call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, &
+                              G, CS%sum_output_CSp)
+
+  if (MS%t_dyn_rel_adv==0.0) &
+    call write_energy(MS%u, MS%v, MS%h, MS%tv, Time_local, &
+                      CS%nstep_tot, G, GV, CS%sum_output_CSp, &
+                      CS%tracer_flow_CSp, &
+                      dt_forcing=set_time(int(floor(time_interval+0.5))) )
 
   call cpu_clock_end(id_clock_other)
 
@@ -1352,9 +1374,11 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, MS
 end subroutine step_offline
 
 !> This subroutine initializes MOM.
-subroutine initialize_MOM(Time, param_file, dirs, MS, CS, restart_CSp, Time_in, &
-                          offline_tracer_mode, input_restart_file, diag_ptr)
+subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp, &
+                          Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
+                          count_calls)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
+  type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
   type(directories),         intent(out)   :: dirs        !< structure with directory paths
   type(MOM_state_type),      pointer       :: MS          !< pointer set in this routine to structure describing the MOM state
@@ -1368,6 +1392,9 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, restart_CSp, Time_in, 
   character(len=*),optional, intent(in)    :: input_restart_file !< If present, name of restart file to read
   type(diag_ctrl), optional, pointer       :: diag_ptr    !< A pointer set in this routine to the diagnostic
                                                           !! regulatory structure
+  logical,         optional, intent(in)    :: count_calls !< If true, nstep_tot counts the number of
+                                                          !! calls to step_MOM instead of the number of
+                                                          !! dynamics timesteps.
 
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
@@ -2244,6 +2271,11 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, restart_CSp, Time_in, 
   endif
   if (CS%split) deallocate(eta)
 
+  CS%nstep_tot = 0
+  if (present(count_calls)) CS%count_calls = count_calls
+  call MOM_sum_output_init(G, param_file, dirs%output_directory, &
+                           CS%ntrunc, Time_init, CS%sum_output_CSp)
+
   ! Flag whether to save initial conditions in finish_MOM_initialization() or not.
   CS%write_IC = save_IC .and. &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
@@ -2291,6 +2323,9 @@ subroutine finish_MOM_initialization(Time, dirs, MS, CS, fluxes, restart_CSp)
     deallocate(z_interface)
     deallocate(restart_CSp_tmp)
   endif
+
+  call write_energy(MS%u, MS%v, MS%h, MS%tv, Time, 0, G, GV, &
+                    CS%sum_output_CSp, CS%tracer_flow_CSp)
 
   call callTree_leave("finish_MOM_initialization()")
   call cpu_clock_end(id_clock_init)

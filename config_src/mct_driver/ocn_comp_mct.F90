@@ -57,8 +57,6 @@ use MOM_diag_mediator,    only: diag_mediator_close_registration, diag_mediator_
 use MOM_diag_mediator,    only: safe_alloc_ptr
 use MOM_ice_shelf,        only: initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf,        only: ice_shelf_end, ice_shelf_save_restart
-use MOM_sum_output,       only: MOM_sum_output_init, sum_output_CS
-use MOM_sum_output,       only: write_energy, accumulate_net_input
 use MOM_string_functions, only: uppercase
 use MOM_constants,        only: CELSIUS_KELVIN_OFFSET, hlf, hlv
 use MOM_EOS,              only: gsw_sp_from_sr, gsw_pt_from_ct
@@ -297,9 +295,6 @@ type, public :: ocean_state_type ; private
                              !! files and +2 (bit 1) for time-stamped files.  A
                              !! restart file is saved at the end of a run segment
                              !! unless Restart_control is negative.
-  type(time_type) :: energysavedays  !< The interval between writing the energies
-                                     !! and other integral quantities of the run.
-  type(time_type) :: write_energy_time !< The next time to write to the energy file.
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
   logical :: icebergs_apply_rigid_boundary !< If true, the icebergs can change ocean bd condition.
@@ -332,7 +327,6 @@ type, public :: ocean_state_type ; private
   type(MOM_control_struct), pointer :: MOM_CSp => NULL()
   type(MOM_state_type),     pointer :: MSp => NULL()
   type(surface_forcing_CS), pointer :: forcing_CSp => NULL()
-  type(sum_output_CS),      pointer :: sum_output_CSp => NULL()
   type(MOM_restart_CS), pointer :: &
     restart_CSp => NULL()     !< A pointer set to the restart control structure
                               !! that will be used for MOM restart files.
@@ -808,7 +802,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 ! Because of the way that indicies and domains are handled, Ocean_sfc must have
 ! been used in a previous call to initialize_ocean_type.
 
-  real :: Time_unit   !< The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho0        !< The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     !< The gravitational acceleration in m s-2.
                       !! This include declares and sets the variable "version".
@@ -831,9 +824,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
+  call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=offline_tracer_mode, &
-                      input_restart_file=input_restart_file,  diag_ptr=OS%diag)
+                      input_restart_file=input_restart_file, diag_ptr=OS%diag, &
+                      count_calls=.true.)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
   OS%fluxes%C_p = OS%MSp%tv%C_p
@@ -847,14 +841,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                  "(bit 0) for a non-time-stamped file.  A restart file \n"//&
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
-  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
-                 "The time unit for ENERGYSAVEDAYS.", &
-                 units="s", default=86400.0)
-  call get_param(param_file, mdl, "ENERGYSAVEDAYS",OS%energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"//&
-                 "energies of the run and other globally summed diagnostics.", &
-                 default=set_time(0,days=1), timeunit=Time_unit)
-
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the surface velocity field that is \n"//&
@@ -922,17 +908,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
     !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
     if (.not. OS%use_ice_shelf) call allocate_forcing_type(OS%grid, OS%fluxes, ustar=.true., shelf=.true.)
   endif
-
-  call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
-                            OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
-
-  ! This call has been moved into the first call to update_ocean_model.
-!  call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-!             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
-
-  ! write_energy_time is the next integral multiple of energysavedays.
-  OS%write_energy_time = Time_init + OS%energysavedays * &
-                         (1 + (OS%Time - Time_init) / OS%energysavedays)
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -1786,10 +1761,6 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes, &
                                    OS%restart_CSp)
-
-    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-                      OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
-                      OS%MOM_CSp%tracer_flow_CSp)
   endif
 
   call disable_averaging(OS%diag)
@@ -1813,18 +1784,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
     call forcing_diagnostics(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
                              OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call accumulate_net_input(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
-                              OS%grid, OS%sum_output_CSp)
     call disable_averaging(OS%diag)
-  endif
-
-!  See if it is time to write out the energy.
-  if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
-      (OS%MSp%t_dyn_rel_adv==0.0)) then
-    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-                      OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
-                      OS%MOM_CSp%tracer_flow_CSp)
-    OS%write_energy_time = OS%write_energy_time + OS%energysavedays
   endif
 
 ! Translate state into Ocean.

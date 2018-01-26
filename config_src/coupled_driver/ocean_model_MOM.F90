@@ -36,8 +36,6 @@ use MOM_get_input, only : Get_MOM_Input, directories
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : close_file, file_exists, read_data, write_version_number
 use MOM_restart, only : MOM_restart_CS, save_restart
-use MOM_sum_output, only : write_energy, accumulate_net_input
-use MOM_sum_output, only : MOM_sum_output_init, sum_output_CS
 use MOM_string_functions, only : uppercase
 use MOM_surface_forcing, only : surface_forcing_init, convert_IOB_to_fluxes
 use MOM_surface_forcing, only : ice_ocn_bnd_type_chksum
@@ -193,8 +191,6 @@ type, public :: ocean_state_type ; private
                               !! is null if there is no ice shelf.
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
-  type(sum_output_CS), pointer :: &
-    sum_output_CSp => NULL()  !< A pointer to the MOM sum output control structure
   type(MOM_restart_CS), pointer :: &
     restart_CSp => NULL()     !< A pointer set to the restart control structure
                               !! that will be used for MOM restart files.
@@ -264,16 +260,13 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, OS%restart_CSp, &
-                      Time_in, offline_tracer_mode=offline_tracer_mode, &
-                      diag_ptr=OS%diag)
+  call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
+                      OS%restart_CSp, Time_in, offline_tracer_mode=offline_tracer_mode, &
+                      diag_ptr=OS%diag, count_calls=.true.)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
   OS%fluxes%C_p = OS%MSp%tv%C_p
   use_temperature = ASSOCIATED(OS%MSp%tv%T)
-
-  call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
-                            OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -283,7 +276,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                  "(bit 0) for a non-time-stamped file.  A restart file \n"//&
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
-
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
                  "staggering of the surface velocity field that is \n"//&
@@ -352,10 +344,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     if (.not. OS%use_ice_shelf) &
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
-
-  ! This call has been moved into the first call to update_ocean_model.
-  !  call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-  !             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -529,10 +517,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes, &
                                    OS%restart_CSp)
-
-    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-                      OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, &
-                      OS%MOM_CSp%tracer_flow_CSp)
   endif
 
   call disable_averaging(OS%diag)
@@ -556,16 +540,8 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
     call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
                              OS%grid, OS%diag, OS%forcing_CSp%handles)
-    call accumulate_net_input(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
-                              OS%grid, OS%sum_output_CSp)
     call disable_averaging(OS%diag)
   endif
-
-  if (OS%MSp%t_dyn_rel_adv==0.0) &
-    call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-                      OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
-                      OS%MOM_CSp%tracer_flow_CSp, dt_forcing=Ocean_coupling_time_step)
-
 
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
