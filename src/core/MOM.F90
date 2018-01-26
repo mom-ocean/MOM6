@@ -2160,13 +2160,14 @@ subroutine initialize_MOM(Time, param_file, dirs, MS, CS, restart_CSp, Time_in, 
     call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
-    call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag,     &
+    call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
                               CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
   call tracer_advect_init(Time, G, param_file, diag, CS%tracer_adv_CSp)
-  call tracer_hor_diff_init(Time, G, param_file, diag, CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
+  call tracer_hor_diff_init(Time, G, param_file, diag, MS%tv%eqn_of_state, &
+                            CS%tracer_diff_CSp, CS%neutral_diffusion_CSp)
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
@@ -2621,6 +2622,15 @@ subroutine write_static_fields(G, GV, tv, diag)
   id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
         'Delta(y) at v points (meter)', 'm', interp_method='none')
   if (id > 0) call post_data(id, G%dyCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dyCuo', diag%axesCu1, &
+        'Open meridional grid spacing at u points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dy_Cu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dxCvo', diag%axesCv1, &
+        'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
+
 
   ! This static diagnostic is from CF 1.8, and is the fraction of a cell
   ! covered by ocean, given as a percentage (poorly named).
