@@ -16,8 +16,7 @@ module MOM_sum_output
 !*                                                                     *
 !*    In addition, if the number of velocity truncations since the     *
 !*  previous call to write_energy exceeds maxtrunc or the total energy *
-!*  exceeds a very large threshold, the day is increased to Huge_time  *
-!*  so that the model will gracefully halt itself.                     *
+!*  exceeds a very large threshold, a fatal termination is triggered.  *
 !*                                                                     *
 !*    This file also contains a few miscelaneous initialization        *
 !*  calls to FMS-related modules.                                      *
@@ -135,10 +134,6 @@ type, public :: sum_output_CS ; private
   logical :: date_stamped_output ! If true, use dates (not times) in messages to stdout.
   type(time_type) :: Start_time ! The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
-  type(time_type) :: Huge_time  ! A large time, which is used to indicate
-                                ! that an error has been encountered
-                                ! and the run should be terminated with
-                                ! an error code.
   integer, pointer :: ntrunc    ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
   real    :: max_Energy         ! The maximum permitted energy per unit mass;
@@ -298,9 +293,6 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
          CS%energysave_geometric = .false.
   endif
 
-
-
-  CS%Huge_time = set_time(INT(1e9),0)
   CS%Start_time = Input_start_time
   CS%ntrunc => ntrnc
 
@@ -320,29 +312,29 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
-!>  This subroutine calculates and writes the total model energy, the
-!! energy and mass of each layer, and other globally integrated
-!! physical quantities.
+!>  This subroutine calculates and writes the total model energy, the energy and
+!! mass of each layer, and other globally integrated  physical quantities.
 subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forcing)
-  type(ocean_grid_type),                     intent(in)    :: G   !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid
-                                                                  !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< The meridional velocity,
-                                                                  !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                     intent(in)    :: tv  !< A structure pointing to various
-                                                                  !! thermodynamic variables.
-  type(time_type),                           intent(inout) :: day !< The current model time.
-  integer,                                   intent(in)    :: n   !< The time step number of the
-                                                                  !! current execution.
-  type(Sum_output_CS),                       pointer       :: CS  !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! MOM_sum_output_init.
-  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp !< tracer constrol structure.
-  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
-  type(time_type),                 optional, intent(in)    :: dt_forcing !< The forcing time step
+  type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u   !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v   !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in)    :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
+                                                !! thermodynamic variables.
+  type(time_type),         intent(in)    :: day !< The current model time.
+  integer,                 intent(in)    :: n   !< The time step number of the
+                                                !! current execution.
+  type(Sum_output_CS),     pointer       :: CS  !< The control structure returned by a
+                                                !! previous call to MOM_sum_output_init.
+  type(tracer_flow_control_CS), &
+                    optional, pointer    :: tracer_CSp !< tracer control structure.
+  type(ocean_OBC_type),         &
+                    optional, pointer    :: OBC !< Open boundaries control structure.
+  type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
@@ -934,15 +926,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
      ((En_mass>CS%max_Energy) .and. (En_mass<CS%max_Energy))) then
-    day = CS%Huge_time
     write(mesg,'("Energy per unit mass of ",ES11.4," exceeds ",ES11.4)') &
                   En_mass, CS%max_Energy
-    call MOM_error(WARNING, "write_energy : "//trim(mesg))
-    call MOM_error(WARNING, &
-      "write_energy : Time set to a large value to force model termination.")
+    call MOM_error(FATAL, &
+      "write_energy : Excessive energy per unit mass or NaNs forced model termination.")
   endif
   if (CS%ntrunc>CS%maxtrunc) then
-    day = CS%Huge_time
     call MOM_error(FATAL, "write_energy : Ocean velocity has been truncated too many times.")
   endif
   CS%ntrunc = 0
