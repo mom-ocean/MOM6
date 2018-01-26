@@ -45,8 +45,6 @@ program MOM_main
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
-  use MOM_sum_output,      only : write_energy, accumulate_net_input
-  use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
   use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
@@ -95,7 +93,7 @@ program MOM_main
 
   ! nmax is the number of iterations after which to stop so that the
   ! simulation does not exceed its CPU time limit.  nmax is determined by
-  ! evaluating the CPU time used between successive calls to write_energy.
+  ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
   integer :: nmax=2000000000;
 
@@ -170,7 +168,6 @@ program MOM_main
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(MOM_state_type),      pointer :: MSp => NULL()
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
-  type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
   type(MOM_restart_CS),      pointer :: &
@@ -283,30 +280,25 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
                         diag_ptr=diag)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
-                       offline_tracer_mode=offline_tracer_mode, diag_ptr=diag)
+    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+                        offline_tracer_mode=offline_tracer_mode, diag_ptr=diag)
   endif
   fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
   Master_Time = Time
   grid => MSp%G
   GV   => MSp%GV
-
-  call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
-                           MOM_CSp%ntrunc, Start_time, sum_output_CSp)
-  call callTree_waypoint("done MOM_sum_output_init")
+  call callTree_waypoint("done initialize_MOM")
 
   call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
                                MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
-
 
   call surface_forcing_init(Time, grid, param_file, diag, &
                             surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
@@ -413,9 +405,6 @@ program MOM_main
     call close_file(unit)
   endif
 
-!  This has been moved inside the loop to be applied when n=1.
-!  call write_energy(MSp%u, MSp%v, MSp%h, &
-!                    MSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
   if (cpu_steps > 0) call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
@@ -460,10 +449,6 @@ program MOM_main
 
     if (n==1) then
       call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes, restart_CSp)
-
-      call write_energy(MSp%u, MSp%v, MSp%h, MSp%tv, &
-                        Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp, &
-                        MOM_CSp%OBC)
     endif
 
     ! This call steps the model over a time time_step.
@@ -494,15 +479,6 @@ program MOM_main
     endif
     Time = Master_Time
 
-    if (fluxes%fluxes_used .and. (.not.offline_tracer_mode)) &
-      call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
-
-!  See if it is time to write out the energy.
-    if (MSp%t_dyn_rel_adv == 0.0) &
-      call write_energy(MSp%u, MSp%v, MSp%h, &
-                        MSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
-                        MOM_CSp%tracer_flow_CSp, dt_forcing=Time_step_ocean)
-
     if (cpu_steps > 0) then ; if (MOD(n, cpu_steps) == 0) then
       call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
     endif ; endif
@@ -517,7 +493,6 @@ program MOM_main
         call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
         call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, &
                                  diag, surface_forcing_CSp%handles)
-!        call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
         call disable_averaging(diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
