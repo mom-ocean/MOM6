@@ -29,7 +29,7 @@ public register_tracer
 public MOM_tracer_chksum, MOM_tracer_chkinv
 public register_tracer_diagnostics, post_tracer_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
-public add_tracer_diagnostics, add_tracer_OBC_values
+public add_tracer_OBC_values
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 
 !> The tracer type
@@ -327,53 +327,6 @@ subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
 
 end subroutine add_tracer_OBC_values
 
-
-!> This subroutine adds diagnostic arrays for a tracer that has
-!! previously been registered by a call to register_tracer.
-subroutine add_tracer_diagnostics(name, Reg, ad_x, ad_y, df_x, df_y, &
-                                  ad_2d_x, ad_2d_y, df_2d_x, df_2d_y,&
-                                  advection_xy)
-  character(len=*), intent(in)              :: name         !< name of the tracer for which the diagnostic points
-  type(tracer_registry_type), pointer       :: Reg          !< pointer to the tracer registry
-  real, dimension(:,:,:), pointer, optional :: ad_x         !< diagnostic x-advective flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:,:), pointer, optional :: ad_y         !< diagnostic y-advective flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:,:), pointer, optional :: df_x         !< diagnostic x-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:,:), pointer, optional :: df_y         !< diagnostic y-diffusive flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: ad_2d_x      !< vert sum of diagnostic x-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: ad_2d_y      !< vert sum of diagnostic y-advect flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: df_2d_x      !< vert sum of diagnostic x-diffuse flux (CONC m3/s or CONC*kg/s)
-  real, dimension(:,:),   pointer, optional :: df_2d_y      !< vert sum of diagnostic y-diffuse flux (CONC m3/s or CONC*kg/s)
-
-  real, dimension(:,:,:), pointer, optional :: advection_xy !< convergence of lateral advective tracer fluxes
-
-  integer :: m
-
-  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
-       "register_tracer must be called before add_tracer_diagnostics")
-
-  do m=1,Reg%ntr ; if (Reg%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= Reg%ntr) then
-    if (present(ad_x)) then ; if (associated(ad_x)) Reg%Tr(m)%ad_x => ad_x ; endif
-    if (present(ad_y)) then ; if (associated(ad_y)) Reg%Tr(m)%ad_y => ad_y ; endif
-    if (present(df_x)) then ; if (associated(df_x)) Reg%Tr(m)%df_x => df_x ; endif
-    if (present(df_y)) then ; if (associated(df_y)) Reg%Tr(m)%df_y => df_y ; endif
-
-    if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Reg%Tr(m)%ad2d_x => ad_2d_x ; endif
-    if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Reg%Tr(m)%ad2d_y => ad_2d_y ; endif
-    if (present(df_2d_x)) then ; if (associated(df_2d_x)) Reg%Tr(m)%df2d_x => df_2d_x ; endif
-    if (present(df_2d_y)) then ; if (associated(df_2d_y)) Reg%Tr(m)%df2d_y => df_2d_y ; endif
-
-    if (present(advection_xy)) then ; if (associated(advection_xy)) Reg%Tr(m)%advection_xy => advection_xy ; endif
-
-  else
-
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_diagnostics is called for it.")
-  endif
-
-end subroutine add_tracer_diagnostics
-
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
 subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_to_Z_CSp)
@@ -412,8 +365,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_diagnostics: "// &
-       "register_tracer must be called before add_tracer_diagnostics")
+  if (.not. associated(Reg)) call MOM_error(FATAL, "register_tracer_diagnostics: "// &
+       "register_tracer must be called before register_tracer_diagnostics")
 
   nTr_in = Reg%ntr
 
