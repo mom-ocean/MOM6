@@ -148,19 +148,6 @@ type, public :: ocean_state_type ; private
                              !! restart file is saved at the end of a run segment
                              !! unless Restart_control is negative.
 
-  type(time_type) :: energysavedays            !< The interval between writing the energies
-                                               !! and other integral quantities of the run.
-  type(time_type) :: energysavedays_geometric  !< The starting interval for computing a geometric
-                                               !! progression of time deltas between calls to
-                                               !! write_energy. This interval will increase by a factor of 2.
-                                               !! after each call to write_energy.
-  logical         :: energysave_geometric      !< Logical to control whether calls to write_energy should
-                                               !! follow a geometric progression
-  type(time_type) :: write_energy_time         !< The next time to write to the energy file.
-  type(time_type) :: geometric_end_time        !< Time at which to stop the geometric progression
-                                               !! of calls to write_energy and revert to the standard
-                                               !! energysavedays interval
-
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
 
@@ -254,7 +241,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 !                    information about the ocean's interior state.
 !  (in)      Time_init - The start time for the coupled model's calendar.
 !  (in)      Time_in - The time at which to initialize the ocean model.
-  real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho0        ! The Boussinesq ocean density, in kg m-3.
   real :: G_Earth     ! The gravitational acceleration in m s-2.
 ! This include declares and sets the variable "version".
@@ -286,6 +272,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   OS%fluxes%C_p = OS%MSp%tv%C_p
   use_temperature = ASSOCIATED(OS%MSp%tv%T)
 
+  call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
+                            OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
+
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "RESTART_CONTROL", OS%Restart_control, &
@@ -294,26 +283,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
                  "(bit 0) for a non-time-stamped file.  A restart file \n"//&
                  "will be saved at the end of the run segment for any \n"//&
                  "non-negative value.", default=1)
-
-  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
-                 "The time unit for ENERGYSAVEDAYS.", &
-                 units="s", default=86400.0)
-  call get_param(param_file, mdl, "ENERGYSAVEDAYS",OS%energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"//&
-                 "energies of the run and other globally summed diagnostics.",&
-                 default=set_time(0,days=1), timeunit=Time_unit)
-  call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",OS%energysavedays_geometric, &
-                 "The starting interval in units of TIMEUNIT for the first call \n"//&
-                 "to save the energies of the run and other globally summed diagnostics. \n"//&
-                 "The interval increases by a factor of 2. after each call to write_energy.",&
-                 default=set_time(seconds=0), timeunit=Time_unit)
-
-  if ((time_type_to_real(OS%energysavedays_geometric) > 0.) .and. &
-     (OS%energysavedays_geometric < OS%energysavedays)) then
-         OS%energysave_geometric = .true.
-  else
-         OS%energysave_geometric = .false.
-  endif
 
   call get_param(param_file, mdl, "OCEAN_SURFACE_STAGGER", stagger, &
                  "A case-insensitive character string to indicate the \n"//&
@@ -384,27 +353,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
-  call MOM_sum_output_init(OS%grid, param_file, OS%dirs%output_directory, &
-                            OS%MOM_CSp%ntrunc, Time_init, OS%sum_output_CSp)
-
   ! This call has been moved into the first call to update_ocean_model.
   !  call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
   !             OS%Time, 0, OS%grid, OS%GV, OS%sum_output_CSp, OS%MOM_CSp%tracer_flow_CSp)
-
-  ! write_energy_time is the next integral multiple of energysavedays.
-  if (OS%energysave_geometric) then
-    if (OS%energysavedays_geometric < OS%energysavedays) then
-      OS%write_energy_time = OS%Time + OS%energysavedays_geometric
-      OS%geometric_end_time = Time_init + OS%energysavedays * &
-       (1 + (OS%Time - Time_init) / OS%energysavedays)
-    else
-      OS%write_energy_time = Time_init + OS%energysavedays * &
-        (1 + (OS%Time - Time_init) / OS%energysavedays)
-    endif
-  else
-    OS%write_energy_time = Time_init + OS%energysavedays * &
-      (1 + (OS%Time - Time_init) / OS%energysavedays)
-  endif
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
@@ -497,7 +448,6 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   real :: time_step         ! The time step of a call to step_MOM in seconds.
   integer :: secs, days
   integer :: is, ie, js, je
-  type(time_type) :: write_energy_time_geometric
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
   call get_time(Ocean_coupling_time_step, secs, days)
@@ -611,32 +561,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
     call disable_averaging(OS%diag)
   endif
 
-!  See if it is time to write out the energy.
-
-  if (OS%energysave_geometric) then
-    if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%geometric_end_time) .and. &
-        (OS%MSp%t_dyn_rel_adv==0.0)) then
-        call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
-                        OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
-                        OS%MOM_CSp%tracer_flow_CSp)
-        OS%write_energy_time = OS%geometric_end_time + OS%energysavedays
-        OS%energysave_geometric = .false.  ! stop geometric progression
-    endif
-  endif
-
-  if ((OS%Time + ((Ocean_coupling_time_step)/2) > OS%write_energy_time) .and. &
-      (OS%MSp%t_dyn_rel_adv==0.0)) then
+  if (OS%MSp%t_dyn_rel_adv==0.0) &
     call write_energy(OS%MSp%u, OS%MSp%v, OS%MSp%h, OS%MSp%tv, &
                       OS%Time, OS%nstep, OS%grid, OS%GV, OS%sum_output_CSp, &
-                      OS%MOM_CSp%tracer_flow_CSp)
-    if (OS%energysave_geometric) then
-        OS%energysavedays_geometric = OS%energysavedays_geometric*2
-        OS%write_energy_time = OS%write_energy_time + OS%energysavedays_geometric
-    else
-      OS%write_energy_time = OS%write_energy_time + OS%energysavedays
-    endif
-  endif
-
+                      OS%MOM_CSp%tracer_flow_CSp, dt_forcing=Ocean_coupling_time_step)
 
 
 ! Translate state into Ocean.
