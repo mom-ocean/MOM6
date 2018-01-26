@@ -560,7 +560,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
+        net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
     enddo ; enddo
