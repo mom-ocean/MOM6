@@ -123,7 +123,7 @@ use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
-use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_type
+use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
