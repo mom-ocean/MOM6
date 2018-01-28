@@ -165,6 +165,13 @@ type, public :: ocean_state_type ; private
   real :: press_to_z          !< A conversion factor between pressure and ocean
                               !! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
+  logical :: offline_tracer_mode = .false. !< If false, use the model in prognostic mode
+                              !! with the barotropic and baroclinic dynamics, thermodynamics,
+                              !! etc. stepped forward integrated in time.
+                              !! If true, all of the above are bypassed with all
+                              !! fields necessary to integrate only the tracer advection
+                              !! and diffusion equation read in from files stored from
+                              !! a previous integration of the prognostic model.
 
   type(directories) :: dirs   !< A structure containing several relevant directory paths.
   type(mech_forcing) :: forces !< A structure with the driving mechanical surface forces
@@ -245,7 +252,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   character(len=48)  :: stagger
   integer :: secs, days
   type(param_file_type) :: param_file !< A structure to parse for run-time parameters
-  logical :: offline_tracer_mode, use_temperature
+  logical :: use_temperature
   type(time_type) :: dt_geometric, dt_savedays, dt_from_base
 
   call callTree_enter("ocean_model_init(), ocean_model_MOM.F90")
@@ -261,7 +268,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
 
   OS%Time = Time_in
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
-                      OS%restart_CSp, Time_in, offline_tracer_mode=offline_tracer_mode, &
+                      OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
   OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
   OS%C_p = OS%MSp%tv%C_p
@@ -522,7 +529,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call disable_averaging(OS%diag)
   Master_time = OS%Time ; Time1 = OS%Time
 
-  if(OS%MOM_Csp%offline_tracer_mode) then
+  if(OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   else
     call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
