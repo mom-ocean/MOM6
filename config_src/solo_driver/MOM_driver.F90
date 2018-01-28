@@ -53,6 +53,7 @@ program MOM_main
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
   use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
   use MOM_time_manager,    only : NO_CALENDAR
+  use MOM_tracer_flow_control, only : tracer_flow_control_CS
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -89,7 +90,7 @@ program MOM_main
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true.
 
-  integer :: n
+  integer :: ns
 
   ! nmax is the number of iterations after which to stop so that the
   ! simulation does not exceed its CPU time limit.  nmax is determined by
@@ -167,11 +168,14 @@ program MOM_main
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
   type(MOM_state_type),      pointer :: MSp => NULL()
+  !> A pointer to the tracer flow control structure.
+  type(tracer_flow_control_CS), pointer :: &
+    tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
   type(MOM_restart_CS),      pointer :: &
-    restart_CSp => NULL()     !< A pointer set to the restart control structure
+    restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
   type(diag_ctrl), pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
@@ -282,13 +286,14 @@ program MOM_main
     Time = segment_start_time
     call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
-                        diag_ptr=diag)
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
     call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
-                        offline_tracer_mode=offline_tracer_mode, diag_ptr=diag)
+                        offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
+                        tracer_flow_CSp=tracer_flow_CSp)
   endif
   fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
@@ -301,7 +306,7 @@ program MOM_main
                                MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
 
   call surface_forcing_init(Time, grid, param_file, diag, &
-                            surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
+                            surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
   call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
@@ -424,9 +429,9 @@ program MOM_main
 
   call cpu_clock_begin(mainClock) !begin main loop
 
-  n = 1
-  do while ((n < nmax) .and. (Time < Time_end))
-    call callTree_enter("Main loop, MOM_driver.F90",n)
+  ns = 1
+  do while ((ns < nmax) .and. (Time < Time_end))
+    call callTree_enter("Main loop, MOM_driver.F90",ns)
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
@@ -447,7 +452,7 @@ program MOM_main
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = time_step
 
-    if (n==1) then
+    if (ns==1) then
       call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes, restart_CSp)
     endif
 
@@ -479,8 +484,8 @@ program MOM_main
     endif
     Time = Master_Time
 
-    if (cpu_steps > 0) then ; if (MOD(n, cpu_steps) == 0) then
-      call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
+    if (cpu_steps > 0) then ; if (MOD(ns, cpu_steps) == 0) then
+      call write_cputime(Time, ns+ntstep-1, nmax, write_CPU_CSp)
     endif ; endif
 
     call enable_averaging(time_step, Time, diag)
@@ -522,7 +527,7 @@ program MOM_main
       restart_time = restart_time + restint
     endif
 
-    n = n + ntstep
+    ns = ns + ntstep
     call callTree_leave("Main loop")
   enddo
 

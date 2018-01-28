@@ -194,7 +194,7 @@ end type MOM_state_type
 
 
 !> Control structure for this module
-type, public :: MOM_control_struct
+type, public :: MOM_control_struct ; private
   type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
   type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
                                    !! bottom drag viscosities, and related fields
@@ -1376,7 +1376,7 @@ end subroutine step_offline
 !> This subroutine initializes MOM.
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls)
+                          count_calls, tracer_flow_CSp)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating paramater file to parse
@@ -1388,14 +1388,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                                                           !! be used for MOM.
   type(time_type), optional, intent(in)    :: Time_in     !< time passed to MOM_initialize_state when
                                                           !! model is not being started from a restart file
-  logical,         optional, intent(out)   :: offline_tracer_mode !< True if tracers are being run offline
+  logical,         optional, intent(out)   :: offline_tracer_mode !< True is returned if tracers are being run offline
   character(len=*),optional, intent(in)    :: input_restart_file !< If present, name of restart file to read
   type(diag_ctrl), optional, pointer       :: diag_ptr    !< A pointer set in this routine to the diagnostic
                                                           !! regulatory structure
+  type(tracer_flow_control_CS), &
+                   optional, pointer       :: tracer_flow_CSp !< A pointer set in this routine to
+                                                          !! the tracer flow control structure.
   logical,         optional, intent(in)    :: count_calls !< If true, nstep_tot counts the number of
                                                           !! calls to step_MOM instead of the number of
                                                           !! dynamics timesteps.
-
   ! local
   type(ocean_grid_type),  pointer :: G => NULL() ! A pointer to a structure with metrics and related
   type(hor_index_type)            :: HI  !  A hor_index_type for array extents
@@ -1544,19 +1546,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "the gravity wave adjustment to h. This is a fragile feature and\n"//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
   call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
-                 "If True, advect temperature and salinity horizontally\n"//&
+                 "If True, advect temperature and salinity horizontally \n"//&
                  "If False, T/S are registered for advection.\n"//&
-                 "This is intended only to be used in offline tracer mode.", &
-                 "and is by default false in that case", &
+                 "This is intended only to be used in offline tracer mode \n"//&
+                 "and is by default false in that case.", &
                  do_not_log = .true., default=.true. )
-  if (present(offline_tracer_mode)) then ! Only read this parameter in solo mode
+  if (present(offline_tracer_mode)) then ! Only read this parameter in enabled modes
     call get_param(param_file, "MOM", "OFFLINE_TRACER_MODE", CS%offline_tracer_mode, &
                  "If true, barotropic and baroclinic dynamics, thermodynamics\n"//&
                  "are all bypassed with all the fields necessary to integrate\n"//&
                  "the tracer advection and diffusion equation are read in from\n"//&
                  "files stored from a previous integration of the prognostic model.\n"//&
                  "NOTE: This option only used in the ocean_solo_driver.", default=.false.)
-    if(CS%offline_tracer_mode) then
+    if (CS%offline_tracer_mode) then
       call get_param(param_file, "MOM", "ADVECT_TS", CS%advect_TS , &
                    "If True, advect temperature and salinity horizontally\n"//&
                    "If False, T/S are registered for advection.\n"//&
@@ -2214,13 +2216,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call tracer_flow_control_init(.not.new_sim, Time, G, GV, MS%h, param_file, &
              CS%diag, CS%OBC, CS%tracer_flow_CSp, CS%sponge_CSp, &
              CS%ALE_sponge_CSp, CS%diag_to_Z_CSp, MS%tv)
-
+  if (present(tracer_flow_CSp)) tracer_flow_CSp => CS%tracer_flow_CSp
 
   ! If running in offline tracer mode, initialize the necessary control structure and
   ! parameters
-  if(present(offline_tracer_mode)) offline_tracer_mode=CS%offline_tracer_mode
+  if (present(offline_tracer_mode)) offline_tracer_mode=CS%offline_tracer_mode
 
-  if(CS%offline_tracer_mode) then
+  if (CS%offline_tracer_mode) then
     ! Setup some initial parameterizations and also assign some of the subtypes
     call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
     call insert_offline_main( CS=CS%offline_CSp, ALE_CSp=CS%ALE_CSp, diabatic_CSp=CS%diabatic_CSp, &
@@ -2429,7 +2431,7 @@ subroutine MOM_timing_init(CS)
  id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
  id_clock_ALE          = cpu_clock_id('(Ocean ALE)', grain=CLOCK_MODULE)
- if(CS%offline_tracer_mode) then
+ if (CS%offline_tracer_mode) then
   id_clock_offline_tracer = cpu_clock_id('Ocean offline tracers', grain=CLOCK_SUBCOMPONENT)
  endif
 
@@ -3166,7 +3168,7 @@ subroutine MOM_end(MS, CS)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
 
-  if(CS%offline_tracer_mode) then
+  if (CS%offline_tracer_mode) then
     call offline_transport_end(CS%offline_CSp)
   endif
 
