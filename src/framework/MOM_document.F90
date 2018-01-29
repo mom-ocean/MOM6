@@ -504,9 +504,14 @@ function real_string(val)
   elseif (val == 0.) then
     real_string = "0.0"
   else
-    write(real_string(1:32), '(ES23.14)') val
-    if (.not.testFormattedFloatIsReal(real_string,val)) then
-     write(real_string(1:32), '(ES23.15)') val
+    if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
+      write(real_string(1:32), '(ES24.14E3)') val
+      if (.not.testFormattedFloatIsReal(real_string,val)) &
+        write(real_string(1:32), '(ES24.15E3)') val
+    else
+      write(real_string(1:32), '(ES23.14)') val
+      if (.not.testFormattedFloatIsReal(real_string,val)) &
+        write(real_string(1:32), '(ES23.15)') val
     endif
     do
       ind = index(real_string,"0E")
