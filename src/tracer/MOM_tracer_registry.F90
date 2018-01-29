@@ -466,12 +466,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
         diag%axesTL, Time, &
         'Horizontal convergence of residual mean advective fluxes of '//&
         trim(lowercase(flux_longname)), conv_units, v_extensive=.true., &
-        conversion=Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum')
+        conversion=Tr%conv_scale)
     Tr%id_adv_xy_2d = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy_2d", &
         diag%axesT1, Time, &
         'Vertical sum of horizontal convergence of residual mean advective fluxes of '//&
-        trim(lowercase(flux_longname)), conv_units, conversion=Tr%conv_scale, &
-        x_cell_method = 'sum', y_cell_method = 'sum')
+        trim(lowercase(flux_longname)), conv_units, conversion=Tr%conv_scale)
     if ((Tr%id_adv_xy > 0) .or. (Tr%id_adv_xy_2d > 0)) &
       call safe_alloc_ptr(Tr%advection_xy,isd,ied,jsd,jed,nz)
 
@@ -519,24 +518,22 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendname) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
-          diag%axesTL, Time, var_lname, conv_units, &
-          v_extensive=.true., x_cell_method = 'sum', y_cell_method = 'sum')
+          diag%axesTL, Time, var_lname, conv_units, v_extensive=.true.)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
-          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units,          &
-          x_cell_method = 'sum', y_cell_method = 'sum')
+          diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
     else
       cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//trim(flux_longname)//" Content"
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, &
           cmor_field_name=trim(Tr%cmor_tendname)//"tend", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          v_extensive=.true., conversion=Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum')
+          v_extensive=.true., conversion=Tr%conv_scale)
       cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
           cmor_field_name=trim(Tr%cmor_tendname)//"tend_2d", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
-          conversion=Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum')
+          conversion=Tr%conv_scale)
     endif
     if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
       call safe_alloc_ptr(Tr%Trxh_prev,isd,ied,jsd,jed,nz)
@@ -565,7 +562,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap',         &
         diag%axesTL, Time, var_lname, flux_units, v_extensive=.true., conversion = Tr%conv_scale)
 
-      var_lname = "Vertical sum of verrtical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
+      var_lname = "Vertical sum of vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont_2d = register_diag_field('ocean_model', &
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap_2d',         &
         diag%axesT1, Time, var_lname, flux_units, conversion = Tr%conv_scale)
