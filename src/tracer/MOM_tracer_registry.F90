@@ -534,7 +534,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
-          cmor_field_name=trim(Tr%cmor_tendname)//"_2d", &
+          cmor_field_name=trim(Tr%cmor_tendname)//"tend_2d", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
           conversion=Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum')
     endif
