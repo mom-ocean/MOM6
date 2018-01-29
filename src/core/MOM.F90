@@ -2156,7 +2156,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
-    call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
+    call ALE_register_diags(Time, G, GV, diag, CS%ALE_CSp)
   endif
 
   ! This subroutine initializes any tracer packages.

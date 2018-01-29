@@ -104,6 +104,7 @@ type, public :: tracer_type
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1
   integer :: id_adv_xy = -1, id_adv_xy_2d = -1
   integer :: id_dfxy_cont = -1, id_dfxy_cont_2d = -1, id_dfxy_conc = -1
+  integer :: id_remap_conc = -1, id_remap_cont = -1, id_remap_cont_2d = -1
   integer :: id_tendency = -1, id_trxh_tendency = -1, id_trxh_tendency_2d = -1
   integer :: id_tr_vardec = -1
 end type tracer_type
@@ -550,6 +551,25 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       call register_Z_tracer(Tr%t, name, longname, units, Time, G, diag_to_Z_CSp, &
                cmor_field_name=cmorname, cmor_standard_name=cmor_long_std(cmor_longname), &
                cmor_long_name=cmor_longname)
+    endif
+
+    ! Vertical regridding/remapping tendencies
+    if (use_ALE .and. Tr%remap_tr) then
+      var_lname = "Vertical remapping tracer concentration tendency for "//trim(Reg%Tr(m)%name)
+      Tr%id_remap_conc= register_diag_field('ocean_model',                          &
+        trim(Tr%flux_nameroot)//'_tendency_vert_remap', diag%axesTL, Time, var_lname, &
+        trim(units)//'s-1')
+
+      var_lname = "Vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
+      Tr%id_remap_cont = register_diag_field('ocean_model', &
+        trim(Tr%flux_nameroot)//'h_tendency_vert_remap',         &
+        diag%axesTL, Time, var_lname, flux_units, v_extensive=.true., conversion = Tr%conv_scale)
+
+      var_lname = "Vertical sum of verrtical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
+      Tr%id_remap_cont_2d = register_diag_field('ocean_model', &
+        trim(Tr%flux_nameroot)//'h_tendency_vert_remap_2d',         &
+        diag%axesT1, Time, var_lname, flux_units, conversion = Tr%conv_scale)
+
     endif
 
     if (use_ALE .and. (Reg%ntr<MAX_FIELDS_) .and. Tr%remap_tr) then
