@@ -942,8 +942,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
              OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
              OS%grid, OS%GV, OS%MOM_CSp)
 
-    call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
-                                     OS%MOM_CSp%use_conT_absS)
+    call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
   endif
 
   call close_param_file(param_file)
@@ -973,8 +972,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
            OS%MOM_CSp%v, OS%MOM_CSp%h, OS%MOM_CSp%ave_ssh,&
            OS%grid, OS%GV, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
-                                   OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
 
@@ -1344,13 +1342,10 @@ end subroutine initialize_ocean_public_type
 !> Translates the coupler's ocean_data_type into MOM6's surface state variable.
 !! This may eventually be folded into the MOM6's code that calculates the
 !! surface state in the first place.
-subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
-                                       patm, press_to_z)
+subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, patm, press_to_z)
   type(surface),           intent(inout) :: state
   type(ocean_public_type), target, intent(inout) :: Ocean_sfc !< Ocean surface state
   type(ocean_grid_type),   intent(inout) :: G                 !< The ocean's grid structure
-  logical,                 intent(in)    :: use_conT_absS     !< If true, , the prognostics
-                                         !! T&S are the conservative temperature
   real,          optional, intent(in)    :: patm(:,:)         !< Atmospheric pressure.
   real,          optional, intent(in)    :: press_to_z        !< Factor to tranform atmospheric
                                          !! pressure to z?
@@ -1373,18 +1368,24 @@ subroutine convert_state_to_ocean_type(state, Ocean_sfc, G, use_conT_absS, &
   endif
 
   i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  !If directed convert the surface T&S
-  !from conservative T to potential T and
-  !from absolute (reference) salinity to practical salinity
-  !
-  if(use_conT_absS) then
+  if (state%T_is_conT) then
+    ! Convert the surface T from conservative T to potential T.
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
-      Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(state%SSS(i+i0,j+j0))
-      Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(state%SSS(i+i0,j+j0),state%SST(i+i0,j+j0)) + CELSIUS_KELVIN_OFFSET
+      Ocean_sfc%t_surf(i,j) = gsw_pt_from_ct(state%SSS(i+i0,j+j0), &
+                               state%SST(i+i0,j+j0)) + CELSIUS_KELVIN_OFFSET
     enddo ; enddo
   else
     do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%t_surf(i,j) = state%SST(i+i0,j+j0) + CELSIUS_KELVIN_OFFSET
+    enddo ; enddo
+  endif
+  if (state%S_is_absS) then
+    ! Convert the surface S from absolute salinity to practical salinity.
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      Ocean_sfc%s_surf(i,j) = gsw_sp_from_sr(state%SSS(i+i0,j+j0))
+    enddo ; enddo
+  else
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
       Ocean_sfc%s_surf(i,j) = state%SSS(i+i0,j+j0)
     enddo ; enddo
   endif
@@ -1820,8 +1821,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
-                                   OS%MOM_CSp%use_conT_absS)
+  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model

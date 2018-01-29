@@ -124,9 +124,14 @@ function left_real(val)
   elseif (val == 0.) then
     left_real = "0.0"
   else
-    write(left_real(1:32), '(ES23.14)') val
-    if (.not.isFormattedFloatEqualTo(left_real,val)) then
-     write(left_real(1:32), '(ES23.15)') val
+    if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
+      write(left_real(1:32), '(ES24.14E3)') val
+      if (.not.isFormattedFloatEqualTo(left_real,val)) &
+        write(left_real(1:32), '(ES24.15E3)') val
+    else
+      write(left_real(1:32), '(ES23.14)') val
+      if (.not.isFormattedFloatEqualTo(left_real,val)) &
+        write(left_real(1:32), '(ES23.15)') val
     endif
     do
       ind = index(left_real,"0E")
