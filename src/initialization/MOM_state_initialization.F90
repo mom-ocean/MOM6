@@ -539,7 +539,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
-<<<<<<< HEAD
       case ("channel"); call channel_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
       case ("channelssp"); call channelssp_initialize_sponges(G, GV, use_temperature, &
@@ -548,10 +547,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                 tv, PF, sponge_CSp, h)
       case ("channel4"); call channel4_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
-=======
       case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, tv, &
                                                PF, useALE, sponge_CSp, ALE_sponge_CSp)
->>>>>>> dev/gfdl
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
       case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &

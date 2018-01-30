@@ -1,7 +1,9 @@
-!> Wind and buoyancy forcing for the shoebox4 configurations
-!> difference from shoebox3: wind stress in the SO is amplified by a factor of 2
+!> Wind and buoyancy forcing for the shoebox5 configurations
+!> difference from shoebox3: 
+!> 1) wind stress peak in SO is 0.2 Pa
+!> 2) rho(65N) = rho(65S) - 0.3
 
-module shoebox4_surface_forcing
+module shoebox5_surface_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -19,15 +21,15 @@ use MOM_variables, only : surface
 
 implicit none ; private
 
-public shoebox4_buoyancy_forcing
-public shoebox4_wind_forcing
-public shoebox4_surface_forcing_init
+public shoebox5_buoyancy_forcing
+public shoebox5_wind_forcing
+public shoebox5_surface_forcing_init
 
 !> This control structure should be used to store any run-time variables
-!! associated with the shoebox4 forcing.  It can be readily modified
+!! associated with the shoebox5 forcing.  It can be readily modified
 !! for a specific case, and because it is private there will be no changes
 !! needed in other code (although they will have to be recompiled).
-type, public :: shoebox4_surface_forcing_CS ; private
+type, public :: shoebox5_surface_forcing_CS ; private
 
   logical :: use_temperature !< If true, use temperature and salinity.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
@@ -40,25 +42,25 @@ type, public :: shoebox4_surface_forcing_CS ; private
   character(len=200) :: inputdir !< The directory where NetCDF input files are.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
-  logical :: first_call = .true. !< True until shoebox4_buoyancy_forcing has been called
-end type shoebox4_surface_forcing_CS
+  logical :: first_call = .true. !< True until shoebox5_buoyancy_forcing has been called
+end type shoebox5_surface_forcing_CS
 
 contains
 
 
-subroutine shoebox4_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
+subroutine shoebox5_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),                 intent(inout) :: fluxes !< Forcing fields.
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   real,                          intent(in)    :: dt !< Forcing time step (s).
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
-  type(shoebox4_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
+  type(shoebox5_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variables
   real :: buoy_rest_const  ! A constant relating density anomalies to the
                            ! restoring buoyancy flux, in m5 s-3 kg-1.
   real :: y, latext, sslat, eqlat ! dimensional: 65S; non-dimensional: 30S, Equator, 30N
-  real :: den, rho1 = 1037.5, rho2 = 1031.3, rho3 = 1037.5 ! south, equator, north
+  real :: den, rho1 = 1037.5, rho2 = 1031.3, rho3 = 1037.2 ! south, equator, north
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
 
@@ -71,7 +73,7 @@ subroutine shoebox4_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   ! Allocate and zero out the forcing arrays, as necessary.  This portion is
   ! usually not changed.
   if (CS%use_temperature) then
-    call MOM_error(FATAL, "shoebox4_buoyancy_forcing: " // &
+    call MOM_error(FATAL, "shoebox5_buoyancy_forcing: " // &
         "Temperature and salinity mode not coded!" )
   else
     ! This is the buoyancy only mode.
@@ -104,7 +106,7 @@ subroutine shoebox4_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
   ! compute the buoyancy flux needed to restore current density to target density
   if (CS%restorebuoy) then
     if (CS%use_temperature) then      ! if temperature is used to restore buoyancy
-      call MOM_error(FATAL, "shoebox4_buoyancy_surface_forcing: " // &
+      call MOM_error(FATAL, "shoebox5_buoyancy_surface_forcing: " // &
         "Temperature/salinity restoring not coded!" )
     else      ! density is used to restore buoyancy
 
@@ -120,18 +122,18 @@ subroutine shoebox4_buoyancy_forcing(sfc_state, fluxes, day, dt, G, CS)
     endif
   endif
 
-end subroutine shoebox4_buoyancy_forcing
+end subroutine shoebox5_buoyancy_forcing
 
 !> Sets the surface wind stresses, forces%taux and forces%tauy for the
-!! shoebox4 forcing configuration.
-subroutine shoebox4_wind_forcing(sfc_state, forces, day, G, CS)
+!! shoebox5 forcing configuration.
+subroutine shoebox5_wind_forcing(sfc_state, forces, day, G, CS)
   type(surface),                 intent(inout) :: sfc_state !< A structure containing fields that
                                                     !! describe the surface
                                                     !state of the ocean.
   type(mech_forcing),            intent(inout) :: forces !< A structure with the driving mechanical forces
   type(time_type),               intent(in)    :: day !< Time used for determining the fluxes.
   type(ocean_grid_type),         intent(inout) :: G !< Grid structure.
-  type(shoebox4_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
+  type(shoebox5_surface_forcing_CS), pointer  :: CS !< Control structure for this module.
   ! Local variable
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -139,7 +141,7 @@ subroutine shoebox4_wind_forcing(sfc_state, forces, day, G, CS)
   real :: x, y
   real :: PI = 4.0*atan(1.0), wp_SO, wp2, wp3, wp4, wp5, wp6, latext, lonext
 
-  wp_SO = 0.13961/2 ! westerly peak in SO;  53 S
+  wp_SO = 0.2 ! westerly peak in SO;  53 S
   wp2 = -0.07871  ! easterly peak in Southern subtropics; 11.75S
   wp3 = 0.03060  ! easterly trough near the equator; 4.75N
   wp4 = -0.07131  ! esterly peak in Northern subtropics;  18.25N
@@ -178,7 +180,7 @@ subroutine shoebox4_wind_forcing(sfc_state, forces, day, G, CS)
       enddo
   enddo
 
-end subroutine shoebox4_wind_forcing
+end subroutine shoebox5_wind_forcing
 
 
 
@@ -195,22 +197,22 @@ subroutine alloc_if_needed(ptr, isd, ied, jsd, jed)
   endif
 end subroutine alloc_if_needed
 
-!> Initializes the shoebox4 control structure.
-subroutine shoebox4_surface_forcing_init(Time, G, param_file, diag, CS)
+!> Initializes the shoebox5 control structure.
+subroutine shoebox5_surface_forcing_init(Time, G, param_file, diag, CS)
   type(time_type),         intent(in) :: Time       !< The current model time.
   type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(param_file_type),   intent(in) :: param_file !< A structure indicating the open file to parse for
                                                     !! model parameter values.
   type(diag_ctrl), target, intent(in) :: diag       !< A structure that is used to regulate diagnostic output.
-  type(shoebox4_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
+  type(shoebox5_surface_forcing_CS), pointer :: CS !< A pointer that is set to point to the control structure
                                                     !! for this module
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   ! Local variables
-  character(len=40)  :: mod = "shoebox4_surface_forcing" ! This module's name.
+  character(len=40)  :: mod = "shoebox5_surface_forcing" ! This module's name.
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "shoebox4_surface_forcing_init called with an associated "// &
+    call MOM_error(WARNING, "shoebox5_surface_forcing_init called with an associated "// &
                              "control structure.")
     return
   endif
@@ -251,7 +253,7 @@ subroutine shoebox4_surface_forcing_init(Time, G, param_file, diag, CS)
     CS%flux_const = CS%flux_const / 86400.0
   endif
 
-end subroutine shoebox4_surface_forcing_init
+end subroutine shoebox5_surface_forcing_init
 
 !------------------------------ defines the functions to used from above ----------------
   !> Returns the value of a cosine-bell function evaluated at x/L
@@ -304,4 +306,4 @@ end subroutine shoebox4_surface_forcing_init
          cosbellhnew  = 0.5*(1+cos(PI*MIN(xx/L, 1.0)))
        end function cosbellhnew
 
-end module shoebox4_surface_forcing
+end module shoebox5_surface_forcing

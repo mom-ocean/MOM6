@@ -85,6 +85,8 @@ use shoebox3_surface_forcing, only : shoebox3_buoyancy_forcing, shoebox3_wind_fo
 use shoebox3_surface_forcing, only : shoebox3_surface_forcing_init, shoebox3_surface_forcing_CS
 use shoebox4_surface_forcing, only : shoebox4_buoyancy_forcing, shoebox4_wind_forcing
 use shoebox4_surface_forcing, only : shoebox4_surface_forcing_init, shoebox4_surface_forcing_CS
+use shoebox5_surface_forcing, only : shoebox5_buoyancy_forcing, shoebox5_wind_forcing
+use shoebox5_surface_forcing, only : shoebox5_surface_forcing_init, shoebox5_surface_forcing_CS
 use shoebox8_surface_forcing, only : shoebox8_buoyancy_forcing,shoebox8_wind_forcing
 use shoebox8_surface_forcing, only : shoebox8_surface_forcing_init, shoebox8_surface_forcing_CS
 use shoebox9_surface_forcing, only : shoebox9_buoyancy_forcing, shoebox9_wind_forcing
@@ -231,6 +233,7 @@ type, public :: surface_forcing_CS ; private
   type(shoebox_surface_forcing_CS), pointer :: shoebox_forcing_CSp => NULL()
   type(shoebox3_surface_forcing_CS), pointer :: shoebox3_forcing_CSp => NULL()
   type(shoebox4_surface_forcing_CS), pointer :: shoebox4_forcing_CSp => NULL()
+  type(shoebox5_surface_forcing_CS), pointer :: shoebox5_forcing_CSp => NULL()
   type(shoebox8_surface_forcing_CS), pointer :: shoebox8_forcing_CSp => NULL()
   type(shoebox9_surface_forcing_CS), pointer :: shoebox9_forcing_CSp => NULL()
   type(channel_surface_forcing_CS), pointer :: channel_forcing_CSp => NULL()
@@ -331,6 +334,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call shoebox3_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%wind_config) == "shoebox4") then
       call shoebox4_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox4_forcing_CSp)
+    elseif (trim(CS%wind_config) == "shoebox5") then
+      call shoebox5_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox5_forcing_CSp)
     elseif (trim(CS%wind_config) == "shoebox8") then
       call shoebox8_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox8_forcing_CSp)
     elseif (trim(CS%wind_config) == "shoebox9") then
@@ -385,6 +390,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call shoebox3_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%buoy_config) == "shoebox4") then
       call shoebox4_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox4_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "shoebox5") then
+      call shoebox5_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox5_forcing_CSp)
     elseif (trim(CS%buoy_config) == "shoebox8") then
       call shoebox8_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox8_forcing_CSp)
     elseif (trim(CS%buoy_config) == "shoebox9") then
@@ -1894,6 +1901,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call shoebox3_surface_forcing_init(Time, G, param_file, diag, CS%shoebox3_forcing_CSp)
   elseif (trim(CS%wind_config) == "shoebox4") then
     call shoebox4_surface_forcing_init(Time, G, param_file, diag, CS%shoebox4_forcing_CSp)
+  elseif (trim(CS%wind_config) == "shoebox5") then
+    call shoebox5_surface_forcing_init(Time, G, param_file, diag, CS%shoebox5_forcing_CSp)
   elseif (trim(CS%wind_config) == "shoebox8") then
     call shoebox8_surface_forcing_init(Time, G, param_file, diag, CS%shoebox8_forcing_CSp)
   elseif (trim(CS%wind_config) == "shoebox9") then
