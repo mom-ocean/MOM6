@@ -122,6 +122,7 @@ use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
+use MOM_tracer_registry,       only : post_tracer_transport_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
 use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
@@ -160,7 +161,8 @@ type transport_diag_IDs
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-  integer :: id_h_tendency_dyn = -1
+  integer :: id_dynamics_h_tendency = -1
+  integer :: id_dynamics_h = -1
 
 end type transport_diag_IDs
 
@@ -618,6 +620,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
+    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
+    if (transport_remap_grid_needed(CS%transport_IDs)) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        h_pre_dyn(i,j,k) = h(i,j,k)
+        if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
+        if (associated(CS%tv%S)) S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+
     if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
       if (thermo_does_span_coupling) then
         dtth = dt_therm
@@ -690,15 +701,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       enddo ; enddo ; enddo
       do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
         CS%v_prev(I,j,k) = u(I,j,k)
-      enddo ; enddo ; enddo
-    endif
-
-    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    if (transport_remap_grid_needed(CS%transport_IDs)) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        h_pre_dyn(i,j,k) = h(i,j,k)
-        if (associated(CS%tv%T)) T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
-        if (associated(CS%tv%S)) S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
       enddo ; enddo ; enddo
     endif
 
@@ -965,6 +967,8 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
            CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+  call post_tracer_transport_diagnostics(G, GV, CS%tracer_reg, h_pre_dyn, CS%diag)
+
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -2341,7 +2345,10 @@ subroutine register_transport_diags(Time, G, GV, IDs, diag, missing)
   IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
-  IDs%id_h_tendency_dyn = register_diag_field('ocean_model','h_tendency_dyn',      &
+  IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
+      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
+      'm s-1', v_extensive = .true.)
+  IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
       diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
       'm s-1', v_extensive = .true.)
 
@@ -2456,14 +2463,14 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans,
 
   if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = h_pre_dyn)
   if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = h_pre_dyn)
-
+  if (IDs%id_dynamics_h > 0 ) call post_data(IDs%id_dynamics_h, h_pre_dyn, diag, alt_h = h_pre_dyn)
   ! Post the change in thicknesses
-  if (IDs%id_h_tendency_dyn > 0) then
+  if (IDs%id_dynamics_h_tendency > 0) then
     h_tend(:,:,:) = 0.
     do k=1,nz ; do j=js,je ; do i=is,ie
       h_tend(i,j,k) = (h(i,j,k) - h_pre_dyn(i,j,k))*Idt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_h_tendency_dyn, h_tend, diag)
+    call post_data(IDs%id_dynamics_h_tendency, h_tend, diag, alt_h = h_pre_dyn)
   endif
 
 end subroutine post_transport_diagnostics
