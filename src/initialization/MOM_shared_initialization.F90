@@ -749,7 +749,7 @@ subroutine reset_face_lengths_list(G, param_file)
 !                         model parameter values.
   character(len=120), pointer, dimension(:) :: lines => NULL()
   character(len=120) :: line
-  character(len=200) :: filename, chan_file, inputdir ! Strings for file/path
+  character(len=200) :: filename, chan_file, inputdir, mesg ! Strings for file/path
   character(len=40)  :: mdl = "reset_face_lengths_list" ! This subroutine's name.
   real, pointer, dimension(:,:) :: &
     u_lat => NULL(), u_lon => NULL(), v_lat => NULL(), v_lon => NULL()
@@ -907,9 +907,19 @@ subroutine reset_face_lengths_list(G, param_file)
       if (((lat >= u_lat(1,npt)) .and. (lat <= u_lat(2,npt))) .and. &
           (((lon >= u_lon(1,npt)) .and. (lon <= u_lon(2,npt))) .or. &
            ((lon_p >= u_lon(1,npt)) .and. (lon_p <= u_lon(2,npt))) .or. &
-           ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) &
+           ((lon_m >= u_lon(1,npt)) .and. (lon_m <= u_lon(2,npt)))) ) then
 
-      G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        G%dy_Cu(I,j) = G%mask2dCu(I,j) * min(G%dyCu(I,j), max(u_width(npt), 0.0))
+        if (j>=G%jsc .and. j<=G%jec .and. I>=G%isc .and. I<=G%iec) then ! Limit messages/checking to compute domain
+          if ( G%mask2dCu(I,j) == 0.0 )  then
+            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCu=0 at ",lat,lon," (",&
+                u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") so grid metric is unmodified."
+          else
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dy_Cu gridpoint at ",lat,lon," (",&
+                  u_lat(1,npt), u_lat(2,npt), u_lon(1,npt), u_lon(2,npt),") to ",G%dy_Cu(I,j),"m"
+          endif
+        endif
+      endif
     enddo
 
     G%areaCu(I,j) = G%dxCu(I,j)*G%dy_Cu(I,j)
@@ -926,8 +936,18 @@ subroutine reset_face_lengths_list(G, param_file)
       if (((lat >= v_lat(1,npt)) .and. (lat <= v_lat(2,npt))) .and. &
           (((lon >= v_lon(1,npt)) .and. (lon <= v_lon(2,npt))) .or. &
            ((lon_p >= v_lon(1,npt)) .and. (lon_p <= v_lon(2,npt))) .or. &
-           ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) &
+           ((lon_m >= v_lon(1,npt)) .and. (lon_m <= v_lon(2,npt)))) ) then
         G%dx_Cv(i,J) = G%mask2dCv(i,J) * min(G%dxCv(i,J), max(v_width(npt), 0.0))
+        if (i>=G%isc .and. i<=G%iec .and. J>=G%jsc .and. J<=G%jec) then ! Limit messages/checking to compute domain
+          if ( G%mask2dCv(i,J) == 0.0 )  then
+            write(*,'(A,2F8.2,A,4F8.2,A)') "read_face_lengths_list : G%mask2dCv=0 at ",lat,lon," (",&
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") so grid metric is unmodified."
+          else
+            write(*,'(A,2F8.2,A,4F8.2,A5,F9.2,A1)') "read_face_lengths_list : Modifying dx_Cv gridpoint at ",lat,lon," (",&
+                  v_lat(1,npt), v_lat(2,npt), v_lon(1,npt), v_lon(2,npt),") to ",G%dx_Cv(I,j),"m"
+          endif
+        endif
+      endif
     enddo
 
     G%areaCv(i,J) = G%dyCv(i,J)*G%dx_Cv(i,J)
@@ -1133,6 +1153,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, geom_file)
   vars(21) = var_desc("Dopen_u","m","Open depth at u points",'u','1','1')
   vars(22) = var_desc("Dblock_v","m","Blocked depth at v points",'v','1','1')
   vars(23) = var_desc("Dopen_v","m","Open depth at v points",'v','1','1')
+
 
   nFlds_used = 19 ; if (G%bathymetry_at_vel) nFlds_used = 23
 

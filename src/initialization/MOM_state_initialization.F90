@@ -67,6 +67,8 @@ use sloshing_initialization, only : sloshing_initialize_thickness
 use sloshing_initialization, only : sloshing_initialize_temperature_salinity
 use seamount_initialization, only : seamount_initialize_thickness
 use seamount_initialization, only : seamount_initialize_temperature_salinity
+use dumbbell_initialization, only : dumbbell_initialize_thickness
+use dumbbell_initialization, only : dumbbell_initialize_temperature_salinity
 use Phillips_initialization, only : Phillips_initialize_thickness
 use Phillips_initialization, only : Phillips_initialize_velocity
 use Phillips_initialization, only : Phillips_initialize_sponges
@@ -83,6 +85,7 @@ use soliton_initialization, only : soliton_initialize_thickness
 use BFB_initialization, only : BFB_initialize_sponges_southonly
 use dense_water_initialization, only : dense_water_initialize_TS
 use dense_water_initialization, only : dense_water_initialize_sponges
+use dumbbell_initialization, only : dumbbell_initialize_sponges
 
 use midas_vertmap, only : find_interfaces, tracer_Z_init
 use midas_vertmap, only : determine_temperature
@@ -253,9 +256,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t\t densities. This is not yet implemented. \n"//&
              " \t circle_obcs - the circle_obcs test case is used. \n"//&
              " \t DOME2D - 2D version of DOME initialization. \n"//&
-             " \t adjustment2d - TBD AJA. \n"//&
-             " \t sloshing - TBD AJA. \n"//&
-             " \t seamount - TBD AJA. \n"//&
+             " \t adjustment2d - 2D lock exchange thickness ICs. \n"//&
+             " \t sloshing - sloshing gravity thickness ICs. \n"//&
+             " \t seamount - no motion test with seamount ICs. \n"//&
+             " \t dumbbell - sloshing channel ICs. \n"//&
              " \t soliton - Equatorial Rossby soliton. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
@@ -297,6 +301,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                    just_read_params=just_read)
        case ("seamount"); call seamount_initialize_thickness(h, G, GV, PF, &
                                    just_read_params=just_read)
+       case ("dumbbell"); call dumbbell_initialize_thickness(h, G, GV, PF, &
+                                   just_read_params=just_read)
        case ("soliton"); call soliton_initialize_thickness(h, G, GV)
        case ("phillips"); call Phillips_initialize_thickness(h, G, GV, PF, &
                                    just_read_params=just_read)
@@ -323,9 +329,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t linear - linear in logical layer space. \n"//&
              " \t DOME2D - 2D DOME initialization. \n"//&
              " \t ISOMIP - ISOMIP initialization. \n"//&
-             " \t adjustment2d - TBD AJA. \n"//&
-             " \t sloshing - TBD AJA. \n"//&
-             " \t seamount - TBD AJA. \n"//&
+             " \t adjustment2d - 2d lock exchange T/S ICs. \n"//&
+             " \t sloshing - sloshing mode T/S ICs. \n"//&
+             " \t seamount - no motion test with seamount ICs. \n"//&
+             " \t dumbbell - sloshing channel ICs. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
              " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
@@ -354,6 +361,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
         case ("sloshing"); call sloshing_initialize_temperature_salinity(tv%T, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("seamount"); call seamount_initialize_temperature_salinity(tv%T, &
+                                    tv%S, h, G, GV, PF, eos, just_read_params=just_read)
+        case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
                                     tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
@@ -514,6 +523,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                PF, sponge_CSp, h)
       case ("BFB"); call BFB_initialize_sponges_southonly(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
+      case ("DUMBBELL"); call dumbbell_initialize_sponges(G, GV, tv, &
+                                               PF, useALE, sponge_CSp, ALE_sponge_CSp)
       case ("phillips"); call Phillips_initialize_sponges(G, use_temperature, tv, &
                                                PF, sponge_CSp, h)
       case ("dense"); call dense_water_initialize_sponges(G, GV, tv, PF, useALE, &
@@ -1827,6 +1838,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 !  The first call to set_up_sponge_field is for the interface heights if in layered mode.!
 
   if (.not. use_ALE) then
+    allocate(eta(isd:ied,jsd:jed,nz+1))
     call MOM_read_data(filename, eta_var, eta(:,:,:), G%Domain)
 
     do j=js,je ; do i=is,ie
@@ -1839,6 +1851,7 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
 ! Set the inverse damping rates so that the model will know where to !
 ! apply the sponges, along with the interface heights.               !
     call initialize_sponge(Idamp, eta, G, param_file, CSp)
+    deallocate(eta)
   else if (.not. new_sponges) then ! ALE mode
 
     call field_size(filename,eta_var,siz,no_domain=.true.)
@@ -1865,6 +1878,8 @@ subroutine initialize_sponges_file(G, GV, use_temperature, tv, param_file, CSp, 
       h(i,j,k) = eta(i,j,k)-eta(i,j,k+1)
     enddo ; enddo; enddo
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp, h, nz_data)
+    deallocate(eta)
+    deallocate(h)
   else
     ! Initialize sponges without supplying sponge grid
     call initialize_ALE_sponge(Idamp, G, param_file, ALE_CSp)
