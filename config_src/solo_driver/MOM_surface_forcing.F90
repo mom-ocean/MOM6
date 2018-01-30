@@ -114,7 +114,8 @@ use SCM_CVmix_tests,         only : SCM_CVmix_tests_buoyancy_forcing
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_CS
 use BFB_surface_forcing,    only : BFB_buoyancy_forcing
 use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
-
+use dumbbell_surface_forcing,    only : dumbbell_surface_forcing_init, dumbbell_surface_forcing_CS
+use dumbbell_surface_forcing, only    : dumbbell_buoyancy_forcing
 use data_override_mod, only : data_override_init, data_override
 
 implicit none ; private
@@ -224,6 +225,7 @@ type, public :: surface_forcing_CS ; private
   type(user_revise_forcing_CS),  pointer :: urf_CS => NULL()
   type(user_surface_forcing_CS), pointer :: user_forcing_CSp => NULL()
   type(BFB_surface_forcing_CS), pointer :: BFB_forcing_CSp => NULL()
+  type(dumbbell_surface_forcing_CS), pointer :: dumbbell_forcing_CSp => NULL()
   type(MESO_surface_forcing_CS), pointer :: MESO_forcing_CSp => NULL()
   type(Neverland_surface_forcing_CS), pointer :: Neverland_forcing_CSp => NULL()
   type(shoebox_surface_forcing_CS), pointer :: shoebox_forcing_CSp => NULL()
@@ -405,6 +407,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call USER_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%user_forcing_CSp)
     elseif (trim(CS%buoy_config) == "BFB") then
       call BFB_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%BFB_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "dumbbell") then
+      call dumbbell_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%dumbbell_forcing_CSp)
     elseif (trim(CS%buoy_config) == "NONE") then
       call MOM_mesg("MOM_surface_forcing: buoyancy forcing has been set to omitted.")
     elseif (CS%variable_buoyforce .and. .not.CS%first_call_set_forcing) then
@@ -1878,6 +1882,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call USER_surface_forcing_init(Time, G, param_file, diag, CS%user_forcing_CSp)
   elseif (trim(CS%buoy_config) == "BFB" ) then
     call BFB_surface_forcing_init(Time, G, param_file, diag, CS%BFB_forcing_CSp)
+  elseif (trim(CS%buoy_config) == "dumbbell" ) then
+    call dumbbell_surface_forcing_init(Time, G, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, param_file, diag, CS%MESO_forcing_CSp)
   elseif (trim(CS%wind_config) == "Neverland") then
