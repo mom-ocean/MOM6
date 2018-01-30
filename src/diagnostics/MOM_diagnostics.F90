@@ -1473,7 +1473,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
-      'Thickness tendency', trim(thickness_units)//" s-1")
+      'Thickness tendency', trim(thickness_units)//" s-1", v_extensive = .true.)
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(MIS%h, CS%dh_dt, CS)

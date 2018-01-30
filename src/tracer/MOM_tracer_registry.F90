@@ -27,7 +27,7 @@ implicit none ; private
 
 public register_tracer
 public MOM_tracer_chksum, MOM_tracer_chkinv
-public register_tracer_diagnostics, post_tracer_diagnostics
+public register_tracer_diagnostics, post_tracer_diagnostics, post_tracer_transport_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
 public add_tracer_OBC_values
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
@@ -660,23 +660,6 @@ subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
-    if (Tr%id_tr > 0) call post_data(Tr%id_tr, Tr%t, diag)
-    if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag)
-    if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag)
-    if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag)
-    if (Tr%id_dfy > 0) call post_data(Tr%id_dfy, Tr%df_y, diag)
-    if (Tr%id_adx_2d > 0) call post_data(Tr%id_adx_2d, Tr%ad2d_x, diag)
-    if (Tr%id_ady_2d > 0) call post_data(Tr%id_ady_2d, Tr%ad2d_y, diag)
-    if (Tr%id_dfx_2d > 0) call post_data(Tr%id_dfx_2d, Tr%df2d_x, diag)
-    if (Tr%id_dfy_2d > 0) call post_data(Tr%id_dfy_2d, Tr%df2d_y, diag)
-    if (Tr%id_adv_xy > 0) call post_data(Tr%id_adv_xy, Tr%advection_xy, diag)
-    if (Tr%id_adv_xy_2d > 0) then
-      work2d(:,:) = 0.0
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        work2d(i,j) = work2d(i,j) + Tr%advection_xy(i,j,k)
-      enddo ; enddo ; enddo
-      call post_data(Tr%id_adv_xy_2d, work2d, diag)
-    endif
     if (Tr%id_tendency > 0) then
       work3d(:,:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie
@@ -702,6 +685,44 @@ subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
   endif ; enddo
 
 end subroutine post_tracer_diagnostics
+
+!> Post the advective and diffusive tendencies
+subroutine post_tracer_transport_diagnostics(G, GV, Reg, h, diag)
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
+  type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                              intent(in) :: h    !< Layer thicknesses
+  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+
+  integer :: i, j, k, is, ie, js, je, nz, m
+  real    :: work2d(SZI_(G),SZJ_(G))
+  type(tracer_type), pointer :: Tr=>NULL()
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+
+  do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
+    Tr => Reg%Tr(m)
+    if (Tr%id_tr > 0) call post_data(Tr%id_tr, Tr%t, diag)
+    if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag, alt_h = h)
+    if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag, alt_h = h)
+    if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag, alt_h = h)
+    if (Tr%id_dfy > 0) call post_data(Tr%id_dfy, Tr%df_y, diag, alt_h = h)
+    if (Tr%id_adx_2d > 0) call post_data(Tr%id_adx_2d, Tr%ad2d_x, diag)
+    if (Tr%id_ady_2d > 0) call post_data(Tr%id_ady_2d, Tr%ad2d_y, diag)
+    if (Tr%id_dfx_2d > 0) call post_data(Tr%id_dfx_2d, Tr%df2d_x, diag)
+    if (Tr%id_dfy_2d > 0) call post_data(Tr%id_dfy_2d, Tr%df2d_y, diag)
+    if (Tr%id_adv_xy > 0) call post_data(Tr%id_adv_xy, Tr%advection_xy, diag, alt_h = h)
+    if (Tr%id_adv_xy_2d > 0) then
+      work2d(:,:) = 0.0
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        work2d(i,j) = work2d(i,j) + Tr%advection_xy(i,j,k)
+      enddo ; enddo ; enddo
+      call post_data(Tr%id_adv_xy_2d, work2d, diag)
+    endif
+  endif ; enddo
+
+end subroutine post_tracer_transport_diagnostics
 
 !> This subroutine writes out chksums for tracers.
 subroutine MOM_tracer_chksum(mesg, Tr, ntr, G)
