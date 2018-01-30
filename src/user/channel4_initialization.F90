@@ -34,6 +34,8 @@ contains
 !> 3) the slope on west/east boundaries decay abruptly to zero at the edge of sponge
 !> 4) the shape of Drake Passage in the east is modified so as to match that in the west
 
+!> update: 1/24/2018: use diagnosed vertical rho profile from sb8sG as sponge layer rho profile
+
 subroutine channel4_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
@@ -159,10 +161,11 @@ subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, C
   ! target interface heights: all negative values
   ! corresponds to rho 8
   eta0 = (/0., 0., 0., 0., 0., &
-                -64.,-140.,-244.,-372.,-520.,-676.,-834.,-996., &
-                -1161.,-1328.,-1501.,-1675.,-1851.,-2030.,-2214.,-2399., &
-                -2592.,-2779.,-2979.,-3179.,-3382.,-3583.,-3786., &
-                -4000., -4000., -4000. /)
+          -36., -74., -130., -203., -300., -400., -489., &
+          -567., -641., -712., -784., -858., -940., -1032., &
+          -1146., -1303., -1551., -1855., -2146., -2448., &
+          -2738., -3024., -3311., -3623., -3921., -4000. /)
+
 
   if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.
