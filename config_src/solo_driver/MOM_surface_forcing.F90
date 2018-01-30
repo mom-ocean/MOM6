@@ -85,12 +85,22 @@ use shoebox3_surface_forcing, only : shoebox3_buoyancy_forcing, shoebox3_wind_fo
 use shoebox3_surface_forcing, only : shoebox3_surface_forcing_init, shoebox3_surface_forcing_CS
 use shoebox4_surface_forcing, only : shoebox4_buoyancy_forcing, shoebox4_wind_forcing
 use shoebox4_surface_forcing, only : shoebox4_surface_forcing_init, shoebox4_surface_forcing_CS
+use shoebox8_surface_forcing, only : shoebox8_buoyancy_forcing,shoebox8_wind_forcing
+use shoebox8_surface_forcing, only : shoebox8_surface_forcing_init, shoebox8_surface_forcing_CS
+use shoebox9_surface_forcing, only : shoebox9_buoyancy_forcing, shoebox9_wind_forcing
+use shoebox9_surface_forcing, only : shoebox9_surface_forcing_init, shoebox9_surface_forcing_CS
 use channel_surface_forcing, only : channel_wind_forcing, channel_buoyancy_forcing
 use channel_surface_forcing, only : channel_surface_forcing_init, channel_surface_forcing_CS
 use channel2_surface_forcing, only : channel2_wind_forcing, channel2_buoyancy_forcing
 use channel2_surface_forcing, only : channel2_surface_forcing_init, channel2_surface_forcing_CS
 use channel3_surface_forcing, only : channel3_wind_forcing, channel3_buoyancy_forcing
 use channel3_surface_forcing, only : channel3_surface_forcing_init, channel3_surface_forcing_CS
+use channel4_surface_forcing, only : channel4_wind_forcing, channel4_buoyancy_forcing
+use channel4_surface_forcing, only : channel4_surface_forcing_init, channel4_surface_forcing_CS
+use channel5_surface_forcing, only : channel5_wind_forcing, channel5_buoyancy_forcing
+use channel5_surface_forcing, only : channel5_surface_forcing_init, channel5_surface_forcing_CS
+use channel6_surface_forcing, only : channel6_wind_forcing, channel6_buoyancy_forcing
+use channel6_surface_forcing, only : channel6_surface_forcing_init, channel6_surface_forcing_CS
 use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
@@ -219,9 +229,14 @@ type, public :: surface_forcing_CS ; private
   type(shoebox_surface_forcing_CS), pointer :: shoebox_forcing_CSp => NULL()
   type(shoebox3_surface_forcing_CS), pointer :: shoebox3_forcing_CSp => NULL()
   type(shoebox4_surface_forcing_CS), pointer :: shoebox4_forcing_CSp => NULL()
+  type(shoebox8_surface_forcing_CS), pointer :: shoebox8_forcing_CSp => NULL()
+  type(shoebox9_surface_forcing_CS), pointer :: shoebox9_forcing_CSp => NULL()
   type(channel_surface_forcing_CS), pointer :: channel_forcing_CSp => NULL()
   type(channel2_surface_forcing_CS), pointer :: channel2_forcing_CSp => NULL()
   type(channel3_surface_forcing_CS), pointer :: channel3_forcing_CSp => NULL()
+  type(channel4_surface_forcing_CS), pointer :: channel4_forcing_CSp => NULL()
+  type(channel5_surface_forcing_CS), pointer :: channel5_forcing_CSp => NULL()
+  type(channel6_surface_forcing_CS), pointer :: channel6_forcing_CSp => NULL()
   type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
 
@@ -314,12 +329,22 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call shoebox3_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%wind_config) == "shoebox4") then
       call shoebox4_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox4_forcing_CSp)
+    elseif (trim(CS%wind_config) == "shoebox8") then
+      call shoebox8_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox8_forcing_CSp)
+    elseif (trim(CS%wind_config) == "shoebox9") then
+      call shoebox9_wind_forcing(sfc_state, forces, day_center, G, CS%shoebox9_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel") then
       call channel_wind_forcing(sfc_state, forces, day_center, G, CS%channel_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel2") then
       call channel2_wind_forcing(sfc_state, forces, day_center, G, CS%channel2_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel3") then
       call channel3_wind_forcing(sfc_state, forces, day_center, G, CS%channel3_forcing_CSp)
+    elseif (trim(CS%wind_config) == "channel4") then
+      call channel4_wind_forcing(sfc_state, forces, day_center, G, CS%channel4_forcing_CSp)
+    elseif (trim(CS%wind_config) == "channel5") then
+      call channel5_wind_forcing(sfc_state, forces, day_center, G, CS%channel5_forcing_CSp)
+    elseif (trim(CS%wind_config) == "channel6") then
+      call channel6_wind_forcing(sfc_state, forces, day_center, G, CS%channel6_forcing_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
       call SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, CS%SCM_idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_CVmix_tests") then
@@ -358,12 +383,22 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call shoebox3_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox3_forcing_CSp)
     elseif (trim(CS%buoy_config) == "shoebox4") then
       call shoebox4_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox4_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "shoebox8") then
+      call shoebox8_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox8_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "shoebox9") then
+      call shoebox9_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%shoebox9_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel") then
       call channel_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel2") then
       call channel2_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel2_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel3") then
       call channel3_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel3_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "channel4") then
+      call channel4_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel4_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "channel5") then
+      call channel5_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel5_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "channel6") then
+      call channel6_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel6_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
@@ -1853,12 +1888,22 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call shoebox3_surface_forcing_init(Time, G, param_file, diag, CS%shoebox3_forcing_CSp)
   elseif (trim(CS%wind_config) == "shoebox4") then
     call shoebox4_surface_forcing_init(Time, G, param_file, diag, CS%shoebox4_forcing_CSp)
+  elseif (trim(CS%wind_config) == "shoebox8") then
+    call shoebox8_surface_forcing_init(Time, G, param_file, diag, CS%shoebox8_forcing_CSp)
+  elseif (trim(CS%wind_config) == "shoebox9") then
+    call shoebox9_surface_forcing_init(Time, G, param_file, diag, CS%shoebox9_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel") then
     call channel_surface_forcing_init(Time, G, param_file, diag, CS%channel_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel2") then
     call channel2_surface_forcing_init(Time, G, param_file, diag, CS%channel2_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel3") then
     call channel3_surface_forcing_init(Time, G, param_file, diag, CS%channel3_forcing_CSp)
+  elseif (trim(CS%wind_config) == "channel4") then
+    call channel4_surface_forcing_init(Time, G, param_file, diag, CS%channel4_forcing_CSp)
+  elseif (trim(CS%wind_config) == "channel5") then
+    call channel5_surface_forcing_init(Time, G, param_file, diag, CS%channel5_forcing_CSp)
+  elseif (trim(CS%wind_config) == "channel6") then
+    call channel6_surface_forcing_init(Time, G, param_file, diag, CS%channel6_forcing_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
     call SCM_idealized_hurricane_wind_init(Time, G, param_file, CS%SCM_idealized_hurricane_CSp)
   elseif (trim(CS%wind_config) == "const") then
