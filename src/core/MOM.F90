@@ -284,7 +284,7 @@ type, public :: MOM_control_struct ; private
   integer :: nstep_tot = 0           !< The total number of dynamic timesteps taken
                                      !! so far in this run segment
   logical :: count_calls = .false.   !< If true, count the calls to step_MOM, rather than the
-                                     !! number of dynamics steps in nstep_tot                    
+                                     !! number of dynamics steps in nstep_tot
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
   logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
   real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
