@@ -105,7 +105,7 @@ use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, st
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
-use MOM_neutral_diffusion,     only : neutral_diffusion_CS, neutral_diffusion_diag_init
+use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
@@ -123,7 +123,7 @@ use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
-use MOM_tracer_registry,       only : add_tracer_diagnostics, tracer_registry_type
+use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
@@ -1825,12 +1825,12 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
                            tr_desc=CS%vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W m-2', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
-                           convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
+                           convergence_scale=conv2watt, CMOR_tendname="opottemp", diag_form=2)
       call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=CS%vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
-                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
+                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalt", diag_form=2)
     endif
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, CS%tv, CS%vd_T, CS%vd_S, param_file)
@@ -2156,7 +2156,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
-    call ALE_register_diags(Time, G, GV, diag, CS%tv%C_p, CS%tracer_Reg, CS%ALE_CSp)
+    call ALE_register_diags(Time, G, GV, diag, CS%ALE_CSp)
   endif
 
   ! This subroutine initializes any tracer packages.
@@ -2198,7 +2198,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
   call cpu_clock_end(id_clock_pass_init)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
-  call neutral_diffusion_diag_init(Time, G, diag, CS%tv%C_p, CS%tracer_Reg, CS%neutral_diffusion_CSp)
 
   if (CS%use_frazil) then
     if (.not.query_initialized(CS%tv%frazil,"frazil",CS%restart_CSp)) &
