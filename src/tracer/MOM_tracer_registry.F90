@@ -318,7 +318,7 @@ subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
 
   integer :: m
 
-  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_OBC_values :"// &
+  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_OBC_values :"//&
        "register_tracer must be called before add_tracer_OBC_values")
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%name == trim(name)) exit ; enddo
@@ -374,7 +374,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not. associated(Reg)) call MOM_error(FATAL, "register_tracer_diagnostics: "// &
+  if (.not. associated(Reg)) call MOM_error(FATAL, "register_tracer_diagnostics: "//&
        "register_tracer must be called before register_tracer_diagnostics")
 
   nTr_in = Reg%ntr
@@ -486,33 +486,36 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
 
     ! Lateral diffusion convergence tendencies
     if (Tr%diag_form == 1) then
-      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency',                    &
-          diag%axesTL, Time, "Lateral or neutral diffusion tracer content tendency for "//trim(shortnm),            &
-          conv_units, conversion = Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
+      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
+          diag%axesTL, Time, "Lateral or neutral diffusion tracer content tendency for "//trim(shortnm), &
+          conv_units, conversion=Tr%conv_scale, x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
 
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
-          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration"//    &
-          "tendency for "//trim(shortnm), conv_units, conversion = Tr%conv_scale,                      &
+          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration "//&
+          "tendency for "//trim(shortnm), conv_units, conversion = Tr%conv_scale, &
           x_cell_method = 'sum', y_cell_method = 'sum')
     else
-      cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//' expressed as '//&
-                       trim(lowercase(flux_longname))//' content due to parameterized mesoscale diffusion'
-      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency',                  &
-          diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for", conv_units,        &
-          conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendname)//'pmdiff',                         &
-          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)),        &
+      cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//&
+           ' expressed as '//trim(lowercase(flux_longname))//&
+           ' content due to parameterized mesoscale diffusion'
+      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
+          diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for "//trim(shortnm), &
+          conv_units, conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendname)//'pmdiff', &
+          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
 
       cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//' expressed as '//&
                        trim(lowercase(flux_longname))//' content due to parameterized mesoscale diffusion'
-      Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d',          &
-          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration tendency for", &
-          conv_units, conversion = Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendname)//'pmdiff_2d',          &
-          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)),      &
-          x_cell_method = 'sum', y_cell_method = 'sum')
+      Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
+          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer "//&
+          "concentration tendency for "//trim(shortnm), conv_units, &
+          conversion=Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendname)//'pmdiff_2d', &
+          cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
+          x_cell_method='sum', y_cell_method='sum')
     endif
     Tr%id_dfxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_conc_tendency', &
-        diag%axesTL, Time, "Lateral (neutral) tracer concentration tendency for", units//' s-1')
+        diag%axesTL, Time, "Lateral (neutral) tracer concentration tendency for "//trim(shortnm), &
+        trim(units)//' s-1')
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendname) == 0) then
@@ -521,7 +524,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
     else
-      cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//trim(flux_longname)//" Content"
+      cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
+                        trim(flux_longname)//" Content"
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, &
           cmor_field_name=trim(Tr%cmor_tendname)//"tend", &
@@ -554,14 +558,15 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       var_lname = "Vertical remapping tracer concentration tendency for "//trim(Reg%Tr(m)%name)
       Tr%id_remap_conc= register_diag_field('ocean_model',                          &
         trim(Tr%flux_nameroot)//'_tendency_vert_remap', diag%axesTL, Time, var_lname, &
-        trim(units)//'s-1')
+        trim(units)//' s-1')
 
       var_lname = "Vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont = register_diag_field('ocean_model', &
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap',         &
         diag%axesTL, Time, var_lname, flux_units, v_extensive=.true., conversion = Tr%conv_scale)
 
-      var_lname = "Vertical sum of vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
+      var_lname = "Vertical sum of vertical remapping tracer content tendency for "//&
+                  trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont_2d = register_diag_field('ocean_model', &
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap_2d',         &
         diag%axesT1, Time, var_lname, flux_units, conversion = Tr%conv_scale)
@@ -571,8 +576,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
     if (use_ALE .and. (Reg%ntr<MAX_FIELDS_) .and. Tr%remap_tr) then
       unit2 = trim(units)//"2"
       if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
-      Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, Time, &
-        "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
+      Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, &
+        Time, "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
       if (Tr%id_tr_vardec > 0) then
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
