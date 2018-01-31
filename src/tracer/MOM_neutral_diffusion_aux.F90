@@ -374,6 +374,8 @@ real function refine_nondim_position(CS, T_ref, S_ref, alpha_ref, beta_ref, P_to
   real :: d, e, f, fa, fb, fc, m, p, q, r, s0, sa, sb, tol, machep
 
   real :: P_last
+
+  machep = EPSILON(machep)
   if (CS%ref_pres>=0.) P_ref = CS%ref_pres
   delta_P = P_bot-P_top
   refine_nondim_position = min_bound
