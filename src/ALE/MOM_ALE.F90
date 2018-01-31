@@ -41,7 +41,7 @@ use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : remapping_CS, dzFromH1H2
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
-use MOM_tracer_registry,  only : tracer_registry_type, MOM_tracer_chkinv
+use MOM_tracer_registry,  only : tracer_registry_type, tracer_type, MOM_tracer_chkinv
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : get_thickness_units, verticalGrid_type
 
@@ -93,7 +93,6 @@ type, public :: ALE_CS
   logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
   logical :: show_call_tree !< For debugging
-  real    :: C_p            !< seawater heat capacity (J/(kg deg C))
 
   ! for diagnostics
   type(diag_ctrl), pointer           :: diag                          !< structure to regulate output
@@ -271,35 +270,14 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
 end subroutine ALE_init
 
 !> Initialize diagnostics for the ALE module.
-subroutine ALE_register_diags(Time, G, GV, diag, C_p, Reg, CS)
+subroutine ALE_register_diags(Time, G, GV, diag, CS)
   type(time_type),target,     intent(in)  :: Time  !< Time structure
   type(ocean_grid_type),      intent(in)  :: G     !< Grid structure
   type(verticalGrid_type),    intent(in)  :: GV    !< Ocean vertical grid structure
   type(diag_ctrl), target,    intent(in)  :: diag  !< Diagnostics control structure
-  real,                       intent(in)  :: C_p   !< seawater heat capacity (J/(kg deg C))
-  type(tracer_registry_type), pointer     :: Reg   !< Tracer registry
   type(ALE_CS), pointer                   :: CS    !< Module control structure
 
-  integer :: m, ntr, nsize
-
-  if (associated(Reg)) then
-    ntr = Reg%ntr
-  else
-    ntr = 0
-  endif
-  nsize = max(1,ntr)
-
   CS%diag => diag
-  CS%C_p  = C_p
-
-  allocate(CS%id_tracer_remap_tendency(nsize))
-  allocate(CS%id_Htracer_remap_tendency(nsize))
-  allocate(CS%id_Htracer_remap_tendency_2d(nsize))
-  allocate(CS%do_tendency_diag(nsize))
-  CS%do_tendency_diag(:)             = .false.
-  CS%id_tracer_remap_tendency(:)     = -1
-  CS%id_Htracer_remap_tendency(:)    = -1
-  CS%id_Htracer_remap_tendency_2d(:) = -1
 
   ! These diagnostics of the state variables before ALE are useful for
   ! debugging the ALE code.
@@ -318,52 +296,6 @@ subroutine ALE_register_diags(Time, G, GV, diag, C_p, Reg, CS)
 
   CS%id_dzRegrid = register_diag_field('ocean_model','dzRegrid',diag%axesTi,Time, &
       'Change in interface height due to ALE regridding', 'm')
-
-  if (ntr > 0) then
-    do m=1,ntr
-      if (trim(Reg%Tr(m)%name) == 'T') then
-
-        CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
-        trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
-        'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'degC s-1')
-
-        CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',&
-        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,   &
-        'Tendency from vertical remapping for heat',                        &
-         'W m-2',v_extensive=.true.)
-
-        CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',&
-        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,   &
-        'Vertical sum of tendency from vertical remapping for heat',           &
-         'W m-2')
-
-      else
-
-        CS%id_tracer_remap_tendency(m) = register_diag_field('ocean_model',                &
-        trim(Reg%Tr(m)%name)//'_tendency_vert_remap', diag%axesTL, Time,                   &
-        'Tendency from vertical remapping for tracer concentration '//trim(Reg%Tr(m)%name),&
-        'tracer concentration * s-1')
-
-        CS%id_Htracer_remap_tendency(m) = register_diag_field('ocean_model',         &
-        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap', diag%axesTL, Time,            &
-        'Tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
-        'kg m-2 s-1',v_extensive=.true.)
-
-        CS%id_Htracer_remap_tendency_2d(m) = register_diag_field('ocean_model',                      &
-        trim(Reg%Tr(m)%name)//'h_tendency_vert_remap_2d', diag%axesT1, Time,                         &
-        'Vertical sum of tendency from vertical remapping for tracer content '//trim(Reg%Tr(m)%name),&
-        'kg m-2 s-1')
-
-      endif
-
-      if (CS%id_tracer_remap_tendency(m)     > 0) CS%do_tendency_diag(m) = .true.
-      if (CS%id_Htracer_remap_tendency(m)    > 0) CS%do_tendency_diag(m) = .true.
-      if (CS%id_Htracer_remap_tendency_2d(m) > 0) CS%do_tendency_diag(m) = .true.
-
-    enddo   ! m loop over tracers
-
-  endif ! ntr > 0
 
 end subroutine ALE_register_diags
 
@@ -840,6 +772,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   real, dimension(GV%ke)                      :: h2
   real :: h_neglect, h_neglect_edge
   logical                                     :: show_call_tree
+  type(tracer_type), pointer                  :: Tr => NULL()
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
@@ -869,10 +802,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
   endif
 
   if (present(dt)) then
-    work_conc(:,:,:) = 0.0
-    work_cont(:,:,:) = 0.0
-    work_2d(:,:)     = 0.0
-    Idt              = 1.0/dt
+    Idt = 1.0/dt
   endif
 
   ! Remap tracer
@@ -880,7 +810,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
     if (show_call_tree) call callTree_waypoint("remapping tracers (remap_all_state_vars)")
     !$OMP parallel do default(shared) private(h1,h2,u_column)
     do m=1,ntr ! For each tracer
-
+      Tr => Reg%Tr(m)
       do j = G%jsc,G%jec
         do i = G%isc,G%iec
 
@@ -889,23 +819,25 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
             ! Build the start and final grids
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
-            call remapping_core_h(CS_remapping, nz, h1, Reg%Tr(m)%t(i,j,:), nz, h2, &
+            call remapping_core_h(CS_remapping, nz, h1, Tr%t(i,j,:), nz, h2, &
                                   u_column, h_neglect, h_neglect_edge)
 
             ! Intermediate steps for tendency of tracer concentration and tracer content.
-            ! Note: do not merge the two if-tests, since do_tendency_diag(:) is not
-            ! allocated during the time=0 initialization call to this routine.
             if (present(dt)) then
-              if (CS_ALE%do_tendency_diag(m)) then
+              if (Tr%id_remap_conc>0) then
                 do k=1,GV%ke
-                  work_conc(i,j,k) = (u_column(k)    - Reg%Tr(m)%t(i,j,k)      ) * Idt
-                  work_cont(i,j,k) = (u_column(k)*h2(k) - Reg%Tr(m)%t(i,j,k)*h1(k)) * Idt * GV%H_to_kg_m2
+                  work_conc(i,j,k) = (u_column(k)    - Tr%t(i,j,k)      ) * Idt
+                enddo
+              endif
+              if (Tr%id_remap_cont>0. .or. Tr%id_remap_cont_2d>0) then
+                do k=1,GV%ke
+                  work_cont(i,j,k) = (u_column(k)*h2(k) - Tr%t(i,j,k)*h1(k)) * Idt
                 enddo
               endif
             endif
 
             ! update tracer concentration
-            Reg%Tr(m)%t(i,j,:) = u_column(:)
+            Tr%t(i,j,:) = u_column(:)
 
           endif
 
@@ -914,53 +846,22 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
 
       ! tendency diagnostics.
-      ! Note: do not merge the two if-tests if (present(dt)) and
-      ! if (CS_ALE%do_tendency_diag(m)).  The reason is that
-      ! do_tendency_diag(:) is not allocated when this routine is called
-      ! during initialization (time=0). So need to keep the if-tests split.
-      if (present(dt)) then
-        if (CS_ALE%do_tendency_diag(m)) then
-
-          if (CS_ALE%id_tracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_tracer_remap_tendency(m), work_conc, CS_ALE%diag, alt_h = h_new)
-          endif
-
-          if (CS_ALE%id_Htracer_remap_tendency(m) > 0 .or. CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
-            if (trim(Reg%Tr(m)%name) == 'T') then
-              do k=1,GV%ke
-                do j = G%jsc,G%jec
-                  do i = G%isc,G%iec
-                    work_cont(i,j,k) = work_cont(i,j,k) * CS_ALE%C_p
-                  enddo
-                enddo
-              enddo
-            elseif (trim(Reg%Tr(m)%name) == 'S') then
-              do k=1,GV%ke
-                do j = G%jsc,G%jec
-                  do i = G%isc,G%iec
-                    work_cont(i,j,k) = work_cont(i,j,k) * ppt2mks
-                  enddo
-                enddo
-              enddo
-            endif
-          endif
-
-          if (CS_ALE%id_Htracer_remap_tendency(m) > 0) then
-            call post_data(CS_ALE%id_Htracer_remap_tendency(m), work_cont, CS_ALE%diag, alt_h = h_new)
-          endif
-          if (CS_ALE%id_Htracer_remap_tendency_2d(m) > 0) then
-            do j = G%jsc,G%jec
-              do i = G%isc,G%iec
-                work_2d(i,j) = 0.0
-                do k = 1,GV%ke
-                  work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
-                enddo
-              enddo
+     if (Tr%id_remap_conc > 0) then
+        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag, alt_h = h_new)
+      endif
+      if (Tr%id_remap_cont > 0) then
+        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag, alt_h = h_new)
+      endif
+      if (Tr%id_remap_cont_2d > 0) then
+        do j = G%jsc,G%jec
+          do i = G%isc,G%iec
+            work_2d(i,j) = 0.0
+            do k = 1,GV%ke
+              work_2d(i,j) = work_2d(i,j) + work_cont(i,j,k)
             enddo
-            call post_data(CS_ALE%id_Htracer_remap_tendency_2d(m), work_2d, CS_ALE%diag)
-          endif
-
-        endif
+          enddo
+        enddo
+        call post_data(Tr%id_remap_cont_2d, work_2d, CS_ALE%diag)
       endif
 
     enddo ! m=1,ntr
