@@ -477,10 +477,6 @@ subroutine vertically_reintegrate_diag_field(remap_cs, G, h, staggered_in_x, sta
         h_dest(:) = remap_cs%h(i,j,:)
         call reintegrate_column(nz_src, h_src, field(i,j,:), &
                                 nz_dest, h_dest, 0., reintegrated_field(i,j,:))
-        if (check_column_integrals(nz_src, field(i,j,:), nz_dest, reintegrated_field(i,j,:))) then
-          print *, SUM(reintegrated_field(i,j,:)), SUM(field(i,j,:))
-          call MOM_error(WARNING, "integrals do not match")
-        endif
       enddo
     enddo
   else

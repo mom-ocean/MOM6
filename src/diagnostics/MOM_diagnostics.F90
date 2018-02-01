@@ -29,6 +29,8 @@ use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
 use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
+use MOM_diag_mediator,     only : diag_grid_storage
+use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
 use MOM_EOS,               only : calculate_density, int_density_dz
@@ -182,7 +184,7 @@ end type surface_diag_IDs
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
-                                       dt, G, GV, CS, eta_bt)
+                                       dt, diag_pre_sync, G, GV, CS, eta_bt)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
                                                                    !! structure.
@@ -210,6 +212,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
                                                                    !! subroutine.
+
+  type(diag_grid_storage),                   intent(in)    ::  diag_pre_sync
+                                                                   !< Target grids from previous
+                                                                   !! timestep
   type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
                                                                    !! a previous call to
                                                                    !! diagnostics_init.
@@ -249,6 +255,21 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz  = G%ke   ; nkmb = GV%nk_rho_varies
+
+  if (dt > 0.0) then
+    call diag_save_grids(CS%diag)
+    call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
+
+    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag)
+
+    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag)
+
+    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
+
+    call diag_restore_grids(CS%diag)
+
+    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
+  endif
 
   ! smg: is the following robust to ALE? It seems a bit opaque.
   ! If the model is NOT in isopycnal mode then nkmb=0. But we need all the
@@ -656,16 +677,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       enddo ; enddo
       call post_data(CS%id_Rd_ebt, CS%Rd1, CS%diag)
     endif
-  endif
-
-  if (dt > 0.0) then
-    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag)
-
-    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag)
-
-    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
-
-    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   endif
 
 end subroutine calculate_diagnostic_fields
@@ -1744,7 +1755,6 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   if (ASSOCIATED(CS%vhGM_Rlay)) call safe_alloc_ptr(CDp%vhGM,isd,ied,JsdB,JedB,nz)
 
 end subroutine set_dependent_diagnostics
-
 
 subroutine MOM_diagnostics_end(CS, ADp)
   type(diagnostics_CS),   pointer       :: CS
