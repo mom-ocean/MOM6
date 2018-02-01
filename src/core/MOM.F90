@@ -773,7 +773,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       mass_src_time = MS%t_dyn_rel_thermo
       call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, &
                   Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
-                  mass_src_time, dt_therm, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+                  MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
                   eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
       if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
