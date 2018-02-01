@@ -390,7 +390,6 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
     cmorname = Tr%cmor_name ; cmor_longname = Tr%cmor_longname
     shortnm = Tr%flux_nameroot
     flux_longname = Tr%flux_longname
-    print *, name
     if (len_trim(cmor_longname) == 0) cmor_longname = longname
 
     if (len_trim(Tr%flux_units) > 0) then ; flux_units = Tr%flux_units
