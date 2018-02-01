@@ -186,8 +186,6 @@ type, public :: barotropic_CS ; private
     vbtav           ! The barotropic meridional velocity averaged over the
                     ! baroclinic time step, m s-1.
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    eta_source, &   ! The net mass source to be applied within the
-                    ! barotropic solver, in H s-1.
     eta_cor, &      ! The difference between the free surface height from
                     ! the barotropic calculation and the sum of the layer
                     ! thicknesses. This difference is imposed as a forcing
@@ -237,10 +235,6 @@ type, public :: barotropic_CS ; private
                              ! give backward Euler. In practice, bebt should be
                              ! of order 0.2 or greater.
   logical :: split           ! If true, use the split time stepping scheme.
-  real    :: eta_source_limit  ! The fraction of the initial depth of the ocean
-                             ! that can be added or removed to the bartropic
-                             ! solution within a thermodynamic time step.  By
-                             ! default this is 0 (i.e., no correction). Nondim.
   logical :: bound_BT_corr   ! If true, the magnitude of the fake mass source
                              ! in the barotropic equation that drives the two
                              ! estimates of the free surface height toward each
@@ -1373,16 +1367,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
                    (((find_uhbt(u_max_cor,BTCL_u(I,j)) + uhbt0(I,j)) - &
                      (find_uhbt(-u_max_cor,BTCL_u(I-1,j)) + uhbt0(I-1,j))) + &
                     ((find_vhbt(v_max_cor,BTCL_v(i,J)) + vhbt0(i,J)) - &
-                     (find_vhbt(-v_max_cor,BTCL_v(i,J-1)) + vhbt0(i,J-1))) ) - &
-                   CS%eta_source(i,j))
+                     (find_vhbt(-v_max_cor,BTCL_v(i,J-1)) + vhbt0(i,J-1))) ))
         CS%eta_cor(i,j) = min(CS%eta_cor(i,j), max(0.0, eta_cor_max))
       else
         ! Limit the sink (inward) correction to the amount of mass that is already
-        ! inside the cell, plus any mass added by eta_source.
+        ! inside the cell.
         Htot = eta(i,j)
         if (GV%Boussinesq) Htot = CS%bathyT(i,j)*GV%m_to_H + eta(i,j)
 
-        CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot + dt*CS%eta_source(i,j)))
+        CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot))
       endif
     endif ; enddo ; enddo
   else ; do j=js,je ; do i=is,ie
@@ -1391,7 +1384,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, &
   enddo ; enddo ; endif ; endif
 !$OMP do
   do j=js,je ; do i=is,ie
-    eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j) + dtbt * CS%eta_source(i,j))
+    eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo ; enddo
 !$OMP end parallel
 
@@ -3744,8 +3737,7 @@ end subroutine find_face_areas
 !! the barotropic solver, along with a corrective fictitious mass source that
 !! will drive the barotropic estimate of the free surface height toward the
 !! baroclinic estimate.
-subroutine bt_mass_source(h, eta, forces, set_cor, dt_therm, dt_since_therm, &
-                          G, GV, CS)
+subroutine bt_mass_source(h, eta, forces, set_cor, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
@@ -3755,9 +3747,6 @@ subroutine bt_mass_source(h, eta, forces, set_cor, dt_therm, dt_since_therm, &
                                                              !! fluxes (and update the slowly varying part of eta_cor)
                                                              !! (.true.) or whether to incrementally update the
                                                              !! corrective fluxes.
-  real,                               intent(in) :: dt_therm !< The thermodynamic time step, in s.
-  real,                               intent(in) :: dt_since_therm !< The elapsed time since mass forcing was
-                                                             !! applied, s.
   type(barotropic_CS),                pointer    :: CS       !< The control structure returned by a previous call
                                                              !! to barotropic_init.
 
@@ -3793,29 +3782,13 @@ subroutine bt_mass_source(h, eta, forces, set_cor, dt_therm, dt_since_therm, &
     enddo ; enddo
 
     if (set_cor) then
-      do i=is,ie ; CS%eta_source(i,j) = 0.0 ; enddo
-      if (CS%eta_source_limit > 0.0) then
-        limit_dt = CS%eta_source_limit/dt_therm
-        if (associated(forces%net_mass_src)) then ; do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j) + forces%net_mass_src(i,j)
-        enddo ; endif
-        do i=is,ie
-          CS%eta_source(i,j) = CS%eta_source(i,j)*GV%kg_m2_to_H
-          if (abs(CS%eta_source(i,j)) > limit_dt * h_tot(i)) then
-            CS%eta_source(i,j) = SIGN(limit_dt * h_tot(i), CS%eta_source(i,j))
-          endif
-        enddo
-      endif
-    endif
-
-    if (set_cor) then
       do i=is,ie
-        d_eta = eta_h(i) - (eta(i,j) - dt_since_therm*CS%eta_source(i,j))
+        d_eta = eta_h(i) - eta(i,j)
         CS%eta_cor(i,j) = d_eta
       enddo
     else
       do i=is,ie
-        d_eta = eta_h(i) - (eta(i,j) - dt_since_therm*CS%eta_source(i,j))
+        d_eta = eta_h(i) - eta(i,j)
         CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
       enddo
     endif
@@ -3966,11 +3939,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "of barotropic time steps between updates to the face \n"//&
                  "areas, or 0 to update only before the barotropic stepping.",&
                  units="nondim", default=1)
-  call get_param(param_file, mdl, "BT_MASS_SOURCE_LIMIT", CS%eta_source_limit, &
-                 "The fraction of the initial depth of the ocean that can \n"//&
-                 "be added to or removed from the bartropic solution \n"//&
-                 "within a thermodynamic time step.  By default this is 0 \n"//&
-                 "for no correction.", units="nondim", default=0.0)
   call get_param(param_file, mdl, "BT_PROJECT_VELOCITY", CS%BT_project_velocity,&
                  "If true, step the barotropic velocity first and project \n"//&
                  "out the velocity tendancy by 1+BEBT when calculating the \n"//&
@@ -4149,7 +4117,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   isdw = CS%isdw ; iedw = CS%iedw ; jsdw = CS%jsdw ; jedw = CS%jedw
 
   ALLOC_(CS%frhatu(IsdB:IedB,jsd:jed,nz)) ; ALLOC_(CS%frhatv(isd:ied,JsdB:JedB,nz))
-  ALLOC_(CS%eta_source(isd:ied,jsd:jed)) ; ALLOC_(CS%eta_cor(isd:ied,jsd:jed))
+  ALLOC_(CS%eta_cor(isd:ied,jsd:jed))
   if (CS%bound_BT_corr) then
     ALLOC_(CS%eta_cor_bound(isd:ied,jsd:jed)) ; CS%eta_cor_bound(:,:) = 0.0
   endif
@@ -4159,7 +4127,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   ALLOC_(CS%va_polarity(isdw:iedw,jsdw:jedw))
 
   CS%frhatu(:,:,:) = 0.0 ; CS%frhatv(:,:,:) = 0.0
-  CS%eta_source(:,:) = 0.0 ; CS%eta_cor(:,:) = 0.0
+  CS%eta_cor(:,:) = 0.0
   CS%IDatu(:,:) = 0.0 ; CS%IDatv(:,:) = 0.0
 
   CS%ua_polarity(:,:) = 1.0 ; CS%va_polarity(:,:) = 1.0
@@ -4480,7 +4448,7 @@ subroutine barotropic_end(CS)
   DEALLOC_(CS%frhatu)   ; DEALLOC_(CS%frhatv)
   DEALLOC_(CS%IDatu)    ; DEALLOC_(CS%IDatv)
   DEALLOC_(CS%ubtav)    ; DEALLOC_(CS%vbtav)
-  DEALLOC_(CS%eta_cor)  ; DEALLOC_(CS%eta_source)
+  DEALLOC_(CS%eta_cor)
   DEALLOC_(CS%ua_polarity) ; DEALLOC_(CS%va_polarity)
   if (CS%bound_BT_corr) then
     DEALLOC_(CS%eta_cor_bound)
