@@ -139,6 +139,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
+  integer :: id_h_pre_sync
 
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
 
@@ -260,11 +261,14 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call diag_save_grids(CS%diag)
     call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
 
-    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag)
+    if (CS%id_h_pre_sync > 0) &
+        call post_data(CS%id_h_pre_sync, diag_pre_sync%h_state, CS%diag, alt_h = diag_pre_sync%h_state)
 
-    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag)
+    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
-    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
+    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
 
     call diag_restore_grids(CS%diag)
 
@@ -1401,6 +1405,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+  CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
+      long_name = 'Cell thickness from the previous timestep', units='m', v_extensive=.true.)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
