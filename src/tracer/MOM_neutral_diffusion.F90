@@ -43,7 +43,7 @@ type, public :: neutral_diffusion_CS ; private
   integer :: deg = 2 ! Degree of polynomial used for reconstructions
   logical :: continuous_reconstruction = .true.   ! True if using continuous PPM reconstruction at interfaces
   logical :: refine_position = .false.
-  logical :: debug
+  logical :: debug = .false.
   integer :: max_iter ! Maximum number of iterations if refine_position is defined
   real :: tolerance   ! Convergence criterion representing difference from true neutrality
   real :: ref_pres    ! Reference pressure, negative if using locally referenced neutral density
