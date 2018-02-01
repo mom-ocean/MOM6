@@ -572,7 +572,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   call cpu_clock_end(id_clock_other)
 
   do n=1,n_max
-
     nt_debug = nt_debug + 1
 
     ! Set the universally visible time to the middle of the time step
@@ -844,6 +843,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
     call enable_averaging(dt, Time_local, CS%diag)
     ! These diagnostics are available every time step.
+    call diag_update_remap_grids(CS%diag)
     if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
     if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
     if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
@@ -857,9 +857,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,              &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, CS%diag_pre_sync,            &
                           G, GV, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
-      call diag_update_remap_grids(CS%diag)
-      call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
+      call post_tracer_diagnostics(CS%Tracer_reg, CS%h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
       CS%t_dyn_rel_diag = 0.0
@@ -2061,7 +2060,6 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   ! Setup the diagnostic grid storage types
   call diag_grid_storage_init(CS%diag_pre_sync, G, diag)
-  call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
   call diag_grid_storage_init(CS%diag_pre_dyn, G, diag)
 
   ! Calculate masks for diagnostics arrays in non-native coordinates
@@ -2121,6 +2119,7 @@ subroutine initialize_MOM(Time, param_file, dirs, CS, Time_in, offline_tracer_mo
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
+  call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
