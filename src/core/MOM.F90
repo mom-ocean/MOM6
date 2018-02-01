@@ -178,7 +178,9 @@ type, public :: MOM_state_type
     vh, &     !< vh = v * h * dx at v grid points (m3/s or kg/s)
     vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    ave_ssh   !< time-averaged (ave over baroclinic time steps) sea surface height (meter)
+    ave_ssh, &!< time-averaged (over a forcing time step) sea surface height (meter)
+    eta_av_bc !< free surface height or column mass time averaged over the last
+              !! baroclinic dynamics time step (m or kg/m2)
   real, pointer, dimension(:,:) :: &
     Hml => NULL() !< active mixed layer depth, in m
 
@@ -259,6 +261,8 @@ type, public :: MOM_control_struct ; private
                                      !! recalculation of the barotropic time step.  If
                                      !! this is negative, it is never calculated, and
                                      !! if it is 0, it is calculated every step.
+  real :: dtbt_reset_time            !< The last time (as indicated by CS%rel_time) when
+                                     !! DTBT was last calculated (sec)
   logical :: interp_p_surf           !< If true, linearly interpolate surface pressure
                                      !! over the coupling time step, using specified value
                                      !! at the end of the coupling step. False by default.
@@ -270,6 +274,9 @@ type, public :: MOM_control_struct ; private
     p_surf_begin => NULL(), & !< surface pressure (Pa) at start of step_MOM_dyn_...
     p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_...
   real, pointer, dimension(:,:,:) :: &
+    h_pre_dyn => NULL(), & !< The thickness before the transports, in H.
+    T_pre_dyn => NULL(), & !< Temperature before the transports, in degC.
+    S_pre_dyn => NULL(), & !< Salinity before the transports, in psu.
     u_prev => NULL(), &  !< previous value of u stored for diagnostics
     v_prev => NULL()     !< previous value of v stored for diagnostics
 
@@ -364,6 +371,7 @@ type, public :: MOM_control_struct ; private
 !  type(group_pass_type) :: pass_bbl_thick_kv_bbl
 !  type(group_pass_type) :: pass_T_S, pass_T_S_h
 !  type(group_pass_type) :: pass_uv_T_S_h
+! End Thermo update structure
 
 
 ! Surface state control structure
@@ -383,6 +391,7 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_sss_max         !< Maximum SSS before triggering bad value message
   real    :: bad_val_column_thickness!< Minimum column thickness before triggering bad value message
 !  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
+! End Surface state control structure
 
 end type MOM_control_struct
 
@@ -446,18 +455,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   real :: dtth            ! time step for thickness diffusion (sec)
   real :: dtdia           ! time step for diabatic processes (sec)
   real :: dt_therm        ! a limited and quantized version of CS%dt_therm (sec)
-  real :: dtbt_reset_time ! value of CS%rel_time when DTBT was last calculated (sec)
-
-  real :: mass_src_time   ! The amount of time for the surface mass source from
-                          ! precipitation-evaporation, rivers, etc., that should
-                          ! be applied to the start of the barotropic solver to
-                          ! avoid generating tsunamis, in s.  This is negative
-                          ! if the precipation has already been applied to the
-                          ! layers, and positive if it will be applied later.
+  real :: dt_therm_here   ! a further limited value of dt_therm (sec)
 
   real :: wt_end, wt_beg
   real :: bbl_time_int    ! The amount of time over which the calculated BBL
-                          ! properties will apply, for use in diagnostics.
+                          ! properties will apply, for use in diagnostics, or 0 if
+                          ! is not to be calculated anew (sec).
 
   logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
                                        ! barotropic time step needs to be updated.
@@ -466,7 +469,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
   real, dimension(SZI_(MS%G),SZJ_(MS%G)) :: &
-    eta_av, &   ! average sea surface height or column mass over a timestep (meter or kg/m2)
     ssh         ! sea surface height based on eta_av (meter or kg/m2)
 
   real, pointer, dimension(:,:,:) :: &
@@ -476,9 +478,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
   ! Store the layer thicknesses, temperature, and salinity before any changes by the dynamics.
   ! This is necessary for remapped mass transport diagnostics
-  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: h_pre_dyn
-  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: T_pre_dyn
-  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: S_pre_dyn
+!  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: h_pre_dyn
+!  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: T_pre_dyn
+!  real, dimension(SZI_(MS%G),SZJ_(MS%G),SZK_(MS%G)) :: S_pre_dyn
   real :: tot_wt_ssh, Itot_wt_ssh
 
   type(time_type) :: Time_local, end_time_thermo
@@ -661,193 +663,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
     endif ! end of block "(CS%diabatic_first .and. (MS%t_dyn_rel_adv==0.0))"
 
-    !===========================================================================
-    ! This is the start of the dynamics stepping part of the algorithm.
+    dt_therm_here = dt_therm
+    if (.not.thermo_does_span_coupling) dt_therm_here = dt*min(ntstep,n_max-n+1)
 
-    call cpu_clock_begin(id_clock_dynamics)
-    call disable_averaging(CS%diag)
-
-    if ((MS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
-      if (thermo_does_span_coupling) then
-        dtth = dt_therm
-      else
-        dtth = dt*min(ntstep,n_max-n+1)
-      endif
-
-      call enable_averaging(dtth,Time_local+set_time(int(floor(dtth-dt+0.5))), CS%diag)
-      call cpu_clock_begin(id_clock_thick_diff)
-      if (associated(CS%VarMix)) &
-        call calc_slope_functions(h, MS%tv, dt, G, GV, CS%VarMix)
-      call thickness_diffuse(h, MS%uhtr, MS%vhtr, MS%tv, dtth, G, GV, &
-                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
-      call cpu_clock_end(id_clock_thick_diff)
-      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
-      call disable_averaging(CS%diag)
-      if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
-
-      ! Whenever thickness changes let the diag manager know, target grids
-      ! for vertical remapping may need to be regenerated.
-      call diag_update_remap_grids(CS%diag)
-    endif
-
-    ! The bottom boundary layer properties are out-of-date and need to be
-    ! recalculated.  This always occurs at the start of a coupling time
-    ! step because the externally prescribed stresses may have changed.
-    do_calc_bbl = ((MS%t_dyn_rel_adv == 0.0) .or. (n==1))
-    if (do_calc_bbl) then
-      ! Calculate the BBL properties and store them inside visc (u,h).
-      call cpu_clock_begin(id_clock_BBL_visc)
+    ! Indicate whether the bottom boundary layer properties need to be
+    ! recalculated, and if so for how long an interval they are valid.
+    bbl_time_int = 0.0
+    if ((MS%t_dyn_rel_adv == 0.0) .or. (n==1)) &
       bbl_time_int = max(dt, min(dt_therm - MS%t_dyn_rel_adv, dt*(1+n_max-n)) )
-      call enable_averaging(bbl_time_int, &
-                Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
-      call set_viscous_BBL(u, v, h, MS%tv, CS%visc, G, GV, CS%set_visc_CSp)
-      call disable_averaging(CS%diag)
-      call cpu_clock_end(id_clock_BBL_visc)
-      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
-    endif
 
-    if (do_calc_bbl) then
-      if (G%nonblocking_updates) then
-        if (do_pass_Ray) &
-          call start_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
-        if (do_pass_kv_bbl_thick) &
-          call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
-        ! do_calc_bbl will be set to .false. when the message passing is complete.
-      else
-        if (do_pass_Ray) &
-          call do_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
-        if (do_pass_kv_bbl_thick) &
-          call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
-      endif
-    endif
-
-    if (CS%interp_p_surf) then
-      wt_end = real(n) / real(n_max)
-      wt_beg = real(n-1) / real(n_max)
-      do j=jsd,jed ; do i=isd,ied
-        CS%p_surf_end(i,j) = wt_end * forces%p_surf(i,j) + &
-                        (1.0-wt_end) * CS%p_surf_prev(i,j)
-        CS%p_surf_begin(i,j) = wt_beg * forces%p_surf(i,j) + &
-                        (1.0-wt_beg) * CS%p_surf_prev(i,j)
-      enddo ; enddo
-    endif
-
-    ! The original velocities might be stored for debugging.
-    if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
-      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-        CS%u_prev(I,j,k) = u(I,j,k)
-      enddo ; enddo ; enddo
-      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-        CS%v_prev(I,j,k) = u(I,j,k)
-      enddo ; enddo ; enddo
-    endif
-
-    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    if (transport_remap_grid_needed(CS%transport_IDs)) then
-      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-        h_pre_dyn(i,j,k) = h(i,j,k)
-        if (associated(MS%tv%T)) T_pre_dyn(i,j,k) = MS%tv%T(i,j,k)
-        if (associated(MS%tv%S)) S_pre_dyn(i,j,k) = MS%tv%S(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-
-    if (G%nonblocking_updates) then ; if (do_calc_bbl) then
-      if (do_pass_Ray) &
-        call complete_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
-      if (do_pass_kv_bbl_thick) &
-        call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
-    endif ; endif
-
-    if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
-      ! This section uses a split time stepping scheme for the dynamic equations,
-      ! basically the stacked shallow water equations with viscosity.
-
-      calc_dtbt = .false.
-      if ((CS%dtbt_reset_period >= 0.0) .and. &
-          ((n==1) .or. (CS%dtbt_reset_period == 0.0) .or. &
-           (CS%rel_time >= dtbt_reset_time + 0.999*CS%dtbt_reset_period))) then
-        calc_dtbt = .true.
-        dtbt_reset_time = CS%rel_time
-      endif
-
-      mass_src_time = MS%t_dyn_rel_thermo
-      call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, &
-                  Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
-                  MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
-                  eta_av, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
-      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
-
-    elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
-      !   This section uses an unsplit stepping scheme for the dynamic
-      ! equations; basically the stacked shallow water equations with viscosity.
-      ! Because the time step is limited by CFL restrictions on the external
-      ! gravity waves, the unsplit is usually much less efficient that the split
-      ! approaches. But because of its simplicity, the unsplit method is very
-      ! useful for debugging purposes.
-
-      if (CS%use_RK2) then
-        call step_MOM_dyn_unsplit_RK2(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
-                 CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
-                 eta_av, G, GV, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
-      else
-        call step_MOM_dyn_unsplit(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
-                 CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
-                 eta_av, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
-      endif
-      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
-
-    endif ! -------------------------------------------------- end SPLIT
-
-
-    if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
-      call cpu_clock_begin(id_clock_thick_diff)
-
-      if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
-
-      if (associated(CS%VarMix)) &
-        call calc_slope_functions(h, MS%tv, dt, G, GV, CS%VarMix)
-      call thickness_diffuse(h, MS%uhtr, MS%vhtr, MS%tv, dt, G, GV, &
-                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
-
-      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
-      call cpu_clock_end(id_clock_thick_diff)
-      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
-      if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
-    endif
-
-    ! apply the submesoscale mixed layer restratification parameterization
-    if (CS%mixedlayer_restrat) then
-      if (CS%debug) then
-        call hchksum(h,"Pre-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
-        call uvchksum("Pre-mixedlayer_restrat uhtr", &
-                      MS%uhtr, MS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
-      endif
-      call cpu_clock_begin(id_clock_ml_restrat)
-      call mixedlayer_restrat(h, MS%uhtr, MS%vhtr, MS%tv, forces, dt, CS%visc%MLD, &
-                              CS%VarMix, G, GV, CS%mixedlayer_restrat_CSp)
-      call cpu_clock_end(id_clock_ml_restrat)
-      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
-      if (CS%debug) then
-        call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
-        call uvchksum("Post-mixedlayer_restrat [uv]htr", &
-                      MS%uhtr, MS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
-      endif
-    endif
-
-    ! Whenever thickness changes let the diag manager know, target grids
-    ! for vertical remapping may need to be regenerated.
-    call diag_update_remap_grids(CS%diag)
-
-    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
-                                           CS%visc, dt, G, GV, CS%MEKE_CSp, MS%uhtr, MS%vhtr)
-    call disable_averaging(CS%diag)
-
-    ! Advance the dynamics time by dt.
-    MS%t_dyn_rel_adv = MS%t_dyn_rel_adv + dt
-    MS%t_dyn_rel_thermo = MS%t_dyn_rel_thermo + dt
-    MS%t_dyn_rel_diag = MS%t_dyn_rel_diag + dt
-
-    call cpu_clock_end(id_clock_dynamics)
+    call step_MOM_dynamics(forces, Time_local, dt, dt_therm_here, bbl_time_int, MS, CS, n, n_max)
 
     !===========================================================================
     ! This is the start of the tracer advection part of the algorithm.
@@ -859,7 +684,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     endif
 
     if (do_advection) then ! Do advective transport and lateral tracer mixing.
-      call step_MOM_tracer_dyn(MS, CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
+      call step_MOM_tracer_dyn(MS, CS, G, GV, h, CS%h_pre_dyn, CS%T_pre_dyn, CS%S_pre_dyn, &
                                MS%tv, Time_local)
     endif
 
@@ -888,7 +713,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     ! Determining the time-average sea surface height is part of the algorithm.
     ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
     tot_wt_ssh = tot_wt_ssh + dt
-    call find_eta(h, MS%tv, GV%g_Earth, G, GV, ssh, eta_av)
+    call find_eta(h, MS%tv, GV%g_Earth, G, GV, ssh, MS%eta_av_bc)
     do j=js,je ; do i=is,ie
       MS%ave_ssh(i,j) = MS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
@@ -979,6 +804,228 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   call cpu_clock_end(id_clock_ocean)
 
 end subroutine step_MOM
+
+subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS, CS, n, n_max)
+  type(mech_forcing), intent(inout)  :: forces     !< A structure with the driving mechanical forces
+  type(time_type),  intent(in)       :: Time_local !< starting time of a segment, as a time type
+  real,             intent(in)       :: dt         !< time interval covered by this call, in s.
+  real,             intent(in)       :: dt_thermo  !< time interval covered by any updates that may
+                                                   !! span multiple dynamics steps, in s.
+  real,             intent(in)       :: bbl_time_int !< time interval over which updates to the
+                                                   !! bottom boundary layer properties will apply,
+                                                   !! in s, or zero not to update the properties.
+  type(MOM_state_type),     pointer  :: MS         !< structure describing the MOM state
+  type(MOM_control_struct), pointer  :: CS         !< control structure from initialize_MOM
+  integer, intent(in) :: n, n_max
+
+  ! local
+  type(ocean_grid_type), pointer :: G ! pointer to a structure containing
+                                      ! metrics and related information
+  type(verticalGrid_type),  pointer :: GV => NULL()
+  real, pointer, dimension(:,:,:) :: &
+    u, & ! u : zonal velocity component (m/s)
+    v, & ! v : meridional velocity component (m/s)
+    h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+
+  logical :: calc_dtbt                 ! Indicates whether the dynamically adjusted
+                                       ! barotropic time step needs to be updated.
+  logical :: showCallTree
+  ! These are used for group halo passes.
+  logical :: do_pass_Ray, do_pass_kv_bbl_thick
+  real :: wt_end, wt_beg
+
+  integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  G => MS%G ; GV => MS%GV ! ; IDs => CS%IDs
+  is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
+  Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  u => MS%u ; v => MS%v ; h => MS%h
+  showCallTree = callTree_showQuery()
+
+  call cpu_clock_begin(id_clock_dynamics)
+
+  do_pass_Ray = .FALSE. ; do_pass_kv_bbl_thick = .FALSE.
+  if (.not.G%Domain%symmetric) then
+    if (associated(CS%visc%Ray_u) .and. associated(CS%visc%Ray_v)) &
+      do_pass_Ray = .True.
+    if ((associated(CS%visc%bbl_thick_u) .and. associated(CS%visc%bbl_thick_v)) .or. &
+        (associated(CS%visc%kv_bbl_u) .and. associated(CS%visc%kv_bbl_v))) &
+      do_pass_kv_bbl_thick = .TRUE.
+  endif
+
+    if ((MS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
+
+      call enable_averaging(dt_thermo,Time_local+set_time(int(floor(dt_thermo-dt+0.5))), CS%diag)
+      call cpu_clock_begin(id_clock_thick_diff)
+      if (associated(CS%VarMix)) &
+        call calc_slope_functions(h, MS%tv, dt, G, GV, CS%VarMix)
+      call thickness_diffuse(h, MS%uhtr, MS%vhtr, MS%tv, dt_thermo, G, GV, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+      call disable_averaging(CS%diag)
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
+
+      ! Whenever thickness changes let the diag manager know, target grids
+      ! for vertical remapping may need to be regenerated.
+      call diag_update_remap_grids(CS%diag)
+    endif
+
+    ! The bottom boundary layer properties need to be recalculated.
+    if (bbl_time_int > 0.0) then
+      ! Calculate the BBL properties and store them inside visc (u,h).
+      call cpu_clock_begin(id_clock_BBL_visc)
+      call enable_averaging(bbl_time_int, &
+                Time_local+set_time(int(bbl_time_int-dt+0.5)), CS%diag)
+      call set_viscous_BBL(u, v, h, MS%tv, CS%visc, G, GV, CS%set_visc_CSp)
+      call disable_averaging(CS%diag)
+      call cpu_clock_end(id_clock_BBL_visc)
+      if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
+
+      if (G%nonblocking_updates) then
+        if (do_pass_Ray) &
+          call start_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call start_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
+      else
+        if (do_pass_Ray) &
+          call do_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+        if (do_pass_kv_bbl_thick) &
+          call do_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
+      endif
+    endif
+
+    if (CS%interp_p_surf) then
+      wt_end = real(n) / real(n_max)
+      wt_beg = real(n-1) / real(n_max)
+      do j=jsd,jed ; do i=isd,ied
+        CS%p_surf_end(i,j) = wt_end * forces%p_surf(i,j) + &
+                        (1.0-wt_end) * CS%p_surf_prev(i,j)
+        CS%p_surf_begin(i,j) = wt_beg * forces%p_surf(i,j) + &
+                        (1.0-wt_beg) * CS%p_surf_prev(i,j)
+      enddo ; enddo
+    endif
+
+    ! The original velocities might be stored for debugging.
+    if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
+      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
+        CS%u_prev(I,j,k) = u(I,j,k)
+      enddo ; enddo ; enddo
+      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
+        CS%v_prev(I,j,k) = u(I,j,k)
+      enddo ; enddo ; enddo
+    endif
+
+    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
+    if (transport_remap_grid_needed(CS%transport_IDs)) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        CS%h_pre_dyn(i,j,k) = h(i,j,k)
+        if (associated(MS%tv%T)) CS%T_pre_dyn(i,j,k) = MS%tv%T(i,j,k)
+        if (associated(MS%tv%S)) CS%S_pre_dyn(i,j,k) = MS%tv%S(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+
+    if (G%nonblocking_updates) then ; if (bbl_time_int > 0.0) then
+      if (do_pass_Ray) &
+        call complete_group_pass(CS%pass_Ray, G%Domain, clock=id_clock_pass)
+      if (do_pass_kv_bbl_thick) &
+        call complete_group_pass(CS%pass_bbl_thick_kv_bbl, G%Domain, clock=id_clock_pass)
+    endif ; endif
+
+    if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
+      ! This section uses a split time stepping scheme for the dynamic equations,
+      ! basically the stacked shallow water equations with viscosity.
+
+      calc_dtbt = .false.
+      if ((CS%dtbt_reset_period >= 0.0) .and. &
+          ((n==1) .or. (CS%dtbt_reset_period == 0.0) .or. &
+           (CS%rel_time >= CS%dtbt_reset_time + 0.999*CS%dtbt_reset_period))) then
+        calc_dtbt = .true.
+        CS%dtbt_reset_time = CS%rel_time
+      endif
+
+      call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, &
+                  Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
+                  MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+                  MS%eta_av_bc, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
+      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
+
+    elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
+      !   This section uses an unsplit stepping scheme for the dynamic
+      ! equations; basically the stacked shallow water equations with viscosity.
+      ! Because the time step is limited by CFL restrictions on the external
+      ! gravity waves, the unsplit is usually much less efficient that the split
+      ! approaches. But because of its simplicity, the unsplit method is very
+      ! useful for debugging purposes.
+
+      if (CS%use_RK2) then
+        call step_MOM_dyn_unsplit_RK2(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
+                 CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+                 MS%eta_av_bc, G, GV, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
+      else
+        call step_MOM_dyn_unsplit(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
+                 CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+                 MS%eta_av_bc, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
+      endif
+      if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
+
+    endif ! -------------------------------------------------- end SPLIT
+
+
+    if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
+      call cpu_clock_begin(id_clock_thick_diff)
+
+      if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, scale=GV%H_to_m)
+
+      if (associated(CS%VarMix)) &
+        call calc_slope_functions(h, MS%tv, dt, G, GV, CS%VarMix)
+      call thickness_diffuse(h, MS%uhtr, MS%vhtr, MS%tv, dt, G, GV, &
+                             CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
+
+      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, scale=GV%H_to_m)
+      call cpu_clock_end(id_clock_thick_diff)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+      if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
+    endif
+
+    ! apply the submesoscale mixed layer restratification parameterization
+    if (CS%mixedlayer_restrat) then
+      if (CS%debug) then
+        call hchksum(h,"Pre-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
+        call uvchksum("Pre-mixedlayer_restrat uhtr", &
+                      MS%uhtr, MS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
+      endif
+      call cpu_clock_begin(id_clock_ml_restrat)
+      call mixedlayer_restrat(h, MS%uhtr, MS%vhtr, MS%tv, forces, dt, CS%visc%MLD, &
+                              CS%VarMix, G, GV, CS%mixedlayer_restrat_CSp)
+      call cpu_clock_end(id_clock_ml_restrat)
+      call pass_var(h, G%Domain, clock=id_clock_pass) !###, halo=max(2,cont_stensil))
+      if (CS%debug) then
+        call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, scale=GV%H_to_m)
+        call uvchksum("Post-mixedlayer_restrat [uv]htr", &
+                      MS%uhtr, MS%vhtr, G%HI, haloshift=0, scale=GV%H_to_m)
+      endif
+    endif
+
+    ! Whenever thickness changes let the diag manager know, target grids
+    ! for vertical remapping may need to be regenerated.
+    call diag_update_remap_grids(CS%diag)
+
+    if (CS%useMEKE) call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
+                                           CS%visc, dt, G, GV, CS%MEKE_CSp, MS%uhtr, MS%vhtr)
+    call disable_averaging(CS%diag)
+
+    ! Advance the dynamics time by dt.
+    MS%t_dyn_rel_adv = MS%t_dyn_rel_adv + dt
+    MS%t_dyn_rel_thermo = MS%t_dyn_rel_thermo + dt
+    MS%t_dyn_rel_diag = MS%t_dyn_rel_diag + dt
+
+    call cpu_clock_end(id_clock_dynamics)
+
+end subroutine step_MOM_dynamics
 
 !> step_MOM_tracer_dyn does tracer advection and lateral diffusion, bringing the
 !! tracers up to date with the changes in state due to the dynamics.  Surface
@@ -1695,7 +1742,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   if (CS%split) then
     call get_param(param_file, "MOM", "DTBT", dtbt, default=-0.98)
     default_val = CS%dt_therm ; if (dtbt > 0.0) default_val = -1.0
-    CS%dtbt_reset_period = -1.0
+    CS%dtbt_reset_period = -1.0 ; CS%dtbt_reset_time = 0.0
     call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dtbt_reset_period, &
                  "The period between recalculations of DTBT (if DTBT <= 0). \n"//&
                  "If DTBT_RESET_PERIOD is negative, DTBT is set based \n"//&
@@ -1985,6 +2032,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   endif
 
   ALLOC_(MS%ave_ssh(isd:ied,jsd:jed)) ; MS%ave_ssh(:,:) = 0.0
+  ALLOC_(MS%eta_av_bc(isd:ied,jsd:jed)) ; MS%eta_av_bc(:,:) = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -2256,6 +2304,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, MS%tv)
   call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
   call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag, CS%missing)
+  if (transport_remap_grid_needed(CS%transport_IDs)) then
+    allocate(CS%h_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%h_pre_dyn(:,:,:) = 0.0
+    if (associated(MS%tv%T)) then
+      allocate(CS%T_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%T_pre_dyn(:,:,:) = 0.0
+    endif
+    if (associated(MS%tv%S)) then
+      allocate(CS%S_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%S_pre_dyn(:,:,:) = 0.0
+    endif
+  endif
   call register_tracer_diagnostics(CS%tracer_Reg, MS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
