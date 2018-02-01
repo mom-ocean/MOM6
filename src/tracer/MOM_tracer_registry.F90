@@ -10,6 +10,8 @@ module MOM_tracer_registry
 use MOM_coms,          only : reproducing_sum
 use MOM_debugging,     only : hchksum
 use MOM_diag_mediator, only : diag_ctrl, register_diag_field, post_data, safe_alloc_ptr
+use MOM_diag_mediator, only : diag_grid_storage
+use MOM_diag_mediator, only : diag_copy_storage_to_diag, diag_save_grids, diag_restore_grids
 use MOM_diag_to_Z,     only : register_Z_tracer, diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser,   only : get_param, log_version, param_file_type
@@ -117,7 +119,7 @@ type, public :: tracer_registry_type
   logical                  :: locked = .false.  !< New tracers may be registered if locked=.false.
                                                 !! When locked=.true., no more tracers can be registered,
                                                 !! at which point common diagnostics can be set up
-                                                !! for the registered tracers.
+                                                !! for the registered tracers
 end type tracer_registry_type
 
 contains
@@ -640,13 +642,14 @@ end subroutine postALE_tracer_diagnostics
 
 !> post_tracer_diagnostics does post_data calls for any diagnostics that are
 !! being handled via the tracer registry.
-subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
+subroutine post_tracer_diagnostics(Reg, h, diag_prev, diag, G, GV, dt)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in) :: h    !< Layer thicknesses
-  type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
+  type(diag_grid_storage),    intent(in) :: diag_prev !< Contains diagnostic grids from previous timestep
+  type(diag_ctrl),            intent(inout) :: diag !< structure to regulate diagnostic output
   real,                       intent(in) :: dt   !< total time step for tracer updates
 
   real    :: work3d(SZI_(G),SZJ_(G),SZK_(GV))
@@ -658,6 +661,9 @@ subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
 
   Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
+  ! Tendency diagnostics need to be posted on the grid from the last call to this routine
+  call diag_save_grids(diag)
+  call diag_copy_storage_to_diag(diag, diag_prev)
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
     if (Tr%id_tendency > 0) then
@@ -666,14 +672,14 @@ subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
         work3d(i,j,k)    = (Tr%t(i,j,k) - Tr%t_prev(i,j,k))*Idt
         tr%t_prev(i,j,k) =  Tr%t(i,j,k)
       enddo ; enddo ; enddo
-      call post_data(Tr%id_tendency, work3d, diag)
+      call post_data(Tr%id_tendency, work3d, diag, alt_h = diag_prev%h_state)
     endif
     if ((Tr%id_trxh_tendency > 0) .or. (Tr%id_trxh_tendency_2d > 0)) then
       do k=1,nz ; do j=js,je ; do i=is,ie
         work3d(i,j,k)     = (Tr%t(i,j,k)*h(i,j,k) - Tr%Trxh_prev(i,j,k)) * Idt
         Tr%Trxh_prev(i,j,k) =  Tr%t(i,j,k) * h(i,j,k)
       enddo ; enddo ; enddo
-      if (Tr%id_trxh_tendency > 0) call post_data(Tr%id_trxh_tendency, work3d, diag)
+      if (Tr%id_trxh_tendency > 0) call post_data(Tr%id_trxh_tendency, work3d, diag, alt_h = diag_prev%h_state)
       if (Tr%id_trxh_tendency_2d > 0) then
         work2d(:,:) = 0.0
         do k=1,nz ; do j=js,je ; do i=is,ie
@@ -683,16 +689,17 @@ subroutine post_tracer_diagnostics(Reg, h, diag, G, GV, dt)
       endif
     endif
   endif ; enddo
+  call diag_restore_grids(diag)
 
 end subroutine post_tracer_diagnostics
 
 !> Post the advective and diffusive tendencies
-subroutine post_tracer_transport_diagnostics(G, GV, Reg, h, diag)
+subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
   type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(tracer_registry_type), pointer    :: Reg  !< pointer to the tracer registry
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                              intent(in) :: h    !< Layer thicknesses
+                              intent(in) :: h_diag !< Layer thicknesses on which to post fields
   type(diag_ctrl),            intent(in) :: diag !< structure to regulate diagnostic output
 
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -704,15 +711,15 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h, diag)
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
     if (Tr%id_tr > 0) call post_data(Tr%id_tr, Tr%t, diag)
-    if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag, alt_h = h)
-    if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag, alt_h = h)
-    if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag, alt_h = h)
-    if (Tr%id_dfy > 0) call post_data(Tr%id_dfy, Tr%df_y, diag, alt_h = h)
+    if (Tr%id_adx > 0) call post_data(Tr%id_adx, Tr%ad_x, diag, alt_h = h_diag)
+    if (Tr%id_ady > 0) call post_data(Tr%id_ady, Tr%ad_y, diag, alt_h = h_diag)
+    if (Tr%id_dfx > 0) call post_data(Tr%id_dfx, Tr%df_x, diag, alt_h = h_diag)
+    if (Tr%id_dfy > 0) call post_data(Tr%id_dfy, Tr%df_y, diag, alt_h = h_diag)
     if (Tr%id_adx_2d > 0) call post_data(Tr%id_adx_2d, Tr%ad2d_x, diag)
     if (Tr%id_ady_2d > 0) call post_data(Tr%id_ady_2d, Tr%ad2d_y, diag)
     if (Tr%id_dfx_2d > 0) call post_data(Tr%id_dfx_2d, Tr%df2d_x, diag)
     if (Tr%id_dfy_2d > 0) call post_data(Tr%id_dfy_2d, Tr%df2d_y, diag)
-    if (Tr%id_adv_xy > 0) call post_data(Tr%id_adv_xy, Tr%advection_xy, diag, alt_h = h)
+    if (Tr%id_adv_xy > 0) call post_data(Tr%id_adv_xy, Tr%advection_xy, diag, alt_h = h_diag)
     if (Tr%id_adv_xy_2d > 0) then
       work2d(:,:) = 0.0
       do k=1,nz ; do j=js,je ; do i=is,ie

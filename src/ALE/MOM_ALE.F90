@@ -809,6 +809,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   if (present(dt)) then
     Idt = 1.0/dt
+    call diag_update_remap_grids(CS_ALE%diag, alt_h = h_old)
   endif
 
   ! Remap tracer
@@ -852,11 +853,11 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
 
       ! tendency diagnostics.
-     if (Tr%id_remap_conc > 0) then
-        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag, alt_h = h_new)
+      if (Tr%id_remap_conc > 0) then
+        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag, alt_h = h_old)
       endif
       if (Tr%id_remap_cont > 0) then
-        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag, alt_h = h_new)
+        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag, alt_h = h_old)
       endif
       if (Tr%id_remap_cont_2d > 0) then
         do j = G%jsc,G%jec
