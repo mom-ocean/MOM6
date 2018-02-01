@@ -29,6 +29,7 @@ use shr_file_mod,        only: shr_file_getUnit, shr_file_freeUnit, shr_file_set
                                shr_file_setLogUnit, shr_file_setLogLevel
 
 ! MOM6 modules
+use MOM_domains,          only : MOM_infra_init, MOM_infra_end
 use MOM_coms,             only : reproducing_sum
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
@@ -38,8 +39,11 @@ use MOM,                  only: finish_MOM_initialization, step_offline
 use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
+use MOM_forcing_type,     only: mech_forcing, allocate_mech_forcing, copy_back_forcing_fields
+use MOM_forcing_type,     only: set_net_mass_forcing, set_derived_forcing_fields
+use MOM_forcing_type,     only: copy_common_forcing_fields
 use MOM_restart,          only: save_restart
-use MOM_domains,          only: MOM_infra_init, num_pes, root_pe, pe_here
+use MOM_domains,          only: num_pes, root_pe, pe_here
 use MOM_domains,          only: pass_vector, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only: pass_var, AGRID, fill_symmetric_edges
 use MOM_grid,             only: ocean_grid_type, get_global_grid_size
@@ -49,7 +53,7 @@ use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
 use MOM_error_handler,    only: callTree_enter, callTree_leave
 use MOM_time_manager,     only: time_type, set_date, set_time, set_calendar_type, NOLEAP, get_date
 use MOM_time_manager,     only: operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,     only: operator(/=), operator(>), get_time
+use MOM_time_manager,     only: operator(==), operator(/=), operator(>), get_time
 use MOM_file_parser,      only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,        only: Get_MOM_Input, directories
 use MOM_diag_mediator,    only: diag_ctrl, enable_averaging, disable_averaging
@@ -317,7 +321,8 @@ type, public :: ocean_state_type ; private
   real :: press_to_z          !< A conversion factor between pressure and ocean
                               !! depth in m, usually 1/(rho_0*g), in m Pa-1.
   real :: C_p                 !< The heat capacity of seawater, in J K-1 kg-1.
-  type(directories) :: dirs   !< A structure containing several relevant directory paths.
+  type(directories)  :: dirs  !< A structure containing several relevant directory paths.
+  type(mech_forcing) :: forces!< A structure with the driving mechanical forces
   type(forcing)   :: fluxes   !< A structure containing pointers to
                               !! the ocean forcing fields.
   type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
@@ -370,19 +375,18 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   character(len=*), optional  , intent(in)    :: NLFilename  !< Namelist filename
 
   !  local variables
-  type(time_type)     :: time_init         !< Start time of coupled model's calendar
-  type(time_type)     :: time_in           !< Time at the beginning of the first ocn coupling interval
-  type(ESMF_time)     :: current_time      !< Current time
+  type(time_type)     :: time0             !< Model start time
+  type(ESMF_time)     :: time_var          !< ESMF_time variable to query time
   type(ESMF_time)     :: time_in_ESMF      !< Initial time for ocean
   type(ESMF_timeInterval) :: ocn_cpl_interval !< Ocean coupling interval
+  integer             :: ncouple_per_day
   integer             :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   character(len=240)  :: runid             !< Run ID
-  character(len=240)  :: runtype           !< Run type
+  character(len=32)   :: runtype           !< Run type
   character(len=240)  :: restartfile       !< Path/Name of restart file
   integer             :: nu                !< i/o unit to read pointer file
   character(len=240)  :: restart_pointer_file !< File name for restart pointer file
   character(len=240)  :: restartpath       !< Path of the restart file
-  character(len=32)   :: starttype         !< infodata start type
   integer             :: mpicom_ocn        !< MPI ocn communicator
   integer             :: npes, pe0         !< # of processors and current processor
   integer             :: i, errorCode
@@ -390,7 +394,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   logical             :: ldiag_cpl = .false.
   integer             :: isc, iec, jsc, jec, ni, nj     !< Indices for the start and end of the domain
                                                         !! in the x and y dir., respectively.
-  ! runi-time params
+  ! runtime params
   type(param_file_type) :: param_file           !< A structure to parse for run-time parameters
   type(directories)     :: dirs_tmp             !< A structure containing several relevant directory paths
   character(len=40)     :: mdl = "ocn_comp_mct" !< This module's name.
@@ -419,16 +423,13 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   character(len=16)   :: inst_name
   character(len=16)   :: inst_suffix
 
-  !!!DANGER!!!: change the following vars with the corresponding MOM6 vars
+  ! TODO: Change the following vars with the corresponding MOM6 vars
   integer :: km=1                   !< Number of vertical levels
-  integer :: nx_block=0, ny_block=0 !< Size of block domain in x,y dir including ghost cells
-  integer :: max_blocks_clinic=0    !< Max. number of blocks per processor in each distribution
-  integer :: ncouple_per_day
-  logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
+  !logical :: lsend_precip_fact      !< If T,send precip_fact to cpl for use in fw balance
                                     !! (partially-coupled option)
   character(len=128) :: err_msg     !< Error message
 
-  ! set (actually, get from mct) the cdata pointers:
+  ! set the cdata pointers:
   call seq_cdata_setptrs(cdata_o, id=MOM_MCT_ID, mpicom=mpicom_ocn, &
                          gsMap=MOM_MCT_gsMap, dom=MOM_MCT_dom, infodata=glb%infodata)
 
@@ -436,19 +437,6 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   call coupler_indices_init(glb%ind)
 
   call seq_infodata_GetData( glb%infodata, case_name=runid )
-
-  call seq_infodata_GetData( glb%infodata, start_type=starttype)
-
-  if (     trim(starttype) == trim(seq_infodata_start_type_start)) then
-     runtype = "initial"
-  else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
-     runtype = "continue"
-  else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
-     runtype = "branch"
-  else
-     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
-     call exit(0)
-  end if
 
   ! instance control
   inst_name   = seq_comm_name(MOM_MCT_ID)
@@ -479,36 +467,22 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
-  ! Get the ESMF clock instance (assigned by CESM for MOM6)
-  call ESMF_ClockGet(EClock, currTime=current_time, rc=rc)
-
-  ! Get the initial CESM time
-  call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-  time_init = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
-
-  ! Compute time_in: time at the beginning of the first ocn coupling interval
-  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  if (runtype /= "continue") then
-    ! In startup runs, take the one ocn coupling interval lag into account to
-    ! compute the initial ocn time.  (time_in = time_init + ocn_cpl_interval)
-    time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
-  else
-    time_in_ESMF = current_time
-  endif
-  call ESMF_TimeGet(time_in_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+  ! Get the initial time
+  call ESMF_ClockGet(EClock, currTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  time0 = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
     write(glb%stdout,*) 'ocn_init_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
@@ -556,9 +530,10 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   endif
 
   ! Initialize the MOM6 model
+  runtype = get_runtype()
   if (runtype == "initial") then ! startup (new run) - 'n' is needed below since we don't
                                  ! specify input_filename in input.nml
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file = 'n')
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file = 'n')
   else                           ! hybrid or branch or continuos runs
     ! output path root
     call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
@@ -573,7 +548,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
     !endif
     call shr_file_freeUnit(nu)
-    call ocean_model_init(glb%ocn_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
+    call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
   endif
 
   ! Initialize ocn_state%state out of sight
@@ -907,7 +882,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%MOM_CSp%diag, OS%fluxes)
+                              OS%MOM_CSp%diag, OS%forces, OS%fluxes)
   endif
   if (OS%icebergs_apply_rigid_boundary)  then
     !call allocate_forcing_type(OS%grid, OS%fluxes, iceberg=.true.)
@@ -1541,8 +1516,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   type(mct_aVect),  intent(inout) :: x2o_o   !< Fluxes from coupler to ocean, computed by ocean
   type(mct_aVect),  intent(inout) :: o2x_o   !< Fluxes from ocean to coupler, computed by ocean
   ! Local variables
-  type(ESMF_time) :: current_time             !< Time to be reached at the end of ocean cpl interval
-  type(ESMF_time) :: time_start_ESMF          !< Time at the start of the coupling interval
+  type(ESMF_time) :: time_var                 !< ESMF_time variable to query time
   type(ESMF_timeInterval) :: ocn_cpl_interval !< The length of one ocean coupling interval
   integer :: year, month, day, hour, minute, seconds, seconds_n, seconds_d, rc
   logical :: write_restart_at_eod      !< Controls if restart files must be written
@@ -1554,9 +1528,11 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
   character(len=384) :: restartname    !< The restart file name (no dir)
   character(len=384) :: restart_pointer_file !< File name for restart pointer file
   character(len=384) :: runid                !< Run ID
+  character(len=32)  :: runtype              !< Run type
   integer            :: nu                   !< i/o unit to write pointer file
   integer            :: shrlogunit ! original log file unit
   integer            :: shrloglev  ! original log level
+  logical, save      :: firstCall = .true.
 
   ! reset shr logging to ocn log file:
   if (is_root_pe()) then
@@ -1565,36 +1541,58 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     call shr_file_setLogUnit(glb%stdout)
   endif
 
-  ! Compute the time at the start of this coupling interval
-  call ESMF_ClockGet(EClock, PrevTime=time_start_ESMF, rc=rc)
-  call ESMF_TimeGet(time_start_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+  ! Query the beginning time of the current coupling interval
+  call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+  call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
   time_start = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
+
+  ! Query the coupling interval duration
+  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
+  call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
+  coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
+
+  ! The following if-block is to correct monthly mean outputs:
+  ! With this change, MOM6 starts at the same date as the other components, and runs for the same
+  ! duration as other components, unlike POP, which would have one missing interval due to ocean
+  ! lag. MOM6 accounts for this lag by doubling the duration of the first coupling interval.
+  if (firstCall) then
+
+    runtype = get_runtype()
+    if (runtype /= "continue" .and. runtype /= "branch") then
+
+      if (debug .and. is_root_pe()) then
+        write(glb%stdout,*) 'doubling first interval duration!'
+      endif
+
+      ! shift back the start time by one coupling interval (to align the start time with other components)
+      time_start = time_start-coupling_timestep
+      ! double the first coupling interval (to account for the missing coupling interval to due to lag)
+      coupling_timestep = coupling_timestep*2
+    end if
+
+    firstCall = .false.
+  end if
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
-    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, CurrTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, current time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StartTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StartTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, StopTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, StopTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, stop time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
-    call ESMF_ClockGet(EClock, PrevTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, PrevTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     write(glb%stdout,*) 'ocn_run_mct, previous time: y,m,d-',year,month,day,'h,m,s=',hour,minute,seconds
     call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
     call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
     write(glb%stdout,*) 'ocn_init_mct, time step: y,m,d-',year,month,day,'s,sn,sd=',seconds,seconds_n,seconds_d
   endif
 
-  ! Translate the coupling time interval
-  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-  call ESMF_TimeIntervalGet(ocn_cpl_interval, yy=year, mm=month, d=day, s=seconds, sn=seconds_n, sd=seconds_d, rc=rc)
-  coupling_timestep = set_time(seconds, days=day, err_msg=err_msg)
-
-  ! set (actually, get from mct) the cdata pointers:
+  ! set the cdata pointers:
   ! \todo this was done in _init_, is it needed again. Does this infodata need to be in glb%?
   ! GMM, check if  this is needed!
   call seq_cdata_setptrs(cdata_o, infodata=glb%infodata)
@@ -1614,8 +1612,8 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
     ! case name
     call seq_infodata_GetData( glb%infodata, case_name=runid )
     ! add time stamp to the restart filename
-    call ESMF_ClockGet(EClock, CurrTime=current_time, rc=rc)
-    call ESMF_TimeGet(current_time, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
+    call ESMF_ClockGet(EClock, CurrTime=time_var, rc=rc)
+    call ESMF_TimeGet(time_var, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
     seconds = seconds + hour*3600 + minute*60
     write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') trim(runid), year, month, day, seconds
 
@@ -1730,15 +1728,19 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   if (OS%fluxes%fluxes_used) then
     ! GMM, is enable_averaging needed now?
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%MOM_CSp%diag)
-    call ocn_import(OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
+    call ocn_import(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
                     c1, c2, c3, c4, OS%restore_salinity,OS%restore_temp)
+
+    ! Fields that exist in both the forcing and mech_forcing types must be copied.
+    call copy_common_forcing_fields(OS%forces, OS%fluxes, OS%grid)
+
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%fluxes, weight) !here weight=1, just saving the current fluxes
 #endif
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%State, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
@@ -1753,26 +1755,32 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   else
     OS%flux_tmp%C_p = OS%fluxes%C_p
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
-    call ocn_import(OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
+    call ocn_import(OS%forces, OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
                        OS%state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
                        OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%State, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
-    call forcing_accumulate(OS%flux_tmp, OS%fluxes, time_step, OS%grid, weight)
+    call forcing_accumulate(OS%flux_tmp, OS%forces, OS%fluxes, time_step, OS%grid, weight)
+    ! Some of the fields that exist in both the forcing and mech_forcing types
+    ! are time-averages must be copied back to the forces type.
+    call copy_back_forcing_fields(OS%fluxes, OS%forces, OS%grid)
 #ifdef _USE_GENERIC_TRACER
     call MOM_generic_tracer_fluxes_accumulate(OS%flux_tmp, weight) !weight of the current flux in the running average
 #endif
   endif
+
+  call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
+  call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes)
@@ -1786,16 +1794,16 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%MOM_Csp%offline_tracer_mode) then
-    call step_offline(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   else
-    call step_MOM(OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
   OS%nstep = OS%nstep + 1
 
   call enable_averaging(time_step, OS%Time, OS%MOM_CSp%diag)
-  call mech_forcing_diags(OS%fluxes, time_step, OS%grid, &
+  call mech_forcing_diags(OS%forces, OS%fluxes, time_step, OS%grid, &
                           OS%MOM_CSp%diag, OS%forcing_CSp%handles)
   call disable_averaging(OS%MOM_CSp%diag)
 
@@ -1832,11 +1840,12 @@ end subroutine update_ocean_model
 !! See \ref section_ocn_import for a summary of the surface fluxes that are
 !! passed from MCT to MOM6, including fluxes that need to be included in
 !! the future.
-subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
+subroutine ocn_import(forces, fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
                              c1, c2, c3, c4, restore_salt, restore_temp)
-  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes structure
-  type(time_type),            intent(in)           :: Time !< Model time structure
-  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid structure
+  type(mech_forcing),         intent(inout)        :: forces !<  Driving mechanical forces
+  type(forcing),              intent(inout)        :: fluxes !< Surface fluxes
+  type(time_type),            intent(in)           :: Time !< Model time
+  type(ocean_grid_type),      intent(inout)        :: G  !< The ocean's grid
   type(surface_forcing_CS),   pointer              :: CS !< control structure returned by
                                                    !! a previous call to surface_forcing_init
   type(surface),              intent(in)           :: state !< control structure to ocean
@@ -1919,17 +1928,18 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
 
   ! if true, allocation and initialization
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, stress=.true., ustar=.true., &
-                               water=.true., heat=.true.)
-
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., &
+                               ustar=.true., press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
+                               press=.true.)
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_nir_dif,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%p_surf,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%p_surf_full,isd,ied,jsd,jed)
-    call safe_alloc_ptr(fluxes%p_surf_SSH,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
+    call safe_alloc_ptr(forces%p_surf_SSH,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
@@ -1949,8 +1959,8 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     enddo; enddo
 
     if (CS%rigid_sea_ice) then
-      call safe_alloc_ptr(fluxes%rigidity_ice_u,IsdB,IedB,jsd,jed)
-      call safe_alloc_ptr(fluxes%rigidity_ice_v,isd,ied,JsdB,JedB)
+      call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
+      call safe_alloc_ptr(forces%rigidity_ice_v,isd,ied,JsdB,JedB)
     endif
 
     if (restore_temp) call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
@@ -2062,8 +2072,8 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
       taux_at_h(i,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
       tauy_at_h(i,j) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     else ! C-grid wind stresses.
-      fluxes%taux(I,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
-      fluxes%tauy(i,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
+      forces%taux(I,j) = x2o_o(ind%x2o_Foxx_taux,k) * CS%wind_stress_multiplier
+      forces%tauy(i,J) = x2o_o(ind%x2o_Foxx_tauy,k) * CS%wind_stress_multiplier
     endif
 
     ! liquid precipitation (rain)
@@ -2142,18 +2152,18 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
 
     ! applied surface pressure from atmosphere and cryosphere
     ! sea-level pressure (Pa)
-    if (ASSOCIATED(fluxes%p_surf_full) .and. ASSOCIATED(fluxes%p_surf)) then
-      fluxes%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
+    if (ASSOCIATED(forces%p_surf_full) .and. ASSOCIATED(forces%p_surf)) then
+      forces%p_surf_full(i,j) = G%mask2dT(i,j) * x2o_o(ind%x2o_Sa_pslv,k)
       if (CS%max_p_surf >= 0.0) then
-          fluxes%p_surf(i,j) = MIN(fluxes%p_surf_full(i,j),CS%max_p_surf)
+          forces%p_surf(i,j) = MIN(forces%p_surf_full(i,j),CS%max_p_surf)
       else
-          fluxes%p_surf(i,j) = fluxes%p_surf_full(i,j)
+          forces%p_surf(i,j) = forces%p_surf_full(i,j)
       endif
 
       if (CS%use_limited_P_SSH) then
-        fluxes%p_surf_SSH(i,j) = fluxes%p_surf(i,j)
+        forces%p_surf_SSH(i,j) = forces%p_surf(i,j)
       else
-        fluxes%p_surf_SSH(i,j) = fluxes%p_surf_full(i,j)
+        forces%p_surf_SSH(i,j) = forces%p_surf_full(i,j)
       endif
 
     endif
@@ -2182,15 +2192,15 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(fluxes%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
+        net_FW(i,j) = net_FW(i,j) + G%areaT(i,j) * &
                      (fluxes%salt_flux(i,j) / CS%ice_salt_concentration)
-      net_FW2(i,j) = net_FW(i,j)
+      net_FW2(i,j) = net_FW(i,j)/G%areaT(i,j)
     enddo ; enddo
 
     if (CS%adjust_net_fresh_water_by_scaling) then
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
       enddo; enddo
     else
       fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
@@ -2208,17 +2218,17 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     call pass_vector(taux_at_q, tauy_at_q, G%Domain, stagger=BGRID_NE)
 
     do j=js,je ; do I=Isq,Ieq
-      fluxes%taux(I,j) = 0.0
+      forces%taux(I,j) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I,J-1)) > 0) &
-        fluxes%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
+        forces%taux(I,j) = (G%mask2dBu(I,J)*taux_at_q(I,J) + &
                             G%mask2dBu(I,J-1)*taux_at_q(I,J-1)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I,J-1))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%tauy(i,J) = 0.0
+      forces%tauy(i,J) = 0.0
       if ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J)) > 0) &
-        fluxes%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
+        forces%tauy(i,J) = (G%mask2dBu(I,J)*tauy_at_q(I,J) + &
                             G%mask2dBu(I-1,J)*tauy_at_q(I-1,J)) / &
                            (G%mask2dBu(I,J) + G%mask2dBu(I-1,J))
     enddo ; enddo
@@ -2238,24 +2248,24 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
           ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
-      fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo ; enddo
 
   elseif (wind_stagger == AGRID) then
     call pass_vector(taux_at_h, tauy_at_h, G%Domain,stagger=AGRID)
 
     do j=js,je ; do I=Isq,Ieq
-      fluxes%taux(I,j) = 0.0
+      forces%taux(I,j) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i+1,j)) > 0) &
-        fluxes%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
+        forces%taux(I,j) = (G%mask2dT(i,j)*taux_at_h(i,j) + &
                             G%mask2dT(i+1,j)*taux_at_h(i+1,j)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i+1,j))
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie
-      fluxes%tauy(i,J) = 0.0
+      forces%tauy(i,J) = 0.0
       if ((G%mask2dT(i,j) + G%mask2dT(i,j+1)) > 0) &
-        fluxes%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
+        forces%tauy(i,J) = (G%mask2dT(i,j)*tauy_at_h(i,j) + &
                             G%mask2dT(i,J+1)*tauy_at_h(i,j+1)) / &
                            (G%mask2dT(i,j) + G%mask2dT(i,j+1))
     enddo ; enddo
@@ -2263,30 +2273,30 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0)) gustiness = CS%gust(i,j)
-      fluxes%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
+      forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
     enddo ; enddo
 
   else ! C-grid wind stresses.
     if (G%symmetric) &
-      call fill_symmetric_edges(fluxes%taux, fluxes%tauy, G%Domain)
-    call pass_vector(fluxes%taux, fluxes%tauy, G%Domain)
+      call fill_symmetric_edges(forces%taux, forces%tauy, G%Domain)
+    call pass_vector(forces%taux, forces%tauy, G%Domain)
 
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0) &
-        taux2 = (G%mask2dCu(I-1,j)*fluxes%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*fluxes%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+        taux2 = (G%mask2dCu(I-1,j)*forces%taux(I-1,j)**2 + &
+                 G%mask2dCu(I,j)*forces%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
 
       tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0) &
-        tauy2 = (G%mask2dCv(i,J-1)*fluxes%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*fluxes%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+        tauy2 = (G%mask2dCv(i,J-1)*forces%tauy(i,J-1)**2 + &
+                 G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
-        fluxes%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
       else
-        fluxes%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
+        forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
       endif
     enddo ; enddo
 
@@ -2298,11 +2308,11 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
     ! The commented out code here and in the following lines is the correct
     ! version, but the incorrect version is being retained temporarily to avoid
     ! changing answers.
-    call pass_var(fluxes%p_surf_full, G%Domain)
+    call pass_var(forces%p_surf_full, G%Domain)
     I_GEarth = 1.0 / G%G_Earth
     Kv_rho_ice = (CS%kv_sea_ice / CS%density_sea_ice)
     do I=isd,ied-1 ; do j=jsd,jed
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i+1,j)) * I_GEarth
+      mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i+1,j)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
@@ -2310,22 +2320,22 @@ subroutine ocn_import(fluxes, Time, G, CS, state, x2o_o, ind, sw_decomp, &
       endif
       ! CAUTION: with both rigid_sea_ice and ice shelves, we will need to make this
       ! a maximum for the second call.
-      fluxes%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_u(I,j) = Kv_rho_ice * mass_eff
     enddo ; enddo
     do i=isd,ied ; do J=jsd,jed-1
-      mass_ice = min(fluxes%p_surf_full(i,j), fluxes%p_surf_full(i,j+1)) * I_GEarth
+      mass_ice = min(forces%p_surf_full(i,j), forces%p_surf_full(i,j+1)) * I_GEarth
       mass_eff = 0.0
       if (mass_ice > CS%rigid_sea_ice_mass) then
         mass_eff = (mass_ice - CS%rigid_sea_ice_mass) **2 / &
                    (mass_ice + CS%rigid_sea_ice_mass)
       endif
-      fluxes%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
+      forces%rigidity_ice_v(i,J) = Kv_rho_ice * mass_eff
     enddo ; enddo
   endif
 
   if (CS%allow_flux_adjustments) then
     ! Apply adjustments to fluxes
-    call apply_flux_adjustments(G, CS, Time, fluxes)
+    call apply_flux_adjustments(G, CS, Time, forces, fluxes)
   endif
 
   ! Allow for user-written code to alter fluxes after all the above
@@ -2340,10 +2350,11 @@ end subroutine  ocn_import
 !! Available adjustments are:
 !! - taux_adj (Zonal wind stress delta, positive to the east, in Pa)
 !! - tauy_adj (Meridional wind stress delta, positive to the north, in Pa)
-subroutine apply_flux_adjustments(G, CS, Time, fluxes)
+subroutine apply_flux_adjustments(G, CS, Time, forces, fluxes)
   type(ocean_grid_type),    intent(inout) :: G !< Ocean grid structure
   type(surface_forcing_CS), pointer       :: CS !< Surface forcing control structure
   type(time_type),          intent(in)    :: Time !< Model time structure
+  type(mech_forcing),       intent(inout) :: forces !< Driving mechanical forces
   type(forcing), optional,  intent(inout) :: fluxes !< Surface fluxes structure
 
   ! Local variables
@@ -2419,11 +2430,11 @@ subroutine apply_flux_adjustments(G, CS, Time, fluxes)
 
     ! Average to C-grid locations
     do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-      fluxes%taux(I,j) = fluxes%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
+      forces%taux(I,j) = forces%taux(I,j) + 0.5 * ( tempx_at_h(i,j) + tempx_at_h(i+1,j) )
     enddo ; enddo
 
     do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-      fluxes%tauy(i,J) = fluxes%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
+      forces%tauy(i,J) = forces%tauy(i,J) + 0.5 * ( tempy_at_h(i,j) + tempy_at_h(i,j+1) )
     enddo ; enddo
   endif ! overrode_x .or. overrode_y
 
@@ -2451,12 +2462,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
                                  !                        !! ocean state to be deallocated upon termination.
   type(time_type),             intent(in)    :: Time      !< The model time, used for writing restarts.
 
-  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 1'
-  !GMM call save_restart(Ocean_state, Time)
-  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
+  call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag, end_diag_manager=.true.)
+  ! print time stats
+  call MOM_infra_end
   call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
-  !if (debug .and. is_root_pe()) write(glb%stdout,*)'Here 2'
 
 end subroutine ocean_model_end
 
@@ -2587,6 +2597,27 @@ subroutine ocn_domain_mct( lsize, gsMap_ocn, dom_ocn)
   deallocate(idata)
 
 end subroutine ocn_domain_mct
+
+!> Returns the CESM run type
+character(32) function get_runtype()
+  character(len=32)   :: starttype         !< infodata start type
+
+  call seq_infodata_GetData( glb%infodata, start_type=starttype)
+
+    if (   trim(starttype) == trim(seq_infodata_start_type_start)) then
+     get_runtype = "initial"
+  else if (trim(starttype) == trim(seq_infodata_start_type_cont) ) then
+     get_runtype = "continue"
+  else if (trim(starttype) == trim(seq_infodata_start_type_brnch)) then
+     get_runtype = "branch"
+  else
+     write(glb%stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
+     call exit(0)
+  end if
+  return
+
+end function
+
 
 !> \namespace ocn_comp_mct
 !!
