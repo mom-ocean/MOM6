@@ -267,6 +267,7 @@ type, public :: MOM_control_struct ; private
                                      !! if it is 0, it is calculated every step.
   real :: dtbt_reset_time            !< The last time (as indicated by CS%rel_time) when
                                      !! DTBT was last calculated (sec)
+  type(MOM_diag_IDs) :: IDs
   real, pointer, dimension(:,:,:) :: &
     h_pre_dyn => NULL(), & !< The thickness before the transports, in H.
     T_pre_dyn => NULL(), & !< Temperature before the transports, in degC.
@@ -309,9 +310,6 @@ type, public :: MOM_control_struct ; private
   character(len=120) :: IC_file      !< A file into which the initial conditions are
                                      !! written in a new run if SAVE_INITIAL_CONDS is true.
 
-
-!dyn
-  type(MOM_diag_IDs) :: IDs
 !wherever tracer_dyn goes? Master?
   type(transport_diag_IDs) :: transport_IDs
 !master?
@@ -449,7 +447,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
                                       ! metrics and related information
   type(verticalGrid_type),  pointer :: GV => NULL()
-  type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
 
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
   integer       :: n_max  ! number of steps to take in this call
@@ -493,7 +490,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   type(group_pass_type) :: pass_tau_ustar_psurf
   logical :: showCallTree
 
-  G => MS%G ; GV => MS%GV ; IDs => CS%IDs
+  G => MS%G ; GV => MS%GV
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -696,21 +693,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     do j=js,je ; do i=is,ie
       MS%ave_ssh(i,j) = MS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
+    if (CS%IDs%id_ssh_inst > 0) call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
     call cpu_clock_end(id_clock_dynamics)
 
     !===========================================================================
-    ! Calculate diagnostics at the end of the time step.
-    call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-
-    call enable_averaging(dt, Time_local, CS%diag)
-    ! These diagnostics are available every time step.
-    if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
-    if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
-    if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
-    if (IDs%id_ssh_inst > 0) call post_data(IDs%id_ssh_inst, ssh, CS%diag)
-    call disable_averaging(CS%diag)
-
+    ! Calculate diagnostics at the end of the time step if the state is self-consistent.
     if (MS%t_dyn_rel_adv == 0.0) then
+      call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(MS%t_dyn_rel_diag, Time_local, CS%diag)
@@ -732,8 +721,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
         if (showCallTree) call callTree_waypoint("finished calculate_Z_diag_fields (step_MOM)")
       endif
       call cpu_clock_end(id_clock_Z_diag)
+      call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
     endif
-    call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
     if (.not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
 
@@ -801,6 +790,7 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
                                       ! metrics and related information
   type(verticalGrid_type),  pointer :: GV => NULL()
+  type(MOM_diag_IDs), pointer :: IDs => NULL() ! A structure with the diagnostic IDs.
   real, pointer, dimension(:,:,:) :: &
     u, & ! u : zonal velocity component (m/s)
     v, & ! v : meridional velocity component (m/s)
@@ -813,7 +803,7 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
-  G => MS%G ; GV => MS%GV ! ; IDs => CS%IDs
+  G => MS%G ; GV => MS%GV ; IDs => CS%IDs
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec ; nz = G%ke
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
@@ -962,6 +952,15 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
   MS%t_dyn_rel_diag = MS%t_dyn_rel_diag + dt
 
   call cpu_clock_end(id_clock_dynamics)
+
+  call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
+  call enable_averaging(dt, Time_local, CS%diag)
+  ! These diagnostics are available after every time dynamics step.
+  if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
+  if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
+  if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
+  call disable_averaging(CS%diag)
+  call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
 
 end subroutine step_MOM_dynamics
 
@@ -2402,16 +2401,15 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
   endif
 
   ! Diagnostics of the rapidly varying dynamic state
-  IDs%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
-      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
-      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
-  IDs%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
-      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
-      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
-  IDs%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
-      'Layer Thickness', thickness_units, v_extensive=.true., conversion=H_convert)
-  IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, Time, &
-      'Instantaneous Sea Surface Height', 'm', missing)
+  IDs%id_u = register_diag_field('ocean_model', 'u_dyn', diag%axesCuL, Time, &
+      'Zonal velocity after the dynamics update', 'm s-1')
+  IDs%id_v = register_diag_field('ocean_model', 'v_dyn', diag%axesCvL, Time, &
+      'Meridional velocity after the dynamics update', 'm s-1')
+  IDs%id_h = register_diag_field('ocean_model', 'h_dyn', diag%axesTL, Time, &
+      'Layer Thickness after the dynamics update', thickness_units, &
+      v_extensive=.true., conversion=H_convert)
+  IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
+      Time, 'Instantaneous Sea Surface Height', 'm', missing)
 end subroutine register_diags
 
 !> Register certain diagnostics related to transports
