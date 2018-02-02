@@ -461,7 +461,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
-  call bt_mass_source(h, eta, forces, .true., G, GV, CS%barotropic_CSp)
+  call bt_mass_source(h, eta, .true., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (G%nonblocking_updates) &
@@ -600,7 +600,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  call bt_mass_source(hp, eta_pred, forces, .false., G, GV, CS%barotropic_CSp)
+  call bt_mass_source(hp, eta_pred, .false., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (CS%begw /= 0.0) then
