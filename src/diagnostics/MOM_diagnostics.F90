@@ -110,6 +110,7 @@ type, public :: diagnostics_CS ; private
     KE_dia     => NULL()    ! KE source from diapycnal diffusion
 
   ! diagnostic IDs
+  integer :: id_u = -1,   id_v = -1, id_h = -1
   integer :: id_e              = -1, id_e_D            = -1
   integer :: id_du_dt          = -1, id_dv_dt          = -1
   integer :: id_col_ht         = -1, id_dh_dt          = -1
@@ -262,6 +263,12 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
          "calculate_diagnostic_fields: Module must be initialized before used.")
 
   call calculate_derivs(dt, G, CS)
+
+  if (CS%id_u > 0) call post_data(CS%id_u, u, CS%diag)
+
+  if (CS%id_v > 0) call post_data(CS%id_v, v, CS%diag)
+
+  if (CS%id_h > 0) call post_data(CS%id_h, h, CS%diag)
 
   if (ASSOCIATED(CS%e)) then
     call find_eta(h, tv, GV%g_Earth, G, GV, CS%e, eta_bt)
@@ -1363,7 +1370,6 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   CS%diag => diag
   use_temperature = ASSOCIATED(tv%T)
 
-
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_COLUMN_FRACTION", CS%mono_N2_column_fraction, &
@@ -1436,6 +1442,15 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
         cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity',     &
         cmor_long_name='Sea Surface Salinity')
   endif
+
+  CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time,              &
+      'Zonal velocity', 'm s-1', cmor_field_name='uo', &
+      cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
+  CS%id_v = register_diag_field('ocean_model', 'v', diag%axesCvL, Time,                  &
+      'Meridional velocity', 'm s-1', cmor_field_name='vo', &
+      cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
+  CS%id_h = register_diag_field('ocean_model', 'h', diag%axesTL, Time, &
+      'Layer Thickness', thickness_units, v_extensive=.true., conversion=convert_H)
 
   CS%id_e = register_diag_field('ocean_model', 'e', diag%axesTi, Time, &
       'Interface Height Relative to Mean Sea Level', 'm')
