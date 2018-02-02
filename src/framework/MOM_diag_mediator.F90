@@ -2526,6 +2526,10 @@ subroutine diag_grid_storage_init(grid_storage, G, diag)
 
   integer :: m, nz
   grid_storage%num_diag_coords = diag%num_diag_coords
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
   ! Allocate memory for the native space
   allocate(grid_storage%h_state(G%isd:G%ied,G%jsd:G%jed, G%ke))
   ! Allocate diagnostic remapping structures
@@ -2546,6 +2550,9 @@ subroutine diag_copy_diag_to_storage(grid_storage, h_state, diag)
 
   integer :: m
 
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
   grid_storage%h_state(:,:,:) = h_state(:,:,:)
   do m = 1,grid_storage%num_diag_coords
     grid_storage%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
@@ -2559,6 +2566,10 @@ subroutine diag_copy_storage_to_diag(diag, grid_storage)
   type(diag_grid_storage), intent(in)    :: grid_storage !< Structure containing a snapshot of the target grids
 
   integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
   diag%diag_grid_overridden = .true.
   do m = 1,grid_storage%num_diag_coords
     diag%diag_remap_cs(m)%h(:,:,:) = grid_storage%diag_grids(m)%h(:,:,:)
@@ -2572,6 +2583,9 @@ subroutine diag_save_grids(diag)
 
   integer :: m
 
+  ! Don't do anything else if there are no remapped coordinates
+  if (diag%num_diag_coords < 1) return
+
   do m = 1,diag%num_diag_coords
     diag%diag_grid_temp%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
   enddo
@@ -2583,6 +2597,9 @@ subroutine diag_restore_grids(diag)
   type(diag_ctrl),         intent(inout) :: diag     !< Diagnostic control structure used as the contructor
 
   integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (diag%num_diag_coords < 1) return
 
   diag%diag_grid_overridden = .false.
   do m = 1,diag%num_diag_coords
@@ -2596,6 +2613,9 @@ subroutine diag_grid_storage_end(grid_storage)
   type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
   ! Local variables
   integer :: m, nz
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
 
   ! Deallocate memory for the native space
   deallocate(grid_storage%h_state)
