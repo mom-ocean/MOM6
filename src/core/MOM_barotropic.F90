@@ -3737,12 +3737,11 @@ end subroutine find_face_areas
 !! the barotropic solver, along with a corrective fictitious mass source that
 !! will drive the barotropic estimate of the free surface height toward the
 !! baroclinic estimate.
-subroutine bt_mass_source(h, eta, forces, set_cor, G, GV, CS)
+subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(ocean_grid_type),              intent(in) :: G        !< The ocean's grid structure.
   type(verticalGrid_type),            intent(in) :: GV       !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h  !< Layer thicknesses, in H (usually m or kg m-2).
   real, dimension(SZI_(G),SZJ_(G)),   intent(in) :: eta      !< The free surface height that is to be corrected, in m.
-  type(mech_forcing),                 intent(in) :: forces   !< A structure with the driving mechanical forces
   logical,                            intent(in) :: set_cor  !< A flag to indicate whether to set the corrective
                                                              !! fluxes (and update the slowly varying part of eta_cor)
                                                              !! (.true.) or whether to incrementally update the
