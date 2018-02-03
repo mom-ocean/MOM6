@@ -228,6 +228,11 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                                      !< If true, step_offline() is called instead of step_MOM().
                                      !! This is intended for running MOM6 in offline tracer mode
+  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
+                                     !! isopycnal/stacked shallow water mode. This logical is
+                                     !! set by calling the function useRegridding() from the
+                                     !! MOM_regridding module.
+
   type(time_type), pointer :: Time   !< pointer to ocean clock
   real :: rel_time = 0.0             !< relative time (sec) since start of current execution
   real    :: dt                      !< (baroclinic) dynamics time step (seconds)
@@ -329,50 +334,56 @@ type, public :: MOM_control_struct ; private
 !master & persistent
   type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
+  type(sponge_CS),               pointer :: sponge_CSp             => NULL()
+  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
+  type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
+!Used initialization, persistent because shared?
+  type(ocean_OBC_type),          pointer :: OBC                    => NULL()
 
 !Master
   type(surface_state_CS),        pointer :: surface_CSp            => NULL()
+  type(step_thermo_CS),          pointer :: thermo_CSp             => NULL()
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
 !Master & transport & thermo
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
 !Not needed?
   type(update_OBC_CS),           pointer :: update_OBC_CSp         => NULL()
-!Used initialization, persistent because shared?
-  type(ocean_OBC_type),          pointer :: OBC                    => NULL()
 
-!tracer or both
-!  type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
 !Step offline
   type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
 !master or dyn
   type(sum_output_CS),           pointer :: sum_output_CSp         => NULL()
 
+end type MOM_control_struct
 
-! Thermo update structure
-  logical :: adiabatic               !< If true, then no diapycnal mass fluxes, with no calls
-                                     !! to routines to calculate or apply diapycnal fluxes.
-  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
-                                     !! isopycnal/stacked shallow water mode. This logical is
-                                     !! set by calling the function useRegridding() from the
-                                     !! MOM_regridding module.
-!  logical :: debug                   !< If true, write verbose checksums for debugging purposes.
-!  type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
-!  type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
-!                                   !! bottom drag viscosities, and related fields
-!  type(accel_diag_ptrs) :: ADp     !< structure containing pointers to accelerations,
-!                                   !! for derived diagnostics (e.g., energy budgets)
-!  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers to continuity equation
-!                                   !! terms, for derived diagnostics (e.g., energy budgets)
-!  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
-!  type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
+
+!> Control structure for the extaction of the surface state.
+type, public :: step_thermo_CS ; private
+  logical :: adiabatic         !< If true, then no diapycnal mass fluxes, with no calls
+                               !! to routines to calculate or apply diapycnal fluxes.
+  logical :: use_ALE_algorithm !< If true, use the ALE algorithm rather than layered
+                               !! isopycnal/stacked shallow water mode. This logical is
+                               !! set by calling the function useRegridding() from the
+                               !! MOM_regridding module.
+  logical :: debug             !< If true, write verbose checksums for debugging purposes.
+  type(diag_ctrl), pointer       :: &
+    diag => NULL()             !< structure to regulate diagnostic output timing
+  type(vertvisc_type), pointer   :: &
+    visc => NULL()             !< structure containing vertical viscosities,
+                               !! bottom drag viscosities, and related fields
+  type(accel_diag_ptrs), pointer :: &
+    ADp => NULL()              !< structure containing pointers to accelerations,
+                               !! for derived diagnostics (e.g., energy budgets)
+  type(cont_diag_ptrs), pointer :: &
+    CDp => NULL()              !< structure containing pointers to continuity equation
+                               !! terms, for derived diagnostics (e.g., energy budgets)
+  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
+  type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
   type(ALE_CS),                  pointer :: ALE_CSp                => NULL()
  
   type(diabatic_CS),             pointer :: diabatic_CSp           => NULL()
-  type(sponge_CS),               pointer :: sponge_CSp             => NULL()
-  type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
-! End Thermo update structure
 
-end type MOM_control_struct
+end type step_thermo_CS
 
 
 !> Control structure for the extaction of the surface state.
@@ -618,7 +629,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(MS, CS, G, GV, u, v, h, MS%tv, fluxes, dtdia, end_time_thermo, .true.)
+      call step_MOM_thermo(MS, CS%thermo_CSp, G, GV, u, v, h, MS%tv, fluxes, dtdia, end_time_thermo, .true.)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       MS%t_dyn_rel_thermo = -dtdia
@@ -672,7 +683,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
                          "before call to diabatic.")
         endif
         ! Apply diabatic forcing, do mixing, and regrid.
-        call step_MOM_thermo(MS, CS, G, GV, u, v, h, MS%tv, fluxes, dtdia, Time_local, .false.)
+        call step_MOM_thermo(MS, CS%thermo_CSp, G, GV, u, v, h, MS%tv, fluxes, dtdia, Time_local, .false.)
       endif
 
       if (CS%diabatic_first .and. abs(MS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
@@ -879,7 +890,7 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
                 MS%eta_av_bc, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
-  elseif (CS%do_dynamics) then ! --------------------------------------------------- not SPLIT
+  elseif (CS%do_dynamics) then ! ------------------------------------ not SPLIT
     !   This section uses an unsplit stepping scheme for the dynamic
     ! equations; basically the stacked shallow water equations with viscosity.
     ! Because the time step is limited by CFL restrictions on the external
@@ -1042,7 +1053,7 @@ end subroutine step_MOM_tracer_dyn
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
 subroutine step_MOM_thermo(MS, CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL)
   type(MOM_state_type),     intent(inout) :: MS     !< structure describing the MOM state
-  type(MOM_control_struct), intent(inout) :: CS     !< control structure
+  type(step_thermo_CS),     intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1505,6 +1516,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   endif
   allocate(MS)
 
+  allocate(CS%thermo_CSp)
   allocate(CS%surface_CSp)
 
   if (test_grid_copy) then ; allocate(G)
@@ -1574,7 +1586,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "exchanging them with the coupler and/or reporting T&S diagnostics.\n", &
                  default=.false.)
   MS%tv%T_is_conT = use_conT_absS ; MS%tv%S_is_absS = use_conT_absS
-  call get_param(param_file, "MOM", "ADIABATIC", CS%adiabatic, &
+  call get_param(param_file, "MOM", "ADIABATIC", CS%thermo_CSp%adiabatic, &
                  "There are no diapycnal mass fluxes if ADIABATIC is \n"//&
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
@@ -1605,7 +1617,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                    default=.false. )
     endif
   endif
-  call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
+  call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm, &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, "MOM", "BULKMIXEDLAYER", bulkmixedlayer, &
@@ -1797,11 +1809,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
     "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
   if (CS%use_ALE_algorithm .and. .not.use_temperature) call MOM_error(FATAL, &
      "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
-  if (CS%adiabatic .and. use_temperature) call MOM_error(WARNING, &
+  if (CS%thermo_CSp%adiabatic .and. use_temperature) call MOM_error(WARNING, &
     "MOM: ADIABATIC and ENABLE_THERMODYNAMICS both defined is usually unwise.")
   if (use_EOS .and. .not.use_temperature) call MOM_error(FATAL, &
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
-  if (CS%adiabatic .and. bulkmixedlayer) call MOM_error(FATAL, &
+  if (CS%thermo_CSp%adiabatic .and. bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
   if (bulkmixedlayer .and. .not.use_EOS) call MOM_error(FATAL, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
@@ -1953,7 +1965,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
     allocate(CS%v_prev(isd:ied,JsdB:JedB,nz)) ; CS%v_prev(:,:,:) = 0.0
     call safe_alloc_ptr(CS%ADp%du_dt_visc,IsdB,IedB,jsd,jed,nz)
     call safe_alloc_ptr(CS%ADp%dv_dt_visc,isd,ied,JsdB,JedB,nz)
-    if (.not.CS%adiabatic) then
+    if (.not.CS%thermo_CSp%adiabatic) then
       call safe_alloc_ptr(CS%ADp%du_dt_dia,IsdB,IedB,jsd,jed,nz)
       call safe_alloc_ptr(CS%ADp%dv_dt_dia,isd,ied,JsdB,JedB,nz)
     endif
@@ -2225,12 +2237,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   if (associated(CS%ALE_sponge_CSp)) &
     call init_ALE_sponge_diags(Time, G, diag, CS%ALE_sponge_CSp)
 
-  if (CS%adiabatic) then
-    call adiabatic_driver_init(Time, G, param_file, diag, CS%diabatic_CSp, &
+  if (CS%thermo_CSp%adiabatic) then
+    call adiabatic_driver_init(Time, G, param_file, diag, CS%thermo_CSp%diabatic_CSp, &
                                CS%tracer_flow_CSp, CS%diag_to_Z_CSp)
   else
     call diabatic_driver_init(Time, G, GV, param_file, CS%use_ALE_algorithm, diag, &
-                              CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
+                              CS%ADp, CS%CDp, CS%thermo_CSp%diabatic_CSp, CS%tracer_flow_CSp, &
                               CS%sponge_CSp, CS%ALE_sponge_CSp, CS%diag_to_Z_CSp)
   endif
 
@@ -2241,7 +2253,22 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
+  ! Re-read parameters used in other control structures.
+  call get_param(param_file, "MOM", "USE_REGRIDDING", CS%thermo_CSp%use_ALE_algorithm , &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
+  call get_param(param_file, "MOM", "DEBUG", CS%thermo_CSp%debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
+
+
   ! Set up shared pointers to the various control structures.
+  CS%thermo_CSp%visc => CS%visc
+  CS%thermo_CSp%diag => CS%diag
+  CS%thermo_CSp%ADp => CS%ADp ; CS%thermo_CSp%CDp => CS%CDp
+  CS%thermo_CSp%set_visc_CSp => CS%set_visc_CSp
+  CS%thermo_CSp%tracer_Reg => CS%tracer_Reg
+  CS%thermo_CSp%ALE_CSp => CS%ALE_CSp
+
   CS%surface_CSp%visc => CS%visc
   CS%surface_CSp%tracer_flow_CSp => CS%tracer_flow_CSp
 
@@ -2277,8 +2304,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 
   if (CS%offline_tracer_mode) then
     ! Setup some initial parameterizations and also assign some of the subtypes
-    call offline_transport_init(param_file, CS%offline_CSp, CS%diabatic_CSp, G, GV)
-    call insert_offline_main( CS=CS%offline_CSp, ALE_CSp=CS%ALE_CSp, diabatic_CSp=CS%diabatic_CSp, &
+    call offline_transport_init(param_file, CS%offline_CSp, CS%thermo_CSp%diabatic_CSp, G, GV)
+    call insert_offline_main( CS=CS%offline_CSp, ALE_CSp=CS%ALE_CSp, diabatic_CSp=CS%thermo_CSp%diabatic_CSp, &
                               diag=CS%diag, OBC=CS%OBC, tracer_adv_CSp=CS%tracer_adv_CSp,              &
                               tracer_flow_CSp=CS%tracer_flow_CSp, tracer_Reg=CS%tracer_Reg,            &
                               tv=MS%tv, x_before_y = (MOD(first_direction,2)==0), debug=CS%debug )
@@ -2467,7 +2494,7 @@ subroutine MOM_timing_init(CS)
  id_clock_thermo   = cpu_clock_id('Ocean thermodynamics and tracers', grain=CLOCK_SUBCOMPONENT)
  id_clock_other    = cpu_clock_id('Ocean Other', grain=CLOCK_SUBCOMPONENT)
  id_clock_tracer   = cpu_clock_id('(Ocean tracer advection)', grain=CLOCK_MODULE_DRIVER)
- if (.not.CS%adiabatic) &
+ if (.not.CS%thermo_CSp%adiabatic) &
    id_clock_diabatic = cpu_clock_id('(Ocean diabatic driver)', grain=CLOCK_MODULE_DRIVER)
 
  id_clock_continuity = cpu_clock_id('(Ocean continuity equation *)', grain=CLOCK_MODULE)
