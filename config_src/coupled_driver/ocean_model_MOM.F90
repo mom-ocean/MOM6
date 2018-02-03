@@ -801,6 +801,11 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 !                          ocean state to be deallocated upon termination.
 !  (in)      Time - The model time, used for writing restarts.
 
+  !Write the checksums at the end of a model run.
+  call write_energy(Ocean_state%MOM_CSp%u, Ocean_state%MOM_CSp%v, Ocean_state%MOM_CSp%h, Ocean_state%MOM_CSp%tv, &
+                    Ocean_state%Time, Ocean_state%nstep, Ocean_state%grid, Ocean_state%GV, Ocean_state%sum_output_CSp, &
+                    Ocean_state%MOM_CSp%tracer_flow_CSp)
+
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%MOM_CSp%diag)
   call MOM_end(Ocean_state%MOM_CSp)
