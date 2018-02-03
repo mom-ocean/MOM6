@@ -281,12 +281,13 @@ type, public :: MOM_control_struct ; private
 !  type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
 !  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
 !  type(VarMix_CS),               pointer :: VarMix                 => NULL()
-!  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
-!  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
-!  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
+  ! The remainder provides pointers to child module control structures.
+  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
+  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
+  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
 
-!  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
-!  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
+  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
+  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
 ! End dynamics update structure
 
 
@@ -316,13 +317,6 @@ type, public :: MOM_control_struct ; private
   type(surface_diag_IDs) :: sfc_IDs
 
   ! The remainder provides pointers to child module control structures.
-!dyn
-  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
-  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
-  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
-
-  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
-  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
 
 !both and shared
   type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
@@ -337,6 +331,7 @@ type, public :: MOM_control_struct ; private
   type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
 
 !Master
+  type(surface_state_CS),        pointer :: surface_CSp            => NULL()
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
 !Master & transport & thermo
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
@@ -377,10 +372,11 @@ type, public :: MOM_control_struct ; private
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp         => NULL()
 ! End Thermo update structure
 
+end type MOM_control_struct
 
-! Surface state control structure
-!  type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
-!                                   !! bottom drag viscosities, and related fields
+
+!> Control structure for the extaction of the surface state.
+type, public :: surface_state_CS ; private
   logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer scheme is used
                                      !! with nkml sublayers and nkbl buffer layer.
   real :: Hmix                       !< Diagnostic mixed layer thickness (meter) when
@@ -394,10 +390,12 @@ type, public :: MOM_control_struct ; private
   real    :: bad_val_sst_min         !< Minimum SST before triggering bad value message
   real    :: bad_val_sss_max         !< Maximum SSS before triggering bad value message
   real    :: bad_val_column_thickness!< Minimum column thickness before triggering bad value message
-!  type(tracer_flow_control_CS),  pointer :: tracer_flow_CSp        => NULL()
-! End Surface state control structure
+  type(vertvisc_type), pointer :: &
+    visc  => NULL()                  !< structure containing vertical viscosities,
+                                     !! bottom drag viscosities, and related fields
+  type(tracer_flow_control_CS), pointer :: tracer_flow_CSp => NULL()
 
-end type MOM_control_struct
+end type surface_state_CS
 
 public initialize_MOM
 public finish_MOM_initialization
@@ -1507,6 +1505,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   endif
   allocate(MS)
 
+  allocate(CS%surface_CSp)
+
   if (test_grid_copy) then ; allocate(G)
   else ; G => MS%G ; endif
 
@@ -1608,7 +1608,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  call get_param(param_file, "MOM", "BULKMIXEDLAYER", CS%bulkmixedlayer, &
+  call get_param(param_file, "MOM", "BULKMIXEDLAYER", bulkmixedlayer, &
                  "If true, use a Kraus-Turner-like bulk mixed layer \n"//&
                  "with transitional buffer layers.  Layers 1 through  \n"//&
                  "NKML+NKBL have variable densities. There must be at \n"//&
@@ -1657,13 +1657,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "case is the largest integer multiple of the coupling \n"//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
 
-  if (.not.CS%bulkmixedlayer) then
-    call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
+  CS%surface_CSp%bulkmixedlayer = bulkmixedlayer
+  if (.not.CS%surface_CSp%bulkmixedlayer) then
+    call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%surface_CSp%Hmix, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
                  "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0)
-    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
+    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%surface_CSp%Hmix_UV, &
                  "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth\n"//&
                  "over which to average to find surface flow properties,\n"//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
@@ -1720,7 +1721,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "This is only used if USE_EOS and ENABLE_THERMODYNAMICS \n"//&
                  "are true.", units="Pa", default=2.0e7)
 
-  if (CS%bulkmixedlayer) then
+  if (bulkmixedlayer) then
     call get_param(param_file, "MOM", "NKML", nkml, &
                  "The number of sublayers within the mixed layer if \n"//&
                  "BULKMIXEDLAYER is true.", units="nondim", default=2)
@@ -1746,27 +1747,27 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "and odd numbers used for y-first.", default=0)
 
   call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", &
-                                     CS%check_bad_surface_vals, &
+                 CS%surface_CSp%check_bad_surface_vals, &
                  "If true, check the surface state for ridiculous values.", &
                  default=.false.)
-  if (CS%check_bad_surface_vals) then
-    call get_param(param_file, "MOM", "BAD_VAL_SSH_MAX", CS%bad_val_ssh_max, &
+  if (CS%surface_CSp%check_bad_surface_vals) then
+    call get_param(param_file, "MOM", "BAD_VAL_SSH_MAX", CS%surface_CSp%bad_val_ssh_max, &
                  "The value of SSH above which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                  default=20.0)
-    call get_param(param_file, "MOM", "BAD_VAL_SSS_MAX", CS%bad_val_sss_max, &
+    call get_param(param_file, "MOM", "BAD_VAL_SSS_MAX", CS%surface_CSp%bad_val_sss_max, &
                  "The value of SSS above which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="PPT", &
                  default=45.0)
-    call get_param(param_file, "MOM", "BAD_VAL_SST_MAX", CS%bad_val_sst_max, &
+    call get_param(param_file, "MOM", "BAD_VAL_SST_MAX", CS%surface_CSp%bad_val_sst_max, &
                  "The value of SST above which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=45.0)
-    call get_param(param_file, "MOM", "BAD_VAL_SST_MIN", CS%bad_val_sst_min, &
+    call get_param(param_file, "MOM", "BAD_VAL_SST_MIN", CS%surface_CSp%bad_val_sst_min, &
                  "The value of SST below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=-2.1)
-    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_val_column_thickness, &
+    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%surface_CSp%bad_val_column_thickness, &
          "The value of column thickness below which a bad value message is \n"//&
          "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
                           default=0.0)
@@ -1792,7 +1793,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 !                      ((write_geom==1) .and. is_new_run(restart_CSp)))
 
   ! Check for inconsistent parameter settings.
-  if (CS%use_ALE_algorithm .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+  if (CS%use_ALE_algorithm .and. bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: BULKMIXEDLAYER can not currently be used with the ALE algorithm.")
   if (CS%use_ALE_algorithm .and. .not.use_temperature) call MOM_error(FATAL, &
      "MOM: At this time, USE_EOS should be True when using the ALE algorithm.")
@@ -1800,9 +1801,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
     "MOM: ADIABATIC and ENABLE_THERMODYNAMICS both defined is usually unwise.")
   if (use_EOS .and. .not.use_temperature) call MOM_error(FATAL, &
     "MOM: ENABLE_THERMODYNAMICS must be defined to use USE_EOS.")
-  if (CS%adiabatic .and. CS%bulkmixedlayer) call MOM_error(FATAL, &
+  if (CS%adiabatic .and. bulkmixedlayer) call MOM_error(FATAL, &
     "MOM: ADIABATIC and BULKMIXEDLAYER can not both be defined.")
-  if (CS%bulkmixedlayer .and. .not.use_EOS) call MOM_error(FATAL, &
+  if (bulkmixedlayer .and. .not.use_EOS) call MOM_error(FATAL, &
       "initialize_MOM: A bulk mixed layer can only be used with T & S as "//&
       "state variables. Add USE_EOS = True to MOM_input.")
 
@@ -1930,11 +1931,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
     allocate(MS%tv%salt_deficit(isd:ied,jsd:jed)) ; MS%tv%salt_deficit(:,:)=0.0
   endif
 
-  if (CS%bulkmixedlayer .or. use_temperature) then
+  if (bulkmixedlayer .or. use_temperature) then
     allocate(MS%Hml(isd:ied,jsd:jed)) ; MS%Hml(:,:) = 0.0
   endif
 
-  if (CS%bulkmixedlayer) then
+  if (bulkmixedlayer) then
     GV%nkml = nkml ; GV%nk_rho_varies = nkml + nkbl
   else
     GV%nkml = 0 ; GV%nk_rho_varies = 0
@@ -2202,7 +2203,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp)
   if (CS%mixedlayer_restrat) then
-    if (.not.(CS%bulkmixedlayer .or. CS%use_ALE_algorithm)) &
+    if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
     if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) &
@@ -2239,6 +2240,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
+
+  ! Set up shared pointers to the various control structures.
+  CS%surface_CSp%visc => CS%visc
+  CS%surface_CSp%tracer_flow_CSp => CS%tracer_flow_CSp
 
   ! now register some diagnostics since the tracer registry is now locked
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, MS%tv)
@@ -2903,7 +2908,7 @@ end subroutine allocate_surface_state
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate fields in state.  Unused fields
 !! are set to NULL or are unallocated.
-subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, CS)
+subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
   type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
   type(surface),                             intent(inout) :: sfc_state !< ocean surface state
@@ -2912,9 +2917,10 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, CS)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< layer thickness (m or kg/m2)
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh    !< time mean surface height (m)
   type(MOM_state_type),                      intent(in)    :: MS     !< structure describing the MOM state
-  type(MOM_control_struct),                  intent(inout) :: CS     !< control structure
+  type(MOM_control_struct),                  intent(inout) :: MOM_CSp !< control structure
 
   ! local
+  type(surface_state_CS), pointer :: CS => NULL()
   real :: depth(SZI_(G))              ! distance from the surface (meter)
   real :: depth_ml                    ! depth over which to average to
                                       ! determine mixed layer properties (meter)
@@ -2934,6 +2940,8 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+
+  CS => MOM_CSp%surface_CSp
 
   use_temperature = associated(MS%tv%T)
 
@@ -3234,6 +3242,8 @@ subroutine MOM_end(MS, CS)
 
   call verticalGridEnd(MS%GV)
   call MOM_grid_end(MS%G)
+
+  deallocate(CS%surface_CSp)
 
   deallocate(MS)
   deallocate(CS)
