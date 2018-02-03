@@ -283,8 +283,6 @@ program SHELF_main
   call log_param(param_file, mdl, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
 !   i don't think we'll use this...
-!   call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
-!                            MOM_CSp%ntrunc, Start_time, sum_output_CSp)
    call MOM_write_cputime_init(param_file, dirs%output_directory, Start_time, &
                                write_CPU_CSp)
    call MOM_mesg("Done MOM_write_cputime_init.", 5)
@@ -292,7 +290,7 @@ program SHELF_main
 
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration(MOM_CSp%diag)
+!  call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
   call open_file(unit, 'time_stamp.out', form=ASCII_FILE, action=APPEND_FILE, &
