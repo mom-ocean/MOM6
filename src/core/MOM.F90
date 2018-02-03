@@ -228,10 +228,10 @@ type, public :: MOM_control_struct ; private
   logical :: offline_tracer_mode = .false.
                                      !< If true, step_offline() is called instead of step_MOM().
                                      !! This is intended for running MOM6 in offline tracer mode
-  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
-                                     !! isopycnal/stacked shallow water mode. This logical is
-                                     !! set by calling the function useRegridding() from the
-                                     !! MOM_regridding module.
+!  logical :: use_ALE_algorithm       !< If true, use the ALE algorithm rather than layered
+!                                     !! isopycnal/stacked shallow water mode. This logical is
+!                                     !! set by calling the function useRegridding() from the
+!                                     !! MOM_regridding module.
 
   type(time_type), pointer :: Time   !< pointer to ocean clock
   real :: rel_time = 0.0             !< relative time (sec) since start of current execution
@@ -349,8 +349,26 @@ type, public :: MOM_control_struct ; private
 !Not needed?
   type(update_OBC_CS),           pointer :: update_OBC_CSp         => NULL()
 
-!Step offline
+! Offline driver CS:
   type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
+!  type(diag_ctrl), pointer       :: &
+!    diag => NULL()             !< structure to regulate diagnostic output timing
+  logical :: use_ALE_algorithm !< If true, use the ALE algorithm rather than layered
+                               !! isopycnal/stacked shallow water mode. This logical is
+                               !! set by calling the function useRegridding() from the
+                               !! MOM_regridding module.
+!  logical :: diabatic_first          !< If true, apply diabatic and thermodynamic
+!                                     !! processes before time stepping the dynamics.
+!  type(VarMix_CS),               pointer :: VarMix                 => NULL()
+!  type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
+!                                   !! related to the Mesoscale Eddy Kinetic Energy
+!  type(tracer_hor_diff_CS),      pointer :: tracer_diff_CSp        => NULL()
+!  type(tracer_registry_type),    pointer :: tracer_Reg             => NULL()
+!  
+!  logical :: calc_rho_for_sea_lev    !< If true, calculate rho to convert pressure to sea level
+!  type(surface_state_CS),        pointer :: surface_CSp            => NULL()
+! End offline driver CS
+
 !master or dyn
   type(sum_output_CS),           pointer :: sum_output_CSp         => NULL()
 
@@ -637,6 +655,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
     endif ! end of block "(CS%diabatic_first .and. (MS%t_dyn_rel_adv==0.0))"
 
+
+    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
+    if (MS%t_dyn_rel_adv==0.0) then ; if (transport_remap_grid_needed(CS%transport_IDs)) then
+      do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        CS%h_pre_dyn(i,j,k) = h(i,j,k)
+        if (associated(MS%tv%T)) CS%T_pre_dyn(i,j,k) = MS%tv%T(i,j,k)
+        if (associated(MS%tv%S)) CS%S_pre_dyn(i,j,k) = MS%tv%S(i,j,k)
+      enddo ; enddo ; enddo
+    endif ; endif
+
     dt_therm_here = dt_therm
     if (.not.thermo_does_span_coupling) dt_therm_here = dt*min(ntstep,n_max-n+1)
 
@@ -657,7 +685,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       enddo ; enddo
     endif
 
-    call step_MOM_dynamics(forces, Time_local, dt, dt_therm_here, bbl_time_int, MS, CS, n)
+    call step_MOM_dynamics(MS, forces, CS%p_surf_begin, CS%p_surf_end, &
+                           Time_local, dt, dt_therm_here, bbl_time_int, CS, n)
 
     !===========================================================================
     ! This is the start of the tracer advection part of the algorithm.
@@ -770,9 +799,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
                               G, CS%sum_output_CSp)
 
   if (MS%t_dyn_rel_adv==0.0) &
-    call write_energy(MS%u, MS%v, MS%h, MS%tv, Time_local, &
-                      CS%nstep_tot, G, GV, CS%sum_output_CSp, &
-                      CS%tracer_flow_CSp, &
+    call write_energy(MS%u, MS%v, MS%h, MS%tv, Time_local, CS%nstep_tot, &
+                      G, GV, CS%sum_output_CSp, CS%tracer_flow_CSp, &
                       dt_forcing=set_time(int(floor(time_interval+0.5))) )
 
   call cpu_clock_end(id_clock_other)
@@ -782,8 +810,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
 end subroutine step_MOM
 
-subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS, CS, dyn_call)
+subroutine step_MOM_dynamics(MS, forces, p_surf_begin, p_surf_end, Time_local, &
+                             dt, dt_thermo, bbl_time_int, CS, dyn_call)
+  type(MOM_state_type),     pointer  :: MS         !< structure describing the MOM state, intent inout.
   type(mech_forcing), intent(inout)  :: forces     !< A structure with the driving mechanical forces
+  real, dimension(:,:), pointer      :: p_surf_begin !< A pointer (perhaps NULL) to the surface
+                                                   !! pressure at the beginning of this dynamic
+                                                   !! step, intent in, in Pa.
+  real, dimension(:,:), pointer      :: p_surf_end   !< A pointer (perhaps NULL) to the surface
+                                                   !! pressure at the end of this dynamic step,
+                                                   !! intent in, in Pa.
   type(time_type),    intent(in)     :: Time_local !< starting time of a segment, as a time type
   real,               intent(in)     :: dt         !< time interval covered by this call, in s.
   real,               intent(in)     :: dt_thermo  !< time interval covered by any updates that may
@@ -791,7 +827,6 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
   real,               intent(in)     :: bbl_time_int !< time interval over which updates to the
                                                    !! bottom boundary layer properties will apply,
                                                    !! in s, or zero not to update the properties.
-  type(MOM_state_type),     pointer  :: MS         !< structure describing the MOM state
   type(MOM_control_struct), pointer  :: CS         !< control structure from initialize_MOM
   integer,            intent(in)     :: dyn_call   !< A count of the calls to step_MOM_dynamics
                                                    !! within this forcing timestep.
@@ -859,16 +894,7 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
       CS%u_prev(I,j,k) = u(I,j,k)
     enddo ; enddo ; enddo
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      CS%v_prev(I,j,k) = u(I,j,k)
-    enddo ; enddo ; enddo
-  endif
-
-  ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-  if (transport_remap_grid_needed(CS%transport_IDs)) then
-    do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-      CS%h_pre_dyn(i,j,k) = h(i,j,k)
-      if (associated(MS%tv%T)) CS%T_pre_dyn(i,j,k) = MS%tv%T(i,j,k)
-      if (associated(MS%tv%S)) CS%S_pre_dyn(i,j,k) = MS%tv%S(i,j,k)
+      CS%v_prev(I,j,k) = v(i,J,k)
     enddo ; enddo ; enddo
   endif
 
@@ -884,9 +910,8 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
       CS%dtbt_reset_time = CS%rel_time
     endif
 
-    call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, &
-                Time_local, dt, forces, CS%p_surf_begin, CS%p_surf_end, &
-                MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+    call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
+                p_surf_begin, p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
                 MS%eta_av_bc, G, GV, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, CS%MEKE)
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
@@ -900,11 +925,11 @@ subroutine step_MOM_dynamics(forces, Time_local, dt, dt_thermo, bbl_time_int, MS
 
     if (CS%use_RK2) then
       call step_MOM_dyn_unsplit_RK2(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
-               CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+               p_surf_begin, p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
                MS%eta_av_bc, G, GV, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE)
     else
       call step_MOM_dyn_unsplit(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
-               CS%p_surf_begin, CS%p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
+               p_surf_begin, p_surf_end, MS%uh, MS%vh, MS%uhtr, MS%vhtr, &
                MS%eta_av_bc, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
     endif
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
