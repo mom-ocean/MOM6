@@ -239,7 +239,7 @@ type, public :: MOM_control_struct ; private
   real    :: dt_therm                !< thermodynamics time step (seconds)
   logical :: thermo_spans_coupling   !< If true, thermodynamic and tracer time
                                      !! steps can span multiple coupled time steps.
-  integer :: nstep_tot = 0           !< The total number of dynamic timesteps taken
+  integer :: nstep_tot = 0           !< The total number of dynamic timesteps tcaaken
                                      !! so far in this run segment
   logical :: count_calls = .false.   !< If true, count the calls to step_MOM, rather than the
                                      !! number of dynamics steps in nstep_tot
@@ -253,46 +253,13 @@ type, public :: MOM_control_struct ; private
 
 
 ! Dynamics update structure
-!  logical :: debug                   !< If true, write verbose checksums for debugging purposes.
-!  type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
-!  type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
-!                                   !! bottom drag viscosities, and related fields
-  logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
-                                     !! undocumented run-time flag that is fragile.
-  logical :: split                   !< If true, use the split time stepping scheme.
-  logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
-                                     !! (i.e., no split between barotropic and baroclinic).
-  logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
-  logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
-  logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
-  logical :: useMEKE                 !< If true, call the MEKE parameterization.
-  real :: dtbt_reset_period          !< The time interval in seconds between dynamic
-                                     !! recalculation of the barotropic time step.  If
-                                     !! this is negative, it is never calculated, and
-                                     !! if it is 0, it is calculated every step.
-  real :: dtbt_reset_time            !< The last time (as indicated by CS%rel_time) when
-                                     !! DTBT was last calculated (sec)
-  type(MOM_diag_IDs) :: IDs
   real, pointer, dimension(:,:,:) :: &
     h_pre_dyn => NULL(), & !< The thickness before the transports, in H.
     T_pre_dyn => NULL(), & !< Temperature before the transports, in degC.
-    S_pre_dyn => NULL(), & !< Salinity before the transports, in psu.
+    S_pre_dyn => NULL()    !< Salinity before the transports, in psu.
+  real, pointer, dimension(:,:,:) :: &
     u_prev => NULL(), &  !< previous value of u stored for diagnostics
     v_prev => NULL()     !< previous value of v stored for diagnostics
-!  type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
-!                                   !! related to the Mesoscale Eddy Kinetic Energy
-!  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers to continuity equation
-!                                   !! terms, for derived diagnostics (e.g., energy budgets)
-!  type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
-!  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
-!  type(VarMix_CS),               pointer :: VarMix                 => NULL()
-  ! The remainder provides pointers to child module control structures.
-  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
-  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
-  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
-
-  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
-  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
 ! End dynamics update structure
 
 
@@ -343,6 +310,7 @@ type, public :: MOM_control_struct ; private
 !Master
   type(surface_state_CS),        pointer :: surface_CSp            => NULL()
   type(step_thermo_CS),          pointer :: thermo_CSp             => NULL()
+  type(step_dyn_CS),             pointer :: dyn_CSp                => NULL()
   type(diagnostics_CS),          pointer :: diagnostics_CSp        => NULL()
 !Master & transport & thermo
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
@@ -374,8 +342,49 @@ type, public :: MOM_control_struct ; private
 
 end type MOM_control_struct
 
+!> Control structure for the dynamics updates.
+type, public :: step_dyn_CS ; private
+  logical :: debug             !< If true, write verbose checksums for debugging purposes.
+  type(diag_ctrl), pointer       :: &
+    diag => NULL()             !< structure to regulate diagnostic output timing
+  type(vertvisc_type), pointer   :: &
+    visc => NULL()             !< structure containing vertical viscosities,
+                               !! bottom drag viscosities, and related fields
+  logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
+                                     !! undocumented run-time flag that is fragile.
+  logical :: split                   !< If true, use the split time stepping scheme.
+  logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
+                                     !! (i.e., no split between barotropic and baroclinic).
+  logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
+  logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
+  logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
+  logical :: useMEKE                 !< If true, call the MEKE parameterization.
+  real :: dtbt_reset_period          !< The time interval in seconds between dynamic
+                                     !! recalculation of the barotropic time step.  If
+                                     !! this is negative, it is never calculated, and
+                                     !! if it is 0, it is calculated every step.
+  real :: dtbt_reset_time            !< The last time (as indicated by CS%rel_time) when
+                                     !! DTBT was last calculated (sec)
+  type(MOM_diag_IDs) :: IDs
 
-!> Control structure for the extaction of the surface state.
+  type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
+                                   !! related to the Mesoscale Eddy Kinetic Energy
+  type(cont_diag_ptrs), pointer :: &
+    CDp => NULL()              !< structure containing pointers to continuity equation
+                               !! terms, for derived diagnostics (e.g., energy budgets)
+  type(set_visc_CS),             pointer :: set_visc_CSp           => NULL()
+  type(MEKE_CS),                 pointer :: MEKE_CSp               => NULL()
+  type(VarMix_CS),               pointer :: VarMix                 => NULL()
+  ! The remainder provides pointers to child module control structures.
+  type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
+  type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
+  type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp    => NULL()
+
+  type(thickness_diffuse_CS),    pointer :: thickness_diffuse_CSp  => NULL()
+  type(mixedlayer_restrat_CS),   pointer :: mixedlayer_restrat_CSp => NULL()
+end type step_dyn_CS
+
+!> Control structure for the thermodynamic updates and verical remapping.
 type, public :: step_thermo_CS ; private
   logical :: adiabatic         !< If true, then no diapycnal mass fluxes, with no calls
                                !! to routines to calculate or apply diapycnal fluxes.
@@ -665,6 +674,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       enddo ; enddo ; enddo
     endif ; endif
 
+    ! The original velocities might be stored for debugging.
+    if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
+      do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
+        CS%u_prev(I,j,k) = u(I,j,k)
+      enddo ; enddo ; enddo
+      do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
+        CS%v_prev(I,j,k) = v(i,J,k)
+      enddo ; enddo ; enddo
+    endif
+
     dt_therm_here = dt_therm
     if (.not.thermo_does_span_coupling) dt_therm_here = dt*min(ntstep,n_max-n+1)
 
@@ -685,8 +704,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       enddo ; enddo
     endif
 
-    call step_MOM_dynamics(MS, forces, CS%p_surf_begin, CS%p_surf_end, &
-                           Time_local, dt, dt_therm_here, bbl_time_int, CS, n)
+    call step_MOM_dynamics(MS, forces, CS%p_surf_begin, CS%p_surf_end, dt, &
+                           dt_therm_here, bbl_time_int, CS%dyn_CSp, &
+                           Time_local, CS%rel_time, n)
 
     !===========================================================================
     ! This is the start of the tracer advection part of the algorithm.
@@ -731,7 +751,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     do j=js,je ; do i=is,ie
       MS%ave_ssh(i,j) = MS%ave_ssh(i,j) + dt*ssh(i,j)
     enddo ; enddo
-    if (CS%IDs%id_ssh_inst > 0) call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
+    if (CS%dyn_CSp%IDs%id_ssh_inst > 0) call post_data(CS%dyn_CSp%IDs%id_ssh_inst, ssh, CS%diag)
     call cpu_clock_end(id_clock_dynamics)
 
     !===========================================================================
@@ -810,24 +830,26 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
 end subroutine step_MOM
 
-subroutine step_MOM_dynamics(MS, forces, p_surf_begin, p_surf_end, Time_local, &
-                             dt, dt_thermo, bbl_time_int, CS, dyn_call)
+subroutine step_MOM_dynamics(MS, forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
+                             bbl_time_int, CS, Time_local, rel_time,  dyn_call)
   type(MOM_state_type),     pointer  :: MS         !< structure describing the MOM state, intent inout.
   type(mech_forcing), intent(inout)  :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer      :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the beginning of this dynamic
                                                    !! step, intent in, in Pa.
-  real, dimension(:,:), pointer      :: p_surf_end   !< A pointer (perhaps NULL) to the surface
+  real, dimension(:,:), pointer      :: p_surf_end !< A pointer (perhaps NULL) to the surface
                                                    !! pressure at the end of this dynamic step,
                                                    !! intent in, in Pa.
-  type(time_type),    intent(in)     :: Time_local !< starting time of a segment, as a time type
   real,               intent(in)     :: dt         !< time interval covered by this call, in s.
   real,               intent(in)     :: dt_thermo  !< time interval covered by any updates that may
                                                    !! span multiple dynamics steps, in s.
   real,               intent(in)     :: bbl_time_int !< time interval over which updates to the
                                                    !! bottom boundary layer properties will apply,
                                                    !! in s, or zero not to update the properties.
-  type(MOM_control_struct), pointer  :: CS         !< control structure from initialize_MOM
+  type(step_dyn_CS),  pointer        :: CS         !< control structure from initialize_MOM
+  type(time_type),    intent(in)     :: Time_local !< Starting time of a segment, as a time type
+  real,               intent(in)     :: rel_time   !< Relative time since the start of the current
+                                                   !! time-stepping cycle, in s.
   integer,            intent(in)     :: dyn_call   !< A count of the calls to step_MOM_dynamics
                                                    !! within this forcing timestep.
   ! local
@@ -888,16 +910,6 @@ subroutine step_MOM_dynamics(MS, forces, p_surf_begin, p_surf_end, Time_local, &
     call disable_averaging(CS%diag)
   endif
 
-  ! The original velocities might be stored for debugging.
-  if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
-    do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
-      CS%u_prev(I,j,k) = u(I,j,k)
-    enddo ; enddo ; enddo
-    do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      CS%v_prev(I,j,k) = v(i,J,k)
-    enddo ; enddo ; enddo
-  endif
-
   if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
     ! This section uses a split time stepping scheme for the dynamic equations,
     ! basically the stacked shallow water equations with viscosity.
@@ -905,9 +917,9 @@ subroutine step_MOM_dynamics(MS, forces, p_surf_begin, p_surf_end, Time_local, &
     calc_dtbt = .false.
     if ((CS%dtbt_reset_period >= 0.0) .and. &
         ((dyn_call==1) .or. (CS%dtbt_reset_period == 0.0) .or. &
-         (CS%rel_time >= CS%dtbt_reset_time + 0.999*CS%dtbt_reset_period))) then
+         (rel_time >= CS%dtbt_reset_time + 0.999*CS%dtbt_reset_period))) then
       calc_dtbt = .true.
-      CS%dtbt_reset_time = CS%rel_time
+      CS%dtbt_reset_time = rel_time
     endif
 
     call step_MOM_dyn_split_RK2(u, v, h, MS%tv, CS%visc, Time_local, dt, forces, &
@@ -1541,6 +1553,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   endif
   allocate(MS)
 
+  allocate(CS%dyn_CSp)
   allocate(CS%thermo_CSp)
   allocate(CS%surface_CSp)
 
@@ -1578,12 +1591,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
     call unit_tests(verbosity)
   endif
 
-  call get_param(param_file, "MOM", "SPLIT", CS%split, &
+  call get_param(param_file, "MOM", "SPLIT", CS%dyn_CSp%split, &
                  "Use the split time stepping if true.", default=.true.)
-  if (CS%split) then
-    CS%use_RK2 = .false.
+  if (CS%dyn_CSp%split) then
+    CS%dyn_CSp%use_RK2 = .false.
   else
-    call get_param(param_file, "MOM", "USE_RK2", CS%use_RK2, &
+    call get_param(param_file, "MOM", "USE_RK2", CS%dyn_CSp%use_RK2, &
                  "If true, use RK2 instead of RK3 in the unsplit time stepping.", &
                  default=.false.)
   endif
@@ -1616,9 +1629,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "true. This assumes that KD = KDML = 0.0 and that \n"//&
                  "there is no buoyancy forcing, but makes the model \n"//&
                  "faster by eliminating subroutine calls.", default=.false.)
-  call get_param(param_file, "MOM", "DO_DYNAMICS", CS%do_dynamics, &
-                 "If False, skips the dynamics calls that update u & v, as well as\n"//&
-                 "the gravity wave adjustment to h. This is a fragile feature and\n"//&
+  call get_param(param_file, "MOM", "DO_DYNAMICS", CS%dyn_CSp%do_dynamics, &
+                 "If False, skips the dynamics calls that update u & v, as well as \n"//&
+                 "the gravity wave adjustment to h. This is a fragile feature and \n"//&
                  "thus undocumented.", default=.true., do_not_log=.true. )
   call get_param(param_file, "MOM", "ADVECT_TS", advect_TS, &
                  "If True, advect temperature and salinity horizontally \n"//&
@@ -1653,15 +1666,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "BULKMIXEDLAYER can not be used with USE_REGRIDDING. \n"//&
                  "The default is influenced by ENABLE_THERMODYNAMICS.", &
                  default=use_temperature .and. .not.CS%use_ALE_algorithm)
-  call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
+  call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%dyn_CSp%thickness_diffuse, &
                  "If true, interface heights are diffused with a \n"//&
                  "coefficient of KHTH.", default=.false.)
   call get_param(param_file, "MOM",  "THICKNESSDIFFUSE_FIRST", &
-                                      CS%thickness_diffuse_first, &
+                                      CS%dyn_CSp%thickness_diffuse_first, &
                  "If true, do thickness diffusion before dynamics.\n"//&
                  "This is only used if THICKNESSDIFFUSE is true.", &
                  default=.false.)
-  if (.not.CS%thickness_diffuse) CS%thickness_diffuse_first = .false.
+  if (.not.CS%dyn_CSp%thickness_diffuse) CS%dyn_CSp%thickness_diffuse_first = .false.
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths \n"//&
                  "at velocity points.  Otherwise the effects of topography \n"//&
@@ -1717,11 +1730,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "over the coupling time step, using the specified value \n"//&
                  "at the end of the step.", default=.false.)
 
-  if (CS%split) then
+  if (CS%dyn_CSp%split) then
     call get_param(param_file, "MOM", "DTBT", dtbt, default=-0.98)
     default_val = CS%dt_therm ; if (dtbt > 0.0) default_val = -1.0
-    CS%dtbt_reset_period = -1.0 ; CS%dtbt_reset_time = 0.0
-    call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dtbt_reset_period, &
+    CS%dyn_CSp%dtbt_reset_period = -1.0 ; CS%dyn_CSp%dtbt_reset_time = 0.0
+    call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dyn_CSp%dtbt_reset_period, &
                  "The period between recalculations of DTBT (if DTBT <= 0). \n"//&
                  "If DTBT_RESET_PERIOD is negative, DTBT is set based \n"//&
                  "only on information available at initialization.  If \n"//&
@@ -2030,15 +2043,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   ! the time stepping scheme.
   call restart_init(param_file, restart_CSp)
   call set_restart_fields(GV, param_file, MS, CS, restart_CSp)
-  if (CS%split) then
+  if (CS%dyn_CSp%split) then
     call register_restarts_dyn_split_RK2(dG%HI, GV, param_file, &
-             CS%dyn_split_RK2_CSp, restart_CSp, MS%uh, MS%vh)
-  elseif (CS%use_RK2) then
+             CS%dyn_CSp%dyn_split_RK2_CSp, restart_CSp, MS%uh, MS%vh)
+  elseif (CS%dyn_CSp%use_RK2) then
     call register_restarts_dyn_unsplit_RK2(dG%HI, GV, param_file, &
-           CS%dyn_unsplit_RK2_CSp, restart_CSp)
+           CS%dyn_CSp%dyn_unsplit_RK2_CSp, restart_CSp)
   else
     call register_restarts_dyn_unsplit(dG%HI, GV, param_file, &
-           CS%dyn_unsplit_CSp, restart_CSp)
+           CS%dyn_CSp%dyn_unsplit_CSp, restart_CSp)
   endif
 
   ! This subroutine calls user-specified tracer registration routines.
@@ -2048,7 +2061,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 
   call MEKE_alloc_register_restart(dG%HI, param_file, CS%MEKE, restart_CSp)
   call set_visc_register_restarts(dG%HI, GV, param_file, CS%visc, restart_CSp)
-  call mixedlayer_restrat_register_restarts(dG%HI, param_file, CS%mixedlayer_restrat_CSp, restart_CSp)
+  call mixedlayer_restrat_register_restarts(dG%HI, param_file, &
+           CS%dyn_CSp%mixedlayer_restrat_CSp, restart_CSp)
 
   if (associated(CS%OBC)) &
     call open_boundary_register_restarts(dg%HI, GV, CS%OBC, restart_CSp)
@@ -2212,34 +2226,34 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call cpu_clock_end(id_clock_MOM_init)
   call callTree_waypoint("ALE initialized (initialize_MOM)")
 
-  CS%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
+  CS%dyn_CSp%useMEKE = MEKE_init(Time, G, param_file, diag, CS%MEKE_CSp, CS%MEKE, restart_CSp)
 
   call VarMix_init(Time, G, param_file, diag, CS%VarMix)
-  call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp,CS%OBC)
-  if (CS%split) then
+  call set_visc_init(Time, G, GV, param_file, diag, CS%visc, CS%set_visc_CSp, CS%OBC)
+  if (CS%dyn_CSp%split) then
     allocate(eta(SZI_(G),SZJ_(G))) ; eta(:,:) = 0.0
     call initialize_dyn_split_RK2(MS%u, MS%v, MS%h, MS%uh, MS%vh, eta, Time, &
-              G, GV, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp,    &
+              G, GV, param_file, diag, CS%dyn_CSp%dyn_split_RK2_CSp, restart_CSp,    &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
               CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
               CS%visc, dirs, CS%ntrunc)
-  elseif (CS%use_RK2) then
+  elseif (CS%dyn_CSp%use_RK2) then
     call initialize_dyn_unsplit_RK2(MS%u, MS%v, MS%h, Time, G, GV,         &
-            param_file, diag, CS%dyn_unsplit_RK2_CSp, restart_CSp,         &
+            param_file, diag, CS%dyn_CSp%dyn_unsplit_RK2_CSp, restart_CSp,         &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
             CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   else
     call initialize_dyn_unsplit(MS%u, MS%v, MS%h, Time, G, GV,             &
-            param_file, diag, CS%dyn_unsplit_CSp, restart_CSp,             &
+            param_file, diag, CS%dyn_CSp%dyn_unsplit_CSp, restart_CSp,             &
             CS%ADp, CS%CDp, MOM_internal_state, CS%OBC, CS%update_OBC_CSp, &
             CS%ALE_CSp, CS%set_visc_CSp, CS%visc, dirs, CS%ntrunc)
   endif
   call callTree_waypoint("dynamics initialized (initialize_MOM)")
 
-  call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
-  CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
-                                                  CS%mixedlayer_restrat_CSp)
-  if (CS%mixedlayer_restrat) then
+  call thickness_diffuse_init(Time, G, GV, param_file, diag, CS%CDp, CS%dyn_CSp%thickness_diffuse_CSp)
+  CS%dyn_CSp%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, param_file, diag, &
+                                                  CS%dyn_CSp%mixedlayer_restrat_CSp)
+  if (CS%dyn_CSp%mixedlayer_restrat) then
     if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
@@ -2279,6 +2293,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
 
   ! Re-read parameters used in other control structures.
+  call get_param(param_file, "MOM", "DEBUG", CS%dyn_CSp%debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%thermo_CSp%use_ALE_algorithm , &
                  "If True, use the ALE algorithm (regridding/remapping).\n"//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
@@ -2287,6 +2303,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 
 
   ! Set up shared pointers to the various control structures.
+  CS%dyn_CSp%visc => CS%visc
+  CS%dyn_CSp%diag => CS%diag
+  CS%dyn_CSp%MEKE => CS%MEKE
+  CS%dyn_CSp%CDp => CS%CDp
+  CS%dyn_CSp%set_visc_CSp => CS%set_visc_CSp
+  CS%dyn_CSp%MEKE_CSp => CS%MEKE_CSp
+  CS%dyn_CSp%VarMix => CS%VarMix
+
+
   CS%thermo_CSp%visc => CS%visc
   CS%thermo_CSp%diag => CS%diag
   CS%thermo_CSp%ADp => CS%ADp ; CS%thermo_CSp%CDp => CS%CDp
@@ -2299,7 +2324,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
 
   ! now register some diagnostics since the tracer registry is now locked
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, MS%tv)
-  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
+  call register_diags(Time, G, GV, CS%dyn_CSp%IDs, CS%diag, CS%missing)
   call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag, CS%missing)
   if (transport_remap_grid_needed(CS%transport_IDs)) then
     allocate(CS%h_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%h_pre_dyn(:,:,:) = 0.0
@@ -2369,13 +2394,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
   endif
 
   if (.not.query_initialized(MS%ave_ssh,"ave_ssh",restart_CSp)) then
-    if (CS%split) then
+    if (CS%dyn_CSp%split) then
       call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, MS%ave_ssh, eta)
     else
       call find_eta(MS%h, MS%tv, GV%g_Earth, G, GV, MS%ave_ssh)
     endif
   endif
-  if (CS%split) deallocate(eta)
+  if (CS%dyn_CSp%split) deallocate(eta)
 
   CS%nstep_tot = 0
   if (present(count_calls)) CS%count_calls = count_calls
@@ -2527,9 +2552,9 @@ subroutine MOM_timing_init(CS)
  id_clock_pass       = cpu_clock_id('(Ocean message passing *)', grain=CLOCK_MODULE)
  id_clock_MOM_init   = cpu_clock_id('(Ocean MOM_initialize_state)', grain=CLOCK_MODULE)
  id_clock_pass_init  = cpu_clock_id('(Ocean init message passing *)', grain=CLOCK_ROUTINE)
- if (CS%thickness_diffuse) &
+ if (CS%dyn_CSp%thickness_diffuse) &
    id_clock_thick_diff = cpu_clock_id('(Ocean thickness diffusion *)', grain=CLOCK_MODULE)
-!if (CS%mixedlayer_restrat) &
+!if (CS%dyn_CSp%mixedlayer_restrat) &
    id_clock_ml_restrat = cpu_clock_id('(Ocean mixed layer restrat)', grain=CLOCK_MODULE)
  id_clock_diagnostics  = cpu_clock_id('(Ocean collective diagnostics)', grain=CLOCK_MODULE)
  id_clock_Z_diag       = cpu_clock_id('(Ocean Z-space diagnostics)', grain=CLOCK_MODULE)
@@ -3282,12 +3307,12 @@ subroutine MOM_end(MS, CS)
   endif
 
   DEALLOC_(MS%uhtr) ; DEALLOC_(MS%vhtr)
-  if (CS%split) then
-    call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
-  elseif (CS%use_RK2) then
-    call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
+  if (CS%dyn_CSp%split) then
+    call end_dyn_split_RK2(CS%dyn_CSp%dyn_split_RK2_CSp)
+  elseif (CS%dyn_CSp%use_RK2) then
+    call end_dyn_unsplit_RK2(CS%dyn_CSp%dyn_unsplit_RK2_CSp)
   else
-    call end_dyn_unsplit(CS%dyn_unsplit_CSp)
+    call end_dyn_unsplit(CS%dyn_CSp%dyn_unsplit_CSp)
   endif
   DEALLOC_(MS%ave_ssh)
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
