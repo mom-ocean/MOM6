@@ -415,13 +415,14 @@ end type step_thermo_CS
 
 !> Control structure for the extaction of the surface state.
 type, public :: surface_state_CS ; private
-  logical :: bulkmixedlayer          !< If true, a refined bulk mixed layer scheme is used
-                                     !! with nkml sublayers and nkbl buffer layer.
-  real :: Hmix                       !< Diagnostic mixed layer thickness (meter) when
-                                     !! bulk mixed layer is not used.
+  real :: Hmix                       !< Diagnostic mixed layer thickness over which to
+                                     !! average surface tracer properties (in meter) when
+                                     !! bulk mixed layer is not used, or a negative value
+                                     !! if a bulk mixed layer is being used.
   real :: Hmix_UV                    !< Depth scale over which to average surface flow to
-                                     !! feedback to the coupler/driver (m).
-                                     !! bulk mixed layer is not used.
+                                     !! feedback to the coupler/driver (m) when
+                                     !! bulk mixed layer is not used, or a negative value
+                                     !! if a bulk mixed layer is being used.
   logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
   real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
   real    :: bad_val_sst_max         !< Maximum SST before triggering bad value message
@@ -441,7 +442,7 @@ public step_MOM
 public step_offline
 public MOM_end
 public allocate_surface_state
-public calculate_surface_state
+public extract_surface_state
 
 integer :: id_clock_ocean
 integer :: id_clock_dynamics
@@ -803,8 +804,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
 
-  if (showCallTree) call callTree_waypoint("calling calculate_surface_state (step_MOM)")
-  call calculate_surface_state(sfc_state, u, v, h, MS%ave_ssh, G, GV, MS, CS)
+  if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
+  call extract_surface_state(MS, sfc_state, CS)
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   call cpu_clock_begin(id_clock_diagnostics)
@@ -1432,7 +1433,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, MS
   endif
 
   call adjust_ssh_for_p_atm(MS%tv, G, GV, MS%ave_ssh, forces%p_surf_SSH, CS%calc_rho_for_sea_lev)
-  call calculate_surface_state(sfc_state, MS%u, MS%v, MS%h, MS%ave_ssh, G, GV, MS, CS)
+  call extract_surface_state(MS, sfc_state, CS)
 
   call disable_averaging(CS%diag)
   call pass_var(MS%tv%T,G%Domain)
@@ -1707,8 +1708,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                  "case is the largest integer multiple of the coupling \n"//&
                  "timestep that is less than or equal to DT_THERM.", default=.false.)
 
-  CS%surface_CSp%bulkmixedlayer = bulkmixedlayer
-  if (.not.CS%surface_CSp%bulkmixedlayer) then
+  if (bulkmixedlayer) then
+    CS%surface_CSp%Hmix = -1.0 ; CS%surface_CSp%Hmix_UV = -1.0
+  else
     call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%surface_CSp%Hmix, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth \n"//&
                  "over which to average to find surface properties like \n"//&
@@ -2983,28 +2985,29 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 end subroutine allocate_surface_state
 
 !> This subroutine sets the surface (return) properties of the ocean
-!! model by setting the appropriate fields in state.  Unused fields
+!! model by setting the appropriate fields in sfc_state.  Unused fields
 !! are set to NULL or are unallocated.
-subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
-  type(ocean_grid_type),                     intent(inout) :: G      !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  type(surface),                             intent(inout) :: sfc_state !< ocean surface state
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u      !< zonal velocity (m/s)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v      !< meridional velocity (m/s)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h      !< layer thickness (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: ssh    !< time mean surface height (m)
-  type(MOM_state_type),                      intent(in)    :: MS     !< structure describing the MOM state
-  type(MOM_control_struct),                  intent(inout) :: MOM_CSp !< control structure
+subroutine extract_surface_state(MS, sfc_state, MOM_CSp)
+  type(MOM_state_type),     pointer       :: MS     !< structure describing the MOM state (intent in)
+  type(surface),            intent(inout) :: sfc_state !< ocean surface state
+  type(MOM_control_struct), intent(in)    :: MOM_CSp !< control structure
 
   ! local
+  real :: hu, hv
+  type(ocean_grid_type), pointer :: G => NULL() ! pointer to a structure containing
+                                      ! metrics and related information
+  type(verticalGrid_type),  pointer :: GV => NULL()
+  real, pointer, dimension(:,:,:) :: &
+    u, & ! u : zonal velocity component (m/s)
+    v, & ! v : meridional velocity component (m/s)
+    h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
   type(surface_state_CS), pointer :: CS => NULL()
-  real :: depth(SZI_(G))              ! distance from the surface (meter)
+  real :: depth(SZI_(MS%G))           ! distance from the surface (meter)
   real :: depth_ml                    ! depth over which to average to
                                       ! determine mixed layer properties (meter)
   real :: dh                          ! thickness of a layer within mixed layer (meter)
   real :: mass                        ! mass per unit area of a layer (kg/m2)
 
-  real :: hu, hv
   logical :: use_temperature   ! If true, temp and saln used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors
   integer :: isd, ied, jsd, jed
@@ -3012,11 +3015,13 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
   logical :: localError
   character(240) :: msg
 
-  call callTree_enter("calculate_surface_state(), MOM.F90")
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
+  call callTree_enter("extract_surface_state(), MOM.F90")
+  G => MS%G ; GV => MS%GV
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   iscB = G%iscB ; iecB = G%iecB; jscB = G%jscB ; jecB = G%jecB
   isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+  u => MS%u ; v => MS%v ; h => MS%h
 
   CS => MOM_CSp%surface_CSp
 
@@ -3036,10 +3041,10 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
   if (associated(CS%visc%tauy_shelf)) sfc_state%tauy_shelf => CS%visc%tauy_shelf
 
   do j=js,je ; do i=is,ie
-    sfc_state%sea_lev(i,j) = ssh(i,j)
+    sfc_state%sea_lev(i,j) = MS%ave_ssh(i,j)
   enddo ; enddo
 
-  if (CS%bulkmixedlayer) then
+  if (CS%Hmix < 0.0) then  ! A bulk mixed layer is in use, so layer 1 has the properties
     if (use_temperature) then ; do j=js,je ; do i=is,ie
       sfc_state%SST(i,j) = MS%tv%T(i,j,1)
       sfc_state%SSS(i,j) = MS%tv%S(i,j,1)
@@ -3054,7 +3059,7 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
     if (associated(MS%Hml)) then ; do j=js,je ; do i=is,ie
       sfc_state%Hml(i,j) = MS%Hml(i,j)
     enddo ; enddo ; endif
-  else
+  else  ! (CS%Hmix >= 0.0)
 
     depth_ml = CS%Hmix
   !   Determine the mean tracer properties of the uppermost depth_ml fluid.
@@ -3161,7 +3166,7 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
         sfc_state%v(i,J) = v(i,J,1)
       enddo ; enddo
     endif
-  endif                                              ! end BULKMIXEDLAYER
+  endif  ! (CS%Hmix >= 0.0)
 
   if (allocated(sfc_state%salt_deficit) .and. associated(MS%tv%salt_deficit)) then
     !$OMP parallel do default(shared)
@@ -3274,8 +3279,8 @@ subroutine calculate_surface_state(sfc_state, u, v, h, ssh, G, GV, MS, MOM_CSp)
     endif
   endif
 
-  call callTree_leave("calculate_surface_sfc_state()")
-end subroutine calculate_surface_state
+  call callTree_leave("extract_surface_sfc_state()")
+end subroutine extract_surface_state
 
 
 !> End of model
@@ -3618,7 +3623,7 @@ end subroutine MOM_end
 !!  * step_MOM steps MOM over a specified interval of time.
 !!  * MOM_initialize calls initialize and does other initialization
 !!    that does not warrant user modification.
-!!  * calculate_surface_state determines the surface (bulk mixed layer
+!!  * extract_surface_state determines the surface (bulk mixed layer
 !!    if traditional isoycnal vertical coordinate) properties of the
 !!    current model state and packages pointers to these fields into an
 !!    exported structure.
