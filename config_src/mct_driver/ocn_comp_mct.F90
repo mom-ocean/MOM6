@@ -34,7 +34,7 @@ use MOM_coms,             only : reproducing_sum
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
 use MOM,                  only: initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
-use MOM,                  only: calculate_surface_state, allocate_surface_state
+use MOM,                  only: extract_surface_state, allocate_surface_state
 use MOM,                  only: finish_MOM_initialization, step_offline
 use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
@@ -903,9 +903,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
   if (present(gas_fields_ocn)) then
-    call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-             OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-             OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
+    call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
   endif
@@ -933,9 +931,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-           OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-           OS%grid, OS%GV, OS%Msp, OS%MOM_CSp)
+  call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 

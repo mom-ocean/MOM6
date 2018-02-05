@@ -18,7 +18,7 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
-use MOM, only : calculate_surface_state, allocate_surface_state, finish_MOM_initialization
+use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
@@ -367,9 +367,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call coupler_type_set_diags(Ocean_sfc%fields, "ocean_sfc", &
                                 Ocean_sfc%axes(1:2), Time_in)
 
-    call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-             OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-             OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
+    call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -958,9 +956,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-           OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-           OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
+  call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 

@@ -29,7 +29,7 @@ program MOM_main
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-  use MOM,                 only : calculate_surface_state, finish_MOM_initialization
+  use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : MOM_state_type, step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
@@ -302,8 +302,7 @@ program MOM_main
   GV   => MSp%GV
   call callTree_waypoint("done initialize_MOM")
 
-  call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
-                               MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
+  call extract_surface_state(MSp, sfc_state, MOM_CSp)
 
   call surface_forcing_init(Time, grid, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
