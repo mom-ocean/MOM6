@@ -325,12 +325,12 @@ type, public :: ocean_state_type ; private
                               !! a previous integration of the prognostic model.
   type(directories)  :: dirs  !< A structure containing several relevant directory paths.
   type(mech_forcing) :: forces!< A structure with the driving mechanical surface forces
-  type(forcing)   :: fluxes   !< A structure containing pointers to
+  type(forcing)  :: fluxes    !< A structure containing pointers to
                               !! the ocean forcing fields.
-  type(forcing)   :: flux_tmp !< A secondary structure containing pointers to the
+  type(forcing)  :: flux_tmp  !< A secondary structure containing pointers to the
                               !! ocean forcing fields for when multiple coupled
                               !! timesteps are taken per thermodynamic step.
-  type(surface)   :: state    !< A structure containing pointers to
+  type(surface)  :: sfc_state !< A structure containing pointers to
                               !! the ocean surface state fields.
   type(ocean_grid_type), pointer :: grid => NULL() !< A pointer to a grid structure
                               !! containing metrics and related information.
@@ -558,7 +558,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time0, input_restart_file=trim(restartfile))
   endif
 
-  ! Initialize ocn_state%state out of sight
+  ! Initialize ocn_state%sfc_state out of sight
   call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
 
   ! store pointers to components inside MOM
@@ -875,7 +875,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
-  call allocate_surface_state(OS%state, OS%grid, use_temperature, &
+  call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn)
 
   call surface_forcing_init(Time_in, OS%grid, param_file, OS%diag, &
@@ -903,11 +903,11 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
   if (present(gas_fields_ocn)) then
-    call calculate_surface_state(OS%state, OS%MSp%u, &
+    call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
              OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
              OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
 
-    call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
+    call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
   endif
 
   call close_param_file(param_file)
@@ -930,14 +930,14 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   integer :: is, ie, js, je
 
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
-  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+  call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%state, OS%MSp%u, &
+  call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
            OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
            OS%grid, OS%GV, OS%Msp, OS%MOM_CSp)
 
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
 end subroutine ocean_model_init_sfc
 
@@ -1402,7 +1402,7 @@ subroutine get_state_pointers(OS, grid, surf)
   type(surface), optional, pointer         :: surf !< Ocean surface state
 
   if (present(grid)) grid => OS%grid
-  if (present(surf)) surf=> OS%state
+  if (present(surf)) surf=> OS%sfc_state
 
 end subroutine get_state_pointers
 
@@ -1709,9 +1709,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   endif
 
   ! This is benign but not necessary if ocean_model_init_sfc was called or if
-  ! OS%state%tr_fields was spawned in ocean_model_init.  Consider removing it.
+  ! OS%sfc_state%tr_fields was spawned in ocean_model_init.  Consider removing it.
   is = OS%grid%isc ; ie = OS%grid%iec ; js = OS%grid%jsc ; je = OS%grid%jec
-  call coupler_type_spawn(Ocean_sfc%fields, OS%state%tr_fields, &
+  call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   weight = 1.0
@@ -1719,7 +1719,7 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   if (OS%fluxes%fluxes_used) then
     ! GMM, is enable_averaging needed now?
     call enable_averaging(time_step, OS%Time + Ocean_coupling_time_step, OS%diag)
-    call ocn_import(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%state, x2o_o, ind, sw_decomp, &
+    call ocn_import(OS%forces, OS%fluxes, OS%Time, OS%grid, OS%forcing_CSp, OS%sfc_state, x2o_o, ind, sw_decomp, &
                     c1, c2, c3, c4, OS%restore_salinity,OS%restore_temp)
 
     ! Fields that exist in both the forcing and mech_forcing types must be copied.
@@ -1731,13 +1731,13 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 
     ! Add ice shelf fluxes
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%fluxes, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
     !  This assumes that the iceshelf and ocean are on the same grid. I hope this is true.
-    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
+    !  call add_berg_flux_to_shelf(OS%grid, OS%forces,OS%fluxes,OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Indicate that there are new unused fluxes.
@@ -1747,17 +1747,17 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
     OS%flux_tmp%C_p = OS%fluxes%C_p
     ! Import fluxes from coupler to ocean. Also, perform do SST and SSS restoring, if needed.
     call ocn_import(OS%forces, OS%flux_tmp, OS%Time, OS%grid, OS%forcing_CSp, &
-                       OS%state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
+                       OS%sfc_state, x2o_o, ind, sw_decomp, c1, c2, c3, c4, &
                        OS%restore_salinity,OS%restore_temp)
 
     if (OS%use_ice_shelf) then
-      call shelf_calc_flux(OS%State, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
+      call shelf_calc_flux(OS%sfc_state, OS%forces, OS%flux_tmp, OS%Time, time_step, OS%Ice_shelf_CSp)
     endif
 
     ! GMM, check ocean_model_MOM.F90 to enable the following option
     !if (OS%icebergs_apply_rigid_boundary)  then
      !This assumes that the iceshelf and ocean are on the same grid. I hope this is true
-    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%State, time_step, OS%berg_area_threshold)
+    ! call add_berg_flux_to_shelf(OS%grid, OS%forces, OS%flux_tmp, OS%use_ice_shelf,OS%density_iceberg,OS%kv_iceberg, OS%latent_heat_fusion, OS%sfc_state, time_step, OS%berg_area_threshold)
     !endif
 
     ! Accumulate the forcing over time steps
@@ -1782,9 +1782,9 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%offline_tracer_mode) then
-    call step_offline(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MSp, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   else
-    call step_MOM(OS%forces, OS%fluxes, OS%state, Time1, time_step, OS%MSp, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
@@ -1797,15 +1797,15 @@ subroutine update_ocean_model(OS, Ocean_sfc, time_start_update, &
 
   if (OS%fluxes%fluxes_used) then
     call enable_averaging(OS%fluxes%dt_buoy_accum, OS%Time, OS%diag)
-    call forcing_diagnostics(OS%fluxes, OS%state, OS%fluxes%dt_buoy_accum, &
+    call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%fluxes%dt_buoy_accum, &
                              OS%grid, OS%diag, OS%forcing_CSp%handles)
     call disable_averaging(OS%diag)
   endif
 
 ! Translate state into Ocean.
-!  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid, &
+!  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, &
 !                                   Ice_ocean_boundary%p, OS%press_to_z)
-  call convert_state_to_ocean_type(OS%state, Ocean_sfc, OS%grid)
+  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
   call callTree_leave("update_ocean_model()")
 end subroutine update_ocean_model
