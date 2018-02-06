@@ -27,6 +27,7 @@ module MOM_diagnostics
 use MOM_coms,              only : reproducing_sum
 use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
+use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
 use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
@@ -50,8 +51,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_diagnostic_fields
-public register_time_deriv
+public calculate_diagnostic_fields, register_time_deriv, write_static_fields
 public find_eta
 public MOM_diagnostics_init, MOM_diagnostics_end
 public register_surface_diags, post_surface_diagnostics
@@ -1691,6 +1691,176 @@ subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
          'Heat flux into ocean from geothermal or other internal sources', 'W m-2')
 
 end subroutine register_surface_diags
+
+
+!> Offers the static fields in the ocean grid type for output via the diag_manager.
+subroutine write_static_fields(G, GV, tv, diag)
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< ocean vertical grid structure
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various thermodynamic variables
+  type(diag_ctrl), target, intent(inout) :: diag !< regulates diagnostic output
+  ! Local variables
+  real    :: tmp_h(SZI_(G),SZJ_(G))
+  integer :: id, i, j
+
+  id = register_static_field('ocean_model', 'geolat', diag%axesT1, &
+        'Latitude of tracer (T) points', 'degrees_north')
+  if (id > 0) call post_data(id, G%geoLatT, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolon', diag%axesT1, &
+        'Longitude of tracer (T) points', 'degrees_east')
+  if (id > 0) call post_data(id, G%geoLonT, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolat_c', diag%axesB1, &
+        'Latitude of corner (Bu) points', 'degrees_north', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLatBu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolon_c', diag%axesB1, &
+        'Longitude of corner (Bu) points', 'degrees_east', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLonBu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolat_v', diag%axesCv1, &
+        'Latitude of meridional velocity (Cv) points', 'degrees_north', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLatCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolon_v', diag%axesCv1, &
+        'Longitude of meridional velocity (Cv) points', 'degrees_east', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLonCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolat_u', diag%axesCu1, &
+        'Latitude of zonal velocity (Cu) points', 'degrees_north', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLatCu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'geolon_u', diag%axesCu1, &
+        'Longitude of zonal velocity (Cu) points', 'degrees_east', interp_method='none')
+  if (id > 0) call post_data(id, G%geoLonCu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'area_t', diag%axesT1,   &
+        'Surface area of tracer (T) cells', 'm2',                    &
+        cmor_field_name='areacello', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',      &
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaT, diag, .true.)
+    call diag_register_area_ids(diag, id_area_t=id)
+  endif
+
+  id = register_static_field('ocean_model', 'area_u', diag%axesCu1,     &
+        'Surface area of x-direction flow (U) cells', 'm2',             &
+        cmor_field_name='areacello_cu', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaCu, diag, .true.)
+  endif
+
+  id = register_static_field('ocean_model', 'area_v', diag%axesCv1,     &
+        'Surface area of y-direction flow (V) cells', 'm2',             &
+        cmor_field_name='areacello_cv', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaCv, diag, .true.)
+  endif
+
+  id = register_static_field('ocean_model', 'area_q', diag%axesB1,      &
+        'Surface area of B-grid flow (Q) cells', 'm2',                  &
+        cmor_field_name='areacello_bu', cmor_standard_name='cell_area', &
+        cmor_long_name='Ocean Grid-Cell Area',         &
+        x_cell_method='sum', y_cell_method='sum', area_cell_method='sum')
+  if (id > 0) then
+    call post_data(id, G%areaBu, diag, .true.)
+  endif
+
+  id = register_static_field('ocean_model', 'depth_ocean', diag%axesT1,  &
+        'Depth of the ocean at tracer points', 'm',                      &
+        standard_name='sea_floor_depth_below_geoid',                     &
+        cmor_field_name='deptho', cmor_long_name='Sea Floor Depth',      &
+        cmor_standard_name='sea_floor_depth_below_geoid',&
+        area=diag%axesT1%id_area, &
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
+  if (id > 0) call post_data(id, G%bathyT, diag, .true., mask=G%mask2dT)
+
+  id = register_static_field('ocean_model', 'wet', diag%axesT1, &
+        '0 if land, 1 if ocean at tracer points', 'none', area=diag%axesT1%id_area)
+  if (id > 0) call post_data(id, G%mask2dT, diag, .true.)
+
+  id = register_static_field('ocean_model', 'wet_c', diag%axesB1, &
+        '0 if land, 1 if ocean at corner (Bu) points', 'none', interp_method='none')
+  if (id > 0) call post_data(id, G%mask2dBu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'wet_u', diag%axesCu1, &
+        '0 if land, 1 if ocean at zonal velocity (Cu) points', 'none', interp_method='none')
+  if (id > 0) call post_data(id, G%mask2dCu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'wet_v', diag%axesCv1, &
+        '0 if land, 1 if ocean at meridional velocity (Cv) points', 'none', interp_method='none')
+  if (id > 0) call post_data(id, G%mask2dCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'Coriolis', diag%axesB1, &
+        'Coriolis parameter at corner (Bu) points', 's-1', interp_method='none')
+  if (id > 0) call post_data(id, G%CoriolisBu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dxt', diag%axesT1, &
+        'Delta(x) at thickness/tracer points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dxt, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dyt', diag%axesT1, &
+        'Delta(y) at thickness/tracer points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dyt, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dxCu', diag%axesCu1, &
+        'Delta(x) at u points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dxCu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dyCu', diag%axesCu1, &
+        'Delta(y) at u points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dyCu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dxCv', diag%axesCv1, &
+        'Delta(x) at v points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dxCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dyCv', diag%axesCv1, &
+        'Delta(y) at v points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dyCv, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dyCuo', diag%axesCu1, &
+        'Open meridional grid spacing at u points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dy_Cu, diag, .true.)
+
+  id = register_static_field('ocean_model', 'dxCvo', diag%axesCv1, &
+        'Open zonal grid spacing at v points (meter)', 'm', interp_method='none')
+  if (id > 0) call post_data(id, G%dx_Cv, diag, .true.)
+
+
+  ! This static diagnostic is from CF 1.8, and is the fraction of a cell
+  ! covered by ocean, given as a percentage (poorly named).
+  id = register_static_field('ocean_model', 'area_t_percent', diag%axesT1, &
+        'Percentage of cell area covered by ocean', '%', &
+        cmor_field_name='sftof', cmor_standard_name='SeaAreaFraction', &
+        cmor_long_name='Sea Area Fraction', &
+        x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
+  if (id > 0) then
+    tmp_h(:,:) = 0.
+    tmp_h(G%isc:G%iec,G%jsc:G%jec) = 100. * G%mask2dT(G%isc:G%iec,G%jsc:G%jec)
+    call post_data(id, tmp_h, diag, .true.)
+  endif
+
+  id = register_static_field('ocean_model','Rho_0', diag%axesNull, &
+       'mean ocean density used with the Boussinesq approximation', &
+       'kg m-3', cmor_field_name='rhozero', &
+       cmor_standard_name='reference_sea_water_density_for_boussinesq_approximation', &
+       cmor_long_name='reference sea water density for boussinesq approximation')
+  if (id > 0) call post_data(id, GV%Rho0, diag, .true.)
+
+  id = register_static_field('ocean_model','C_p', diag%axesNull, &
+       'heat capacity of sea water', 'J kg-1 K-1', cmor_field_name='cpocean', &
+       cmor_standard_name='specific_heat_capacity_of_sea_water', &
+       cmor_long_name='specific_heat_capacity_of_sea_water')
+  if (id > 0) call post_data(id, tv%C_p, diag, .true.)
+
+end subroutine write_static_fields
 
 
 !> This subroutine sets up diagnostics upon which other diagnostics depend.
