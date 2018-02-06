@@ -103,6 +103,8 @@ use channel5_surface_forcing, only : channel5_wind_forcing, channel5_buoyancy_fo
 use channel5_surface_forcing, only : channel5_surface_forcing_init, channel5_surface_forcing_CS
 use channel6_surface_forcing, only : channel6_wind_forcing, channel6_buoyancy_forcing
 use channel6_surface_forcing, only : channel6_surface_forcing_init, channel6_surface_forcing_CS
+use channel7_surface_forcing, only : channel7_wind_forcing, channel7_buoyancy_forcing
+use channel7_surface_forcing, only : channel7_surface_forcing_init, channel7_surface_forcing_CS
 use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
@@ -242,6 +244,7 @@ type, public :: surface_forcing_CS ; private
   type(channel4_surface_forcing_CS), pointer :: channel4_forcing_CSp => NULL()
   type(channel5_surface_forcing_CS), pointer :: channel5_forcing_CSp => NULL()
   type(channel6_surface_forcing_CS), pointer :: channel6_forcing_CSp => NULL()
+  type(channel7_surface_forcing_CS), pointer :: channel7_forcing_CSp => NULL()
   type(SCM_idealized_hurricane_CS), pointer :: SCM_idealized_hurricane_CSp => NULL()
   type(SCM_CVmix_tests_CS),      pointer :: SCM_CVmix_tests_CSp => NULL()
 
@@ -352,6 +355,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call channel5_wind_forcing(sfc_state, forces, day_center, G, CS%channel5_forcing_CSp)
     elseif (trim(CS%wind_config) == "channel6") then
       call channel6_wind_forcing(sfc_state, forces, day_center, G, CS%channel6_forcing_CSp)
+    elseif (trim(CS%wind_config) == "channel7") then
+      call channel7_wind_forcing(sfc_state, forces, day_center, G, CS%channel7_forcing_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
       call SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, CS%SCM_idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_CVmix_tests") then
@@ -408,6 +413,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, CS
       call channel5_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel5_forcing_CSp)
     elseif (trim(CS%buoy_config) == "channel6") then
       call channel6_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel6_forcing_CSp)
+    elseif (trim(CS%buoy_config) == "channel7") then
+      call channel7_buoyancy_forcing(sfc_state, fluxes, day_center, dt, G, CS%channel7_forcing_CSp)
     elseif (trim(CS%buoy_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_buoyancy_forcing(sfc_state, fluxes, day_center, G, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%buoy_config) == "USER") then
@@ -1919,6 +1926,8 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, tracer_flow_CSp)
     call channel5_surface_forcing_init(Time, G, param_file, diag, CS%channel5_forcing_CSp)
   elseif (trim(CS%wind_config) == "channel6") then
     call channel6_surface_forcing_init(Time, G, param_file, diag, CS%channel6_forcing_CSp)
+  elseif (trim(CS%wind_config) == "channel7") then
+    call channel7_surface_forcing_init(Time, G, param_file, diag, CS%channel7_forcing_CSp)
   elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
     call SCM_idealized_hurricane_wind_init(Time, G, param_file, CS%SCM_idealized_hurricane_CSp)
   elseif (trim(CS%wind_config) == "const") then
