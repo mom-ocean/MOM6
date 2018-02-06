@@ -3,24 +3,6 @@ module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_variables, only : vertvisc_type
-use MOM_open_boundary, only : ocean_OBC_type
-
-! A Structure with pointers to forcing fields to drive MOM;
-! all fluxes are positive downward.
-use MOM_forcing_type, only : forcing, mech_forcing
-
-use MOM_variables, only: accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
-
-! A structure containing pointers to various fields
-! to describe surface state, and will be returned
-! to the calling program.
-use MOM_variables, only : surface
-
-! A structure containing pointers to an assortment of
-! thermodynamic fields, including potential/Conservative
-! temperature, salinity and mixed layer density.
-use MOM_variables, only: thermo_var_ptrs
 
 ! Infrastructure modules
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
@@ -51,6 +33,7 @@ use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_fixed_initialization, only : MOM_initialize_fixed
+use MOM_forcing_type,         only : forcing, mech_forcing
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
@@ -107,7 +90,8 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_ini
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
-use MOM_open_boundary,         only : OBC_registry_type, register_temp_salt_segments
+use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
+use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
 use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
@@ -130,10 +114,14 @@ use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_
 use MOM_tracer_flow_control,   only : tracer_flow_control_init, call_tracer_surface_state
 use MOM_tracer_flow_control,   only : tracer_flow_control_end
 use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
+use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
+use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
+use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
 use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
+
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
 use MOM_offline_main,          only : insert_offline_main, extract_offline_main, post_offline_convergence_diags
@@ -345,13 +333,10 @@ type, public :: MOM_control_struct ; private
 
 end type MOM_control_struct
 
-public initialize_MOM
-public finish_MOM_initialization
-public step_MOM
-public step_offline
-public MOM_end
-public allocate_surface_state
+public initialize_MOM, finish_MOM_initialization, MOM_end
+public step_MOM, step_offline
 public extract_surface_state
+public allocate_surface_state, deallocate_surface_state
 
 integer :: id_clock_ocean
 integer :: id_clock_dynamics
@@ -2801,64 +2786,6 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
   endif ; endif
 
 end subroutine adjust_ssh_for_p_atm
-
-!> This subroutine allocates the fields for the surface (return) properties of
-!! the ocean model.  Unused fields are unallocated.
-subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
-                                  gas_fields_ocn)
-  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
-  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
-  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
-  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically integrated fields.
-  type(coupler_1d_bc_type), &
-               optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
-                                              !! ocean and surface-ice fields that will participate
-                                              !! in the calculation of additional gas or other
-                                              !! tracer fluxes, and can be used to spawn related
-                                              !! internal variables in the ice model.
-
-  logical :: use_temp, alloc_integ
-  integer :: is, ie, js, je, isd, ied, jsd, jed
-  integer :: isdB, iedB, jsdB, jedB
-
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
-
-  use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
-  alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
-
-  if (sfc_state%arrays_allocated) return
-
-  if (use_temp) then
-    allocate(sfc_state%SST(isd:ied,jsd:jed)) ; sfc_state%SST(:,:) = 0.0
-    allocate(sfc_state%SSS(isd:ied,jsd:jed)) ; sfc_state%SSS(:,:) = 0.0
-  else
-    allocate(sfc_state%sfc_density(isd:ied,jsd:jed)) ; sfc_state%sfc_density(:,:) = 0.0
-  endif
-  allocate(sfc_state%sea_lev(isd:ied,jsd:jed)) ; sfc_state%sea_lev(:,:) = 0.0
-  allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
-  allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
-  allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
-
-  if (alloc_integ) then
-    ! Allocate structures for the vertically integrated ocean_mass, ocean_heat,
-    ! and ocean_salt.
-    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed)) ; sfc_state%ocean_mass(:,:) = 0.0
-    if (use_temp) then
-      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
-      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
-    endif
-    allocate(sfc_state%salt_deficit(isd:ied,jsd:jed)) ; sfc_state%salt_deficit(:,:) = 0.0
-  endif
-
-  if (present(gas_fields_ocn)) &
-    call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
-                            (/isd,is,ie,ied/), (/jsd,js,je,jed/), as_needed=.true.)
-
-  sfc_state%arrays_allocated = .true.
-
-end subroutine allocate_surface_state
 
 !> This subroutine sets the surface (return) properties of the ocean
 !! model by setting the appropriate fields in sfc_state.  Unused fields
