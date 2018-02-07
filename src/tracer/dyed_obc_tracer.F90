@@ -14,7 +14,7 @@ use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : MOM_restart_CS
 use MOM_time_manager,       only : time_type, get_time
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
-use MOM_tracer_registry,    only : add_tracer_diagnostics, add_tracer_OBC_values
+use MOM_tracer_registry,    only : add_tracer_OBC_values
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
