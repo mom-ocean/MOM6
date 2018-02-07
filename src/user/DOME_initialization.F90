@@ -313,6 +313,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
     enddo ; enddo
   enddo
+! call register_segment_tracer(tr_desc(m), param_file, segment%HI, GV, &
+!                              segment%Reg, m, OBC_scalar=1.0)
 
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
@@ -342,8 +344,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       OBC_T_v(i,J,k) = T0(k)
     enddo ; enddo ; enddo
     call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
-!   call register_segment_tracer(tr_desc(m), param_file, segment%HI, GV, &
-!                                segment%Reg, m, OBC_scalar=1.0)
   endif
 
 end subroutine DOME_set_OBC_data
