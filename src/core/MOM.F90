@@ -149,7 +149,7 @@ type transport_diag_IDs
 end type transport_diag_IDs
 
 !> Structure describing the state of the ocean.
-type, public :: MOM_state_type
+type, public :: MOM_state_type ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
     h, &      !< layer thickness (m or kg/m2 (H))
     T, &      !< potential temperature (degrees C)
@@ -333,6 +333,7 @@ end type MOM_control_struct
 public initialize_MOM, finish_MOM_initialization, MOM_end
 public step_MOM, step_offline
 public extract_surface_state, get_ocean_stocks
+public get_MOM_state_elements, MOM_state_is_synchronized
 public allocate_surface_state, deallocate_surface_state
 
 integer :: id_clock_ocean
@@ -2903,6 +2904,32 @@ subroutine extract_surface_state(MS, sfc_state, CS)
 
   call callTree_leave("extract_surface_sfc_state()")
 end subroutine extract_surface_state
+
+!> Return true if all phases of step_MOM are at the same point in time.
+function MOM_state_is_synchronized(MS) result(in_synch)
+  type(MOM_state_type),  pointer :: MS   !< structure describing the MOM state
+  logical :: in_synch !< True if all phases of the update are synchronized.
+
+  in_synch = ((MS%t_dyn_rel_adv == 0.0) .and. (MS%t_dyn_rel_adv == 0.0))
+
+end function MOM_state_is_synchronized
+
+!> This subroutine offers access to values or pointers to other types from within
+!! the MOM_state_type, allowing the MOM_state_type to be opaque.
+subroutine get_MOM_state_elements(MS, G, GV, C_p, use_temp)
+  type(MOM_state_type),  pointer :: MS   !< structure describing the MOM state
+  type(ocean_grid_type), &
+               optional, pointer :: G    !< structure containing metrics and grid info
+  type(verticalGrid_type), &
+               optional, pointer :: GV   !< structure containing vertical grid info
+  real,    optional, intent(out) :: C_p  !< The heat capacity
+  logical, optional, intent(out) :: use_temp !< Indicates whether temperature is a state variable
+
+  if (present(G)) G => MS%G
+  if (present(GV)) GV => MS%GV
+  if (present(C_p)) C_p = MS%tv%C_p
+  if (present(use_temp)) use_temp = associated(MS%tv%T)
+end subroutine get_MOM_state_elements
 
 !> Find the global integrals of various quantities.
 subroutine get_ocean_stocks(MS, mass, heat, salt, on_PE_only)
