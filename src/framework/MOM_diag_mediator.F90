@@ -62,6 +62,9 @@ public diag_register_area_ids
 public register_cell_measure, diag_associate_volume_cell_measure
 public diag_get_volume_cell_measure_dm_id
 public diag_set_state_ptrs, diag_update_remap_grids
+public diag_grid_storage_init, diag_grid_storage_end
+public diag_copy_diag_to_storage, diag_copy_storage_to_diag
+public diag_save_grids, diag_restore_grids
 
 interface post_data
   module procedure post_data_3d, post_data_2d, post_data_0d
@@ -103,6 +106,18 @@ type, public :: axes_grp
   real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
   real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
 end type axes_grp
+
+!> Contains an array to store a diagnostic target grid
+type, private :: diag_grids_type
+  real, dimension(:,:,:), allocatable :: h  !< Target grid for remapped coordinate
+end type diag_grids_type
+
+!> Stores all the remapping grids and the model's native space thicknesses
+type, public :: diag_grid_storage
+  integer                                          :: num_diag_coords !< Number of target coordinates
+  real, dimension(:,:,:), allocatable              :: h_state         !< Layer thicknesses in native space
+  type(diag_grids_type), dimension(:), allocatable :: diag_grids      !< Primarily empty, except h field
+end type diag_grid_storage
 
 !> This type is used to represent a diagnostic at the diag_mediator level.
 !! There can be both 'primary' and 'seconday' diagnostics. The primaries
@@ -169,6 +184,8 @@ type, public :: diag_ctrl
   integer :: num_diag_coords
   !> Control structure for each possible coordinate
   type(diag_remap_ctrl), dimension(:), allocatable :: diag_remap_cs
+  type(diag_grid_storage) :: diag_grid_temp !< Stores the remapped diagnostic grid
+  logical :: diag_grid_overridden = .false. !< True if the diagnostic grids have been overriden
 
   !> Axes groups for each possible coordinate (these will all be 3D groups)
   type(axes_grp), dimension(:), allocatable :: remap_axesZL, remap_axesZi
@@ -375,6 +392,8 @@ subroutine set_axes_info(G, GV, param_file, diag_cs, set_vertical)
            needs_interpolating=.true., xyave_axes=diag_cs%remap_axesZi(i))
     endif
   enddo
+
+  call diag_grid_storage_init(diag_CS%diag_grid_temp, G, diag_CS)
 
 end subroutine set_axes_info
 
@@ -2261,6 +2280,11 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
 
   if (id_clock_diag_grid_updates>0) call cpu_clock_begin(id_clock_diag_grid_updates)
 
+  if (diag_cs%diag_grid_overridden) then
+     call MOM_error(FATAL, "diag_update_remap_grids was called, but current grids in "// &
+                           "diagnostic structure have been overridden")
+  endif
+
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
                            diag_cs%G, diag_cs%GV, h_diag, T_diag, S_diag, &
@@ -2350,6 +2374,7 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
     call diag_remap_end(diag_cs%diag_remap_cs(i))
   enddo
 
+  call diag_grid_storage_end(diag_cs%diag_grid_temp)
   deallocate(diag_cs%mask3dTL)
   deallocate(diag_cs%mask3dBL)
   deallocate(diag_cs%mask3dCuL)
@@ -2491,5 +2516,115 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
+
+!> Allocates fields necessary to store diagnostic remapping fields
+subroutine diag_grid_storage_init(grid_storage, G, diag)
+  type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
+  type(ocean_grid_type),   intent(in)    :: G           !< Horizontal grid
+  type(diag_ctrl),         intent(in)    :: diag        !< Diagnostic control structure used as the contructor
+                                                        !! template for this routine
+
+  integer :: m, nz
+  grid_storage%num_diag_coords = diag%num_diag_coords
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
+  ! Allocate memory for the native space
+  allocate(grid_storage%h_state(G%isd:G%ied,G%jsd:G%jed, G%ke))
+  ! Allocate diagnostic remapping structures
+  allocate(grid_storage%diag_grids(diag%num_diag_coords))
+  ! Loop through and allocate memory for the grid on each target coordinate
+  do m = 1, diag%num_diag_coords
+    nz = diag%diag_remap_cs(m)%nz
+    allocate(grid_storage%diag_grids(m)%h(G%isd:G%ied,G%jsd:G%jed, nz))
+  enddo
+
+end subroutine diag_grid_storage_init
+
+!> Copy from the main diagnostic arrays to the grid storage as well as the native thicknesses
+subroutine diag_copy_diag_to_storage(grid_storage, h_state, diag)
+  type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
+  real, dimension(:,:,:),  intent(in)    :: h_state     !< Current model thicknesses
+  type(diag_ctrl),         intent(in)    :: diag     !< Diagnostic control structure used as the contructor
+
+  integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
+  grid_storage%h_state(:,:,:) = h_state(:,:,:)
+  do m = 1,grid_storage%num_diag_coords
+    grid_storage%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
+  enddo
+
+end subroutine diag_copy_diag_to_storage
+
+!> Copy from the stored diagnostic arrays to the main diagnostic grids
+subroutine diag_copy_storage_to_diag(diag, grid_storage)
+  type(diag_ctrl),         intent(inout) :: diag     !< Diagnostic control structure used as the contructor
+  type(diag_grid_storage), intent(in)    :: grid_storage !< Structure containing a snapshot of the target grids
+
+  integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
+  diag%diag_grid_overridden = .true.
+  do m = 1,grid_storage%num_diag_coords
+    diag%diag_remap_cs(m)%h(:,:,:) = grid_storage%diag_grids(m)%h(:,:,:)
+  enddo
+
+end subroutine diag_copy_storage_to_diag
+
+!> Save the current diagnostic grids in the temporary structure within diag
+subroutine diag_save_grids(diag)
+  type(diag_ctrl),         intent(inout) :: diag     !< Diagnostic control structure used as the contructor
+
+  integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (diag%num_diag_coords < 1) return
+
+  do m = 1,diag%num_diag_coords
+    diag%diag_grid_temp%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
+  enddo
+
+end subroutine diag_save_grids
+
+!> Restore the diagnostic grids from the temporary structure within diag
+subroutine diag_restore_grids(diag)
+  type(diag_ctrl),         intent(inout) :: diag     !< Diagnostic control structure used as the contructor
+
+  integer :: m
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (diag%num_diag_coords < 1) return
+
+  diag%diag_grid_overridden = .false.
+  do m = 1,diag%num_diag_coords
+    diag%diag_remap_cs(m)%h(:,:,:) = diag%diag_grid_temp%diag_grids(m)%h(:,:,:)
+  enddo
+
+end subroutine diag_restore_grids
+
+!> Deallocates the fields in the remapping fields container
+subroutine diag_grid_storage_end(grid_storage)
+  type(diag_grid_storage), intent(inout) :: grid_storage !< Structure containing a snapshot of the target grids
+  ! Local variables
+  integer :: m, nz
+
+  ! Don't do anything else if there are no remapped coordinates
+  if (grid_storage%num_diag_coords < 1) return
+
+  ! Deallocate memory for the native space
+  deallocate(grid_storage%h_state)
+  ! Loop through and deallocate memory for the grid on each target coordinate
+  do m = 1, grid_storage%num_diag_coords
+    deallocate(grid_storage%diag_grids(m)%h)
+  enddo
+  ! Deallocate diagnostic remapping structures
+  deallocate(grid_storage%diag_grids)
+end subroutine diag_grid_storage_end
 
 end module MOM_diag_mediator
