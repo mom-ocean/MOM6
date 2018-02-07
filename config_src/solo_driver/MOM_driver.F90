@@ -30,6 +30,7 @@ program MOM_main
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
+  use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : MOM_state_type, step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
@@ -295,11 +296,10 @@ program MOM_main
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
-  fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
+  call get_MOM_state_elements(MSp, G=grid, GV=GV, C_p=fluxes%C_p)
   Master_Time = Time
-  grid => MSp%G
-  GV   => MSp%GV
+
   call callTree_waypoint("done initialize_MOM")
 
   call extract_surface_state(MSp, sfc_state, MOM_CSp)
@@ -533,10 +533,11 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-         "with inconsistent dynamics and advective times.  Additional restart fields "//&
+    if (.not.MOM_state_is_synchronized(MSp)) &
+      call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
-     if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
+    if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
          "End of MOM_main reached with unused buoyancy fluxes. "//&
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")

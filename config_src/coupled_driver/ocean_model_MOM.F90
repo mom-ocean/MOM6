@@ -19,6 +19,7 @@ module ocean_model_mod
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
+use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM, only : get_ocean_stocks, step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
@@ -270,10 +271,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
-  OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
-  OS%C_p = OS%MSp%tv%C_p
-  OS%fluxes%C_p = OS%MSp%tv%C_p
-  use_temperature = ASSOCIATED(OS%MSp%tv%T)
+  call get_MOM_state_elements(OS%MSp, G=OS%grid, GV=OS%GV, C_p=OS%C_p, &
+                              use_temp=use_temperature)
+  OS%fluxes%C_p = OS%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -673,9 +673,10 @@ subroutine ocean_model_restart(OS, timestamp)
   type(ocean_state_type),        pointer :: OS
   character(len=*), intent(in), optional :: timestamp
 
-  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-       "with inconsistent dynamics and advective times.  Additional restart fields "//&
-       "that have not been coded yet would be required for reproducibility.")
+  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+      call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
       "restart files can only be created after the buoyancy forcing is applied.")
@@ -757,9 +758,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-       "with inconsistent dynamics and advective times.  Additional restart fields "//&
-       "that have not been coded yet would be required for reproducibility.")
+  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+    call MOM_error(WARNING, "ocean_model_save_restart called with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")

@@ -36,6 +36,7 @@ use MOM_cpu_clock,        only : CLOCK_SUBCOMPONENT
 use MOM,                  only: initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
 use MOM,                  only: extract_surface_state, allocate_surface_state
 use MOM,                  only: finish_MOM_initialization, step_offline
+use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM_forcing_type,     only: forcing, forcing_diags, register_forcing_type_diags
 use MOM_forcing_type,     only: allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only: mech_forcing_diags, forcing_accumulate, forcing_diagnostics
@@ -810,10 +811,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       input_restart_file=input_restart_file, diag_ptr=OS%diag, &
                       count_calls=.true.)
-  OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
-  OS%C_p = OS%MSp%tv%C_p
-  OS%fluxes%C_p = OS%MSp%tv%C_p
-  use_temperature = ASSOCIATED(OS%MSp%tv%T)
+  call get_MOM_state_elements(OS%MSp, G=OS%grid, GV=OS%GV, C_p=OS%fluxes%C_p, &
+                              use_temp=use_temperature)
+  OS%C_p = OS%fluxes%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
