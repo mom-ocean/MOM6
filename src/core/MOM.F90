@@ -56,11 +56,12 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_C
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
-use MOM_diagnostics,           only : write_static_fields, diagnostics_CS, surface_diag_IDs
+use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, post_surface_diagnostics
-use MOM_diag_to_Z,             only : calculate_Z_diag_fields, calculate_Z_transport
-use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, register_Z_tracer, diag_to_Z_CS
-use MOM_diag_to_Z,             only : MOM_diag_to_Z_end
+use MOM_diagnostics,           only : write_static_fields, transport_remap_grid_needed
+use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
+use MOM_diag_to_Z,             only : calculate_Z_diag_fields, register_Z_tracer
+use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, MOM_diag_to_Z_end, diag_to_Z_CS
 use MOM_dynamics_unsplit,      only : step_MOM_dyn_unsplit, register_restarts_dyn_unsplit
 use MOM_dynamics_unsplit,      only : initialize_dyn_unsplit, end_dyn_unsplit
 use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
@@ -140,13 +141,6 @@ type MOM_diag_IDs
   ! 2-d state field
   integer :: id_ssh_inst = -1
 end type MOM_diag_IDs
-
-!> A structure with diagnostic IDs of mass transport related diagnostics
-type transport_diag_IDs
-  ! Diagnostics for tracer horizontal transport
-  integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
-  integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
-end type transport_diag_IDs
 
 !> Structure describing the state of the ocean.
 type, public :: MOM_state_type ; private
@@ -2355,47 +2349,6 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
       Time, 'Instantaneous Sea Surface Height', 'm', missing)
 end subroutine register_diags
 
-!> Register certain diagnostics related to transports
-subroutine register_transport_diags(Time, G, GV, IDs, diag, missing)
-  type(time_type),          intent(in)    :: Time  !< current model time
-  type(ocean_grid_type),    intent(in)    :: G     !< ocean grid structure
-  type(verticalGrid_type),  intent(in)    :: GV    !< ocean vertical grid structure
-  type(transport_diag_IDs), intent(inout) :: IDs   !< A structure with the diagnostic IDs.
-  type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
-  real,                     intent(in)    :: missing !< The value to use to fill in missing data
-
-  real :: H_convert
-  character(len=48) :: thickness_units
-
-  thickness_units = get_thickness_units(GV)
-  if (GV%Boussinesq) then
-    H_convert = GV%H_to_m
-  else
-    H_convert = GV%H_to_kg_m2
-  endif
-
-  ! Diagnostics related to tracer and mass transport
-  IDs%id_uhtr = register_diag_field('ocean_model', 'uhtr', diag%axesCuL, Time, &
-      'Accumulated zonal thickness fluxes to advect tracers', 'kg', &
-      y_cell_method='sum', v_extensive=.true., conversion=H_convert)
-  IDs%id_vhtr = register_diag_field('ocean_model', 'vhtr', diag%axesCvL, Time, &
-      'Accumulated meridional thickness fluxes to advect tracers', 'kg', &
-      x_cell_method='sum', v_extensive=.true., conversion=H_convert)
-  IDs%id_umo = register_diag_field('ocean_model', 'umo', &
-      diag%axesCuL, Time, 'Ocean Mass X Transport', 'kg s-1', &
-      standard_name='ocean_mass_x_transport', y_cell_method='sum', v_extensive=.true.)
-  IDs%id_vmo = register_diag_field('ocean_model', 'vmo', &
-      diag%axesCvL, Time, 'Ocean Mass Y Transport', 'kg s-1', &
-      standard_name='ocean_mass_y_transport', x_cell_method='sum', v_extensive=.true.)
-  IDs%id_umo_2d = register_diag_field('ocean_model', 'umo_2d', &
-      diag%axesCu1, Time, 'Ocean Mass X Transport Vertical Sum', 'kg s-1', &
-      standard_name='ocean_mass_x_transport_vertical_sum', y_cell_method='sum')
-  IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
-      diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
-      standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
-
-end subroutine register_transport_diags
-
 !> This subroutine sets up clock IDs for timing various subroutines.
 subroutine MOM_timing_init(CS)
   type(MOM_control_struct), intent(in) :: CS  !< control structure set up by initialize_MOM.
@@ -2425,95 +2378,6 @@ subroutine MOM_timing_init(CS)
  endif
 
 end subroutine MOM_timing_init
-
-!> This routine posts diagnostics of the transports, including the subgridscale
-!! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans, &
-                                      diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
-  type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
-  type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: uhtr !< Accumulated zonal thickness fluxes used
-                                                  !! to advect tracers (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                            intent(in)    :: vhtr !< Accumulated meridional thickness fluxes
-                                                  !! used to advect tracers (m3 or kg)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h   !< The updated layer thicknesses, in H
-  type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
-  type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
-  real,                     intent(in)    :: dt_trans !< total time step associated with the transports, in s.
-  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
-                                                 !! the transports to depth space
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: T_pre_dyn !< Temperature before the transports, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: S_pre_dyn !< Salinity before the transports, in H.
-
-  real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
-  real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport, in kg s-1
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport, in kg s-1
-  real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
-  integer :: i, j, k, is, ie, js, je, nz
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  call cpu_clock_begin(id_clock_Z_diag)
-  call calculate_Z_transport(uhtr, vhtr, h, dt_trans, G, GV, diag_to_Z_CSp)
-  call cpu_clock_end(id_clock_Z_diag)
-
-  ! Post mass transports, including SGS
-  ! Build the remap grids using the layer thicknesses from before the dynamics
-  if (transport_remap_grid_needed(IDs)) &
-    call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
-
-  H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
-  if (IDs%id_umo_2d > 0) then
-    umo2d(:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      umo2d(I,j) = umo2d(I,j) + uhtr(I,j,k) * H_to_kg_m2_dt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_umo_2d, umo2d, diag)
-  endif
-  if (IDs%id_umo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
-      umo(I,j,k) = uhtr(I,j,k) * H_to_kg_m2_dt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_umo, umo, diag, alt_h = h_pre_dyn)
-  endif
-  if (IDs%id_vmo_2d > 0) then
-    vmo2d(:,:) = 0.0
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vmo2d(i,J) = vmo2d(i,J) + vhtr(i,J,k) * H_to_kg_m2_dt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_vmo_2d, vmo2d, diag)
-  endif
-  if (IDs%id_vmo > 0) then
-    ! Convert to kg/s. Modifying the array for diagnostics is allowed here since it is set to zero immediately below
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
-      vmo(i,J,k) = vhtr(i,J,k) * H_to_kg_m2_dt
-    enddo ; enddo ; enddo
-    call post_data(IDs%id_vmo, vmo, diag, alt_h = h_pre_dyn)
-  endif
-
-  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = h_pre_dyn)
-  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = h_pre_dyn)
-
-end subroutine post_transport_diagnostics
-
-!> Indicate whether it is necessary to save and recalculate the grid for finding
-!! remapped transports.
-function transport_remap_grid_needed(IDs) result(needed)
-  type(transport_diag_IDs), intent(in)    :: IDs !< A structure with transport-related diagnostic IDs
-  logical :: needed
-
-  needed = .false.
-  needed = needed .or. (IDs%id_uhtr > 0) .or. (IDs%id_vhtr > 0)
-  needed = needed .or. (IDs%id_umo > 0)  .or. (IDs%id_vmo > 0)
-end function transport_remap_grid_needed
 
 
 !> Set the fields that are needed for bitwise identical restarting
