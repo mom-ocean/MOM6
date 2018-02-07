@@ -359,10 +359,10 @@ contains
 !! occur inside of diabatic.
 subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS)
   type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
-  type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
-  type(surface),    intent(inout)    :: sfc_state     !< surface ocean state
-  type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-  real,             intent(in)       :: time_interval !< time interval covered by this run segment, in s.
+  type(forcing),      intent(inout)  :: fluxes        !< pointers to forcing fields
+  type(surface),      intent(inout)  :: sfc_state     !< surface ocean state
+  type(time_type),    intent(in)     :: Time_start    !< starting time of a segment, as a time type
+  real,               intent(in)     :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_state_type),     pointer  :: MS            !< structure describing the MOM state
   type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
 
@@ -478,7 +478,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
   CS%rel_time = 0.0
 
   tot_wt_ssh = 0.0
-  do j=js,je ; do i=is,ie ; MS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = CS%missing; enddo ; enddo
+  do j=js,je ; do i=is,ie ; MS%ave_ssh(i,j) = 0.0 ; ssh(i,j) = 0.0 ; enddo ; enddo
 
   if (associated(CS%VarMix)) then
     call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
@@ -505,9 +505,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
   if (CS%debug) then
     call MOM_state_chksum("Before steps ", u, v, h, MS%uh, MS%vh, G, GV)
+    call check_redundant("Before steps ", u, v, G)
     call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     call MOM_mech_forcing_chksum("Before steps", forces, G, haloshift=0)
-    call check_redundant("Before steps ", u, v, G)
     call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
   call cpu_clock_end(id_clock_other)
@@ -695,8 +695,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   call cpu_clock_begin(id_clock_diagnostics)
-  call enable_averaging(dt*n_max, Time_local, CS%diag)
-  call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, dt*n_max, sfc_state, MS%tv, ssh, fluxes)
+  call enable_averaging(time_interval, Time_local, CS%diag)
+  call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, time_interval, &
+                                sfc_state, MS%tv, ssh, fluxes)
   call disable_averaging(CS%diag)
   call cpu_clock_end(id_clock_diagnostics)
 
