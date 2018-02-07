@@ -38,7 +38,7 @@ use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
-use MOM_spatial_means,        only : global_area_mean, global_area_integral
+use MOM_spatial_means,        only : global_area_mean, global_area_integral, global_mass_integral
 use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
@@ -332,7 +332,7 @@ end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
 public step_MOM, step_offline
-public extract_surface_state
+public extract_surface_state, get_ocean_stocks
 public allocate_surface_state, deallocate_surface_state
 
 integer :: id_clock_ocean
@@ -2904,6 +2904,22 @@ subroutine extract_surface_state(MS, sfc_state, CS)
   call callTree_leave("extract_surface_sfc_state()")
 end subroutine extract_surface_state
 
+!> Find the global integrals of various quantities.
+subroutine get_ocean_stocks(MS, mass, heat, salt, on_PE_only)
+  type(MOM_state_type),  pointer :: MS   !< structure describing the MOM state
+  real,    optional, intent(out) :: heat  !< The globally integrated integrated ocean heat, in J.
+  real,    optional, intent(out) :: salt  !< The globally integrated integrated ocean salt, in kg.
+  real,    optional, intent(out) :: mass  !< The globally integrated integrated ocean mass, in kg.
+  logical, optional, intent(in)  :: on_PE_only !< If present and true, only sum on the local PE.
+
+  if (present(mass)) &
+    mass = global_mass_integral(MS%h, MS%G, MS%GV, on_PE_only=on_PE_only)
+  if (present(heat)) &
+    heat = MS%tv%C_p * global_mass_integral(MS%h, MS%G, MS%GV, MS%tv%T, on_PE_only=on_PE_only)
+  if (present(salt)) &
+    salt = 1.0e-3 * global_mass_integral(MS%h, MS%G, MS%GV, MS%tv%S, on_PE_only=on_PE_only)
+
+end subroutine get_ocean_stocks
 
 !> End of model
 subroutine MOM_end(MS, CS)
