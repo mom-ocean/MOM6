@@ -2555,7 +2555,8 @@ subroutine diag_copy_diag_to_storage(grid_storage, h_state, diag)
 
   grid_storage%h_state(:,:,:) = h_state(:,:,:)
   do m = 1,grid_storage%num_diag_coords
-    grid_storage%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
+    if (diag%diag_remap_cs(m)%nz > 0) &
+      grid_storage%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
   enddo
 
 end subroutine diag_copy_diag_to_storage
@@ -2572,7 +2573,8 @@ subroutine diag_copy_storage_to_diag(diag, grid_storage)
 
   diag%diag_grid_overridden = .true.
   do m = 1,grid_storage%num_diag_coords
-    diag%diag_remap_cs(m)%h(:,:,:) = grid_storage%diag_grids(m)%h(:,:,:)
+    if (diag%diag_remap_cs(m)%nz > 0) &
+      diag%diag_remap_cs(m)%h(:,:,:) = grid_storage%diag_grids(m)%h(:,:,:)
   enddo
 
 end subroutine diag_copy_storage_to_diag
@@ -2587,7 +2589,8 @@ subroutine diag_save_grids(diag)
   if (diag%num_diag_coords < 1) return
 
   do m = 1,diag%num_diag_coords
-    diag%diag_grid_temp%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
+    if (diag%diag_remap_cs(m)%nz > 0) &
+      diag%diag_grid_temp%diag_grids(m)%h(:,:,:) = diag%diag_remap_cs(m)%h(:,:,:)
   enddo
 
 end subroutine diag_save_grids
@@ -2603,7 +2606,8 @@ subroutine diag_restore_grids(diag)
 
   diag%diag_grid_overridden = .false.
   do m = 1,diag%num_diag_coords
-    diag%diag_remap_cs(m)%h(:,:,:) = diag%diag_grid_temp%diag_grids(m)%h(:,:,:)
+    if (diag%diag_remap_cs(m)%nz > 0) &
+      diag%diag_remap_cs(m)%h(:,:,:) = diag%diag_grid_temp%diag_grids(m)%h(:,:,:)
   enddo
 
 end subroutine diag_restore_grids
