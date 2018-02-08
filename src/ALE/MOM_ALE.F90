@@ -397,7 +397,7 @@ subroutine ALE_main( G, GV, h, u, v, tv, Reg, CS, dt, frac_shelf_h)
   ! The presence of dt is used for expediency to distinguish whether ALE_main is being called during init
   ! or in the main loop. Tendency diagnostics in remap_all_state_vars also rely on this logic.
   if (present(dt)) then
-    call diag_update_remap_grids(CS%diag, alt_h = h_new)
+    call diag_update_remap_grids(CS%diag)
   endif
   ! Remap all variables from old grid h onto new grid h_new
   call remap_all_state_vars( CS%remapCS, CS, G, GV, h, h_new, Reg, -dzRegrid, &
@@ -809,7 +809,6 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
 
   if (present(dt)) then
     Idt = 1.0/dt
-    call diag_update_remap_grids(CS_ALE%diag, alt_h = h_old)
   endif
 
   ! Remap tracer
@@ -820,9 +819,7 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
       Tr => Reg%Tr(m)
       do j = G%jsc,G%jec
         do i = G%isc,G%iec
-
           if (G%mask2dT(i,j)>0.) then
-
             ! Build the start and final grids
             h1(:) = h_old(i,j,:)
             h2(:) = h_new(i,j,:)
@@ -842,22 +839,18 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
                 enddo
               endif
             endif
-
             ! update tracer concentration
             Tr%t(i,j,:) = u_column(:)
-
           endif
-
         enddo ! i
       enddo ! j
 
-
       ! tendency diagnostics.
       if (Tr%id_remap_conc > 0) then
-        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag, alt_h = h_old)
+        call post_data(Tr%id_remap_conc, work_conc, CS_ALE%diag)
       endif
       if (Tr%id_remap_cont > 0) then
-        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag, alt_h = h_old)
+        call post_data(Tr%id_remap_cont, work_cont, CS_ALE%diag)
       endif
       if (Tr%id_remap_cont_2d > 0) then
         do j = G%jsc,G%jec
@@ -927,12 +920,12 @@ subroutine remap_all_state_vars(CS_remapping, CS_ALE, G, GV, h_old, h_new, Reg, 
     enddo
   endif
 
-  if (CS_ALE%id_vert_remap_h > 0) call post_data(CS_ALE%id_vert_remap_h, h_new, CS_ALE%diag)
+  if (CS_ALE%id_vert_remap_h > 0) call post_data(CS_ALE%id_vert_remap_h, h_old, CS_ALE%diag)
   if (CS_ALE%id_vert_remap_h_tendency > 0) then
     do k = 1, nz ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       work_cont(i,j,k) = (h_new(i,j,k) - h_old(i,j,k))*Idt
     enddo ; enddo ; enddo
-    call post_data(CS_ALE%id_vert_remap_h_tendency, work_cont, CS_ALE%diag, alt_h = h_new)
+    call post_data(CS_ALE%id_vert_remap_h_tendency, work_cont, CS_ALE%diag)
   endif
   if (show_call_tree) call callTree_waypoint("v remapped (remap_all_state_vars)")
   if (show_call_tree) call callTree_leave("remap_all_state_vars()")
