@@ -46,7 +46,6 @@ use MOM_restart, only : MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_OBC_values
 use MOM_variables, only : surface
 use MOM_verticalGrid, only : verticalGrid_type
 
@@ -289,17 +288,15 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
         else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
-                                 0.0, OBC_in_v=OBC_tr1_v)
+      ! Steal from updated DOME in the fullness of time.
     else
-      ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+      ! Steal from updated DOME in the fullness of time.
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
     do m=2,lntr
       call query_vardesc(CS%tr_desc(m), name, caller="USER_initialize_tracer")
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+      ! Steal from updated DOME in the fullness of time.
     enddo
   endif
 

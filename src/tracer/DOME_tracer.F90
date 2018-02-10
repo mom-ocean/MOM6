@@ -2,25 +2,26 @@ module DOME_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : diag_to_Z_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_hor_index, only : hor_index_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_diag_mediator,   only : diag_ctrl
+use MOM_diag_to_Z,       only : diag_to_Z_CS
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,    only : forcing
+use MOM_hor_index,       only : hor_index_type
+use MOM_grid,            only : ocean_grid_type
+use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
+use MOM_open_boundary,   only : OBC_segment_type
+use MOM_restart,         only : MOM_restart_CS
+use MOM_sponge,          only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,    only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_registry, only : add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_variables,       only : surface
+use MOM_verticalGrid,    only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
+use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -79,6 +80,7 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
+  type(OBC_segment_type), pointer :: segment
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
@@ -277,11 +279,15 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   if (associated(OBC)) then
     call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
     if (OBC%specified_v_BCs_exist_globally) then
-      allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-        else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
+      segment => OBC%segment(1)
+      allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
+      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
+        if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
+        else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
+      call register_segment_tracer(CS%tr_desc(1), param_file, GV, &
+                                   OBC%segment(1), OBC_scalar=dye)
       call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
                                  0.0, OBC_in_v=OBC_tr1_v)
     else
@@ -293,6 +299,8 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     do m=2,NTR
       call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
       call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+      call register_segment_tracer(tr_desc(m), param_file, GV, &
+                                   OBC%segment(n), OBC_scalar=dye)
     enddo
   endif
 
