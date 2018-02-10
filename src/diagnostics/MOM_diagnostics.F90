@@ -1154,7 +1154,8 @@ end subroutine calculate_derivs
 
 !> This routine posts diagnostics of various ocean surface and integrated
 !! quantities at the time the ocean state is reported back to the caller
-subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, ssh, fluxes)
+subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
+                                    ssh, ssh_ibc)
   type(surface_diag_IDs),   intent(in) :: IDs !< A structure with the diagnostic IDs.
   type(ocean_grid_type),    intent(in) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in) :: GV  !< ocean vertical grid structure
@@ -1163,9 +1164,11 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, ssh
   type(surface),            intent(in) :: sfc_state !< structure describing the ocean surface state
   type(thermo_var_ptrs),    intent(in) :: tv  !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), &
-                            intent(in) :: ssh !< Time mean surface height without
-                                              !! corrections for ice displacement(m)
-  type(forcing),            intent(in) :: fluxes !< pointers to forcing fields
+                            intent(in) :: ssh !< Time mean surface height without corrections for
+                                              !! ice displacement (m)
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(in) :: ssh_ibc !< Time mean surface height with corrections for
+                                              !! ice displacement and the inverse barometer (m)
 
   real, dimension(SZI_(G),SZJ_(G)) :: work_2d  ! A 2-d work array
   real, dimension(SZI_(G),SZJ_(G)) :: &
@@ -1192,14 +1195,8 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, ssh
   if (IDs%id_zos > 0 .or. IDs%id_zossq > 0) then
     zos(:,:) = 0.0
     do j=js,je ; do i=is,ie
-      zos(i,j) = ssh(i,j)
+      zos(i,j) = ssh_ibc(i,j)
     enddo ; enddo
-    if (ASSOCIATED(fluxes%p_surf)) then
-      do j=js,je ; do i=is,ie
-        zos(i,j) = zos(i,j) + G%mask2dT(i,j)*fluxes%p_surf(i,j) / &
-                             (GV%Rho0 * GV%g_Earth)
-      enddo ; enddo
-    endif
     zos_area_mean = global_area_mean(zos, G)
     do j=js,je ; do i=is,ie
       zos(i,j) = zos(i,j) - G%mask2dT(i,j)*zos_area_mean
