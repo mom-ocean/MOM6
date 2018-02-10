@@ -392,6 +392,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
   integer, save :: nt_debug = 1 ! running number of iterations, for debugging only.
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
   integer       :: n_max  ! number of steps to take in this call
+  integer, save :: ndyn_per_adv = 0 ! Number of calls to dynamics since the last call to advection
+                                    ! I think this has to have the save attribute if thermo_spans coupling
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -618,8 +620,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
     call cpu_clock_begin(id_clock_dynamics)
     call disable_averaging(CS%diag)
 
-    ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-    call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
+    ! Store pre-dynamics grids for proper diagnostic remapping for transports or advective tendencies
+    ! If there are more dynamics steps per advective steps (i.e DT_THERM /= DT), this needs to be the
+    ! stored at the first call
+    if (ndyn_per_adv == 0 .and. CS%t_dyn_rel_adv == 0.) then
+      call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
+      ndyn_per_adv = ndyn_per_adv + 1
+    endif
 
     if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse .and. CS%thickness_diffuse_first) then
       if (thermo_does_span_coupling) then
@@ -804,6 +811,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS)
 
     if (do_advection) then ! Do advective transport and lateral tracer mixing.
       call step_MOM_tracer_dyn(CS, G, GV, h, CS%tv, Time_local)
+      ndyn_per_adv = 0
     endif
 
     !===========================================================================
