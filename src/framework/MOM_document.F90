@@ -32,12 +32,14 @@ type, public :: doc_type ; private
   integer :: unitAll = -1           ! The open unit number for docFileBase + .all.
   integer :: unitShort = -1         ! The open unit number for docFileBase + .short.
   integer :: unitLayout = -1        ! The open unit number for docFileBase + .layout.
+  integer :: unitDebugging  = -1    ! The open unit number for docFileBase + .debugging.
   logical :: filesAreOpen = .false. ! True if any files were successfully opened.
   character(len=mLen) :: docFileBase = '' ! The basename of the files where run-time
                                     ! parameters, settings and defaults are documented.
   logical :: complete = .true.      ! If true, document all parameters.
   logical :: minimal = .true.       ! If true, document non-default parameters.
   logical :: layout = .true.        ! If true, document layout parameters.
+  logical :: debugging = .true.     ! If true, document debugging parameters.
   logical :: defineSyntax = .false. ! If true, use #def syntax instead of a=b syntax
   logical :: warnOnConflicts = .false. ! Cause a WARNING error if defaults differ.
   integer :: commentColumn = 32     ! Number of spaces before the comment marker.
@@ -78,12 +80,14 @@ subroutine doc_param_none(doc, varname, desc, units)
   endif
 end subroutine doc_param_none
 
-subroutine doc_param_logical(doc, varname, desc, units, val, default, layoutParam)
+subroutine doc_param_logical(doc, varname, desc, units, val, default, &
+                             layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   logical,          intent(in) :: val
   logical,          optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for logicals.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -109,16 +113,19 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default, layoutPara
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 end subroutine doc_param_logical
 
-subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, layoutParam)
+subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
+                                   layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   logical,          intent(in) :: vals(:)
   logical,          optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for arrays of logicals.
   integer :: i
   character(len=mLen) :: mesg
@@ -152,16 +159,19 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, lay
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 end subroutine doc_param_logical_array
 
-subroutine doc_param_int(doc, varname, desc, units, val, default, layoutParam)
+subroutine doc_param_int(doc, varname, desc, units, val, default, &
+                         layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   integer,          intent(in) :: val
   integer,          optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for integers.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -181,16 +191,19 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, layoutParam)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 end subroutine doc_param_int
 
-subroutine doc_param_int_array(doc, varname, desc, units, vals, default, layoutParam)
+subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
+                               layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   integer,          intent(in) :: vals(:)
   integer,          optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for arrays of integers.
   integer :: i
   character(len=mLen) :: mesg
@@ -216,16 +229,18 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, layoutP
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_int_array
 
-subroutine doc_param_real(doc, varname, desc, units, val, default)
+subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   real,             intent(in) :: val
   real,             optional, intent(in) :: default
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for reals.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -245,15 +260,17 @@ subroutine doc_param_real(doc, varname, desc, units, val, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             debuggingParam=debuggingParam)
   endif
 end subroutine doc_param_real
 
-subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
+subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   real,             intent(in) :: vals(:)
   real,             optional, intent(in) :: default
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for arrays of reals.
   integer :: i
   character(len=mLen) :: mesg
@@ -276,17 +293,20 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_real_array
 
-subroutine doc_param_char(doc, varname, desc, units, val, default, layoutParam)
+subroutine doc_param_char(doc, varname, desc, units, val, default, &
+                          layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   character(len=*), intent(in) :: val
   character(len=*), optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for character strings.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -304,7 +324,8 @@ subroutine doc_param_char(doc, varname, desc, units, val, default, layoutParam)
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_char
@@ -356,12 +377,14 @@ subroutine doc_closeBlock(doc, blockName)
   endif
 end subroutine doc_closeBlock
 
-subroutine doc_param_time(doc, varname, desc, units, val, default, layoutParam)
+subroutine doc_param_time(doc, varname, desc, units, val, default, &
+                          layoutParam, debuggingParam)
   type(doc_type),   pointer    :: doc
   character(len=*), intent(in) :: varname, desc, units
   type(time_type),  intent(in) :: val
   type(time_type),  optional, intent(in) :: default
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
 ! This subroutine handles parameter documentation for time-type variables.
 !  ### This needs to be written properly!
   integer :: numspc
@@ -378,30 +401,34 @@ subroutine doc_param_time(doc, varname, desc, units, val, default, layoutParam)
     if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, layoutParam=layoutParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
+                             layoutParam=layoutParam, debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_time
 
-subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, layoutParam)
+subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
+                               layoutParam, debuggingParam)
   type(doc_type),             intent(in) :: doc
   character(len=*),           intent(in) :: vmesg, desc
   logical,          optional, intent(in) :: valueWasDefault
   integer,          optional, intent(in) :: indent
   logical,          optional, intent(in) :: layoutParam
+  logical,          optional, intent(in) :: debuggingParam
   character(len=mLen) :: mesg
   integer :: start_ind = 1, end_ind, indnt, tab, len_tab, len_nl
-  logical :: all, short, layout
+  logical :: all, short, layout, debug
 
-  layout = .false.
-  if (present(layoutParam)) layout = layoutParam
-  all = doc%complete .and. (doc%unitAll > 0) .and. .not. layout
-  short = doc%minimal .and. (doc%unitShort > 0) .and. .not. layout
+  layout = .false. ; if (present(layoutParam)) layout = layoutParam
+  debug = .false. ; if (present(debuggingParam)) debug = debuggingParam
+  all = doc%complete .and. (doc%unitAll > 0) .and. .not. (layout .or. debug)
+  short = doc%minimal .and. (doc%unitShort > 0) .and. .not. (layout .or. debug)
   if (present(valueWasDefault)) short = short .and. (.not. valueWasDefault)
 
   if (all) write(doc%unitAll, '(a)') trim(vmesg)
   if (short) write(doc%unitShort, '(a)') trim(vmesg)
   if (layout) write(doc%unitLayout, '(a)') trim(vmesg)
+  if (debug) write(doc%unitDebugging, '(a)') trim(vmesg)
 
   if (len_trim(desc) == 0) return
 
@@ -426,6 +453,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, layout
       if (all) write(doc%unitAll, '(a)') trim(mesg)
       if (short) write(doc%unitShort, '(a)') trim(mesg)
       if (layout) write(doc%unitLayout, '(a)') trim(mesg)
+      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
     else
       mesg = repeat(" ",indnt)//"! "//trim(desc(start_ind:))
       do ; tab = index(mesg, "\t")
@@ -435,6 +463,7 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, layout
       if (all) write(doc%unitAll, '(a)') trim(mesg)
       if (short) write(doc%unitShort, '(a)') trim(mesg)
       if (layout) write(doc%unitLayout, '(a)') trim(mesg)
+      if (debug) write(doc%unitDebugging, '(a)') trim(mesg)
       exit
     endif
 
@@ -475,9 +504,14 @@ function real_string(val)
   elseif (val == 0.) then
     real_string = "0.0"
   else
-    write(real_string(1:32), '(ES23.14)') val
-    if (.not.testFormattedFloatIsReal(real_string,val)) then
-     write(real_string(1:32), '(ES23.15)') val
+    if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
+      write(real_string(1:32), '(ES24.14E3)') val
+      if (.not.testFormattedFloatIsReal(real_string,val)) &
+        write(real_string(1:32), '(ES24.15E3)') val
+    else
+      write(real_string(1:32), '(ES23.14)') val
+      if (.not.testFormattedFloatIsReal(real_string,val)) &
+        write(real_string(1:32), '(ES23.15)') val
     endif
     do
       ind = index(real_string,"0E")
@@ -632,10 +666,10 @@ end subroutine doc_function
 
 ! ----------------------------------------------------------------------
 
-subroutine doc_init(docFileBase, doc, minimal, complete)
+subroutine doc_init(docFileBase, doc, minimal, complete, layout, debugging)
   character(len=*),  intent(in)  :: docFileBase
   type(doc_type),    pointer     :: doc
-  logical, optional, intent(in)  :: minimal, complete
+  logical, optional, intent(in)  :: minimal, complete, layout, debugging
 ! Arguments: docFileBase - The name of the doc file.
 !  (inout)   doc - The doc_type to populate.
 
@@ -645,7 +679,10 @@ subroutine doc_init(docFileBase, doc, minimal, complete)
 
   doc%docFileBase = docFileBase
   if (present(minimal)) doc%minimal = minimal
-  if (present(minimal)) doc%complete = complete
+  if (present(complete)) doc%complete = complete
+  if (present(layout)) doc%layout = layout
+  if (present(debugging)) doc%debugging = debugging
+
 end subroutine doc_init
 
 subroutine open_doc_file(doc)
@@ -666,7 +703,8 @@ subroutine open_doc_file(doc)
       open(doc%unitAll, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='REPLACE', iostat=ios)
       write(doc%unitAll, '(a)') &
-       '! This file was written by the model and records all non-layout parameters used at run-time.'
+       '! This file was written by the model and records all non-layout '//&
+       'or debugging parameters used at run-time.'
     else ! This file is being reopened, and should be appended.
       open(doc%unitAll, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
            action='WRITE', status='OLD', position='APPEND', iostat=ios)
@@ -720,6 +758,27 @@ subroutine open_doc_file(doc)
     doc%filesAreOpen = .true.
   endif
 
+  if ((len_trim(doc%docFileBase) > 0) .and. doc%debugging .and. (doc%unitDebugging<0)) then
+    new_file = .true. ; if (doc%unitDebugging /= -1) new_file = .false.
+    doc%unitDebugging = find_unused_unit_number()
+
+    write(fileName(1:240),'(a)') trim(doc%docFileBase)//'.debugging'
+    if (new_file) then
+      open(doc%unitDebugging, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
+           action='WRITE', status='REPLACE', iostat=ios)
+      write(doc%unitDebugging, '(a)') &
+       '! This file was written by the model and records the debugging parameters used at run-time.'
+    else ! This file is being reopened, and should be appended.
+      open(doc%unitDebugging, file=trim(fileName), access='SEQUENTIAL', form='FORMATTED', &
+           action='WRITE', status='OLD', position='APPEND', iostat=ios)
+    endif
+    inquire(doc%unitDebugging, opened=opened)
+    if ((.not.opened) .or. (ios /= 0)) then
+      call MOM_error(FATAL, "Failed to open doc file "//trim(fileName)//".")
+    endif
+    doc%filesAreOpen = .true.
+  endif
+
 end subroutine open_doc_file
 
 function find_unused_unit_number()
@@ -754,6 +813,11 @@ subroutine doc_end(doc)
   if (doc%unitLayout > 0) then
     close(doc%unitLayout)
     doc%unitLayout = -2
+  endif
+
+  if (doc%unitDebugging > 0) then
+    close(doc%unitDebugging)
+    doc%unitDebugging = -2
   endif
 
   doc%filesAreOpen = .false.

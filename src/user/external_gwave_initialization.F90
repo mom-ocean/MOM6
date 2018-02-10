@@ -8,6 +8,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
+use MOM_verticalGrid, only : verticalGrid_type
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -18,10 +19,11 @@ contains
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
-subroutine external_gwave_initialize_thickness(h, G, param_file, just_read_params)
-  type(ocean_grid_type), intent(in) :: G                      !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+subroutine external_gwave_initialize_thickness(h, G, GV, param_file, just_read_params)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -70,7 +72,7 @@ subroutine external_gwave_initialize_thickness(h, G, param_file, just_read_param
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=1,nz
-      h(i,j,k) = eta1D(K) - eta1D(K+1)
+      h(i,j,k) = GV%m_to_H * (eta1D(K) - eta1D(K+1))
     enddo
   enddo ; enddo
 

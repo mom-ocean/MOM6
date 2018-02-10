@@ -93,20 +93,30 @@ subroutine set_hycom_params(CS, max_interface_depths, max_layer_thickness, inter
 end subroutine set_hycom_params
 
 !> Build a HyCOM coordinate column
-subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, z_col, z_col_new)
+subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, &
+                               z_col, z_col_new, zScale, h_neglect, h_neglect_edge)
   type(hycom_CS),        intent(in)    :: CS !< Coordinate control structure
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in H)
   real, dimension(nz),   intent(in)    :: T, S !< T and S for column
-  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, in m
+  real, dimension(nz),   intent(in)    :: h  !< Layer thicknesses, (in m or H)
   real, dimension(nz),   intent(in)    :: p_col !< Layer pressure in Pa
   real, dimension(nz+1), intent(in)    :: z_col ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
+  real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
+                                                 !! to desired units for zInterface, perhaps m_to_H.
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h.
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h0.
 
   ! Local variables
   integer   :: k
   real, dimension(nz) :: rho_col, h_col_new ! Layer quantities
+  real :: z_scale
   real :: stretching ! z* stretching, converts z* to z.
   real :: nominal_z ! Nominal depth of interface is using z* (m or Pa)
   real :: hNew
@@ -115,6 +125,8 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, z_co
 
   maximum_depths_set = allocated(CS%max_interface_depths)
   maximum_h_set = allocated(CS%max_layer_thickness)
+
+  z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Work bottom recording potential density
   call calculate_density(T, S, p_col, rho_col, 1, nz, eqn_of_state)
@@ -127,14 +139,14 @@ subroutine build_hycom1_column(CS, eqn_of_state, nz, depth, h, T, S, p_col, z_co
   ! Interpolates for the target interface position with the rho_col profile
   ! Based on global density profile, interpolate to generate a new grid
   call build_and_interpolate_grid(CS%interp_CS, rho_col, nz, h(:), z_col, &
-       CS%target_density, nz, h_col_new, z_col_new)
+           CS%target_density, nz, h_col_new, z_col_new, h_neglect, h_neglect_edge)
 
   ! Sweep down the interfaces and make sure that the interface is at least
   ! as deep as a nominal target z* grid
   nominal_z = 0.
   stretching = z_col(nz+1) / depth ! Stretches z* to z
   do k = 2, nz+1
-    nominal_z = nominal_z + CS%coordinateResolution(k-1) * stretching
+    nominal_z = nominal_z + (z_scale * CS%coordinateResolution(k-1)) * stretching
     z_col_new(k) = max( z_col_new(k), nominal_z )
     z_col_new(k) = min( z_col_new(k), z_col(nz+1) )
   enddo

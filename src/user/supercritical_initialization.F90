@@ -68,11 +68,6 @@ subroutine supercritical_set_OBC_data(OBC, G, param_file)
     else
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
-!     do k=1,G%ke
-!       do J=JsdB,JedB ; do i=isd,ied
-!         segment%normal_vel(i,J,k) = 0.0
-!       enddo ; enddo
-!     enddo
       do J=JsdB,JedB ; do i=isd,ied
         segment%normal_vel_bt(i,J) = 0.0
       enddo ; enddo

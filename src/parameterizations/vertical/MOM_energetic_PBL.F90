@@ -638,9 +638,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       Kd(i,K) = 0.0
     enddo ; enddo
     do i=is,ie
-       CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
-       !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
-       sfc_connected(i) = .true.
+      CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
+      !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
+      sfc_connected(i) = .true.
     enddo
 
     if (debug) then
@@ -680,7 +680,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       iL_Ekman   = absf(i)/U_star
       iL_Obukhov = buoy_flux(i,j)*vonkar/U_Star**3
 
-      if (CS%Mstar_Mode.eq.CS%CONST_MSTAR) then
+      if (CS%Mstar_Mode == CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
 
@@ -774,14 +774,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (CS%Mstar_Mode.gt.0) then
         ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
         ! First solve for the TKE to PE length scale
-          if (CS%MSTAR_MODE.eq.CS%MLD_o_OBUKHOV) then
+          if (CS%MSTAR_MODE == CS%MLD_o_OBUKHOV) then
             MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
-            if ((MLD_over_Stab) .le. 0.0) then
+            if ((MLD_over_Stab) <= 0.0) then
               !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
               MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
             else
               if (CS%MSTAR_CAP>=0.) then
-                if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
+                if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab  <= CS%MSTAR_XINT_UP)) then
                 !If using flat cap (or if using asymptotic cap
                 !   but within linear regime we can make use of same code)
                   MSTAR_mix = min(CS%MSTAR_CAP, &
@@ -797,10 +797,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
               endif
             endif
-          elseif (CS%MSTAR_MODE.eq.CS%EKMAN_o_OBUKHOV) then
+          elseif (CS%MSTAR_MODE == CS%EKMAN_o_OBUKHOV) then
+            !### Please refrain from using the construct A / B / C in place of A/(B*C).
             mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable/u_star**2/(absf(i)+1.e-10))
             mstar_ROT =  CS%C_EK*log(max(1.,u_star/(absf(i)+1.e-10)/mld_guess))
-            if ( CS%MSTAR_CAP.le.0.0) then !No cap.
+            if ( CS%MSTAR_CAP <= 0.0) then !No cap.
               MSTAR_MIX = max(mstar_STAB,& ! 1st term if balance of rotation and stabilizing
                                     ! the balance is f(L_Ekman,L_Obukhov)
                               min(& ! 2nd term for forced stratification limited
@@ -907,7 +908,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           I_MLD = 1.0 / MLD_guess ; h_rsum = 0.0
           MixLen_shape(1) = 1.0
           do K=2,nz+1
-            h_rsum = h_rsum + h(i,k-1)
+            h_rsum = h_rsum + h(i,k-1)*GV%H_to_m
             if (CS%MixLenExponent==2.0)then
               MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
                    (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2!CS%MixLenExponent
@@ -1417,7 +1418,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do k=2,nz
             if (FIRST_OBL) then !Breaks when OBL found
               if (Vstar_Used(k) > 1.e-10 .and. k < nz) then
-                MLD_FOUND = MLD_FOUND+h(i,k-1)*GV%H_to_m
+                MLD_FOUND = MLD_FOUND + h(i,k-1)*GV%H_to_m
               else
                 FIRST_OBL = .false.
                 if (MLD_FOUND-CS%MLD_tol > MLD_guess) then
@@ -1970,9 +1971,9 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
   real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
   real :: pi, u10
   pi = 4.0*atan(1.0)
-  ! Computing u10 based on u_star and COARE 3.5 relationships
-  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
-  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
+  if (ustar .gt. 0.0) then
+    ! Computing u10 based on u_star and COARE 3.5 relationships
+    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
     us = us_to_u10*u10
     !

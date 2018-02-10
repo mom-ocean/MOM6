@@ -59,7 +59,7 @@ public diag_axis_init, ocean_register_diag, register_static_field
 public register_scalar_field
 public define_axes_group, diag_masks_set
 public diag_register_area_ids
-public diag_associate_volume_cell_measure
+public register_cell_measure, diag_associate_volume_cell_measure
 public diag_get_volume_cell_measure_dm_id
 public diag_set_state_ptrs, diag_update_remap_grids
 
@@ -181,6 +181,7 @@ type, public :: diag_ctrl
   real, dimension(:,:,:), pointer :: S => null()
   type(EOS_type),  pointer :: eqn_of_state => null()
   type(ocean_grid_type), pointer :: G => null()
+  type(verticalGrid_type), pointer :: GV => null()
 
   ! The volume cell measure (special diagnostic) manager id
   integer :: volume_cell_measure_dm_id = -1
@@ -504,6 +505,21 @@ subroutine diag_register_area_ids(diag_cs, id_area_t, id_area_q)
   endif
 end subroutine diag_register_area_ids
 
+!> Sets a handle inside diagnostics mediator to associate 3d cell measures
+subroutine register_cell_measure(G, diag, Time)
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
+  type(diag_ctrl), target, intent(inout) :: diag !< Regulates diagnostic output
+  type(time_type),         intent(in)    :: Time !< Model time
+  ! Local variables
+  integer :: id
+  id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
+                           Time, 'Ocean grid-cell volume', 'm3', &
+                           standard_name='ocean_volume', v_extensive=.true., &
+                           x_cell_method='sum', y_cell_method='sum')
+  call diag_associate_volume_cell_measure(diag, id)
+
+end subroutine register_cell_measure
+
 !> Attaches the id of cell volumes to axes groups for use with cell_measures
 subroutine diag_associate_volume_cell_measure(diag_cs, id_h_volume)
   type(diag_ctrl),   intent(inout) :: diag_cs     !< Diagnostics control structure
@@ -802,7 +818,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     call MOM_error(FATAL,"post_data_2d_low: peculiar size in j-direction")
   endif
 
-  if (diag%conversion_factor/=0.) then
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2) ) )
     do j=jsv,jev ; do i=isv,iev
       if (field(i,j) == diag_cs%missing_value) then
@@ -846,7 +862,8 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
                        weight=diag_cs%time_int)
     endif
   endif
-  if (diag%conversion_factor/=0.) deallocate( locfield )
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+    deallocate( locfield )
 
 end subroutine post_data_2d_low
 
@@ -926,7 +943,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs( &
               diag%axes%vertical_coordinate_number), &
-              diag_cs%G, h_diag, staggered_in_x, staggered_in_y, &
+              diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
               diag%axes%mask3d, diag_cs%missing_value, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
@@ -989,8 +1006,9 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:,:), pointer :: locfield => NULL()
   logical :: used  ! The return value of send_data is not used for anything.
+  logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
-  integer :: isv, iev, jsv, jev, ks, ke, i, j, k
+  integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1024,10 +1042,26 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     call MOM_error(FATAL,"post_data_3d_low: peculiar size in j-direction")
   endif
 
-  if (diag%conversion_factor/=0.) then
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) then
     ks = lbound(field,3) ; ke = ubound(field,3)
     allocate( locfield( lbound(field,1):ubound(field,1), lbound(field,2):ubound(field,2), ks:ke ) )
-    do k=ks,ke ; do j=jsv,jev ; do i=isv,iev
+    ! locfield(:,:,:) = 0.0  ! Zeroing out this array would be a good idea, but it appears not to be necessary.
+    isv_c = isv ; jsv_c = jsv
+    if (diag%fms_xyave_diag_id>0) then
+      staggered_in_x = diag%axes%is_u_point .or. diag%axes%is_q_point
+      staggered_in_y = diag%axes%is_v_point .or. diag%axes%is_q_point
+      ! When averaging a staggered field, edge points are always required.
+      if (staggered_in_x) isv_c = iev - (diag_cs%ie - diag_cs%is) - 1
+      if (staggered_in_y) jsv_c = jev - (diag_cs%je - diag_cs%js) - 1
+      if (isv_c < lbound(locfield,1)) call MOM_error(FATAL, &
+        "It is an error to average a staggered diagnostic field that does not "//&
+        "have i-direction space to represent the symmetric computational domain.")
+      if (jsv_c < lbound(locfield,2)) call MOM_error(FATAL, &
+        "It is an error to average a staggered diagnostic field that does not "//&
+        "have j-direction space to represent the symmetric computational domain.")
+    endif
+
+    do k=ks,ke ; do j=jsv_c,jev ; do i=isv_c,iev
       if (field(i,j,k) == diag_cs%missing_value) then
         locfield(i,j,k) = diag_cs%missing_value
       else
@@ -1075,7 +1109,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   if (diag%fms_xyave_diag_id>0) then
     call post_xy_average(diag_cs, diag, locfield)
   endif
-  if (diag%conversion_factor/=0.) deallocate( locfield )
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
+    deallocate( locfield )
 
 end subroutine post_data_3d_low
 
@@ -2047,8 +2082,9 @@ end subroutine diag_mediator_infrastructure_init
 
 !> diag_mediator_init initializes the MOM diag_mediator and opens the available
 !! diagnostics file, if appropriate.
-subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
+subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   type(ocean_grid_type), target, intent(inout) :: G  !< The ocean grid type.
+  type(verticalGrid_type), target, intent(in)  :: GV !< The ocean vertical grid structure
   integer,                    intent(in)    :: nz    !< The number of layers in the model's native grid.
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(diag_ctrl),            intent(inout) :: diag_cs !< A pointer to a type with many variables
@@ -2115,6 +2151,7 @@ subroutine diag_mediator_init(G, nz, param_file, diag_cs, doc_file_dir)
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
+  diag_cs%GV => GV
   diag_cs%h => null()
   diag_cs%T => null()
   diag_cs%S => null()
@@ -2226,7 +2263,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S)
 
   do i=1, diag_cs%num_diag_coords
     call diag_remap_update(diag_cs%diag_remap_cs(i), &
-                           diag_cs%G, h_diag, T_diag, S_diag, &
+                           diag_cs%G, diag_cs%GV, h_diag, T_diag, S_diag, &
                            diag_cs%eqn_of_state)
   enddo
 

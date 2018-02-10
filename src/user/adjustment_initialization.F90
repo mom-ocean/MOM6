@@ -42,7 +42,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -131,40 +131,40 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
       end do
       target_values = target_values - 1000.
       do j=js,je ; do i=is,ie
-          if (front_wave_length.ne.0.) then
-            y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / adjustment_width
-            yy = min(1.0, yy); yy = max(-1.0, yy)
-            yy = yy * 2. * acos( 0. )
-            y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
+        if (front_wave_length.ne.0.) then
+          y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
+          yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / adjustment_width
+          yy = min(1.0, yy); yy = max(-1.0, yy)
+          yy = yy * 2. * acos( 0. )
+          y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
+        else
+          y = 0.
+        endif
+        x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
+        x = min(1.0, x); x = max(-1.0, x)
+        x = x * acos( 0. )
+        delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
+        do k=2,nz
+          if (dSdz.ne.0.) then
+            eta1D(k) = ( target_values(k) - ( S_ref + delta_S ) ) / dSdz
           else
-            y = 0.
+            eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
           endif
-          x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
-          x = min(1.0, x); x = max(-1.0, x)
-          x = x * acos( 0. )
-          delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
-          do k=2,nz
-            if (dSdz.ne.0.) then
-              eta1D(k) = ( target_values(k) - ( S_ref + delta_S ) ) / dSdz
-            else
-              eta1D(k) = e0(k) - (0.5*adjustment_delta) * sin( x )
-            endif
-            eta1D(k) = max( eta1D(k), -G%max_depth )
-            eta1D(k) = min( eta1D(k), 0. )
-          enddo
-          eta1D(1)=0.; eta1D(nz+1)=-G%max_depth
-          do k=nz,1,-1
-            if (eta1D(k) > 0.) then
-              eta1D(k) = max( eta1D(k+1) + min_thickness, 0. )
-              h(i,j,k) = max( eta1D(k) - eta1D(k+1), min_thickness )
-            elseif (eta1D(k) <= (eta1D(k+1) + min_thickness)) then
-              eta1D(k) = eta1D(k+1) + min_thickness
-              h(i,j,k) = min_thickness
-            else
-              h(i,j,k) = eta1D(k) - eta1D(k+1)
-            endif
-          enddo
+          eta1D(k) = max( eta1D(k), -G%max_depth )
+          eta1D(k) = min( eta1D(k), 0. )
+        enddo
+        eta1D(1)=0.; eta1D(nz+1)=-G%max_depth
+        do k=nz,1,-1
+          if (eta1D(k) > 0.) then
+            eta1D(k) = max( eta1D(k+1) + min_thickness, 0. )
+            h(i,j,k) = GV%m_to_H * max( eta1D(k) - eta1D(k+1), min_thickness )
+          elseif (eta1D(k) <= (eta1D(k+1) + min_thickness)) then
+            eta1D(k) = eta1D(k+1) + min_thickness
+            h(i,j,k) = GV%m_to_H * min_thickness
+          else
+            h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          endif
+        enddo
       enddo ; enddo
 
     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
@@ -174,13 +174,13 @@ subroutine adjustment_initialize_thickness ( h, G, GV, param_file, just_read_par
       enddo
       do j=js,je ; do i=is,ie
         do k=nz,1,-1
-            h(i,j,k) = eta1D(k) - eta1D(k+1)
+          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
         enddo
       enddo ; enddo
 
     case default
       call MOM_error(FATAL,"adjustment_initialize_thickness: "// &
-      "Unrecognized i.c. setup - set ADJUSTMENT_IC")
+                     "Unrecognized i.c. setup - set ADJUSTMENT_IC")
 
   end select
 
@@ -190,17 +190,18 @@ end subroutine adjustment_initialize_thickness
 !------------------------------------------------------------------------------
 !> Initialization of temperature and salinity.
 !------------------------------------------------------------------------------
-subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, &
+subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                     eqn_of_state, just_read_params)
-  type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< The temperature that is being initialized.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< The salinity that is being initialized.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thickness.
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< The model thicknesses in H (m or kg m-2).
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the
                                          !! open file to parse for model parameter values.
   type(EOS_type),                 pointer     :: eqn_of_state !< Equation of state.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                      !! only read parameters without changing T & S.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: x, y, yy
@@ -256,31 +257,31 @@ subroutine adjustment_initialize_temperature_salinity ( T, S, h, G, param_file, 
     case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA )
       dSdz = -delta_S_strat/G%max_depth
       do j=js,je ; do i=is,ie
-          eta1d(nz+1)=-G%bathyT(i,j)
-          do k=nz,1,-1
-            eta1d(k)=eta1d(k+1)+h(i,j,k)
-          enddo
-          if (front_wave_length.ne.0.) then
-            y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
-            yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / front_wave_length
-            yy = min(1.0, yy); yy = max(-1.0, yy)
-            yy = yy * 2. * acos( 0. )
-            y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
-          else
-            y = 0.
-          endif
-          x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
-          x = min(1.0, x); x = max(-1.0, x)
-          x = x * acos( 0. )
-          delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
-          do k=1,nz
-            S(i,j,k) = S_ref + delta_S + 0.5 * ( eta1D(k)+eta1D(k+1) ) * dSdz
-            x = abs(S(i,j,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
-            x = 1.-min(1., x)
-            T(i,j,k) = x
-         enddo
-   !     x=sum(T(i,j,:)*h(i,j,:))
-   !     T(i,j,:)=T(i,j,:)/x*(G%max_depth*1.5/real(nz))
+        eta1d(nz+1) = -G%bathyT(i,j)
+        do k=nz,1,-1
+          eta1d(k) = eta1d(k+1) + h(i,j,k)*GV%H_to_m
+        enddo
+        if (front_wave_length.ne.0.) then
+          y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
+          yy = 2. * ( G%geoLatT(i,j) - 0.5 * G%len_lat ) / front_wave_length
+          yy = min(1.0, yy); yy = max(-1.0, yy)
+          yy = yy * 2. * acos( 0. )
+          y = front_wave_amp*sin(y) + front_wave_asym*sin(yy)
+        else
+          y = 0.
+        endif
+        x = ( ( G%geoLonT(i,j) - 0.5 * G%len_lon ) + y ) / adjustment_width
+        x = min(1.0, x); x = max(-1.0, x)
+        x = x * acos( 0. )
+        delta_S = adjustment_deltaS * 0.5 * (1. - sin( x ) )
+        do k=1,nz
+          S(i,j,k) = S_ref + delta_S + 0.5 * ( eta1D(k)+eta1D(k+1) ) * dSdz
+          x = abs(S(i,j,k) - 0.5*real(nz-1)/real(nz)*S_range)/S_range*real(2*nz)
+          x = 1. - min(1., x)
+          T(i,j,k) = x
+        enddo
+   !    x=sum(T(i,j,:)*h(i,j,:))
+   !    T(i,j,:)=T(i,j,:)/x*(G%max_depth*1.5/real(nz))
       enddo ; enddo
 
     case ( REGRIDDING_LAYER, REGRIDDING_RHO )
