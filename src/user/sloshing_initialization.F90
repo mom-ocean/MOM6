@@ -69,7 +69,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -160,8 +160,8 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! are strictly positive
     do k = nz,1,-1
 
-      if ( z_inter(k) .LT. (z_inter(k+1) + GV%Angstrom) ) then
-        z_inter(k) = z_inter(k+1) + GV%Angstrom
+      if ( z_inter(k) .LT. (z_inter(k+1) + GV%Angstrom_Z) ) then
+        z_inter(k) = z_inter(k+1) + GV%Angstrom_Z
       end if
 
     end do
@@ -169,7 +169,7 @@ subroutine sloshing_initialize_thickness ( h, G, GV, param_file, just_read_param
     ! 4. Define layers
     total_height = 0.0
     do k = 1,nz
-      h(i,j,k) = z_inter(k) - z_inter(k+1)
+      h(i,j,k) = GV%m_to_H * (z_inter(k) - z_inter(k+1))
 
       total_height = total_height + h(i,j,k)
     end do
@@ -186,12 +186,13 @@ end subroutine sloshing_initialize_thickness
 !! reference surface layer salinity and temperature and a specified range.
 !! Note that the linear distribution is set up with respect to the layer
 !! number, not the physical position).
-subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, param_file, &
+subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                       eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC).
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt).
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa).
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or Pa).
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
