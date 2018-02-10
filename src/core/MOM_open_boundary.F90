@@ -2407,7 +2407,7 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
-  type(OBC_segment_type), intent(inout)            :: segment      !< current segment data structure
+  type(OBC_segment_type), intent(inout)         :: segment      !< current segment data structure
   type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
                                                                 !! stored value of tr%tr_desc. This target must be
                                                                 !! an enduring part of the control structure,

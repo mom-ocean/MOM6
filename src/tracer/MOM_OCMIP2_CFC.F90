@@ -60,7 +60,6 @@ use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -412,10 +411,7 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                          CS%CFC12_IC_val, G, CS)
 
   if (associated(OBC)) then
-  ! By default, all tracers have 0 concentration in their inflows. This may
-  ! make the following calls are unnecessary.
-  !  call add_tracer_OBC_values(trim(CS%CFC11_desc%name), CS%tr_Reg, 0.0)
-  !  call add_tracer_OBC_values(trim(CS%CFC12_desc%name), CS%tr_Reg, 0.0)
+  ! Steal from updated DOME in the fullness of time.
   endif
 
 end subroutine initialize_OCMIP2_CFC
