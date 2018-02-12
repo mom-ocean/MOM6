@@ -1383,8 +1383,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
 
       ! Use the larger of the above and a function of sin(latitude)
       if (Kh_sin_lat>0.) then
-        CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
         slat_fn = abs( sin( deg2rad * G%geoLatT(i,j) ) ) ** Kh_pwr_of_sine
+        CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
       endif
 
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
