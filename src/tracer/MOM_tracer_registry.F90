@@ -29,7 +29,6 @@ public register_tracer
 public MOM_tracer_chksum, MOM_tracer_chkinv
 public register_tracer_diagnostics, post_tracer_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
-public add_tracer_OBC_values
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 
 !> The tracer type
@@ -301,40 +300,6 @@ subroutine lock_tracer_registry(Reg)
   Reg%locked = .True.
 
 end subroutine lock_tracer_registry
-
-
-!> This subroutine adds open boundary condition concentrations for a tracer that
-!! has previously been registered by a call to register_tracer.
-subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
-  character(len=*), intent(in)               :: name        !< tracer name for which the diagnostic points
-  type(tracer_registry_type), pointer        :: Reg         !< pointer to the tracer registry
-  real, intent(in), optional                 :: OBC_inflow  !< tracer value for all inflows via the OBC
-                                                            !! for which OBC_in_u or OBC_in_v are
-                                                            !! not specified (same units as tracer CONC)
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u    !< tracer at inflows through u-face of tracer cells
-                                                            !! (same units as tracer CONC)
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_v    !< tracer at inflows through v-face of tracer cells
-                                                            !! (same units as tracer CONC)
-
-  integer :: m
-
-  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_OBC_values :"//&
-       "register_tracer must be called before add_tracer_OBC_values")
-
-  do m=1,Reg%ntr ; if (Reg%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= Reg%ntr) then
-!   if (present(OBC_inflow)) Reg%Tr(m)%OBC_inflow_conc = OBC_inflow
-!   if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-!                                     Reg%Tr(m)%OBC_in_u => OBC_in_u ; endif
-!   if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-!                                     Reg%Tr(m)%OBC_in_v => OBC_in_v ; endif
-  else
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_OBC_values is called for it.")
-  endif
-
-end subroutine add_tracer_OBC_values
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
