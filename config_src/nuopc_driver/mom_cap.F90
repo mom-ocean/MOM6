@@ -522,6 +522,7 @@ module mom_cap_mod
     integer, intent(out)  :: rc
     
     character(len=10)                         :: value
+    character(len=*),parameter  :: subname='(mom_cap:InitializeP0)'
 
     rc = ESMF_SUCCESS
 
@@ -692,7 +693,12 @@ module mom_cap_mod
 
     Ocean_sfc%is_ocean_pe = .true.
     call ocean_model_init(Ocean_sfc, Ocean_state, Time, Time)
-    call data_override_init(Ocean_domain_in = Ocean_sfc%domain)
+
+!tcx tcraig This results in errors in CESM with help from Alper
+! FATAL error "MPP_OPEN: error in OPEN for data_table"
+! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
+!tcx    call data_override_init(Ocean_domain_in = Ocean_sfc%domain)
+
     call mpp_get_compute_domain(Ocean_sfc%domain, isc, iec, jsc, jec)
 
     allocate ( Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
@@ -1300,12 +1306,13 @@ module mom_cap_mod
       deallocate(ofld)
     endif
 
-    call NUOPC_Write(exportState, fileNamePrefix='init_field_ocn_export_', &
-      timeslice=1, relaxedFlag=.true., rc=rc) 
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+! tcraig, turn this off for now, have issues with overwriting failures
+!    call NUOPC_Write(exportState, fileNamePrefix='init_field_ocn_export_', &
+!      timeslice=1, relaxedFlag=.true., rc=rc) 
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+!      line=__LINE__, &
+!      file=__FILE__)) &
+!      return  ! bail out
 
     write(*,*) '----- MOM initialization phase Realize completed'
 
@@ -1617,6 +1624,7 @@ module mom_cap_mod
     call dumpMomInternal(mom_grid_i, export_slice, "sea_lev"   , "will provide", Ocean_sfc%sea_lev)
 
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
+
   end subroutine ModelAdvance
 
   !> Called by NUOPC at the end of the run to clean up.
@@ -1832,7 +1840,6 @@ module mom_cap_mod
 
       endif
 
-
     end subroutine writeSliceFields
 
   !-----------------------------------------------------------------------------
@@ -1975,10 +1982,86 @@ module mom_cap_mod
   subroutine MOM_FieldsSetup(ice_ocean_boundary,ocean_sfc)
     type(ice_ocean_boundary_type), intent(in)   :: Ice_ocean_boundary
     type(ocean_public_type), intent(in)         :: Ocean_sfc
+
+#ifdef CESMCOUPLED
+!    type (shr_nuopc_fldList_Type) :: fldsList
+#endif
+
     character(len=*),parameter  :: subname='(mom_cap:MOM_FieldsSetup)'
 
   !!! fld_list_add(num, fldlist, stdname, transferOffer, data(optional), shortname(optional))
 
+#ifdef CESMCOUPLED
+
+! WARNING tcx tcraig
+! tcraig this is just a starting point, the fields are not complete or correct here
+
+    !--------------------------------                                                                                  
+    ! create import fields list                                                                                        
+    !--------------------------------                                                                                  
+
+!    call shr_nuopc_fldList_Zero(fldsList, rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+!    call shr_nuopc_fldList_fromflds(fldsList, flds_x2o, flds_x2o_map, "will provide", subname//":flds_x2o", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+!    call shr_nuopc_fldList_Add(fldsList, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+    ! convert to fldsToOcn
+
+    !--------------------------------                                                                                  
+    ! create export fields list                                                                                        
+    !--------------------------------                                                                                  
+
+!    call shr_nuopc_fldList_Zero(fldsList, rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+!    call shr_nuopc_fldList_fromflds(fldsList, flds_o2x, flds_o2x_map, "will provide", subname//":flds_o2x", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+!    call shr_nuopc_fldList_Add(fldsList, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+! WARNING tcx tcraig
+! tcraig this is just a starting point, the fields are not complete or correct here
+! tcraig we will need to figure out whether to adjust the mediator coupling fields for mom or vv or a bit of both
+
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux" , "will provide", data=Ice_ocean_boundary%u_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy" , "will provide", data=Ice_ocean_boundary%v_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"  , "will provide", data=Ice_ocean_boundary%t_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap" , "will provide", data=Ice_ocean_boundary%q_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_salt" , "will provide", data=Ice_ocean_boundary%salt_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwdn" , "will provide", data=Ice_ocean_boundary%lw_flux  )
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dir)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dif)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swidr", "will provide", data=Ice_ocean_boundary%sw_flux_nir_dir)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swidf", "will provide", data=Ice_ocean_boundary%sw_flux_nir_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rain" , "will provide", data=Ice_ocean_boundary%lprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_snow" , "will provide", data=Ice_ocean_boundary%fprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl" , "will provide", data=Ice_ocean_boundary%runoff )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_meltw", "will provide", data=Ice_ocean_boundary%calving)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "runoff_heat_flux" , "will provide", data=Ice_ocean_boundary%runoff_hflx )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_melth", "will provide", data=Ice_ocean_boundary%calving_hflx)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv" , "will provide", data=Ice_ocean_boundary%p )
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice", "will provide", data=Ice_ocean_boundary%mi)
+
+!--------- export fields -------------
+
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_omask", "will provide")
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_t", "will provide", data=Ocean_sfc%t_surf)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"    , "will provide", data=Ocean_sfc%s_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u", "will provide", data=Ocean_sfc%u_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v", "will provide", data=Ocean_sfc%v_surf )
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir", "will provide")
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir", "will provide")
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=Ocean_sfc%sea_lev)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"   , "will provide", data=Ocean_sfc%frazil)
+
+
+#else
 !--------- import fields -------------
 
 ! tcraig, don't point directly into mom data YET (last field is optional in interface)
@@ -2013,6 +2096,8 @@ module mom_cap_mod
 !    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir", "will provide")
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=Ocean_sfc%sea_lev)
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"   , "will provide", data=Ocean_sfc%frazil)
+
+#endif
 
   end subroutine MOM_FieldsSetup
 
