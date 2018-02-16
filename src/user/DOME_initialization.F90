@@ -10,7 +10,7 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -313,14 +313,14 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
     enddo ; enddo
   enddo
-! call register_segment_tracer(tr_desc(m), param_file, segment%HI, GV, &
-!                              segment%Reg, m, OBC_scalar=1.0)
 
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
     ! In this example, all S inflows have values of 35 psu.
-    call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
+!   call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
+!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
+!                                segment, OBC_scalar=35.0)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
@@ -343,7 +343,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       OBC_T_v(i,J,k) = T0(k)
     enddo ; enddo ; enddo
-    call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
+!   call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
+!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
+!                                segment, OBC_array=.true.)
   endif
 
 end subroutine DOME_set_OBC_data

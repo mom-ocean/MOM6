@@ -11,12 +11,11 @@ use MOM_hor_index,       only : hor_index_type
 use MOM_grid,            only : ocean_grid_type
 use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
-use MOM_open_boundary,   only : OBC_segment_type
+use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_restart,         only : MOM_restart_CS
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_variables,       only : surface
 use MOM_verticalGrid,    only : verticalGrid_type
@@ -80,7 +79,6 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  type(OBC_segment_type), pointer :: segment
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
@@ -142,7 +140,7 @@ end function register_DOME_tracer
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp)
+                                  sponge_CSp, diag_to_Z_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart !< .true. if the fields have already
@@ -157,6 +155,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                                                      !! for the sponges, if they are in use.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
                                                                      !! for diagnostics in depth space.
+  type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
 
 ! Local variables
   real, allocatable :: temp(:,:,:)
@@ -179,6 +178,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -280,6 +280,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
     call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
     if (OBC%specified_v_BCs_exist_globally) then
       segment => OBC%segment(1)
+      allocate(segment%field(NTR))
       allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
 !     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
       do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
@@ -287,20 +288,16 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
         else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
       call register_segment_tracer(CS%tr_desc(1), param_file, GV, &
-                                   OBC%segment(1), OBC_scalar=dye)
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
-                                 0.0, OBC_in_v=OBC_tr1_v)
+                                   OBC%segment(1), OBC_array=.true.)
     else
       ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
     do m=2,NTR
       call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
-      call register_segment_tracer(tr_desc(m), param_file, GV, &
-                                   OBC%segment(n), OBC_scalar=dye)
+      call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
+                                   OBC%segment(1), OBC_scalar=0.0)
     enddo
   endif
 
