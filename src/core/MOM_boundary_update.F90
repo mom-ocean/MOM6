@@ -14,7 +14,7 @@ use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_verticalGrid,          only : verticalGrid_type
-use MOM_tracer_registry,       only : add_tracer_OBC_values, tracer_registry_type
+use MOM_tracer_registry,       only : tracer_registry_type
 use MOM_variables,             only : thermo_var_ptrs
 use tidal_bay_initialization,  only : tidal_bay_set_OBC_data, register_tidal_bay_OBC
 use tidal_bay_initialization,  only : tidal_bay_OBC_end, tidal_bay_OBC_CS
