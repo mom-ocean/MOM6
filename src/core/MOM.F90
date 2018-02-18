@@ -585,12 +585,12 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
     nt_debug = nt_debug + 1
 
-    ! Set the universally visible time to the middle of the time step
-    CS%Time = Time_start + set_time(int(floor(CS%rel_time+0.5*dt+0.5)))
-    CS%rel_time = CS%rel_time + dt
-
+    CS%rel_time = CS%rel_time + dt ! The relative time at the end of the step.
+    ! Set the universally visible time to the middle of the time step.
+    CS%Time = Time_start + set_time(int(floor(0.5 + CS%rel_time - 0.5*dt)))
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
+
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
     !===========================================================================
@@ -610,6 +610,10 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
 
+      ! If necessary, temporarily reset CS%Time to the center of the period covered
+      ! by the call to step_MOM_thermo, noting that they begin at the same time.
+      if (dtdia > dt) CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+
       ! The end-time of the diagnostic interval needs to be set ahead if there
       ! are multiple dynamic time steps worth of thermodynamics applied here.
       end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
@@ -621,6 +625,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       CS%t_dyn_rel_thermo = -dtdia
       if (showCallTree) call callTree_waypoint("finished diabatic_first (step_MOM)")
 
+      if (dtdia > dt) & ! Reset CS%Time to its previous value.
+        CS%Time = Time_start + set_time(int(floor(0.5 + CS%rel_time - 0.5*dt)))
     endif ! end of block "(CS%diabatic_first .and. (MS%t_dyn_rel_adv==0.0))"
 
     !===========================================================================
@@ -834,8 +840,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
           call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                          "before call to diabatic.")
         endif
+        ! If necessary, temporarily reset CS%Time to the center of the period covered
+        ! by the call to step_MOM_thermo, noting that they end at the same time.
+        if (dtdia > dt) CS%Time = CS%Time - set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
+
         ! Apply diabatic forcing, do mixing, and regrid.
         call step_MOM_thermo(MS, CS, G, GV, u, v, h, MS%tv, fluxes, dtdia, Time_local, .false.)
+
+        if (dtdia > dt) & ! Reset CS%Time to its previous value.
+          CS%Time = Time_start + set_time(int(floor(0.5 + CS%rel_time - 0.5*dt)))
       endif
 
       if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
