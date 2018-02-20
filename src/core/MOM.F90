@@ -584,7 +584,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       else
         dtdia = dt*min(ntstep,n_max-(n-1))
       endif
-      
+
       ! If necessary, temporarily reset CS%Time to the center of the period covered
       ! by the call to step_MOM_thermo, noting that they begin at the same time.
       if (dtdia > dt) CS%Time = CS%Time + set_time(int(floor(0.5*(dtdia-dt) + 0.5)))

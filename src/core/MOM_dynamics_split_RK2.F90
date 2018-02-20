@@ -324,10 +324,10 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, CS%OBC, h)
 
-    do k=1,nz ; do j=js-1,je+1 ; do I=is-2,ie+1
+    do k=1,nz ; do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       u_old_rad_OBC(I,j,k) = u_av(I,j,k)
     enddo ; enddo ; enddo
-    do k=1,nz ; do J=js-2,je+1 ; do i=is-1,ie+1
+    do k=1,nz ; do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
       v_old_rad_OBC(i,J,k) = v_av(i,J,k)
     enddo ; enddo ; enddo
   endif
