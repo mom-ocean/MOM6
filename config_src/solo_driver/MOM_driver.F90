@@ -489,7 +489,7 @@ program MOM_main
 
       nts = MAX(1,MIN(n_max,floor(dt_therm/dt_dyn + 0.001)))
       n_last_thermo = 0
-      
+
       Time2 = Time1 ; t_elapsed_seg = 0.0
       do n=1,n_max
         if (diabatic_first) then
@@ -499,7 +499,7 @@ program MOM_main
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=(n==1), end_cycle=.false.)
           endif
-          
+
           call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MSp, MOM_CSp, &
                         do_dynamics=.true., do_thermodynamics=.false., &
                         start_cycle=.false., end_cycle=(n==n_max))
