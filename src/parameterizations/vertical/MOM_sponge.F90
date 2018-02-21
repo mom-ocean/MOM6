@@ -623,8 +623,13 @@ subroutine apply_sponge(h, dt, G, GV, ea, eb, CS, Rcv_ml)
   enddo ! end of c loop
 
   if (associated(CS%diag)) then ; if (query_averaging_enabled(CS%diag)) then
-    Idt = 1.0 / dt
-    if (CS%id_w_sponge > 0) call post_data(CS%id_w_sponge, Idt*GV%H_to_m*w_int(:,:,:), CS%diag)
+    if (CS%id_w_sponge > 0) then
+      Idt = 1.0 / dt
+      do k=1,nz+1 ; do j=js,je ; do i=is,ie
+        w_int(i,j,K) = w_int(i,j,K) * Idt * GV%H_to_m ! Scale values by clobbering array since it is local
+      enddo ; enddo ; enddo
+      call post_data(CS%id_w_sponge, w_int(:,:,:), CS%diag)
+    endif
   endif ; endif
 
 end subroutine apply_sponge
