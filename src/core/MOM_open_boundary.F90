@@ -40,7 +40,7 @@ public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public radiation_open_bdry_conds
 public set_tracer_data
-public update_obc_segment_data
+public update_OBC_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
@@ -2407,7 +2407,7 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
-  type(OBC_segment_type), intent(inout)            :: segment      !< current segment data structure
+  type(OBC_segment_type), intent(inout)         :: segment      !< current segment data structure
   type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
                                                                 !! stored value of tr%tr_desc. This target must be
                                                                 !! an enduring part of the control structure,
