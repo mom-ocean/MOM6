@@ -31,7 +31,7 @@ program MOM_main
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
-  use MOM,                 only : MOM_state_type, step_offline
+  use MOM,                 only : step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -173,7 +173,6 @@ program MOM_main
                                  ! a previous integration of the prognostic model
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
-  type(MOM_state_type),      pointer :: MSp => NULL()
   !> A pointer to the tracer flow control structure.
   type(tracer_flow_control_CS), pointer :: &
     tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
@@ -290,24 +289,24 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
                         diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
 
-  call get_MOM_state_elements(MSp, G=grid, GV=GV, C_p=fluxes%C_p)
+  call get_MOM_state_elements(MOM_CSp, G=grid, GV=GV, C_p=fluxes%C_p)
   Master_Time = Time
 
   call callTree_waypoint("done initialize_MOM")
 
-  call extract_surface_state(MSp, sfc_state, MOM_CSp)
+  call extract_surface_state(MOM_CSp, sfc_state)
 
   call surface_forcing_init(Time, grid, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
@@ -474,15 +473,15 @@ program MOM_main
     fluxes%dt_buoy_accum = time_step
 
     if (ns==1) then
-      call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes, restart_CSp)
+      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes, restart_CSp)
     endif
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
+      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
     elseif (single_step_call) then
-      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
     else
       n_max = 1 ; if (time_step > dt) n_max = ceiling(time_step/dt - 0.001)
       dt_dyn = time_step / real(n_max)
@@ -494,33 +493,33 @@ program MOM_main
       do n=1,n_max
         if (diabatic_first) then
           if (modulo(n-1,nts)==0) then
-            dtdia = dt*min(ntstep,n_max-(n-1))
-            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MSp, MOM_CSp, &
+            dtdia = dt_dyn*min(ntstep,n_max-(n-1))
+            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=(n==1), end_cycle=.false.)
           endif
 
-          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MSp, MOM_CSp, &
+          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MOM_CSp, &
                         do_dynamics=.true., do_thermodynamics=.false., &
                         start_cycle=.false., end_cycle=(n==n_max))
         else
-          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MSp, MOM_CSp, &
+          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MOM_CSp, &
                         do_dynamics=.true., do_thermodynamics=.false., &
                         start_cycle=(n==1), end_cycle=.false.)
 
           if ((modulo(n,nts)==0) .or. (n==n_max)) then
-            dtdia = dt*(n - n_last_thermo)
+            dtdia = dt_dyn*(n - n_last_thermo)
             ! Back up Time2 to the start of the thermodynamic segment.
             if (n > n_last_thermo+1) &
-              Time2 = Time2 - set_time(int(floor((dtdia - dt) + 0.5)))
-            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MSp, MOM_CSp, &
+              Time2 = Time2 - set_time(int(floor((dtdia - dt_dyn) + 0.5)))
+            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MOM_CSp, &
                           do_dynamics=.false., do_thermodynamics=.true., &
                           start_cycle=.false., end_cycle=(n==n_max))
             n_last_thermo = n
           endif
         endif
 
-        t_elapsed_seg = t_elapsed_seg + dt
+        t_elapsed_seg = t_elapsed_seg + dt_dyn
         Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
       enddo
     endif
@@ -595,7 +594,7 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (.not.MOM_state_is_synchronized(MSp)) &
+    if (.not.MOM_state_is_synchronized(MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
          "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
@@ -643,7 +642,7 @@ program MOM_main
 
   call io_infra_end ; call MOM_infra_end
 
-  call MOM_end(MSp, MOM_CSp)
+  call MOM_end(MOM_CSp)
   if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
 
 end program MOM_main

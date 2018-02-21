@@ -17,7 +17,7 @@ module ocean_model_mod
 ! in the same way as MOM4.
 !</OVERVIEW>
 
-use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
+use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
 use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
 use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
 use MOM, only : get_ocean_stocks, step_offline
@@ -191,8 +191,6 @@ type, public :: ocean_state_type ; private
                               !! about the vertical grid.
   type(MOM_control_struct), pointer :: &
     MOM_CSp => NULL()         !< A pointer to the MOM control structure
-  type(MOM_state_type), pointer :: &
-    MSp => NULL()             !< A pointer to the MOM_state_type
   type(ice_shelf_CS), pointer :: &
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This
@@ -268,10 +266,10 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   if (.not.OS%is_ocean_pe) return
 
   OS%Time = Time_in
-  call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
+  call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
-  call get_MOM_state_elements(OS%MSp, G=OS%grid, GV=OS%GV, C_p=OS%C_p, &
+  call get_MOM_state_elements(OS%MOM_CSp, G=OS%grid, GV=OS%GV, C_p=OS%C_p, &
                               use_temp=use_temperature)
   OS%fluxes%C_p = OS%C_p
 
@@ -367,7 +365,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call coupler_type_set_diags(Ocean_sfc%fields, "ocean_sfc", &
                                 Ocean_sfc%axes(1:2), Time_in)
 
-    call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
+    call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -520,7 +518,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%nstep==0) then
-    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MSp, OS%MOM_CSp, OS%fluxes, &
+    call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
                                    OS%restart_CSp)
   endif
 
@@ -528,9 +526,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   Master_time = OS%Time ; Time1 = OS%Time
 
   if(OS%offline_tracer_mode) then
-    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
+    call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MOM_CSp)
   else
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MSp, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, time_step, OS%MOM_CSp)
   endif
 
   OS%Time = Master_time + Ocean_coupling_time_step
@@ -673,7 +671,7 @@ subroutine ocean_model_restart(OS, timestamp)
   type(ocean_state_type),        pointer :: OS
   character(len=*), intent(in), optional :: timestamp
 
-  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+  if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
       call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
          "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
@@ -731,7 +729,7 @@ subroutine ocean_model_end(Ocean_sfc, Ocean_state, Time)
 
   call ocean_model_save_restart(Ocean_state, Time)
   call diag_mediator_end(Time, Ocean_state%diag)
-  call MOM_end(Ocean_state%MSp, Ocean_state%MOM_CSp)
+  call MOM_end(Ocean_state%MOM_CSp)
   if (Ocean_state%use_ice_shelf) call ice_shelf_end(Ocean_state%Ice_shelf_CSp)
 end subroutine ocean_model_end
 ! </SUBROUTINE> NAME="ocean_model_end"
@@ -758,7 +756,7 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+  if (.not.MOM_state_is_synchronized(OS%MOM_CSp)) &
     call MOM_error(WARNING, "ocean_model_save_restart called with inconsistent "//&
          "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
@@ -958,7 +956,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
+  call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -1016,15 +1014,15 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
   select case (index)
     case (ISTOCK_WATER)  ! Return the mass of fresh water in the ocean in kg.
       if (OS%GV%Boussinesq) then
-        call get_ocean_stocks(OS%MSp, mass=value, on_PE_only=.true.)
+        call get_ocean_stocks(OS%MOM_CSp, mass=value, on_PE_only=.true.)
       else  ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
-        call get_ocean_stocks(OS%MSp, mass=value, salt=salt, on_PE_only=.true.)
+        call get_ocean_stocks(OS%MOM_CSp, mass=value, salt=salt, on_PE_only=.true.)
         value = value - salt
       endif
     case (ISTOCK_HEAT)  ! Return the heat content of the ocean in J.
-      call get_ocean_stocks(OS%MSp, heat=value, on_PE_only=.true.)
+      call get_ocean_stocks(OS%MOM_CSp, heat=value, on_PE_only=.true.)
     case (ISTOCK_SALT)  ! Return the mass of the salt in the ocean in kg.
-       call get_ocean_stocks(OS%MSp, salt=value, on_PE_only=.true.)
+       call get_ocean_stocks(OS%MOM_CSp, salt=value, on_PE_only=.true.)
     case default ; value = 0.0
   end select
   ! If the FMS coupler is changed so that Ocean_stock_PE is only called on
