@@ -8,16 +8,16 @@ use MOM_error_handler, only : MOM_error, FATAL
 implicit none ; private
 
 !> Control structure containing required parameters for a z-like coordinate
-type, public :: zlike_CS
-  private
+type, public :: zlike_CS ; private
 
   !> Number of levels
   integer :: nk
 
-  !> Minimum thickness allowed for layers
+  !> Minimum thickness allowed for layers, in the same thickness units that will
+  !! be used in all subsequent calls to build_zstar_column with this structure.
   real :: min_thickness
 
-  !> Target coordinate resolution
+  !> Target coordinate resolution, usually in m
   real, allocatable, dimension(:) :: coordinateResolution
 end type zlike_CS
 
@@ -59,20 +59,22 @@ end subroutine set_zlike_params
 
 !> Builds a z* coordinate with a minimum thickness
 subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, &
-              z_rigid_top, eta_orig, zScale)
+                              z_rigid_top, eta_orig, zScale)
   type(zlike_CS),        intent(in)    :: CS !< Coordinate control structure
   integer,               intent(in)    :: nz !< Number of levels
   real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m or H)
-  real,                  intent(in)    :: total_thickness !< Column thickness (positive in m or H)
+  real,                  intent(in)    :: total_thickness !< Column thickness (positive in the same units as depth)
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
-  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in m or H)
-  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top (m or H)
-  real, optional,        intent(in)    :: zScale !< Scaling factor from the input thicknesses in m
-                                                 !! to desired units for zInterface, perhaps m_to_H.
+  real, optional,        intent(in)    :: z_rigid_top !< The height of a rigid top (negative in the same units as depth)
+  real, optional,        intent(in)    :: eta_orig !< The actual original height of the top in the same units as depth
+  real, optional,        intent(in)    :: zScale !< Scaling factor from the target coordinate resolution
+                                                 !! in m to desired units for zInterface, perhaps m_to_H
   ! Local variables
   real :: eta, stretching, dh, min_thickness, z0_top, z_star, z_scale
   integer :: k
   logical :: new_zstar_def
+
+  z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   new_zstar_def = .false.
   min_thickness = min( CS%min_thickness, total_thickness/real(nz) )
@@ -81,8 +83,6 @@ subroutine build_zstar_column(CS, nz, depth, total_thickness, zInterface, &
     z0_top = z_rigid_top
     new_zstar_def = .true.
   endif
-
-  z_scale = 1.0 ; if (present(zScale)) z_scale = zScale
 
   ! Position of free-surface (or the rigid top, for which eta ~ z0_top)
   eta = total_thickness - depth

@@ -50,7 +50,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (psu)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or Pa)
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
                                                       !! only read parameters without changing h.
@@ -86,7 +86,7 @@ subroutine SCM_idealized_hurricane_TS_init(T, S, h, G, GV, param_file, just_read
     do k=1,nz
       eta(K+1) = eta(K) - h(i,j,k)*GV%H_to_m ! Interface below layer (in m)
       zC = 0.5*( eta(K) + eta(K+1) )        ! Z of middle of layer (in m)
-      T(i,j,k) = SST_ref + dTdz*min(0., zC+MLD)
+      T(i,j,k) = SST_ref + dTdz * min(0., zC + MLD)
       S(i,j,k) = S_ref
     enddo ! k
   enddo ; enddo

@@ -839,6 +839,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
     h_def2_v
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H.
+  real :: Hmix_min  ! CS%Hmix_min converted to units of H.
   real :: h1, h2  ! Temporary thicknesses, in H.
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 
@@ -848,6 +849,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   endif
   nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff
+  Hmix_min = CS%Hmix_min * GV%m_to_H
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie
@@ -890,12 +892,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   enddo ; enddo ; enddo
   if (present(def_rat_u_2lay)) then ; do j=js,je ; do I=is-1,ie
     def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
-                     (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                     (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
     def_rat_u_2lay(I,j) = G%mask2dCu(I,j) * h_def2_u(I,j) / &
-                          (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                          (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; else ; do j=js,je ; do I=is-1,ie
     def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
-                     (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                     (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; endif
 
   ! Determine which meridional faces are problematic.
@@ -939,12 +941,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   enddo ; enddo ; enddo
   if (present(def_rat_v_2lay)) then ; do J=js-1,je ; do i=is,ie
     def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
     def_rat_v_2lay(i,J) = G%mask2dCv(i,J) * h_def2_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; else ; do J=js-1,je ; do i=is,ie
     def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; endif
 
 end subroutine find_deficit_ratios

@@ -1,4 +1,4 @@
-module seamount_initialization
+module dumbbell_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -19,27 +19,28 @@ use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use MOM_ALE_sponge,    only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-character(len=40) :: mdl = "seamount_initialization" ! This module's name.
+character(len=40) :: mdl = "dumbbell_initialization" ! This module's name.
 
 ! -----------------------------------------------------------------------------
 ! The following routines are visible to the outside world
 ! -----------------------------------------------------------------------------
-public seamount_initialize_topography
-public seamount_initialize_thickness
-public seamount_initialize_temperature_salinity
-
+public dumbbell_initialize_topography
+public dumbbell_initialize_thickness
+public dumbbell_initialize_temperature_salinity
+public dumbbell_initialize_sponges
 ! -----------------------------------------------------------------------------
 ! This module contains the following routines
 ! -----------------------------------------------------------------------------
 contains
 
 !> Initialization of topography.
-subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
+subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
   ! Arguments
   type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
@@ -49,42 +50,40 @@ subroutine seamount_initialize_topography ( D, G, param_file, max_depth )
 
   ! Local variables
   integer   :: i, j
-  real      :: x, y, delta, Lx, rLx, Ly, rLy
+  real      :: x, y, delta, dblen, dbfrac
 
-  call get_param(param_file, mdl,"SEAMOUNT_DELTA",delta, &
-                 "Non-dimensional height of seamount.", &
-                 units="non-dim", default=0.5)
-  call get_param(param_file, mdl,"SEAMOUNT_X_LENGTH_SCALE",Lx, &
-                 "Length scale of seamount in x-direction.\n"//&
-                 "Set to zero make topography uniform in the x-direction.", &
-                 units="Same as x,y", default=20.)
-  call get_param(param_file, mdl,"SEAMOUNT_Y_LENGTH_SCALE",Ly, &
-                 "Length scale of seamount in y-direction.\n"//&
-                 "Set to zero make topography uniform in the y-direction.", &
-                 units="Same as x,y", default=0.)
+  call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
+                'Lateral Length scale for dumbbell.',&
+                 units='k', default=600., do_not_log=.false.)
+  call get_param(param_file, mdl,"DUMBBELL_FRACTION",dbfrac, &
+                'Meridional fraction for narrow part of dumbbell.',&
+                 units='nondim', default=0.5, do_not_log=.false.)
 
-  Lx = Lx / G%len_lon
-  Ly = Ly / G%len_lat
-  rLx = 0. ; if (Lx>0.) rLx = 1. / Lx
-  rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
-  do i=G%isc,G%iec
+  if (G%x_axis_units == 'm') then
+    dblen=dblen*1.e3
+  endif
+
+ do i=G%isc,G%iec
     do j=G%jsc,G%jec
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-      x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
-      y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
-      D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
+      x = ( G%geoLonT(i,j) ) / dblen
+      y = ( G%geoLatT(i,j)  ) / G%len_lat
+      D(i,j)=G%max_depth
+      if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
+        D(i,j) = 0.0
+      endif
     enddo
   enddo
 
-end subroutine seamount_initialize_topography
+end subroutine dumbbell_initialize_topography
 
 !> Initialization of thicknesses.
 !! This subroutine initializes the layer thicknesses to be uniform.
-subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_params)
+subroutine dumbbell_initialize_thickness ( h, G, GV, param_file, just_read_params)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in H.
+                           intent(out) :: h           !< The thickness that is being initialized, in m.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -153,9 +152,9 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_z
-          h(i,j,k) = GV%Angstrom
+          h(i,j,k) = GV%Angstrom_z
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -165,12 +164,12 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
     do j=js,je ; do i=is,ie
       eta1D(nz+1) = -1.0*G%bathyT(i,j)
       do k=nz,1,-1
-        eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
+        eta1D(k) = -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%m_to_H * min_thickness
+          h(i,j,k) = min_thickness
         else
-          h(i,j,k) = GV%m_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -179,21 +178,21 @@ subroutine seamount_initialize_thickness ( h, G, GV, param_file, just_read_param
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
       delta_h = G%bathyT(i,j) / dfloat(nz)
-      h(i,j,:) = GV%m_to_H * delta_h
+      h(i,j,:) = delta_h
     end do ; end do
 
 end select
 
-end subroutine seamount_initialize_thickness
+end subroutine dumbbell_initialize_thickness
 
 !> Initial values for temperature and salinity
-subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
+subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file, &
                                                   eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature (degC)
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity (ppt)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness in H (m or Pa)
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h !< Layer thickness (m or Pa)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -202,6 +201,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, k_light
   real    :: xi0, xi1, dxi, r, S_surf, T_surf, S_range, T_range
+  real    :: x, y, dblen
   real    :: T_ref, T_Light, T_Dense, S_ref, S_Light, S_Dense, a1, frac_dense, k_frac, res_rat
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=20) :: verticalCoordinate, density_profile
@@ -210,77 +210,154 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
 
   just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
+  T_surf = 20.0
+
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_DENSITY_PROFILE", density_profile, &
                  'Initial profile shape. Valid values are "linear", "parabolic"\n'// &
                  'and "exponential".', default='linear', do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
-                 'Initial surface salinity', units='1e-3', default=34., do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_SST", T_surf, &
-                 'Initial surface temperature', units='C', default=0., do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
-                 'Initial salinity range (bottom - surface)', units='1e-3', &
+  call get_param(param_file, mdl,"DUMBBELL_SREF", S_surf, &
+                 'DUMBBELL REFERENCE SALINITY', units='1e-3', default=34., do_not_log=just_read)
+  call get_param(param_file, mdl,"DUMBBELL_S_RANGE", S_range, &
+                 'DUMBBELL salinity range (right-left)', units='1e-3', &
                  default=2., do_not_log=just_read)
-  call get_param(param_file, mdl,"INITIAL_T_RANGE", T_range, &
-                 'Initial temperature range (bottom - surface)', units='C', &
-                 default=0., do_not_log=just_read)
+  call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
+                'Lateral Length scale for dumbbell ',&
+                 units='k', default=600., do_not_log=just_read)
 
-  select case ( coordinateMode(verticalCoordinate) )
-    case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
-      ! These parameters are used in MOM_fixed_initialization.F90 when CONFIG_COORD="ts_range"
-      call get_param(param_file, mdl, "T_REF", T_ref, default=10.0, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_T_LIGHT", T_light, default=T_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, default=T_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "S_REF", S_ref, default=35.0, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, default = S_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, default = S_Ref, do_not_log=.true.)
-      call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, default=1.0, do_not_log=.true.)
-      if (just_read) return ! All run-time parameters have been read, so return.
+  if (G%x_axis_units == 'm') then
+    dblen=dblen*1.e3
+  endif
 
-      ! Emulate the T,S used in the "ts_range" coordinate configuration code
-      k_light = GV%nk_rho_varies + 1
-      do j=js,je ; do i=is,ie
-        T(i,j,k_light) = T_light ; S(i,j,k_light) = S_light
-      enddo ; enddo
-      a1 = 2.0 * res_rat / (1.0 + res_rat)
-      do k=k_light+1,nz
-        k_frac = real(k-k_light)/real(nz-k_light)
-        frac_dense = a1 * k_frac + (1.0 - a1) * k_frac**2
-        do j=js,je ; do i=is,ie
-          T(i,j,k) = frac_dense * (T_Dense - T_Light) + T_Light
-          S(i,j,k) = frac_dense * (S_Dense - S_Light) + S_Light
-        enddo ; enddo
+  do j=G%jsc,G%jec
+    do i=G%isc,G%iec
+    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+      x = ( G%geoLonT(i,j) ) / dblen
+      do k=1,nz
+        T(i,j,k)=T_surf
       enddo
-    case ( REGRIDDING_SIGMA, REGRIDDING_ZSTAR, REGRIDDING_RHO ) ! All other coordinate use FV initialization
-      if (just_read) return ! All run-time parameters have been read, so return.
-      do j=js,je ; do i=is,ie
-        xi0 = 0.0
-        do k = 1,nz
-          xi1 = xi0 + GV%H_to_m * h(i,j,k) / G%max_depth
-          select case ( trim(density_profile) )
-            case ('linear')
-             !S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)
-              S(i,j,k) = S_surf + ( 0.5 * S_range ) * (xi0 + xi1) ! Coded this way to reproduce old hard-coded answers
-              T(i,j,k) = T_surf + T_range * 0.5 * (xi0 + xi1)
-            case ('parabolic')
-              S(i,j,k) = S_surf + S_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
-              T(i,j,k) = T_surf + T_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
-            case ('exponential')
-              S(i,j,k) = S_surf + S_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
-              T(i,j,k) = T_surf + T_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
-            case default
-              call MOM_error(FATAL, 'Unknown value for "INITIAL_DENSITY_PROFILE"')
-          end select
-          xi0 = xi1
+      if (x>=0. ) then
+        do k=1,nz
+          S(i,j,k)=S_surf + 0.5*S_range
         enddo
-      enddo ; enddo
-  end select
+      endif
+      if (x<0. ) then
+        do k=1,nz
+          S(i,j,k)=S_surf - 0.5*S_range
+        enddo
+      endif
 
-end subroutine seamount_initialize_temperature_salinity
+    enddo
+  enddo
 
-!> \namespace seamount_initialization
+end subroutine dumbbell_initialize_temperature_salinity
+
+!> Initialize the restoring sponges for the dense water experiment
+subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
+  type(ocean_grid_type),   intent(in) :: G !< Horizontal grid control structure
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid control structure
+  type(thermo_var_ptrs),   intent(in) :: tv !< Thermodynamic variables
+  type(param_file_type),   intent(in) :: param_file !< Parameter file structure
+  logical,                 intent(in) :: use_ALE !< ALE flag
+  type(sponge_CS),         pointer    :: CSp !< Layered sponge control structure pointer
+  type(ALE_sponge_CS),     pointer    :: ACSp !< ALE sponge control structure pointer
+
+  real :: sponge_time_scale
+
+  real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h, T, S ! sponge thicknesses, temp and salt
+  real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge
+
+  integer :: i, j, k, nz
+  real :: x, zi, zmid, dist, min_thickness, dblen
+  real :: mld, S_ref, S_range, S_dense, T_ref, sill_height
+  call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
+                'Lateral Length scale for dumbbell ',&
+                 units='k', default=600., do_not_log=.true.)
+
+  if (G%x_axis_units == 'm') then
+    dblen=dblen*1.e3
+  endif
+
+  nz = GV%ke
+
+  call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
+       "The time scale in the reservoir for restoring. If zero, the sponge is disabled.", &
+       units="s", default=0.)
+  call get_param(param_file, mdl, "DUMBBELL_SREF", S_ref, do_not_log=.true.)
+  call get_param(param_file, mdl, "DUMBBELL_S_RANGE", S_range, do_not_log=.true.)
+  call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
+                'Minimum thickness for layer',&
+                 units='m', default=1.0e-3, do_not_log=.true.)
+
+  ! no active sponges
+  if (sponge_time_scale <= 0.) return
+
+  ! everywhere is initially unsponged
+  Idamp(:,:) = 0.0
+
+  do j = G%jsc, G%jec
+    do i = G%isc,G%iec
+      if (G%mask2dT(i,j) > 0.) then
+        ! nondimensional x position
+        x = (G%geoLonT(i,j) ) / dblen
+        if (x > 0.25 .or. x < -0.25) then
+          ! scale restoring by depth into sponge
+          Idamp(i,j) = 1. / sponge_time_scale
+        endif
+      endif
+    enddo
+  enddo
+
+  if (use_ALE) then
+    ! construct a uniform grid for the sponge
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      eta1D(nz+1) = -1.0*G%bathyT(i,j)
+      do k=nz,1,-1
+        eta1D(k) = -G%max_depth * real(k-1) / real(nz)
+        if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
+          eta1D(k) = eta1D(k+1) + min_thickness
+          h(i,j,k) = min_thickness
+        else
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
+        endif
+      enddo
+    enddo ; enddo
+
+    call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
+
+    ! construct temperature and salinity for the sponge
+    ! start with initial condition
+    S(:,:,:) = 0.0
+
+    do j=G%jsc,G%jec
+      do i=G%isc,G%iec
+
+      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+         x = ( G%geoLonT(i,j) ) / dblen
+         if (x>=0.25 ) then
+           do k=1,nz
+             S(i,j,k)=S_ref + 0.5*S_range
+           enddo
+         endif
+         if (x<=-0.25 ) then
+           do k=1,nz
+             S(i,j,k)=S_ref - 0.5*S_range
+           enddo
+         endif
+!         if (j.eq.G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
+       enddo
+
+     enddo
+  endif
+
+  if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+
+end subroutine dumbbell_initialize_sponges
+
+!> \namespace dumbbell_initialization
 !!
-!! The module configures the model for the idealized seamount
+!! The module configures the model for the idealized dumbbell
 !! test case.
-end module seamount_initialization
+end module dumbbell_initialization
