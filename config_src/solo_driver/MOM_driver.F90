@@ -29,7 +29,8 @@ program MOM_main
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
   use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
-  use MOM,                 only : calculate_surface_state, finish_MOM_initialization
+  use MOM,                 only : extract_surface_state, finish_MOM_initialization
+  use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : MOM_state_type, step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
@@ -125,6 +126,11 @@ program MOM_main
   real :: dt_off                  ! Offline time step in seconds
   integer :: ntstep               ! The number of baroclinic dynamics time steps
                                   ! within time_step.
+  real :: dt_therm
+  real :: dt_dyn, dtdia, t_elapsed_seg
+  integer :: n, n_max, nts, n_last_thermo
+  logical :: diabatic_first, single_step_call
+  type(time_type) :: Time2
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
                                 ! incremental restart files are saved and whether they
@@ -142,7 +148,7 @@ program MOM_main
   integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
   integer :: hours=0, minutes=0, seconds=0 ! length, if read from a namelist.
-  integer :: yr, mon, day, hr, min, sec    ! Temp variables for writing the date.
+  integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
   character(len=9)  :: month
@@ -295,15 +301,13 @@ program MOM_main
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp)
   endif
-  fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
+  call get_MOM_state_elements(MSp, G=grid, GV=GV, C_p=fluxes%C_p)
   Master_Time = Time
-  grid => MSp%G
-  GV   => MSp%GV
+
   call callTree_waypoint("done initialize_MOM")
 
-  call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
-                               MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
+  call extract_surface_state(MSp, sfc_state, MOM_CSp)
 
   call surface_forcing_init(Time, grid, param_file, diag, &
                             surface_forcing_CSp, tracer_flow_CSp)
@@ -364,6 +368,23 @@ program MOM_main
                  timeunit=Time_unit, fail_if_missing=.true.)
     Time_end = daymax
   endif
+
+  call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
+                 "If true, advance the state of MOM with a single step \n"//&
+                 "including both dynamics and thermodynamics.  If false \n"//&
+                 "the two phases are advanced with separate calls.", default=.true.)
+  call get_param(param_file, mod_name, "DT_THERM", dt_therm, &
+                 "The thermodynamic and tracer advection time step. \n"//&
+                 "Ideally DT_THERM should be an integer multiple of DT \n"//&
+                 "and less than the forcing or coupling time-step, unless \n"//&
+                 "THERMO_SPANS_COUPLING is true, in which case DT_THERM \n"//&
+                 "can be an integer multiple of the coupling timestep.  By \n"//&
+                 "default DT_THERM is set to DT.", units="s", default=dt)
+  call get_param(param_file, mod_name, "DIABATIC_FIRST", diabatic_first, &
+                 "If true, apply diabatic and thermodynamic processes, \n"//&
+                 "including buoyancy forcing and mass gain or loss, \n"//&
+                 "before stepping the dynamics forward.", default=.false.)
+
 
   if (Time >= Time_end) call MOM_error(FATAL, &
     "MOM_driver: The run has been started at or after the end time of the run.")
@@ -460,8 +481,48 @@ program MOM_main
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
       call step_offline(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
-    else
+    elseif (single_step_call) then
       call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
+    else
+      n_max = 1 ; if (time_step > dt) n_max = ceiling(time_step/dt - 0.001)
+      dt_dyn = time_step / real(n_max)
+
+      nts = MAX(1,MIN(n_max,floor(dt_therm/dt_dyn + 0.001)))
+      n_last_thermo = 0
+
+      Time2 = Time1 ; t_elapsed_seg = 0.0
+      do n=1,n_max
+        if (diabatic_first) then
+          if (modulo(n-1,nts)==0) then
+            dtdia = dt*min(ntstep,n_max-(n-1))
+            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MSp, MOM_CSp, &
+                          do_dynamics=.false., do_thermodynamics=.true., &
+                          start_cycle=(n==1), end_cycle=.false.)
+          endif
+
+          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MSp, MOM_CSp, &
+                        do_dynamics=.true., do_thermodynamics=.false., &
+                        start_cycle=.false., end_cycle=(n==n_max))
+        else
+          call step_MOM(forces, fluxes, sfc_state, Time2, dt_dyn, MSp, MOM_CSp, &
+                        do_dynamics=.true., do_thermodynamics=.false., &
+                        start_cycle=(n==1), end_cycle=.false.)
+
+          if ((modulo(n,nts)==0) .or. (n==n_max)) then
+            dtdia = dt*(n - n_last_thermo)
+            ! Back up Time2 to the start of the thermodynamic segment.
+            if (n > n_last_thermo+1) &
+              Time2 = Time2 - set_time(int(floor((dtdia - dt) + 0.5)))
+            call step_MOM(forces, fluxes, sfc_state, Time2, dtdia, MSp, MOM_CSp, &
+                          do_dynamics=.false., do_thermodynamics=.true., &
+                          start_cycle=.false., end_cycle=(n==n_max))
+            n_last_thermo = n
+          endif
+        endif
+
+        t_elapsed_seg = t_elapsed_seg + dt
+        Time2 = Time1 + set_time(int(floor(t_elapsed_seg + 0.5)))
+      enddo
     endif
 
 !   Time = Time + Time_step_ocean
@@ -534,10 +595,11 @@ program MOM_main
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-         "with inconsistent dynamics and advective times.  Additional restart fields "//&
+    if (.not.MOM_state_is_synchronized(MSp)) &
+      call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
-     if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
+    if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
          "End of MOM_main reached with unused buoyancy fluxes. "//&
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")
@@ -551,11 +613,11 @@ program MOM_main
         write(unit, '(i6,8x,a)') calendar_type, &
              '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
 
-        call get_date(Start_time, yr, mon, day, hr, min, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, min, sec, &
+        call get_date(Start_time, yr, mon, day, hr, mins, sec)
+        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
              'Model start time:   year, month, day, hour, minute, second'
-        call get_date(Time, yr, mon, day, hr, min, sec)
-        write(unit, '(6i6,8x,a)') yr, mon, day, hr, min, sec, &
+        call get_date(Time, yr, mon, day, hr, mins, sec)
+        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
              'Current model time: year, month, day, hour, minute, second'
     end if
     call close_file(unit)

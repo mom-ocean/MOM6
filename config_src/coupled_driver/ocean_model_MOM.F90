@@ -18,8 +18,9 @@ module ocean_model_mod
 !</OVERVIEW>
 
 use MOM, only : initialize_MOM, step_MOM, MOM_control_struct, MOM_state_type, MOM_end
-use MOM, only : calculate_surface_state, allocate_surface_state, finish_MOM_initialization
-use MOM, only : step_offline
+use MOM, only : extract_surface_state, allocate_surface_state, finish_MOM_initialization
+use MOM, only : get_MOM_state_elements, MOM_state_is_synchronized
+use MOM, only : get_ocean_stocks, step_offline
 use MOM_constants, only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, disable_averaging
 use MOM_diag_mediator, only : diag_mediator_close_registration, diag_mediator_end
@@ -270,10 +271,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MSp, OS%MOM_CSp, &
                       OS%restart_CSp, Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true.)
-  OS%grid => OS%MSp%G ; OS%GV => OS%MSp%GV
-  OS%C_p = OS%MSp%tv%C_p
-  OS%fluxes%C_p = OS%MSp%tv%C_p
-  use_temperature = ASSOCIATED(OS%MSp%tv%T)
+  call get_MOM_state_elements(OS%MSp, G=OS%grid, GV=OS%GV, C_p=OS%C_p, &
+                              use_temp=use_temperature)
+  OS%fluxes%C_p = OS%C_p
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -367,9 +367,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
     call coupler_type_set_diags(Ocean_sfc%fields, "ocean_sfc", &
                                 Ocean_sfc%axes(1:2), Time_in)
 
-    call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-             OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-             OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
+    call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -675,9 +673,10 @@ subroutine ocean_model_restart(OS, timestamp)
   type(ocean_state_type),        pointer :: OS
   character(len=*), intent(in), optional :: timestamp
 
-  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-       "with inconsistent dynamics and advective times.  Additional restart fields "//&
-       "that have not been coded yet would be required for reproducibility.")
+  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+      call MOM_error(WARNING, "End of MOM_main reached with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_restart "//&
       "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
       "restart files can only be created after the buoyancy forcing is applied.")
@@ -759,9 +758,10 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 !   restart behavior as now in FMS.
   character(len=200) :: restart_dir
 
-  if (OS%MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
-       "with inconsistent dynamics and advective times.  Additional restart fields "//&
-       "that have not been coded yet would be required for reproducibility.")
+  if (.not.MOM_state_is_synchronized(OS%MSp)) &
+    call MOM_error(WARNING, "ocean_model_save_restart called with inconsistent "//&
+         "dynamics and advective times.  Additional restart fields "//&
+         "that have not been coded yet would be required for reproducibility.")
   if (.not.OS%fluxes%fluxes_used) call MOM_error(FATAL, "ocean_model_save_restart "//&
        "was called with unused buoyancy fluxes.  For conservation, the ocean "//&
        "restart files can only be created after the buoyancy forcing is applied.")
@@ -958,9 +958,7 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
   call coupler_type_spawn(Ocean_sfc%fields, OS%sfc_state%tr_fields, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
-  call calculate_surface_state(OS%sfc_state, OS%MSp%u, &
-           OS%MSp%v, OS%MSp%h, OS%MSp%ave_ssh,&
-           OS%grid, OS%GV, OS%MSp, OS%MOM_CSp)
+  call extract_surface_state(OS%MSp, OS%sfc_state, OS%MOM_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid)
 
@@ -994,6 +992,8 @@ end subroutine ocean_model_flux_init
 ! Ocean_stock_pe - returns stocks of heat, water, etc. for conservation checks.!
 !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~!
 !> Ocean_stock_pe - returns the integrated stocks of heat, water, etc. for conservation checks.
+!!   Because of the way FMS is coded, only the root PE has the integrated amount,
+!!   while all other PEs get 0.
 subroutine Ocean_stock_pe(OS, index, value, time_index)
   use stock_constants_mod, only : ISTOCK_WATER, ISTOCK_HEAT,ISTOCK_SALT
   type(ocean_state_type), pointer     :: OS         !< A structure containing the internal ocean state.
@@ -1007,49 +1007,29 @@ subroutine Ocean_stock_pe(OS, index, value, time_index)
 !  (in)      value -  Sum returned for the conservation quantity of interest.
 !  (in,opt)  time_index - Index for time level to use if this is necessary.
 
-  real :: to_heat, to_mass, to_salt, PSU_to_kg ! Conversion constants.
-  integer :: i, j, k, is, ie, js, je, nz, ind
+  real :: salt
 
   value = 0.0
   if (.not.associated(OS)) return
   if (.not.OS%is_ocean_pe) return
 
-  is = OS%grid%isc ; ie = OS%grid%iec
-  js = OS%grid%jsc ; je = OS%grid%jec ; nz = OS%grid%ke
-
   select case (index)
-    case (ISTOCK_WATER)
-      ! Return the mass of fresh water in the ocean on this PE in kg.
-      to_mass = OS%GV%H_to_kg_m2
+    case (ISTOCK_WATER)  ! Return the mass of fresh water in the ocean in kg.
       if (OS%GV%Boussinesq) then
-        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-          value = value + to_mass*(OS%MSp%h(i,j,k) * OS%grid%areaT(i,j))
-        endif ; enddo ; enddo ; enddo
-      else
-        ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
-        PSU_to_kg = 1.0e-3
-        do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-          value = value + to_mass * ((1.0 - PSU_to_kg*OS%MSp%tv%S(i,j,k))*&
-                                  (OS%MSp%h(i,j,k) * OS%grid%areaT(i,j)))
-        endif ; enddo ; enddo ; enddo
+        call get_ocean_stocks(OS%MSp, mass=value, on_PE_only=.true.)
+      else  ! In non-Boussinesq mode, the mass of salt needs to be subtracted.
+        call get_ocean_stocks(OS%MSp, mass=value, salt=salt, on_PE_only=.true.)
+        value = value - salt
       endif
-    case (ISTOCK_HEAT)
-      ! Return the heat content of the ocean on this PE in J.
-      to_heat = OS%GV%H_to_kg_m2 * OS%C_p
-      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-        value = value + (to_heat * OS%MSp%tv%T(i,j,k)) * &
-                        (OS%MSp%h(i,j,k)*OS%grid%areaT(i,j))
-      endif ; enddo ; enddo ; enddo
-    case (ISTOCK_SALT)
-      ! Return the mass of the salt in the ocean on this PE in kg.
-      ! The 1000 converts salinity in PSU to salt in kg kg-1.
-      to_salt = OS%GV%H_to_kg_m2 / 1000.0
-      do k=1,nz ; do j=js,je ; do i=is,ie ; if (OS%grid%mask2dT(i,j) > 0.5) then
-        value = value + (to_salt * OS%MSp%tv%S(i,j,k)) * &
-                        (OS%MSp%h(i,j,k)*OS%grid%areaT(i,j))
-      endif ; enddo ; enddo ; enddo
+    case (ISTOCK_HEAT)  ! Return the heat content of the ocean in J.
+      call get_ocean_stocks(OS%MSp, heat=value, on_PE_only=.true.)
+    case (ISTOCK_SALT)  ! Return the mass of the salt in the ocean in kg.
+       call get_ocean_stocks(OS%MSp, salt=value, on_PE_only=.true.)
     case default ; value = 0.0
   end select
+  ! If the FMS coupler is changed so that Ocean_stock_PE is only called on
+  ! ocean PEs, uncomment the following and eliminate the on_PE_only flags above.
+  !  if (.not.is_root_pe()) value = 0.0
 
 end subroutine Ocean_stock_pe
 
