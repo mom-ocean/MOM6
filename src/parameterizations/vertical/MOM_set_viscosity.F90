@@ -34,7 +34,7 @@ module MOM_set_visc
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_debugging, only : uvchksum
+use MOM_debugging, only : uvchksum, hchksum
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl, time_type
@@ -126,7 +126,7 @@ contains
 !! paper of Killworth and Edwards, JPO 1999.  It is not necessary to
 !! calculate the thickness and viscosity every time step; instead
 !! previous values may be used.
-subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
+subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS, symmetrize)
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -142,6 +142,9 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
                                                   !! related fields.
   type(set_visc_CS),        pointer       :: CS   !< The control structure returned by a previous
                                                   !! call to vertvisc_init.
+  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
+                                                  !! of those values in visc that would be
+                                                  !! calculated with symmetric memory.
 !   The following subroutine calculates the thickness of the bottom
 ! boundary layer and the viscosity within that layer.  A drag law is
 ! used, either linearized about an assumed bottom velocity or using
@@ -313,6 +316,17 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
          "Module must be initialized before it is used.")
   if (.not.CS%bottomdraglaw) return
 
+  if (present(symmetrize)) then ; if (symmetrize) then
+    Jsq = js-1 ; Isq = is-1
+  endif ; endif
+
+  if (CS%debug) then
+    call uvchksum("Start set_viscous_BBL [uv]", u, v, G%HI, haloshift=1)
+    call hchksum(h,"Start set_viscous_BBL h", G%HI, haloshift=1, scale=GV%H_to_m)
+    if (associated(tv%T)) call hchksum(tv%T, "Start set_viscous_BBL T", G%HI, haloshift=1)
+    if (associated(tv%S)) call hchksum(tv%S, "Start set_viscous_BBL S", G%HI, haloshift=1)
+  endif
+
   use_BBL_EOS = associated(tv%eqn_of_state) .and. CS%BBL_use_EOS
   OBC => CS%OBC
 
@@ -324,7 +338,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !  if (CS%linear_drag) ustar(:) = cdrag_sqrt*CS%drag_bg_vel
 
   if ((nkml>0) .and. .not.use_BBL_EOS) then
-    do i=G%IscB,G%IecB+1 ; p_ref(i) = tv%P_ref ; enddo
+    do i=Isq,Ieq+1 ; p_ref(i) = tv%P_ref ; enddo
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do k=1,nkmb
       call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, &
@@ -400,11 +414,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, CS)
 !$OMP                                  BBL_visc_frac,h_vel,L0,Vol_0,dV_dL2,dVol,L_max,     &
 !$OMP                                  L_min,Vol_err_min,Vol_err_max,BBL_frac,Cell_width,  &
 !$OMP                                  gam,Rayleigh, Vol_tol, tmp_val_m1_to_p1)
-  do j=G%JscB,G%JecB ; do m=1,2
+  do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
       if (j<G%Jsc) cycle
-      is = G%IscB ; ie = G%IecB
+      is = Isq ; ie = Ieq
       do i=is,ie
         do_i(i) = .false.
         if (G%mask2dCu(I,j) > 0) do_i(i) = .true.
@@ -1023,7 +1037,7 @@ end function set_u_at_v
 !! the thickness of the topmost NKML layers (with a bulk mixed layer) are
 !! currently used.  The thicknesses are given in terms of fractional layers, so
 !! that this thickness will move as the thickness of the topmost layers change.
-subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
+subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS, symmetrize)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1041,6 +1055,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
   real,                    intent(in)    :: dt   !< Time increment in s.
   type(set_visc_CS),       pointer       :: CS   !< The control structure returned by a previous
                                                  !! call to vertvisc_init.
+  logical,        optional, intent(in)    :: symmetrize !< If present and true, do extra calculations
+                                                  !! of those values in visc that would be
+                                                  !! calculated with symmetric memory.
 
 !   The following subroutine calculates the thickness of the surface boundary
 ! layer for applying an elevated viscosity.  A bulk Richardson criterion or
@@ -1167,6 +1184,10 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, CS)
          "Module must be initialized before it is used.")
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
+
+  if (present(symmetrize)) then ; if (symmetrize) then
+    Jsq = js-1 ; Isq = is-1
+  endif ; endif
 
   Rho0x400_G = 400.0*(GV%Rho0/GV%g_Earth)*GV%m_to_H
   U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
