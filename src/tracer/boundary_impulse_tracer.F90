@@ -16,7 +16,6 @@ use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_C
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -220,11 +219,7 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
   enddo ! Tracer loop
 
   if (associated(OBC)) then
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  ! do m=1,CS%ntr
-  !  call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
-  ! enddo
+  ! Steal from updated DOME in the fullness of time.
   endif
 
 end subroutine initialize_boundary_impulse_tracer

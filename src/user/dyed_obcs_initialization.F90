@@ -10,7 +10,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_io,              only : vardesc, var_desc
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables,       only : thermo_var_ptrs
 use MOM_verticalGrid,    only : verticalGrid_type
 

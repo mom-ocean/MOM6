@@ -31,18 +31,17 @@ public register_tracer
 public MOM_tracer_chksum, MOM_tracer_chkinv
 public register_tracer_diagnostics, post_tracer_diagnostics, post_tracer_transport_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
-public add_tracer_OBC_values
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
 
 !> The tracer type
 type, public :: tracer_type
 
   real, dimension(:,:,:), pointer :: t              => NULL() !< tracer concentration array
-  real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows
-  real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
-                                                              !! specified in OBCs through u-face of cell
-  real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
-                                                              !! specified in OBCs through v-face of cell
+! real                            :: OBC_inflow_conc=  0.0    !< tracer concentration for generic inflows
+! real, dimension(:,:,:), pointer :: OBC_in_u       => NULL() !< structured values for flow into the domain
+!                                                             !! specified in OBCs through u-face of cell
+! real, dimension(:,:,:), pointer :: OBC_in_v       => NULL() !< structured values for flow into the domain
+!                                                             !! specified in OBCs through v-face of cell
 
   real, dimension(:,:,:), pointer :: ad_x           => NULL() !< diagnostic array for x-advective tracer flux
   real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
@@ -270,11 +269,11 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   if (present(ad_y)) then ; if (associated(ad_y)) Tr%ad_y => ad_y ; endif
   if (present(df_x)) then ; if (associated(df_x)) Tr%df_x => df_x ; endif
   if (present(df_y)) then ; if (associated(df_y)) Tr%df_y => df_y ; endif
-  if (present(OBC_inflow)) Tr%OBC_inflow_conc = OBC_inflow
-  if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-                                    Tr%OBC_in_u => OBC_in_u ; endif
-  if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-                                    Tr%OBC_in_v => OBC_in_v ; endif
+! if (present(OBC_inflow)) Tr%OBC_inflow_conc = OBC_inflow
+! if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
+!                                   Tr%OBC_in_u => OBC_in_u ; endif
+! if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
+!                                   Tr%OBC_in_v => OBC_in_v ; endif
   if (present(ad_2d_x)) then ; if (associated(ad_2d_x)) Tr%ad2d_x => ad_2d_x ; endif
   if (present(ad_2d_y)) then ; if (associated(ad_2d_y)) Tr%ad2d_y => ad_2d_y ; endif
   if (present(df_2d_x)) then ; if (associated(df_2d_x)) Tr%df2d_x => df_2d_x ; endif
@@ -303,40 +302,6 @@ subroutine lock_tracer_registry(Reg)
   Reg%locked = .True.
 
 end subroutine lock_tracer_registry
-
-
-!> This subroutine adds open boundary condition concentrations for a tracer that
-!! has previously been registered by a call to register_tracer.
-subroutine add_tracer_OBC_values(name, Reg, OBC_inflow, OBC_in_u, OBC_in_v)
-  character(len=*), intent(in)               :: name        !< tracer name for which the diagnostic points
-  type(tracer_registry_type), pointer        :: Reg         !< pointer to the tracer registry
-  real, intent(in), optional                 :: OBC_inflow  !< tracer value for all inflows via the OBC
-                                                            !! for which OBC_in_u or OBC_in_v are
-                                                            !! not specified (same units as tracer CONC)
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_u    !< tracer at inflows through u-face of tracer cells
-                                                            !! (same units as tracer CONC)
-  real, pointer, dimension(:,:,:), optional  :: OBC_in_v    !< tracer at inflows through v-face of tracer cells
-                                                            !! (same units as tracer CONC)
-
-  integer :: m
-
-  if (.not. associated(Reg)) call MOM_error(FATAL, "add_tracer_OBC_values :"// &
-       "register_tracer must be called before add_tracer_OBC_values")
-
-  do m=1,Reg%ntr ; if (Reg%Tr(m)%name == trim(name)) exit ; enddo
-
-  if (m <= Reg%ntr) then
-    if (present(OBC_inflow)) Reg%Tr(m)%OBC_inflow_conc = OBC_inflow
-    if (present(OBC_in_u)) then ; if (associated(OBC_in_u)) &
-                                      Reg%Tr(m)%OBC_in_u => OBC_in_u ; endif
-    if (present(OBC_in_v)) then ; if (associated(OBC_in_v)) &
-                                      Reg%Tr(m)%OBC_in_v => OBC_in_v ; endif
-  else
-    call MOM_error(FATAL, "MOM_tracer: register_tracer must be called for "//&
-             trim(name)//" before add_tracer_OBC_values is called for it.")
-  endif
-
-end subroutine add_tracer_OBC_values
 
 !> register_tracer_diagnostics does a set of register_diag_field calls for any previously
 !! registered in a tracer registry with a value of registry_diags set to .true.
@@ -376,7 +341,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (.not. associated(Reg)) call MOM_error(FATAL, "register_tracer_diagnostics: "// &
+  if (.not. associated(Reg)) call MOM_error(FATAL, "register_tracer_diagnostics: "//&
        "register_tracer must be called before register_tracer_diagnostics")
 
   nTr_in = Reg%ntr
@@ -488,33 +453,36 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
 
     ! Lateral diffusion convergence tendencies
     if (Tr%diag_form == 1) then
-      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency',                    &
-          diag%axesTL, Time, "Lateral or neutral diffusion tracer content tendency for "//trim(shortnm),            &
-          conv_units, conversion = Tr%conv_scale, x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
+      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
+          diag%axesTL, Time, "Lateral or neutral diffusion tracer content tendency for "//trim(shortnm), &
+          conv_units, conversion=Tr%conv_scale, x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
 
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
-          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration"//    &
-          "tendency for "//trim(shortnm), conv_units, conversion = Tr%conv_scale,                      &
+          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration "//&
+          "tendency for "//trim(shortnm), conv_units, conversion = Tr%conv_scale, &
           x_cell_method = 'sum', y_cell_method = 'sum')
     else
-      cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//' expressed as '//&
-                       trim(lowercase(flux_longname))//' content due to parameterized mesoscale diffusion'
-      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency',                  &
-          diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for", conv_units,        &
-          conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendname)//'pmdiff',                         &
-          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)),        &
+      cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//&
+           ' expressed as '//trim(lowercase(flux_longname))//&
+           ' content due to parameterized mesoscale diffusion'
+      Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
+          diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for "//trim(shortnm), &
+          conv_units, conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendname)//'pmdiff', &
+          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
 
       cmor_var_lname = 'Tendency of '//trim(lowercase(cmor_longname))//' expressed as '//&
                        trim(lowercase(flux_longname))//' content due to parameterized mesoscale diffusion'
-      Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d',          &
-          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer concentration tendency for", &
-          conv_units, conversion = Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendname)//'pmdiff_2d',          &
-          cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)),      &
-          x_cell_method = 'sum', y_cell_method = 'sum')
+      Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
+          diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer "//&
+          "concentration tendency for "//trim(shortnm), conv_units, &
+          conversion=Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendname)//'pmdiff_2d', &
+          cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
+          x_cell_method='sum', y_cell_method='sum')
     endif
     Tr%id_dfxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_conc_tendency', &
-        diag%axesTL, Time, "Lateral (neutral) tracer concentration tendency for", units//' s-1')
+        diag%axesTL, Time, "Lateral (neutral) tracer concentration tendency for "//trim(shortnm), &
+        trim(units)//' s-1')
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)
     if (len_trim(Tr%cmor_tendname) == 0) then
@@ -523,7 +491,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units)
     else
-      cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//trim(flux_longname)//" Content"
+      cmor_var_lname = "Tendency of "//trim(cmor_longname)//" Expressed as "//&
+                        trim(flux_longname)//" Content"
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, &
           cmor_field_name=trim(Tr%cmor_tendname)//"tend", &
@@ -556,14 +525,15 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       var_lname = "Vertical remapping tracer concentration tendency for "//trim(Reg%Tr(m)%name)
       Tr%id_remap_conc= register_diag_field('ocean_model',                          &
         trim(Tr%flux_nameroot)//'_tendency_vert_remap', diag%axesTL, Time, var_lname, &
-        trim(units)//'s-1')
+        trim(units)//' s-1')
 
       var_lname = "Vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont = register_diag_field('ocean_model', &
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap',         &
         diag%axesTL, Time, var_lname, flux_units, v_extensive=.true., conversion = Tr%conv_scale)
 
-      var_lname = "Vertical sum of vertical remapping tracer content tendency for "//trim(Reg%Tr(m)%flux_longname)
+      var_lname = "Vertical sum of vertical remapping tracer content tendency for "//&
+                  trim(Reg%Tr(m)%flux_longname)
       Tr%id_remap_cont_2d = register_diag_field('ocean_model', &
         trim(Tr%flux_nameroot)//'h_tendency_vert_remap_2d',         &
         diag%axesT1, Time, var_lname, flux_units, conversion = Tr%conv_scale)
@@ -573,8 +543,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
     if (use_ALE .and. (Reg%ntr<MAX_FIELDS_) .and. Tr%remap_tr) then
       unit2 = trim(units)//"2"
       if (index(units(1:len_trim(units))," ") > 0) unit2 = "("//trim(units)//")2"
-      Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, Time, &
-        "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
+      Tr%id_tr_vardec = register_diag_field('ocean_model', trim(shortnm)//"_vardec", diag%axesTL, &
+        Time, "ALE variance decay for "//lowercase(longname), trim(unit2)//" s-1")
       if (Tr%id_tr_vardec > 0) then
         ! Set up a new tracer for this tracer squared
         m2 = Reg%ntr+1
