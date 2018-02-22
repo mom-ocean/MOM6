@@ -89,7 +89,7 @@ type, public :: tracer_type
   character(len=48)               :: conv_units = ""          !< The units for the flux convergence of this tracer.
   real                            :: conv_scale = 1.0         !< A scaling factor used to convert the flux
                                                               !! convergence of this tracer to its desired units.
-  character(len=48)               :: cmor_tendname = ""       !< The CMOR variable name for tendencies of this
+  character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
                                                               !! tracer, required because CMOR does not follow any
                                                               !! discernable pattern for these names.
   integer :: ind_tr_squared = -1
@@ -129,7 +129,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
                            OBC_inflow, OBC_in_u, OBC_in_v, ad_x, ad_y, df_x, df_y, &
                            ad_2d_x, ad_2d_y, df_2d_x, df_2d_y, advection_xy, registry_diags, &
                            flux_nameroot, flux_longname, flux_units, flux_scale, &
-                           convergence_units, convergence_scale, cmor_tendname, diag_form, &
+                           convergence_units, convergence_scale, cmor_tendprefix, diag_form, &
                            restart_CS, mandatory)
   type(hor_index_type),           intent(in)    :: HI           !< horizontal index type
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
@@ -175,7 +175,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   character(len=*),     optional, intent(in)    :: convergence_units   !< The units for the flux convergence of this tracer.
   real,                 optional, intent(in)    :: convergence_scale !< A scaling factor used to convert the flux
                                                                 !! convergence of this tracer to its desired units.
-  character(len=*),     optional, intent(in)    :: cmor_tendname !< The CMOR name for the layer-integrated tendencies of this tracer.
+  character(len=*),     optional, intent(in)    :: cmor_tendprefix !< The CMOR name for the layer-integrated tendencies of this tracer.
   integer,              optional, intent(in)    :: diag_form    !< An integer (1 or 2, 1 by default) indicating the character
                                                                 !! string template to use in labeling diagnostics
   type(MOM_restart_CS), optional, pointer       :: restart_CS   !< A pointer to the restart control structure;
@@ -248,8 +248,8 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   Tr%conv_units = ""
   if (present(convergence_units)) Tr%conv_units = convergence_units
 
-  Tr%cmor_tendname = ""
-  if (present(cmor_tendname)) Tr%cmor_tendname = cmor_tendname
+  Tr%cmor_tendprefix = ""
+  if (present(cmor_tendprefix)) Tr%cmor_tendprefix = cmor_tendprefix
 
   Tr%conv_scale = 1.0
   if (present(convergence_scale)) then
@@ -467,7 +467,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
            ' content due to parameterized mesoscale diffusion'
       Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
           diag%axesTL, Time, "Lateral or neutral diffusion tracer concentration tendency for "//trim(shortnm), &
-          conv_units, conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendname)//'pmdiff', &
+          conv_units, conversion = Tr%conv_scale, cmor_field_name = trim(Tr%cmor_tendprefix)//'pmdiff', &
           cmor_long_name = trim(cmor_var_lname), cmor_standard_name = trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method = 'sum', y_cell_method = 'sum', v_extensive = .true.)
 
@@ -476,7 +476,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
       Tr%id_dfxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency_2d', &
           diag%axesT1, Time, "Depth integrated lateral or neutral diffusion tracer "//&
           "concentration tendency for "//trim(shortnm), conv_units, &
-          conversion=Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendname)//'pmdiff_2d', &
+          conversion=Tr%conv_scale, cmor_field_name=trim(Tr%cmor_tendprefix)//'pmdiff_2d', &
           cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method='sum', y_cell_method='sum')
     endif
@@ -485,7 +485,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
         trim(units)//' s-1')
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)
-    if (len_trim(Tr%cmor_tendname) == 0) then
+    if (len_trim(Tr%cmor_tendprefix) == 0) then
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, v_extensive=.true.)
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
@@ -495,13 +495,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, use_ALE, diag_
                         trim(flux_longname)//" Content"
       Tr%id_trxh_tendency = register_diag_field('ocean_model', trim(shortnm)//'h_tendency', &
           diag%axesTL, Time, var_lname, conv_units, &
-          cmor_field_name=trim(Tr%cmor_tendname)//"tend", &
+          cmor_field_name=trim(Tr%cmor_tendprefix)//"tend", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
           v_extensive=.true., conversion=Tr%conv_scale)
       cmor_var_lname = trim(cmor_var_lname)//" Vertical Sum"
       Tr%id_trxh_tendency_2d = register_diag_field('ocean_model', trim(shortnm)//'h_tendency_2d', &
           diag%axesT1, Time, "Vertical sum of "//trim(lowercase(var_lname)), conv_units, &
-          cmor_field_name=trim(Tr%cmor_tendname)//"tend_2d", &
+          cmor_field_name=trim(Tr%cmor_tendprefix)//"tend_2d", &
           cmor_standard_name=cmor_long_std(cmor_var_lname), cmor_long_name=cmor_var_lname, &
           conversion=Tr%conv_scale)
     endif

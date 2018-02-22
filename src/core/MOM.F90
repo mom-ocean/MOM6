@@ -189,6 +189,8 @@ type, public :: MOM_state_type ; private
   real :: t_dyn_rel_diag      !< The time of the diagnostics relative to diabatic
                               !! processes and remapping (in seconds).  t_dyn_rel_diag
                               !! is always positive, since the diagnostics must lag.
+  integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection
+                              !! Must be saved if thermo spans coupling?
 end type MOM_state_type
 
 
@@ -393,8 +395,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
   integer       :: n_max  ! number of steps to take in this call
-  integer, save :: ndyn_per_adv = 0 ! Number of calls to dynamics since the last call to advection
-                                    ! I think this has to have the save attribute if thermo_spans coupling
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -608,9 +608,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
       ! Store pre-dynamics grids for proper diagnostic remapping for transports or advective tendencies
       ! If there are more dynamics steps per advective steps (i.e DT_THERM /= DT), this needs to be the
       ! stored at the first call
-      if (ndyn_per_adv == 0 .and. MS%t_dyn_rel_adv == 0.) then
+      if (MS%ndyn_per_adv == 0 .and. MS%t_dyn_rel_adv == 0.) then
         call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
-        ndyn_per_adv = ndyn_per_adv + 1
+        MS%ndyn_per_adv = MS%ndyn_per_adv + 1
       endif
 
       ! The pre-dynamics velocities might be stored for debugging truncations.
@@ -663,7 +663,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, MS, CS
 
       if (do_advection) then ! Do advective transdtport and lateral tracer mixing.
         call step_MOM_tracer_dyn(MS, CS, G, GV, h, Time_local)
-        ndyn_per_adv = 0
+        MS%ndyn_per_adv = 0
         if (CS%diabatic_first .and. abs(MS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
                 "step_MOM: Mismatch between the dynamics and diabatic times "//&
                 "with DIABATIC_FIRST.")
@@ -1922,12 +1922,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, MS, CS, restart_CSp
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W m-2', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
-                           convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
+                           convergence_scale=conv2watt, CMOR_tendprefix="opottemp", diag_form=2)
       call register_tracer(MS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
-                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
+                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, MS%tv, vd_T, vd_S, param_file)
