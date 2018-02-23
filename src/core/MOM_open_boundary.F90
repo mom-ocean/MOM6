@@ -86,6 +86,7 @@ type, public :: OBC_segment_tracer_type
   real                            :: OBC_inflow_conc = 0.0 !< tracer concentration for generic inflows
   character(len=32)               :: name                  !< tracer name used for error messages
   type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
+  real, dimension(:,:,:), pointer :: tres       => NULL()  !< tracer reservoir array
 end type OBC_segment_tracer_type
 
 !> Registry type for tracers on segments
@@ -144,6 +145,11 @@ type, public :: OBC_segment_type
                                                             !! that values should be nudged towards (m s-1).
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
+  real :: Tr_InvLscale_out                                     !< An effective inverse length scale (m-1)
+  real :: Tr_InvLscale_in                                      !< for restoring the tracer concentration in a
+                                                               !< ficticious reservior towards interior values
+                                                               !< when flow is exiting the domain, or towards
+                                                               !< an externally imposed value when flow is entering
 end type OBC_segment_type
 
 !> Open-boundary data
@@ -259,7 +265,7 @@ subroutine open_boundary_config(G, param_file, OBC)
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
-
+  real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries
   allocate(OBC)
 
   call log_version(param_file, mdl, version, "Controls where open boundaries are located, what "//&
@@ -388,9 +394,27 @@ subroutine open_boundary_config(G, param_file, OBC)
                    "Valid values range from 0 to 1. This is only used if \n"//&
                    "one of the open boundary segments is using Orlanski.", &
                    units="nondim",  default=0.2)
+      call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
+                 "An effective length scale for restoring the tracer concentration \n"//&
+                 "at the boundaries to externally imposed values when the flow. \n"//&
+                 "is entering the domain .", units="m", default=0.0)
+
+      call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN ", Lscale_in, &
+                 "An effective length scale for restoring the tracer concentration \n"//&
+                 "at the boundaries to values from the interior when the flow. \n"//&
+                 "is exiting the domain .", units="m", default=0.0)
+
     endif
     if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
   endif
+
+  ! All tracers are using the same restoring length scale for now, but we may want to make this
+  ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
+  ! by data while others are well constrained - MJH.
+  do l = 1, OBC%number_of_segments
+    OBC%segment(l)%Tr_InvLscale_in =  1.0/Lscale_in
+    OBC%segment(l)%Tr_InvLscale_out =  1.0/Lscale_out
+  enddo
 
     ! Safety check
   if ((OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) .and. &
@@ -2296,7 +2320,11 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
+            ! if the tracer reservoir has not yet been initialized, then set to external value
+            if (segment%tr_Reg%Tr(1)%tres(i,j,k) <=0.) &
+                 segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
           enddo; enddo; enddo
+
         else
           segment%tr_Reg%Tr(1)%OBC_inflow_conc = segment%field(m)%value
         endif
@@ -2304,6 +2332,9 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
+            ! if the tracer reservoir has not yet been initialized, then set to external value
+            if (segment%tr_Reg%Tr(2)%tres(i,j,k) <=0.) &
+                 segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
           enddo; enddo; enddo
         else
           segment%tr_Reg%Tr(2)%OBC_inflow_conc = segment%field(m)%value
@@ -2484,9 +2515,11 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   if (present(OBC_scalar)) segment%tr_Reg%Tr(ntseg)%OBC_inflow_conc = OBC_scalar ! initialize tracer value later
   if (present(OBC_array)) then
     if (segment%is_E_or_W) then
-      allocate(segment%tr_Reg%Tr(ntseg)%t(IsdB:IedB,jsd:jed,1:GV%ke))
+      allocate(segment%tr_Reg%Tr(ntseg)%t(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
+      allocate(segment%tr_Reg%Tr(ntseg)%tres(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
     elseif (segment%is_N_or_S) then
-      allocate(segment%tr_Reg%Tr(ntseg)%t(isd:ied,JsdB:JedB,1:GV%ke))
+      allocate(segment%tr_Reg%Tr(ntseg)%t(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
+      allocate(segment%tr_Reg%Tr(ntseg)%tres(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
     endif
   endif
 
