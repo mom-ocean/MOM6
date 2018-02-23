@@ -24,15 +24,13 @@ program MOM_main
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-
-  use time_interp_external_mod, only : time_interp_external_init
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_diag_mediator,   only : enable_averaging, disable_averaging, diag_mediator_end
-  use MOM_diag_mediator,   only : diag_mediator_close_registration, diag_mediator_end
+  use MOM_diag_mediator,   only : diag_ctrl, diag_mediator_close_registration
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : calculate_surface_state, finish_MOM_initialization
-  use MOM,                 only : step_offline
+  use MOM,                 only : MOM_state_type, step_offline
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_error_handler,   only : MOM_error, MOM_mesg, WARNING, FATAL, is_root_pe
   use MOM_error_handler,   only : callTree_enter, callTree_leave, callTree_waypoint
@@ -45,10 +43,8 @@ program MOM_main
   use MOM_io,              only : file_exists, open_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, ASCII_FILE, READONLY_FILE, SINGLE_FILE
-  use MOM_restart,         only : save_restart
+  use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
-  use MOM_sum_output,      only : write_energy, accumulate_net_input
-  use MOM_sum_output,      only : MOM_sum_output_init, sum_output_CS
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
   use MOM_time_manager,    only : time_type, set_date, set_time, get_date, time_type_to_real
@@ -57,6 +53,7 @@ program MOM_main
   use MOM_time_manager,    only : increment_date, set_calendar_type, month_name
   use MOM_time_manager,    only : JULIAN, GREGORIAN, NOLEAP, THIRTY_DAY_MONTHS
   use MOM_time_manager,    only : NO_CALENDAR
+  use MOM_tracer_flow_control, only : tracer_flow_control_CS
   use MOM_variables,       only : surface
   use MOM_verticalGrid,    only : verticalGrid_type
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
@@ -93,11 +90,11 @@ program MOM_main
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true.
 
-  integer :: n
+  integer :: ns
 
   ! nmax is the number of iterations after which to stop so that the
   ! simulation does not exceed its CPU time limit.  nmax is determined by
-  ! evaluating the CPU time used between successive calls to write_energy.
+  ! evaluating the CPU time used between successive calls to write_cputime.
   ! Initially it is set to be very large.
   integer :: nmax=2000000000;
 
@@ -115,7 +112,6 @@ program MOM_main
   type(time_type) :: Start_time         ! The start time of the simulation.
   type(time_type) :: segment_start_time ! The start time of this run segment.
   type(time_type) :: Time_end           ! End time for the segment or experiment.
-  type(time_type) :: write_energy_time  ! The next time to write to the energy file.
   type(time_type) :: restart_time       ! The next time to write restart files.
   type(time_type) :: Time_step_ocean    ! A time_type version of time_step.
 
@@ -140,9 +136,8 @@ program MOM_main
   real            :: Time_unit       ! The time unit in seconds for the following input fields.
   type(time_type) :: restint         ! The time between saves of the restart file.
   type(time_type) :: daymax          ! The final day of the simulation.
-  type(time_type) :: energysavedays  ! The interval between writing the energies
-                                     ! and other integral quantities of the run.
 
+  integer :: CPU_steps          ! The number of steps between writing CPU time.
   integer :: date_init(6)=0                ! The start date of the whole simulation.
   integer :: date(6)=-1                    ! Possibly the start date of this run segment.
   integer :: years=0, months=0, days=0     ! These may determine the segment run
@@ -162,6 +157,7 @@ program MOM_main
   logical :: unit_in_use
   integer :: initClock, mainClock, termClock
 
+  logical :: debug               ! If true, write verbose checksums for debugging purposes.
   logical :: offline_tracer_mode ! If false, use the model in prognostic mode where
                                  ! the barotropic and baroclinic dynamics, thermodynamics,
                                  ! etc. are stepped forward integrated in time.
@@ -171,10 +167,18 @@ program MOM_main
                                  ! a previous integration of the prognostic model
 
   type(MOM_control_struct),  pointer :: MOM_CSp => NULL()
+  type(MOM_state_type),      pointer :: MSp => NULL()
+  !> A pointer to the tracer flow control structure.
+  type(tracer_flow_control_CS), pointer :: &
+    tracer_flow_CSp => NULL()  !< A pointer to the tracer flow control structure
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
-  type(sum_output_CS),       pointer :: sum_output_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(MOM_restart_CS),      pointer :: &
+    restart_CSp => NULL()     !< A pointer to the restart control structure
+                              !! that will be used for MOM restart files.
+  type(diag_ctrl), pointer :: &
+    diag => NULL()            !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
 
   character(len=4), parameter :: vers_num = 'v2.0'
@@ -207,9 +211,6 @@ program MOM_main
     call set_current_pelist(ocean_pelist)
     deallocate(ocean_pelist)
   endif
-
-  !!! dont keep this here - move to mom open_boundary ###
-  call time_interp_external_init()
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )
@@ -283,25 +284,29 @@ program MOM_main
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     segment_start_time = set_date(date(1),date(2),date(3),date(4),date(5),date(6))
     Time = segment_start_time
-    ! Note the not before CS%d
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, segment_start_time, offline_tracer_mode = offline_tracer_mode)
+    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+                        segment_start_time, offline_tracer_mode=offline_tracer_mode, &
+                        diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp)
   else
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or left as Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, param_file, dirs, MOM_CSp, offline_tracer_mode=offline_tracer_mode)
+    call initialize_MOM(Time, Start_time, param_file, dirs, MSp, MOM_CSp, restart_CSp, &
+                        offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
+                        tracer_flow_CSp=tracer_flow_CSp)
   endif
-  fluxes%C_p = MOM_CSp%tv%C_p  ! Copy the heat capacity for consistency.
+  fluxes%C_p = MSp%tv%C_p  ! Copy the heat capacity for consistency.
 
   Master_Time = Time
-  grid => MOM_CSp%G
-  GV   => MOM_CSp%GV
-  call calculate_surface_state(sfc_state, MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                               MOM_CSp%ave_ssh, grid, GV, MOM_CSp)
+  grid => MSp%G
+  GV   => MSp%GV
+  call callTree_waypoint("done initialize_MOM")
 
+  call calculate_surface_state(sfc_state, MSp%u, MSp%v, MSp%h, &
+                               MSp%ave_ssh, grid, GV, MSp, MOM_CSp)
 
-  call surface_forcing_init(Time, grid, param_file, MOM_CSp%diag, &
-                            surface_forcing_CSp, MOM_CSp%tracer_flow_CSp)
+  call surface_forcing_init(Time, grid, param_file, diag, &
+                            surface_forcing_CSp, tracer_flow_CSp)
   call callTree_waypoint("done surface_forcing_init")
 
   call get_param(param_file, mod_name, "ICE_SHELF", use_ice_shelf, &
@@ -310,14 +315,8 @@ program MOM_main
     ! These arrays are not initialized in most solo cases, but are needed
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
-                              MOM_CSp%diag, forces, fluxes)
+                              diag, forces, fluxes)
   endif
-
-  call MOM_sum_output_init(grid, param_file, dirs%output_directory, &
-                           MOM_CSp%ntrunc, Start_time, sum_output_CSp)
-  call MOM_write_cputime_init(param_file, dirs%output_directory, Start_time, &
-                              write_CPU_CSp)
-  call callTree_waypoint("done MOM_sum_output_init")
 
   segment_start_time = Time
   elapsed_time = 0.0
@@ -380,16 +379,23 @@ program MOM_main
                  "of TIMEUNIT.  Use 0 (the default) to not save \n"//&
                  "incremental restart files at all.", default=set_time(0), &
                  timeunit=Time_unit)
-  call get_param(param_file, mod_name, "ENERGYSAVEDAYS", energysavedays, &
-                 "The interval in units of TIMEUNIT between saves of the \n"//&
-                 "energies of the run and other globally summed diagnostics.", &
-                 default=set_time(int(time_step+0.5)), timeunit=Time_unit)
+  call get_param(param_file, mod_name, "WRITE_CPU_STEPS", cpu_steps, &
+                 "The number of coupled timesteps between writing the cpu \n"//&
+                 "time. If this is not positive, do not check cpu time, and \n"//&
+                 "the segment run-length can not be set via an elapsed CPU time.", &
+                 default=1000)
+  call get_param(param_file, "MOM", "DEBUG", debug, &
+                 "If true, write out verbose debugging data.", default=.false.)
 
   call log_param(param_file, mod_name, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
+  if (cpu_steps > 0) &
+    call MOM_write_cputime_init(param_file, dirs%output_directory, Start_time, &
+                                write_CPU_CSp)
+
   ! Close the param_file.  No further parsing of input is possible after this.
   call close_param_file(param_file)
-  call diag_mediator_close_registration(MOM_CSp%diag)
+  call diag_mediator_close_registration(diag)
 
   ! Write out a time stamp file.
   if (calendar_type /= NO_CALENDAR) then
@@ -404,13 +410,7 @@ program MOM_main
     call close_file(unit)
   endif
 
-!  This has been moved inside the loop to be applied when n=1.
-!  call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-!                    MOM_CSp%tv, Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp)
-  call write_cputime(Time, 0, nmax, write_CPU_CSp)
-
-  write_energy_time = Start_time + energysavedays * &
-      (1 + (Time - Start_time) / energysavedays)
+  if (cpu_steps > 0) call write_cputime(Time, 0, nmax, write_CPU_CSp)
 
   if (((.not.BTEST(Restart_control,1)) .and. (.not.BTEST(Restart_control,0))) &
       .or. (Restart_control < 0)) permit_incr_restart = .false.
@@ -429,16 +429,16 @@ program MOM_main
 
   call cpu_clock_begin(mainClock) !begin main loop
 
-  n = 1
-  do while ((n < nmax) .and. (Time < Time_end))
-    call callTree_enter("Main loop, MOM_driver.F90",n)
+  ns = 1
+  do while ((ns < nmax) .and. (Time < Time_end))
+    call callTree_enter("Main loop, MOM_driver.F90",ns)
 
     ! Set the forcing for the next steps.
     if (.not. offline_tracer_mode) then
         call set_forcing(sfc_state, forces, fluxes, Time, Time_step_ocean, grid, &
                      surface_forcing_CSp)
     endif
-    if (MOM_CSp%debug) then
+    if (debug) then
       call MOM_mech_forcing_chksum("After set forcing", forces, grid, haloshift=0)
       call MOM_forcing_chksum("After set forcing", fluxes, grid, haloshift=0)
     endif
@@ -452,20 +452,16 @@ program MOM_main
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = time_step
 
-    if (n==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes)
-
-      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, MOM_CSp%tv, &
-                        Time, 0, grid, GV, sum_output_CSp, MOM_CSp%tracer_flow_CSp, &
-                        MOM_CSp%OBC)
+    if (ns==1) then
+      call finish_MOM_initialization(Time, dirs, MSp, MOM_CSp, fluxes, restart_CSp)
     endif
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     if (offline_tracer_mode) then
-      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
+      call step_offline(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
     else
-      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, time_step, MSp, MOM_CSp)
     endif
 
 !   Time = Time + Time_step_ocean
@@ -474,7 +470,7 @@ program MOM_main
     if (elapsed_time > 2e9) then
       ! This is here to ensure that the conversion from a real to an integer
       ! can be accurately represented in long runs (longer than ~63 years).
-      ! It will also ensure that elapsed time does not loose resolution of order
+      ! It will also ensure that elapsed time does not lose resolution of order
       ! the timetype's resolution, provided that the timestep and tick are
       ! larger than 10-5 seconds.  If a clock with a finer resolution is used,
       ! a smaller value would be required.
@@ -488,32 +484,25 @@ program MOM_main
     endif
     Time = Master_Time
 
-    call enable_averaging(time_step, Time, MOM_CSp%diag)
-    call mech_forcing_diags(forces, fluxes, time_step, grid, MOM_CSp%diag, &
+    if (cpu_steps > 0) then ; if (MOD(ns, cpu_steps) == 0) then
+      call write_cputime(Time, ns+ntstep-1, nmax, write_CPU_CSp)
+    endif ; endif
+
+    call enable_averaging(time_step, Time, diag)
+    call mech_forcing_diags(forces, fluxes, time_step, grid, diag, &
                             surface_forcing_CSp%handles)
-    call disable_averaging(MOM_CSp%diag)
+    call disable_averaging(diag)
 
     if (.not. offline_tracer_mode) then
       if (fluxes%fluxes_used) then
-        call enable_averaging(fluxes%dt_buoy_accum, Time, MOM_CSp%diag)
+        call enable_averaging(fluxes%dt_buoy_accum, Time, diag)
         call forcing_diagnostics(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, &
-                                 MOM_CSp%diag, surface_forcing_CSp%handles)
-        call accumulate_net_input(fluxes, sfc_state, fluxes%dt_buoy_accum, grid, sum_output_CSp)
-        call disable_averaging(MOM_CSp%diag)
+                                 diag, surface_forcing_CSp%handles)
+        call disable_averaging(diag)
       else
         call MOM_error(FATAL, "The solo MOM_driver is not yet set up to handle "//&
                "thermodynamic time steps that are longer than the coupling timestep.")
       endif
-    endif
-
-!  See if it is time to write out the energy.
-    if ((Time + (Time_step_ocean/2) > write_energy_time) .and. &
-        (MOM_CSp%t_dyn_rel_adv == 0.0)) then
-      call write_energy(MOM_CSp%u, MOM_CSp%v, MOM_CSp%h, &
-                        MOM_CSp%tv, Time, n+ntstep-1, grid, GV, sum_output_CSp, &
-                        MOM_CSp%tracer_flow_CSp)
-      call write_cputime(Time, n+ntstep-1, nmax, write_CPU_CSp)
-      write_energy_time = write_energy_time + energysavedays
     endif
 
 !  See if it is time to write out a restart file - timestamped or not.
@@ -521,7 +510,7 @@ program MOM_main
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, .true., GV=GV)
+                          restart_CSp, .true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -529,7 +518,7 @@ program MOM_main
       endif
       if (BTEST(Restart_control,0)) then
         call save_restart(dirs%restart_output_dir, Time, grid, &
-                          MOM_CSp%restart_CSp, GV=GV)
+                          restart_CSp, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -538,14 +527,14 @@ program MOM_main
       restart_time = restart_time + restint
     endif
 
-    n = n + ntstep
+    ns = ns + ntstep
     call callTree_leave("Main loop")
   enddo
 
   call cpu_clock_end(mainClock)
   call cpu_clock_begin(termClock)
   if (Restart_control>=0) then
-    if (MOM_CSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
+    if (MSp%t_dyn_rel_adv > 0.0) call MOM_error(WARNING, "End of MOM_main reached "//&
          "with inconsistent dynamics and advective times.  Additional restart fields "//&
          "that have not been coded yet would be required for reproducibility.")
      if (.not.fluxes%fluxes_used .and. .not.offline_tracer_mode) call MOM_error(FATAL, &
@@ -553,7 +542,7 @@ program MOM_main
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")
 
-    call save_restart(dirs%restart_output_dir, Time, grid, MOM_CSp%restart_CSp, GV=GV)
+    call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
     ! Write ocean solo restart file.
@@ -587,12 +576,12 @@ program MOM_main
   endif
 
   call callTree_waypoint("End MOM_main")
-  call diag_mediator_end(Time, MOM_CSp%diag, end_diag_manager=.true.)
+  call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end
 
-  call MOM_end(MOM_CSp)
+  call MOM_end(MSp, MOM_CSp)
   if (use_ice_shelf) call ice_shelf_end(ice_shelf_CSp)
 
 end program MOM_main

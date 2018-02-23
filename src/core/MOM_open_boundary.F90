@@ -21,6 +21,7 @@ use MOM_string_functions,     only : extract_word, remove_spaces
 use MOM_tracer_registry,      only : tracer_registry_type
 use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
+use time_interp_external_mod, only : time_interp_external_init
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
@@ -39,7 +40,7 @@ public open_boundary_impose_normal_slope
 public open_boundary_impose_land_mask
 public radiation_open_bdry_conds
 public set_tracer_data
-public update_obc_segment_data
+public update_OBC_segment_data
 public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
@@ -174,6 +175,7 @@ type, public :: ocean_OBC_type
                                                       !! in the global domain use specified BCs.
   logical :: specified_v_BCs_exist_globally = .false. !< True if any meridional velocity points
                                                       !! in the global domain use specified BCs.
+  logical :: radiation_BCs_exist_globally = .false.   !< True if radiations BCs are in use anywhere.
   logical :: user_BCs_set_globally = .false.          !< True if any OBC_USER_CONFIG is set
                                                       !! for input from user directory.
   logical :: update_OBC = .false.                     !< Is OBC data time-dependent
@@ -186,7 +188,7 @@ type, public :: ocean_OBC_type
                                                       !! in the strain on open boundaries.
   logical :: zero_biharmonic = .false.                !< If True, zeros the Laplacian of flow on open boundaries for
                                                       !! use in the biharmonic viscosity term.
-  logical :: extend_segments = .false.                !< If True, extend OBC segments (for testing)
+  logical :: brushcutter_mode = .false.               !< If True, read data on supergrid.
   real :: g_Earth
   ! Properties of the segments used.
   type(OBC_segment_type), pointer, dimension(:) :: &
@@ -283,11 +285,6 @@ subroutine open_boundary_config(G, param_file, OBC)
                  "The number of model layers", default=0, do_not_log=.true.)
 
   if (config1 .ne. "none") OBC%user_BCs_set_globally = .true.
-
-  call get_param(param_file, mdl, "EXTEND_OBC_SEGMENTS", OBC%extend_segments, &
-                   "If true, extend OBC segments. This option is used to recover\n"//&
-                   "legacy solutions dependent on an incomplete implementaion of OBCs.\n"//&
-                   "This option will be obsoleted in the future.", default=.false.)
 
   if (OBC%number_of_segments > 0) then
     call get_param(param_file, mdl, "OBC_ZERO_VORTICITY", OBC%zero_vorticity, &
@@ -426,6 +423,9 @@ subroutine open_boundary_config(G, param_file, OBC)
               OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) then
     ! No open boundaries have been requested
     call open_boundary_dealloc(OBC)
+  else
+    ! Need this for ocean_only mode boundary interpolation.
+    call time_interp_external_init()
   endif
 
 end subroutine open_boundary_config
@@ -456,9 +456,6 @@ subroutine initialize_segment_data(G, OBC, PF)
   integer :: current_pe
   integer, dimension(1) :: single_pelist
   !will be able to dynamically switch between sub-sampling refined grid data or model grid
-  logical :: brushcutter_mode
-
-
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -487,6 +484,9 @@ subroutine initialize_segment_data(G, OBC, PF)
           "If true, the values on the intermediate grid used for remapping\n"//&
           "are forced to be bounded, which might not be the case due to\n"//&
           "round off.", default=.false.,do_not_log=.true.)
+    call get_param(PF, mdl, "BRUSHCUTTER_MODE", OBC%brushcutter_mode, &
+         "If true, read external OBC data on the supergrid.", &
+         default=.false.)
 
   allocate(OBC%remap_CS)
   call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
@@ -494,7 +494,6 @@ subroutine initialize_segment_data(G, OBC, PF)
        check_remapping=check_remapping, force_bounds_in_subcell=force_bounds_in_subcell)
 
   if (OBC%user_BCs_set_globally) return
-
 
   !< temporarily disable communication in order to read segment data independently
 
@@ -509,8 +508,10 @@ subroutine initialize_segment_data(G, OBC, PF)
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
     write(suffix,"('_segment_',i3.3)") n
-    ! needs documentation !!
-    call get_param(PF, mdl, segnam, segstr, 'xyz')
+    ! needs documentation !!  Yet, unsafe for now, causes grief for
+    ! MOM_parameter_docs in circle_obcs on two processes.
+!   call get_param(PF, mdl, segnam, segstr, 'xyz')
+    call get_param(PF, mdl, segnam, segstr)
 
     call parse_segment_data_str(trim(segstr), fields=fields, num_fields=num_fields)
     if (num_fields == 0) then
@@ -537,9 +538,6 @@ subroutine initialize_segment_data(G, OBC, PF)
     IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
-    ! this is hard-coded for now - needs cleanup ###
-    brushcutter_mode = .false.
-
     do m=1,num_fields
       call parse_segment_data_str(trim(segstr), var=trim(fields(m)), value=value, filenam=filename, fieldnam=fieldname)
       if (trim(filename) /= 'none') then
@@ -556,13 +554,13 @@ subroutine initialize_segment_data(G, OBC, PF)
         call field_size(filename,fieldname,siz,no_domain=.true.)
         if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
-          if (brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
+          if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
             call MOM_error(FATAL,'segment data are not on the supergrid')
           endif
           siz2(1)=1
 
           if (siz(1)>1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               siz2(1)=(siz(1)-1)/2
             else
               siz2(1)=siz(1)
@@ -570,7 +568,7 @@ subroutine initialize_segment_data(G, OBC, PF)
           endif
           siz2(2)=1
           if (siz(2)>1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               siz2(2)=(siz(2)-1)/2
             else
               siz2(2)=siz(2)
@@ -613,8 +611,8 @@ subroutine initialize_segment_data(G, OBC, PF)
 
 end subroutine initialize_segment_data
 
-!< Define indices for segment and store in hor_index_type
-!< using global segment bounds corresponding to q-points
+!> Define indices for segment and store in hor_index_type
+!> using global segment bounds corresponding to q-points
 subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   type(dyn_horgrid_type), intent(in) :: G !< grid type
   type(OBC_segment_type), intent(inout) :: seg  !< Open boundary segment
@@ -624,9 +622,6 @@ subroutine setup_segment_indices(G, seg, Is_obc, Ie_obc, Js_obc, Je_obc)
   integer, intent(in) :: Je_obc !< Q-point global j-index of end of segment
   ! Local variables
   integer :: Isg,Ieg,Jsg,Jeg
-
-!  if (.not. G%Domain%symmetric) call MOM_error(FATAL, "MOM_open_boundary.F90, setup_segment_indices: "//&
-!                       "Need to compile in symmetric mode")
 
   ! Isg, Ieg will be I*_obc in global space
   if (Ie_obc<Is_obc) then
@@ -698,15 +693,6 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
   Js_obc = Js_obc - G%jdg_offset ! Convert to local tile indices on this tile
   Je_obc = Je_obc - G%jdg_offset ! Convert to local tile indices on this tile
 
-  ! Hack to extend segment by one point
-  if (OBC%extend_segments) then
-    if (Js_obc<Je_obc) then
-      Js_obc = Js_obc - 1 ; Je_obc = Je_obc + 1
-    else
-      Js_obc = Js_obc + 1 ; Je_obc = Je_obc - 1
-    endif
-  endif
-
   if (Je_obc>Js_obc) then
     OBC%segment(l_seg)%direction = OBC_DIRECTION_E
   else if (Je_obc<Js_obc) then
@@ -728,6 +714,7 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_u_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
       OBC%segment(l_seg)%open = .true.
@@ -739,9 +726,9 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       print *,'segment_param_str= ',segment_param_str(1:22)
       allocate(tnudge(2))
       call get_param(PF, mdl, segment_param_str(1:22), tnudge, &
-           "Timescales in seconds for nudging along a segment", &
+           "Timescales in days for nudging along a segment,\n"//&
+           "for inflow, then outflow.", &
                 fail_if_missing=.true.,default=0.,units="days")
-!      tnudge(1)=1.0;tnudge(2)=30.
       print *,'tnudge=',tnudge
 !      call parse_segment_param(seg_str, 'TNUDGE_UNITS',OBC%segment(l_seg)%Tnudge_in)
       OBC%segment(l_seg)%Tnudge_in = 1.0/(tnudge(1)*86400.)
@@ -757,22 +744,19 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%Flather_u_BCs_exist_globally = .true.
       OBC%open_u_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_u_BCs_exist_globally = .true. ! This avoids deallocation
-      ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) then
-        Js_obc = Js_obc + 1
-        Je_obc = Je_obc - 1
-      endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_u_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (I_obc<=G%HI%IsdB .or. I_obc>=G%HI%IedB) return ! Boundary is not on tile
-    if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
   enddo ! a_loop
+
+  if (I_obc<=G%HI%IsdB+1 .or. I_obc>=G%HI%IedB-1) return ! Boundary is not on tile
+  if (Je_obc<=G%HI%JsdB .or. Js_obc>=G%HI%JedB) return ! Segment is not on tile
 
   OBC%segment(l_seg)%on_pe = .true.
   OBC%segment(l_seg)%is_E_or_W = .true.
@@ -811,15 +795,6 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
   Is_obc = Is_obc - G%idg_offset ! Convert to local tile indices on this tile
   Ie_obc = Ie_obc - G%idg_offset ! Convert to local tile indices on this tile
 
-  ! Hack to extend segment by one point
-  if (OBC%extend_segments) then
-    if (Is_obc<Ie_obc) then
-      Is_obc = Is_obc - 1 ; Ie_obc = Ie_obc + 1
-    else
-      Is_obc = Is_obc + 1 ; Ie_obc = Ie_obc - 1
-    endif
-  endif
-
   if (Ie_obc>Is_obc) then
      OBC%segment(l_seg)%direction = OBC_DIRECTION_S
   else if (Ie_obc<Is_obc) then
@@ -841,6 +816,7 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%radiation = .true.
       OBC%segment(l_seg)%open = .true.
       OBC%open_v_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'OBLIQUE') then
       OBC%segment(l_seg)%oblique = .true.
       OBC%segment(l_seg)%open = .true.
@@ -860,22 +836,19 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
       OBC%segment(l_seg)%Flather = .true.
       OBC%Flather_v_BCs_exist_globally = .true.
       OBC%open_v_BCs_exist_globally = .true.
+      OBC%radiation_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'SIMPLE') then
       OBC%segment(l_seg)%specified = .true.
       OBC%specified_v_BCs_exist_globally = .true. ! This avoids deallocation
-      ! Hack to undo the hack above for SIMPLE BCs
-      if (OBC%extend_segments) then
-        Is_obc = Is_obc + 1
-        Ie_obc = Ie_obc - 1
-      endif
     else
       call MOM_error(FATAL, "MOM_open_boundary.F90, setup_v_point_obc: "//&
                      "String '"//trim(action_str(a_loop))//"' not understood.")
     endif
 
-    if (J_obc<=G%HI%JsdB .or. J_obc>=G%HI%JedB) return ! Boundary is not on tile
-    if (Ie_obc<=G%HI%IsdB .or. Is_obc>=G%HI%IedB) return ! Segment is not on tile
   enddo ! a_loop
+
+  if (J_obc<=G%HI%JsdB+1 .or. J_obc>=G%HI%JedB-1) return ! Boundary is not on tile
+  if (Ie_obc<=G%HI%IsdB .or. Is_obc>=G%HI%IedB) return ! Segment is not on tile
 
   OBC%segment(l_seg)%on_pe = .true.
   OBC%segment(l_seg)%is_N_or_S = .true.
@@ -1852,22 +1825,21 @@ subroutine set_tracer_data(OBC, tv, h, G, PF, tracer_Reg)
 
 end subroutine set_tracer_data
 
+!> Needs documentation
 function lookup_seg_field(OBC_seg,field)
-  type(OBC_segment_type), pointer :: OBC_seg
-  character(len=32), intent(in) :: field ! The field name
+  type(OBC_segment_type), pointer :: OBC_seg !< OBC segment
+  character(len=32), intent(in) :: field !< The field name
   integer :: lookup_seg_field
-
-  integer :: n,m
+  ! Local variables
+  integer :: n
 
   lookup_seg_field=-1
   do n=1,OBC_seg%num_fields
-   if (trim(field) == OBC_seg%field(m)%name) then
+   if (trim(field) == OBC_seg%field(n)%name) then
      lookup_seg_field=n
      return
    endif
   enddo
-
-  return
 
 end function lookup_seg_field
 
@@ -2070,7 +2042,6 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   real, dimension(:,:), pointer :: seg_vel => NULL()  ! pointer to segment velocity array
   real, dimension(:,:), pointer :: seg_trans => NULL()  ! pointer to segment transport array
   real, dimension(:,:,:), allocatable :: tmp_buffer
-  logical :: brushcutter_mode
   integer :: subsample_factor
   integer :: is_obc2, js_obc2
 
@@ -2081,9 +2052,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
   if (.not. associated(OBC)) return
 
-  !will be able to dynamically switch between sub-sampling refined grid data or model grid
-  brushcutter_mode = .false.
-  if (brushcutter_mode) then
+  if (OBC%brushcutter_mode) then
     subsample_factor = 2
   else
     subsample_factor = 1
@@ -2100,7 +2069,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
     js_obc = max(segment%js_obc,jsd-1)
     je_obc = min(segment%je_obc,jed)
 
-    if (brushcutter_mode) then
+    if (OBC%brushcutter_mode) then
       if (segment%is_E_or_W) then
         nj_seg=nj_seg-1
         js_obc=js_obc+1
@@ -2162,7 +2131,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (.not.associated(segment%field(m)%buffer_dst)) then
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
           if (segment%field(m)%nk_src > 1) then
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,G%ke))
             else
               if (segment%is_E_or_W) then
@@ -2172,7 +2141,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
               endif
             endif
           else
-            if (brushcutter_mode) then
+            if (OBC%brushcutter_mode) then
               allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
             else
               if (segment%is_E_or_W) then
@@ -2196,7 +2165,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
 
         call time_interp_external(segment%field(m)%fid,Time, tmp_buffer)
-        if (brushcutter_mode) then
+        if (OBC%brushcutter_mode) then
           if (siz(1)==1) then
             segment%field(m)%buffer_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
           else
@@ -2211,7 +2180,7 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         endif
         if (segment%field(m)%nk_src > 1) then
           call time_interp_external(segment%field(m)%fid_dz,Time, tmp_buffer)
-          if (brushcutter_mode) then
+          if (OBC%brushcutter_mode) then
             if (siz(1)==1) then
               segment%field(m)%dz_src(is_obc,:,:)=tmp_buffer(1,2*(js_obc+G%jdg_offset)-1:2*(je_obc+G%jdg_offset)-1:2,:)
             else
@@ -2466,7 +2435,7 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
   type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
   type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
-  type(OBC_segment_type), intent(inout)            :: segment      !< current segment data structure
+  type(OBC_segment_type), intent(inout)         :: segment      !< current segment data structure
   type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
                                                                 !! stored value of tr%tr_desc. This target must be
                                                                 !! an enduring part of the control structure,
@@ -2847,14 +2816,14 @@ subroutine flood_fill2(G, color, cin, cout, cland)
 
 end subroutine flood_fill2
 
+!> Register OBC segment data for restarts
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
-  type(hor_index_type), intent(in) :: HI
-  type(verticalGrid_type), pointer, intent(in) :: GV
+  type(hor_index_type), intent(in) :: HI !< Horizontal indices
+  type(verticalGrid_type), pointer, intent(in) :: GV !< Container for vertical grid information
   type(ocean_OBC_type), pointer, intent(inout) :: OBC_CS !< OBC data structure
-  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp
+  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp !< Restart structure
+  ! Local variables
   type(vardesc) :: vd
-  logical :: rx_normal_associated
-  integer :: n
 
   if (.not. associated(OBC_CS)) &
        call MOM_error(FATAL, "open_boundary_register_restarts: Called with "//&
@@ -2864,14 +2833,11 @@ subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
        call MOM_error(FATAL, "open_boundary_register_restarts: Restart "//&
                       "arrays were previously allocated")
 
-
-  rx_normal_associated = .false.
-
-  do n=1,OBC_CS%number_of_segments
-    if (associated(OBC_CS%segment(n)%rx_normal)) rx_normal_associated = .true.
-  enddo
-
-  if (rx_normal_associated) then
+  ! *** This is a temporary work around for restarts with OBC segments.
+  ! This implementation uses 3D arrays solely for restarts. We need
+  ! to be able to add 2D ( x,z or y,z ) data to restarts to avoid using
+  ! so much memory and disk space. ***
+  if (OBC_CS%radiation_BCs_exist_globally) then
     allocate(OBC_CS%rx_normal(HI%isdB:HI%iedB,HI%jsd:HI%jed,GV%ke))
     OBC_CS%rx_normal(:,:,:) = 0.0
     vd = var_desc("rx_normal","m s-1", "Normal Phase Speed for EW OBCs",'u','L')

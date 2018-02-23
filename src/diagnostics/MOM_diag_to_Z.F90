@@ -1002,7 +1002,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
     CS%id_tr(m) = register_diag_field('ocean_model_zold', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', name//'_xyave', CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', trim(name)//'_xyave', CS%axesZ, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else

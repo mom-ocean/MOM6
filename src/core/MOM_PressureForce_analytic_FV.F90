@@ -471,6 +471,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   real :: I_Rho0             ! 1/Rho0.
   real :: G_Rho0             ! G_Earth / Rho0 in m4 s-2 kg-1.
   real :: Rho_ref            ! The reference density in kg m-3.
+  real :: dz_neglect         ! A minimal thickness in m, like e.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
@@ -500,6 +501,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
 
   PRScheme = pressureReconstructionScheme(ALE_CSp)
   h_neglect = GV%H_subroundoff
+  dz_neglect = GV%H_subroundoff * GV%H_to_m
   I_Rho0 = 1.0/GV%Rho0
   G_Rho0 = GV%g_Earth/GV%Rho0
   rho_ref = CS%Rho0
@@ -617,9 +619,9 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
     endif
   endif
 
-!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,e,     &
-!$OMP                                  p_atm,nz,use_EOS,use_ALE,PRScheme,T_t,T_b,S_t, &
-!$OMP                                  S_b,CS,tv,tv_tmp,h,PFu,I_Rho0,h_neglect,PFv,dM)&
+!$OMP parallel do default(none) shared(use_p_atm,rho_ref,G,GV,e,p_atm,nz,use_EOS,&
+!$OMP                                  use_ALE,PRScheme,T_t,T_b,S_t,S_b,CS,tv,tv_tmp, &
+!$OMP                                  h,PFu,I_Rho0,h_neglect,dz_neglect,PFv,dM)&
 !$OMP                          private(is_bk,ie_bk,js_bk,je_bk,Isq_bk,Ieq_bk,Jsq_bk,  &
 !$OMP                                  Jeq_bk,ioff_bk,joff_bk,pa_bk,  &
 !$OMP                                  intx_pa_bk,inty_pa_bk,dpa_bk,intz_dpa_bk,      &
@@ -668,7 +670,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
             call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                       S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                       rho_ref, CS%Rho0, GV%g_Earth,    &
-                      GV%H_subroundoff, G%bathyT, G%HI, G%Block(n), &
+                      dz_neglect, G%bathyT, G%HI, G%Block(n), &
                       tv%eqn_of_state, dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
                       useMassWghtInterp = CS%useMassWghtInterp)
           elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then

@@ -2,26 +2,25 @@ module DOME_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
-use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_hor_index, only : hor_index_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
-use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, MOM_restart_CS
-use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, get_time
+use MOM_diag_mediator,   only : diag_ctrl
+use MOM_diag_to_Z,       only : diag_to_Z_CS
+use MOM_error_handler,   only : MOM_error, FATAL, WARNING
+use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,    only : forcing
+use MOM_hor_index,       only : hor_index_type
+use MOM_grid,            only : ocean_grid_type
+use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
+use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
+use MOM_restart,         only : MOM_restart_CS
+use MOM_sponge,          only : set_up_sponge_field, sponge_CS
+use MOM_time_manager,    only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
-use MOM_variables, only : surface
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_variables,       only : surface
+use MOM_verticalGrid,    only : verticalGrid_type
 
-use coupler_types_mod, only : coupler_type_set_data, ind_csurf
+use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
@@ -34,10 +33,6 @@ public DOME_tracer_column_physics, DOME_tracer_surface_state, DOME_tracer_end
 ! ntr is the number of tracers in this module.
 integer, parameter :: ntr = 11
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: DOME_tracer_CS ; private
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
                                         ! coupler.
@@ -47,11 +42,6 @@ type, public :: DOME_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR) :: &
-    tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
-    tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
-    tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
-    tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real :: land_val(NTR) = -1.0 ! The value of tr used where land is masked out.
   logical :: use_sponge    ! If true, sponges may be applied somewhere in the domain.
 
@@ -61,8 +51,6 @@ type, public :: DOME_tracer_CS ; private
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
-  integer, dimension(NTR) :: id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1
-  integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
   type(vardesc) :: tr_desc(NTR)
 end type DOME_tracer_CS
@@ -85,6 +73,8 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "DOME_tracer" ! This module's name.
+  character(len=48) :: flux_units ! The units for tracer fluxes, usually
+                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   character(len=200) :: inputdir
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_DOME_tracer
@@ -123,15 +113,17 @@ function register_DOME_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     else ; write(name,'("tr_D",I2.2)') m ; endif
     write(longname,'("Concentration of DOME Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
+    if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+    else ; flux_units = "kg s-1" ; endif
 
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
-    ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), .true., restart_CS)
-    ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m))
+    ! Register the tracer for horizontal advection, diffusion, and restarts.
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                         name=name, longname=longname, units="kg kg-1", &
+                         registry_diags=.true., flux_units=flux_units, &
+                         restart_CS=restart_CS)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -148,7 +140,7 @@ end function register_DOME_tracer
 !> This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
-                                  sponge_CSp, diag_to_Z_CSp)
+                                  sponge_CSp, diag_to_Z_CSp, param_file)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   logical,                               intent(in) :: restart !< .true. if the fields have already
@@ -163,6 +155,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                                                      !! for the sponges, if they are in use.
   type(diag_to_Z_CS),                    pointer    :: diag_to_Z_CSp !< A pointer to the control structure
                                                                      !! for diagnostics in depth space.
+  type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
 
 ! Local variables
   real, allocatable :: temp(:,:,:)
@@ -185,6 +178,7 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
+  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -285,61 +279,27 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   if (associated(OBC)) then
     call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
     if (OBC%specified_v_BCs_exist_globally) then
-      allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-        else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
+      segment => OBC%segment(1)
+      allocate(segment%field(NTR))
+      allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
+      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
+        if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
+        else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
       enddo ; enddo ; enddo
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, &
-                                 0.0, OBC_in_v=OBC_tr1_v)
+      call register_segment_tracer(CS%tr_desc(1), param_file, GV, &
+                                   OBC%segment(1), OBC_array=.true.)
     else
       ! This is not expected in the DOME example.
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
     endif
     ! All tracers but the first have 0 concentration in their inflows. As this
     ! is the default value, the following calls are unnecessary.
     do m=2,NTR
       call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-      call add_tracer_OBC_values(trim(name), CS%tr_Reg, 0.0)
+      call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
+                                   OBC%segment(1), OBC_scalar=0.0)
     enddo
   endif
-
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
-  else ; flux_units = "kg s-1" ; endif
-
-  do m=1,NTR
-    ! Register the tracer for the restart file.
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_DOME_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units))
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p, CS%tr_dfx(m)%p, CS%tr_dfy(m)%p)
-
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
 
 end subroutine initialize_DOME_tracer
 
@@ -395,19 +355,6 @@ subroutine DOME_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV,
     enddo
   endif
 
-  do m=1,NTR
-    if (CS%id_tracer(m)>0) &
-      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
-  enddo
-
 end subroutine DOME_tracer_column_physics
 
 !> This subroutine extracts the surface fields from this tracer package that
@@ -450,13 +397,6 @@ subroutine DOME_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,NTR
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
-
     deallocate(CS)
   endif
 end subroutine DOME_tracer_end

@@ -112,6 +112,7 @@ type, public :: surface_forcing_CS ; private
   logical :: adjust_net_srestore_to_zero    ! adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
+  logical :: use_net_FW_adjustment_sign_bug ! use the wrong sign when adjusting net FW
   logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
   logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil
                                             ! criteria for salinity restoring.
@@ -268,6 +269,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   real :: delta_sst           ! temporary storage for sst diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
+  real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
 
   call cpu_clock_begin(id_clock_forcing)
 
@@ -549,6 +551,8 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
+    sign_for_net_FW_bug = 1.
+    if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
       net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
@@ -560,7 +564,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
+        net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
       net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
     enddo ; enddo
@@ -930,6 +934,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  CS%adjust_net_fresh_water_to_zero, &
                  "If true, adjusts the net fresh-water forcing seen \n"//&
                  "by the ocean (including restoring) to zero.", default=.false.)
+  if (CS%adjust_net_fresh_water_to_zero) &
+    call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
+                 CS%use_net_FW_adjustment_sign_bug, &
+                   "If true, use the wrong sign for the adjustment to\n"//&
+                   "the net fresh-water.", default=.true.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
                  "If true, adjustments to net fresh water to achieve zero net are\n"//&

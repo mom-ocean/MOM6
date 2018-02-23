@@ -50,17 +50,18 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
 
   ! Local variables
   integer   :: i, j
-  real      :: x, y, delta, dblen
-
+  real      :: x, y, delta, dblen, dbfrac
 
   call get_param(param_file, mdl,"DUMBBELL_LEN",dblen, &
-                'Lateral Length scale for dumbbell ',&
+                'Lateral Length scale for dumbbell.',&
                  units='k', default=600., do_not_log=.false.)
+  call get_param(param_file, mdl,"DUMBBELL_FRACTION",dbfrac, &
+                'Meridional fraction for narrow part of dumbbell.',&
+                 units='nondim', default=0.5, do_not_log=.false.)
 
   if (G%x_axis_units == 'm') then
     dblen=dblen*1.e3
   endif
-
 
  do i=G%isc,G%iec
     do j=G%jsc,G%jec
@@ -68,7 +69,7 @@ subroutine dumbbell_initialize_topography ( D, G, param_file, max_depth )
       x = ( G%geoLonT(i,j) ) / dblen
       y = ( G%geoLatT(i,j)  ) / G%len_lat
       D(i,j)=G%max_depth
-      if ((x>=-0.25 .and. x<=0.25) .and. (y<=-.25 .or. y>=0.25)) then
+      if ((x>=-0.25 .and. x<=0.25) .and. (y <= -0.5*dbfrac .or. y >= 0.5*dbfrac)) then
         D(i,j) = 0.0
       endif
     enddo
@@ -229,31 +230,28 @@ subroutine dumbbell_initialize_temperature_salinity ( T, S, h, G, GV, param_file
     dblen=dblen*1.e3
   endif
 
+  do j=G%jsc,G%jec
+    do i=G%isc,G%iec
+    ! Compute normalized zonal coordinates (x,y=0 at center of domain)
+      x = ( G%geoLonT(i,j) ) / dblen
+      do k=1,nz
+        T(i,j,k)=T_surf
+      enddo
+      if (x>=0. ) then
+        do k=1,nz
+          S(i,j,k)=S_surf + 0.5*S_range
+        enddo
+      endif
+      if (x<0. ) then
+        do k=1,nz
+          S(i,j,k)=S_surf - 0.5*S_range
+        enddo
+      endif
 
-
-    do j=G%jsc,G%jec
-      do i=G%isc,G%iec
-      ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-         x = ( G%geoLonT(i,j) ) / dblen
-         do k=1,nz
-           T(i,j,k)=T_surf
-         enddo
-         if (x>=0. ) then
-           do k=1,nz
-             S(i,j,k)=S_surf + 0.5*S_range
-           enddo
-         endif
-         if (x<0. ) then
-           do k=1,nz
-             S(i,j,k)=S_surf - 0.5*S_range
-           enddo
-         endif
-
-   enddo
- enddo
+    enddo
+  enddo
 
 end subroutine dumbbell_initialize_temperature_salinity
-
 
 !> Initialize the restoring sponges for the dense water experiment
 subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp)
@@ -282,7 +280,6 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
     dblen=dblen*1.e3
   endif
 
-
   nz = GV%ke
 
   call get_param(param_file, mdl, "DUMBBELL_SPONGE_TIME_SCALE", sponge_time_scale, &
@@ -293,7 +290,6 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer',&
                  units='m', default=1.0e-3, do_not_log=.true.)
-
 
   ! no active sponges
   if (sponge_time_scale <= 0.) return
@@ -329,9 +325,7 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
       enddo
     enddo ; enddo
 
-
     call initialize_ALE_sponge(Idamp, G, param_file, ACSp, h, nz)
-
 
     ! construct temperature and salinity for the sponge
     ! start with initial condition
@@ -339,7 +333,6 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
 
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
-
 
       ! Compute normalized zonal coordinates (x,y=0 at center of domain)
          x = ( G%geoLonT(i,j) ) / dblen
@@ -356,14 +349,12 @@ subroutine dumbbell_initialize_sponges(G, GV, tv, param_file, use_ALE, CSp, ACSp
 !         if (j.eq.G%jsc) print *,'i,Sponge S= ',i,S(i,1,1)
        enddo
 
-
      enddo
- endif
+  endif
 
- if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
+  if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, tv%S, ACSp)
 
 end subroutine dumbbell_initialize_sponges
-
 
 !> \namespace dumbbell_initialization
 !!
