@@ -37,9 +37,8 @@ module oil_tracer
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -47,11 +46,10 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -72,10 +70,6 @@ public oil_stock, oil_tracer_end
 ! NTR_MAX is the maximum number of tracers in this module.
 integer, parameter :: NTR_MAX = 20
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: oil_tracer_CS ; private
   integer :: ntr    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
@@ -94,11 +88,6 @@ type, public :: oil_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR_MAX) :: &
-    tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.
-    tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
-    tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
-    tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   real, dimension(NTR_MAX) :: &
     IC_val = 0.0, &    ! The (uniform) initial condition value.
     young_val = 0.0, & ! The value assigned to tr at the surface.
@@ -112,10 +101,8 @@ type, public :: oil_tracer_CS ; private
                            ! initialization code if they are not found in the
                            ! restart files.
   integer, dimension(NTR_MAX) :: &
-    ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
+    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
-    id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1, &
-    id_tr_dfx = -1, id_tr_dfy = -1
 
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
@@ -151,6 +138,8 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying oils
+  character(len=48) :: flux_units ! The units for tracer fluxes, here
+                            ! kg(oil) s-1 or kg(oil) m-3 kg(water) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   logical :: register_oil_tracer
   integer :: isd, ied, jsd, jed, nz, m, i, j
@@ -215,7 +204,7 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     if (CS%oil_source_k(m)/=0) then
       write(name_tag(1:3),'("_",I2.2)') m
       CS%ntr = CS%ntr + 1
-      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg/m3", "Oil Tracer", caller=mdl)
+      CS%tr_desc(m) = var_desc("oil"//trim(name_tag), "kg m-3", "Oil Tracer", caller=mdl)
       CS%IC_val(m) = 0.0
       if (CS%oil_decay_days(m)>0.) then
         CS%oil_decay_rate(m)=1./(86400.0*CS%oil_decay_days(m))
@@ -226,6 +215,10 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   enddo
   call log_param(param_file, mdl, "OIL_DECAY_RATE", CS%oil_decay_rate(1:CS%ntr))
 
+  ! This needs to be changed if the units of tracer are changed above.
+  if (GV%Boussinesq) then ; flux_units = "kg s-1"
+  else ; flux_units = "kg m-3 kg s-1" ; endif
+
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
 
   do m=1,CS%ntr
@@ -233,12 +226,10 @@ function register_oil_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! calls.  Curses on the designers and implementers of Fortran90.
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_oil_tracer")
-    ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), &
-                                .not.CS%oil_may_reinit, restart_CS)
-    ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m))
+    ! Register the tracer for horizontal advection, diffusion, and restarts.
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=CS%tr_desc(m), &
+                         registry_diags=.true., flux_units=flux_units, restart_CS=restart_CS, &
+                         mandatory=.not.CS%oil_may_reinit)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -353,49 +344,8 @@ subroutine initialize_oil_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   enddo ! Tracer loop
 
   if (associated(OBC)) then
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  ! do m=1,CS%ntr
-  !  call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
-  ! enddo
+  ! Put something here...
   endif
-
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "yr m3 s-1"
-  else ; flux_units = "yr kg s-1" ; endif
-
-  do m=1,CS%ntr
-    ! Register the tracer for the restart file.
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_oil_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units))
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
-
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
 
 end subroutine initialize_oil_tracer
 
@@ -506,19 +456,6 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     enddo
   endif
 
-  do m=1,CS%ntr
-    if (CS%id_tracer(m)>0) &
-      call post_data(CS%id_tracer(m),CS%tr(:,:,:,m),CS%diag)
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
-  enddo
-
 end subroutine oil_tracer_column_physics
 
 function oil_stock(h, stocks, G, GV, CS, names, units, stock_index)
@@ -614,13 +551,6 @@ subroutine oil_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,CS%ntr
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
-
     deallocate(CS)
   endif
 end subroutine oil_tracer_end

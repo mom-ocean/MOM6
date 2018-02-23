@@ -3,9 +3,8 @@ module boundary_impulse_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
@@ -17,7 +16,6 @@ use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_C
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -38,10 +36,6 @@ public boundary_impulse_stock, boundary_impulse_tracer_end
 ! NTR_MAX is the maximum number of tracers in this module.
 integer, parameter :: NTR_MAX = 1
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: boundary_impulse_tracer_CS ; private
   integer :: ntr=NTR_MAX    ! The number of tracers that are actually used.
   logical :: coupled_tracers = .false.  ! These tracers are not offered to the
@@ -50,20 +44,11 @@ type, public :: boundary_impulse_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer :: tr(:,:,:,:) => NULL()   ! The array of tracers used in this
                                            ! subroutine, in g m-3?
-  type(p3d), dimension(NTR_MAX) :: &
-    tr_adx, &! Tracer zonal advective fluxes in g m-3 m3 s-1.An Error Has Occurred
-
-
-    tr_ady, &! Tracer meridional advective fluxes in g m-3 m3 s-1.
-    tr_dfx, &! Tracer zonal diffusive fluxes in g m-3 m3 s-1.
-    tr_dfy   ! Tracer meridional diffusive fluxes in g m-3 m3 s-1.
   logical :: tracers_may_reinit  ! If true, boundary_impulse can be initialized if
                                  ! not found in restart file
   integer, dimension(NTR_MAX) :: &
-    ind_tr, &  ! Indices returned by aof_set_coupler_flux if it is used and the
+    ind_tr     ! Indices returned by aof_set_coupler_flux if it is used and the
                ! surface tracer concentrations are to be provided to the coupler.
-    id_tracer = -1, id_tr_adx = -1, id_tr_ady = -1, &
-    id_tr_dfx = -1, id_tr_dfy = -1
 
   integer :: nkml ! Number of layers in mixed layer
   real, dimension(NTR_MAX)  :: land_val = -1.0
@@ -106,6 +91,8 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
   character(len=3)   :: name_tag ! String for creating identifying boundary_impulse
+  character(len=48)  :: flux_units ! The units for tracer fluxes, usually
+                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()
   real, pointer :: rem_time_ptr => NULL()
   logical :: register_boundary_impulse_tracer
@@ -139,16 +126,17 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   do m=1,CS%ntr
     ! This is needed to force the compiler not to do a copy in the registration
     ! calls.  Curses on the designers and implementers of Fortran90.
-    CS%tr_desc(m) = var_desc(trim("boundary_impulse"), "kg", &
+    CS%tr_desc(m) = var_desc(trim("boundary_impulse"), "kg kg-1", &
         "Boundary impulse tracer", caller=mdl)
+    if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"
+    else ; flux_units = "kg s-1" ; endif
+
     tr_ptr => CS%tr(:,:,:,m)
     call query_vardesc(CS%tr_desc(m), name=var_name, caller="register_boundary_impulse_tracer")
-    ! Register the tracer for the restart file.
-    call register_restart_field(tr_ptr, CS%tr_desc(m), &
-                                .not. CS%tracers_may_reinit, restart_CS)
-    ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, CS%tr_desc(m), param_file, HI, GV, tr_Reg, &
-                         tr_desc_ptr=CS%tr_desc(m))
+    ! Register the tracer for horizontal advection, diffusion, and restarts.
+    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, tr_desc=CS%tr_desc(m), &
+                         registry_diags=.true., flux_units=flux_units, &
+                         restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -159,10 +147,9 @@ function register_boundary_impulse_tracer(HI, GV, param_file, CS, tr_Reg, restar
   enddo
   ! Register remaining source time as a restart field
   rem_time_ptr => CS%remaining_source_time
-  call register_restart_field(rem_time_ptr,                                                                 &
-                              var_desc(trim("bir_remain_time"), "s", "Remaining time to apply BIR source",  &
-                                             hor_grid = "1", z_grid = "1", caller=mdl),                     &
-                              .not. CS%tracers_may_reinit, restart_CS)
+  call register_restart_field(rem_time_ptr, "bir_remain_time", &
+                              .not.CS%tracers_may_reinit, restart_CS, &
+                              "Remaining time to apply BIR source", "s")
 
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
@@ -232,49 +219,8 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, h, diag, OBC,
   enddo ! Tracer loop
 
   if (associated(OBC)) then
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  ! do m=1,CS%ntr
-  !  call add_tracer_OBC_values(trim(CS%tr_desc(m)%name), CS%tr_Reg, 0.0)
-  ! enddo
+  ! Steal from updated DOME in the fullness of time.
   endif
-
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "g salt/(m^2 s)"
-  else ; flux_units = "g salt/(m^2 s)" ; endif
-
-  do m=1,CS%ntr
-    ! Register the tracer for the restart file.
-    call query_vardesc(CS%tr_desc(m), name, units=units, longname=longname, &
-                       caller="initialize_boundary_impulse_tracer")
-    CS%id_tracer(m) = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-        day, trim(longname) , trim(units))
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
-
-    call register_Z_tracer(CS%tr(:,:,:,m), trim(name), longname, units, &
-                           day, G, diag_to_Z_CSp)
-  enddo
 
 end subroutine initialize_boundary_impulse_tracer
 
@@ -357,20 +303,6 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
       enddo ; enddo ; enddo
     endif
 
-  enddo
-
-  do m=1,1
-    if (CS%id_tracer(m)>0) then
-      call post_data(CS%id_tracer(m), CS%tr(:,:,:,m), CS%diag)
-    endif ! CS%id_tracer(m)>0
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
   enddo
 
 end subroutine boundary_impulse_tracer_column_physics
@@ -470,13 +402,6 @@ subroutine boundary_impulse_tracer_end(CS)
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)
-    do m=1,CS%ntr
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
-
     deallocate(CS)
   endif
 end subroutine boundary_impulse_tracer_end

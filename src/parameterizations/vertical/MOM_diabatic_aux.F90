@@ -1265,25 +1265,26 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, dt, fluxes, optics, h, tv, &
     !  1) Answers will change due to round-off
     !  2) Be sure to save their values BEFORE fluxes are used.
     if (Calculate_Buoyancy) then
-       drhodt(:) = 0.0
-       drhods(:) = 0.0
-       netPen(:,:) = 0.0
-       ! Sum over bands and attenuate as a function of depth
-       ! netPen is the netSW as a function of depth
-       call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
-            H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
-       ! Density derivatives
-       call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
-            dRhodT, dRhodS, start, npts, tv%eqn_of_state)
-       ! 1. Adjust netSalt to reflect dilution effect of FW flux
-       ! 2. Add in the SW heating for purposes of calculating the net
-       ! surface buoyancy flux affecting the top layer.
-       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
-       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
-       SkinBuoyFlux(G%isc:G%iec,j) = - GoRho * ( dRhodS(G%isc:G%iec) * (netSalt_rate(G%isc:G%iec) &
-            - tv%S(G%isc:G%iec,j,1) * netMassInOut_rate(G%isc:G%iec)* GV%H_to_m )&
-            + dRhodT(G%isc:G%iec) * ( netHeat_rate(G%isc:G%iec) +        &
-            netPen(G%isc:G%iec,1))) * GV%H_to_m ! m^2/s^3
+      drhodt(:) = 0.0
+      drhods(:) = 0.0
+      netPen(:,:) = 0.0
+      ! Sum over bands and attenuate as a function of depth
+      ! netPen is the netSW as a function of depth
+      call sumSWoverBands(G, GV, h2d(:,:), optics%opacity_band(:,:,j,:), nsw, j, dt, &
+           H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
+      ! Density derivatives
+      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, &
+           dRhodT, dRhodS, start, npts, tv%eqn_of_state)
+      ! 1. Adjust netSalt to reflect dilution effect of FW flux
+      ! 2. Add in the SW heating for purposes of calculating the net
+      ! surface buoyancy flux affecting the top layer.
+      ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
+      !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
+      do i=is,ie
+        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_m * ( &
+            dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+            dRhodT(i) * ( netHeat_rate(i) + netPen(i,1)) ) ! m^2/s^3
+      enddo
     endif
 
   enddo ! j-loop finish

@@ -20,23 +20,25 @@ public PPM_reconstruction, PPM_boundary_extrapolation
 !! to avoid division by zero.
 !! @note This is a dimensional parameter and should really include a unit
 !!       conversion.
-real, parameter :: h_neglect = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30
 
 contains
 
 !> Builds quadratic polynomials coefficients from cell mean and edge values.
-subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients)
+subroutine PPM_reconstruction( N, h, u, ppoly_E, ppoly_coefficients, h_neglect)
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< Cell widths
   real, dimension(N),   intent(in)    :: u !< Cell averages
   real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values
   real, dimension(N,3), intent(inout) :: ppoly_coefficients !< Polynomial coefficients
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
   ! Local variables
   integer   :: k              ! Loop index
   real      :: edge_l, edge_r ! Edge values (left and right)
 
   ! PPM limiter
-  call PPM_limiter_standard( N, h, u, ppoly_E )
+  call PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
 
   ! Loop over all cells
   do k = 1,N
@@ -56,11 +58,14 @@ end subroutine PPM_reconstruction
 !> Adjusts edge values using the standard PPM limiter (Colella & Woodward, JCP 1984)
 !! after first checking that the edge values are bounded by neighbors cell averages
 !! and that the edge values are monotonic between cell averages.
-subroutine PPM_limiter_standard( N, h, u, ppoly_E )
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(N),   intent(in)    :: h ! Cell widths
-  real, dimension(N),   intent(in)    :: u ! Cell averages
-  real, dimension(N,2), intent(inout) :: ppoly_E !< Edge values
+subroutine PPM_limiter_standard( N, h, u, ppoly_E, h_neglect )
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width
+                                           !! in the same units as h.
   ! Local variables
   integer   :: k              ! Loop index
   real      :: u_l, u_c, u_r  ! Cell averages (left, center and right)
@@ -68,7 +73,7 @@ subroutine PPM_limiter_standard( N, h, u, ppoly_E )
   real      :: expr1, expr2
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly_E )
+  call bound_edge_values( N, h, u, ppoly_E, h_neglect )
 
   ! Make discontinuous edge values monotonic
   call check_discontinuous_edge_values( N, u, ppoly_E )
@@ -124,7 +129,7 @@ end subroutine PPM_limiter_standard
 !------------------------------------------------------------------------------
 ! ppm boundary extrapolation
 ! -----------------------------------------------------------------------------
-subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
+subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients, h_neglect)
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -155,16 +160,22 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   real, dimension(:),   intent(in)    :: u ! cell averages (size N)
   real, dimension(:,:), intent(inout) :: ppoly_E
   real, dimension(:,:), intent(inout) :: ppoly_coefficients
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                          !! the purpose of cell reconstructions
+                                          !! in the same units as h.
 
   ! Local variables
-  integer       :: i0, i1
-  real          :: u0, u1
-  real          :: h0, h1
-  real          :: a, b, c
-  real          :: u0_l, u0_r
-  real          :: u1_l, u1_r
-  real          :: slope
-  real          :: exp1, exp2
+  integer :: i0, i1
+  real    :: u0, u1
+  real    :: h0, h1
+  real    :: a, b, c
+  real    :: u0_l, u0_r
+  real    :: u1_l, u1_r
+  real    :: slope
+  real    :: exp1, exp2
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! ----- Left boundary -----
   i0 = 1
@@ -177,7 +188,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly_coefficients(i1,2)
-  u1_r = b *((h0+h_neglect)/(h1+h_neglect))     ! derivative evaluated at xi = 0.0,
+  u1_r = b *((h0+hNeglect)/(h1+hNeglect))     ! derivative evaluated at xi = 0.0,
                         ! expressed w.r.t. xi (local coord. system)
 
   ! Limit the right slope by the PLM limited slope
@@ -231,7 +242,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, ppoly_E, ppoly_coefficients)
   b = ppoly_coefficients(i0,2)
   c = ppoly_coefficients(i0,3)
   u1_l = (b + 2*c)                  ! derivative evaluated at xi = 1.0
-  u1_l = u1_l * ((h1+h_neglect)/(h0+h_neglect))
+  u1_l = u1_l * ((h1+hNeglect)/(h0+hNeglect))
 
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )

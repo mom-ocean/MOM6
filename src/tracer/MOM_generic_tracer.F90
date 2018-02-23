@@ -38,7 +38,6 @@ module MOM_generic_tracer
   use MOM_time_manager, only : time_type, get_time, set_time
   use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
   use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-  use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
   use MOM_tracer_Z_init, only : tracer_Z_init
   use MOM_tracer_initialization_from_Z, only : MOM_initialize_tracer_from_Z
   use MOM_variables, only : surface, thermo_var_ptrs
@@ -113,7 +112,6 @@ contains
     real, dimension(:,:,:), pointer     :: tr_ptr
     real, dimension(HI%isd:HI%ied, HI%jsd:HI%jed,GV%ke)         :: grid_tmask
     integer, dimension(HI%isd:HI%ied, HI%jsd:HI%jed)           :: grid_kmt
-    type(vardesc) :: vdesc
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
@@ -192,24 +190,18 @@ contains
        call g_tracer_get_values(g_tracer,g_tracer_name,'longname', longname)
        call g_tracer_get_values(g_tracer,g_tracer_name,'units',units )
 
-       !nnz: Hard coded stuff. Need get/set routines
-       vdesc = var_desc(g_tracer_name, units, longname, &
-                        caller="MOM_generic_tracer")
        !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
        tr_ptr => tr_field(:,:,:,1)
-       ! Register tracer for restart file.
-       ! mandatory field in restart file is set to .false.
-       ! 2008/12/08 jgj: change default to true, so all fields must be present in restart.
-       ! 2010/02/04 jgj: if tracers_may_reinit is true, tracers may go through
-       ! initialization code if not found in restart
-       call register_restart_field(tr_ptr, vdesc, .not.CS%tracers_may_reinit, restart_CS)
-
-       ! Register prognastic tracer for horizontal advection & diffusion. Note
-       ! that because the generic tracer code uses only a temporary copy of
-       ! the vardesc type, a pointer to this type can not be set as a target
-       ! for register_tracer to use.
-       if (g_tracer_is_prog(g_tracer)) &
-         call register_tracer(tr_ptr, vdesc, param_file, HI, GV, tr_Reg)
+       ! Register prognastic tracer for horizontal advection, diffusion, and restarts.
+       if (g_tracer_is_prog(g_tracer)) then
+         call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                              name=g_tracer_name, longname=longname, units=units, &
+                              registry_diags=.false., &   !### CHANGE TO TRUE?
+                              restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
+       else
+         call register_restart_field(tr_ptr, g_tracer_name, .not.CS%tracers_may_reinit, &
+                                     restart_CS, longname=longname, units=units)
+       endif
 
        !traverse the linked list till hit NULL
        call g_tracer_get_next(g_tracer, g_tracer_next)
@@ -543,7 +535,8 @@ contains
 
     call generic_tracer_source(tv%T,tv%S,rho_dzt,dzt,Hml,G%isd,G%jsd,1,dt,&
          G%areaT,get_diag_time_end(CS%diag),&
-         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, sosga=sosga)
+         optics%nbands, optics%max_wavelength_band, optics%sw_pen_band, optics%opacity_band, &
+         internal_heat=tv%internal_heat, frunoff=fluxes%frunoff, sosga=sosga)
 
     ! This uses applyTracerBoundaryFluxesInOut to handle the change in tracer due to freshwater fluxes
     ! usually in ALE mode

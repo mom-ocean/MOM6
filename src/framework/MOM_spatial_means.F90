@@ -73,7 +73,7 @@ function global_layer_mean(var, h, G, GV)
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight(i,j,k)  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    weight(i,j,k)  =  (GV%H_to_m * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j,k) =  var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
 
@@ -101,7 +101,7 @@ function global_volume_mean(var, h, G, GV)
   tmpForSumming(:,:) = 0. ; sum_weight(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight_here  =  h(i,j,k) * (G%areaT(i,j) * G%mask2dT(i,j))
+    weight_here  =  (GV%H_to_m * h(i,j,k)) * (G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j) = tmpForSumming(i,j) + var(i,j,k) * weight_here
     sum_weight(i,j) = sum_weight(i,j) + weight_here
   enddo ; enddo ; enddo
