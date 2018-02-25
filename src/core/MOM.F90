@@ -6,7 +6,8 @@ module MOM
 
 ! Infrastructure modules
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
-use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel_chksum
+use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
+use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
@@ -360,7 +361,7 @@ contains
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
 subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
-                    do_dynamics, do_thermodynamics, start_cycle, end_cycle)
+                    do_dynamics, do_thermodynamics, start_cycle, end_cycle, cycle_length)
   type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
   type(forcing),      intent(inout)  :: fluxes        !< pointers to forcing fields
   type(surface),      intent(inout)  :: sfc_state     !< surface ocean state
@@ -377,6 +378,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   logical,  optional, intent(in)     :: end_cycle     !< This indicates whether this call is to be
                                                       !! treated as the last call to step_MOM in a
                                                       !! time-stepping cycle; missing is like true.
+  real,     optional, intent(in)     :: cycle_length  !< The amount of time in a coupled time
+                                                      !! stepping cycle, in s.
 
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
@@ -412,6 +415,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
                         ! a stepping cycle (whatever that may mean).
   logical :: cycle_end  ! If true, do calculations and diagnostics that are only done at
                         ! the end of a stepping cycle (whatever that may mean).
+  real :: cycle_time    ! The length of the coupled time-stepping cycle, in s.
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     ssh         ! sea surface height, which may be based on eta_av (meter)
 
@@ -444,6 +448,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     "Both do_dynamics and do_thermodynamics are false, which makes no sense.")
   cycle_start = .true. ; if (present(start_cycle)) cycle_start = start_cycle
   cycle_end = .true. ; if (present(end_cycle)) cycle_end = end_cycle
+  cycle_time = time_interval ; if (present(cycle_length)) cycle_time = cycle_length
 
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
@@ -464,14 +469,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
     dt = time_interval / real(n_max)
     thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
-                                (CS%dt_therm > 1.5*time_interval))
-    if (.not.do_thermo) then
-      dt_therm = CS%dt_therm
-      ! ntstep is not used.
-    elseif (thermo_does_span_coupling) then
+                                (CS%dt_therm > 1.5*cycle_time))
+    if (thermo_does_span_coupling) then
       ! Set dt_therm to be an integer multiple of the coupling time step.
-      dt_therm = time_interval * floor(CS%dt_therm / time_interval + 0.001)
+      dt_therm = cycle_time * floor(CS%dt_therm / cycle_time + 0.001)
       ntstep = floor(dt_therm/dt + 0.001)
+    elseif (.not.do_thermo) then
+      dt_therm = CS%dt_therm
+      if (present(cycle_length)) dt_therm = min(CS%dt_therm, cycle_length)
+      ! ntstep is not used.
     else
       ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
       dt_therm = dt*ntstep
@@ -483,7 +489,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
     dt = time_interval / real(n_max)
     dt_therm = dt ; ntstep = 1
-    thermo_does_span_coupling = .true. ! This appears to be right?
+    thermo_does_span_coupling = .true. ! This is never used in this case?
   endif
 
   if (do_dyn) then
@@ -504,7 +510,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     call cpu_clock_end(id_clock_pass)
   endif
 
-  if (do_thermo) then
+  if (cycle_start) then
     if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (ASSOCIATED(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
@@ -518,7 +524,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
     if (associated(CS%VarMix)) then
-      call enable_averaging(time_interval, Time_start+set_time(int(time_interval)), &
+      call enable_averaging(cycle_time, Time_start+set_time(int(cycle_time)), &
                             CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, CS%VarMix)
       call disable_averaging(CS%diag)
@@ -547,7 +553,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     if (cycle_start) &
       call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
-    if (do_thermo) call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
+    !###DELETE THIS? if (do_thermo) call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
@@ -621,8 +627,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       endif
 
       dt_therm_here = dt_therm
-      if (do_thermo .and. .not.thermo_does_span_coupling) &
-        dt_therm_here = dt*min(ntstep,n_max-n+1)
+      if (do_thermo .and. do_dyn .and. .not.thermo_does_span_coupling) &
+        dt_therm_here = dt*min(ntstep, n_max-n+1)
 
       ! Indicate whether the bottom boundary layer properties need to be
       ! recalculated, and if so for how long an interval they are valid.
@@ -631,7 +637,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         if ((CS%t_dyn_rel_adv == 0.0) .or. (n==1)) &
           bbl_time_int = max(dt, min(dt_therm - CS%t_dyn_rel_adv, dt*(1+n_max-n)) )
       else
-        if (CS%t_dyn_rel_adv == 0.0) bbl_time_int = dt_therm
+        if ((CS%t_dyn_rel_adv == 0.0) .or. ((n==1) .and. cycle_start)) &
+          bbl_time_int = min(dt_therm, cycle_time)
       endif
 
       if (CS%interp_p_surf) then
@@ -658,7 +665,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
         do_advection = ((MOD(n,ntstep) == 0) .or. (n==n_max))
       endif
 
-      if (do_advection) then ! Do advective transdtport and lateral tracer mixing.
+      if (do_advection) then ! Do advective transport and lateral tracer mixing.
         call step_MOM_tracer_dyn(CS, G, GV, h, CS%h_pre_dyn, CS%T_pre_dyn, CS%S_pre_dyn, &
                                  Time_local)
         if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
@@ -671,7 +678,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     ! This is the second place where the diabatic processes and remapping could occur.
     if (CS%t_dyn_rel_adv == 0.0 .and. do_thermo .and. .not.CS%diabatic_first) then
       dtdia = CS%t_dyn_rel_thermo
-      if (thermo_does_span_coupling .and. (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
+      if (CS%thermo_spans_coupling .and. (CS%dt_therm > 1.5*cycle_time) .and. &
+          (abs(dt_therm - dtdia) > 1e-6*dt_therm)) then
         call MOM_error(FATAL, "step_MOM: Mismatch between dt_therm and dtdia "//&
                        "before call to diabatic.")
       endif
@@ -735,7 +743,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   enddo ! complete the n loop
 
-  if (do_dyn .and. CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
+  if (CS%count_calls .and. cycle_start) CS%nstep_tot = CS%nstep_tot + 1
 
   call cpu_clock_begin(id_clock_other)
 
@@ -2827,15 +2835,28 @@ subroutine extract_surface_state(CS, sfc_state)
     endif
   endif
 
+  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G)
+
   call callTree_leave("extract_surface_sfc_state()")
 end subroutine extract_surface_state
 
 !> Return true if all phases of step_MOM are at the same point in time.
-function MOM_state_is_synchronized(CS) result(in_synch)
+function MOM_state_is_synchronized(CS, adv_dyn) result(in_synch)
   type(MOM_control_struct), pointer :: CS !< MOM control structure
+  logical,        optional, intent(in) :: adv_dyn  !< If present and true, only check
+                                          !! whether the advection is up-to-date with
+                                          !! the dynamics.
   logical :: in_synch !< True if all phases of the update are synchronized.
 
-  in_synch = ((CS%t_dyn_rel_adv == 0.0) .and. (CS%t_dyn_rel_thermo == 0.0))
+  logical :: adv_only
+
+  adv_only = .false. ; if (present(adv_dyn)) adv_only = adv_dyn
+
+  if (adv_only) then
+    in_synch = (CS%t_dyn_rel_adv == 0.0)
+  else
+    in_synch = ((CS%t_dyn_rel_adv == 0.0) .and. (CS%t_dyn_rel_thermo == 0.0))
+  endif
 
 end function MOM_state_is_synchronized
 
