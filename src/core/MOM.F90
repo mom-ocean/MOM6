@@ -166,9 +166,9 @@ type, public :: MOM_control_struct ; private
               !! baroclinic dynamics time step (m or kg/m2)
   real, pointer, dimension(:,:) :: &
     Hml => NULL() !< active mixed layer depth, in m
-  real :: cycle_time !< The running time of the current time-stepping cycle in
-                     !! calls that step the dynamics, and also the length of
-                     !! the length of the time integral of ssh_rint, in s.
+  real :: time_in_cycle !< The running time of the current time-stepping cycle
+              !! in calls that step the dynamics, and also the length of the
+              !! time integral of ssh_rint, in s.
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
@@ -510,17 +510,15 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     call cpu_clock_end(id_clock_pass)
   endif
 
+  CS%rel_time = 0.0
+
   if (cycle_start) then
     if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
     if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (ASSOCIATED(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
     if (ASSOCIATED(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
-  endif
 
-  CS%rel_time = 0.0
-
-  if (cycle_start) then
-    CS%cycle_time = 0.0
+    CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
     if (associated(CS%VarMix)) then
@@ -553,7 +551,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     if (cycle_start) &
       call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV)
     if (cycle_start) call check_redundant("Before steps ", u, v, G)
-    !###DELETE THIS? if (do_thermo) call MOM_forcing_chksum("Before steps", fluxes, G, haloshift=0)
     if (do_dyn) call MOM_mech_forcing_chksum("Before steps", forces, G, haloshift=0)
     if (do_dyn) call check_redundant("Before steps ", forces%taux, forces%tauy, G)
   endif
@@ -700,7 +697,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       call cpu_clock_begin(id_clock_dynamics)
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
-      CS%cycle_time = CS%cycle_time + dt
+      CS%time_in_cycle = CS%time_in_cycle + dt
       call find_eta(h, CS%tv, GV%g_Earth, G, GV, ssh, CS%eta_av_bc)
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
@@ -747,8 +744,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
   call cpu_clock_begin(id_clock_other)
 
-  if (CS%cycle_time > 0.0) then
-    I_wt_ssh = 1.0/CS%cycle_time
+  if (CS%time_in_cycle > 0.0) then
+    I_wt_ssh = 1.0/CS%time_in_cycle
     do j=js,je ; do i=is,ie
       ssh(i,j) = CS%ssh_rint(i,j)*I_wt_ssh
       CS%ave_ssh_ibc(i,j) = ssh(i,j)
@@ -772,8 +769,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
     call cpu_clock_begin(id_clock_diagnostics)
-    call enable_averaging(CS%cycle_time, Time_local, CS%diag)
-    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%cycle_time, &
+    call enable_averaging(CS%time_in_cycle, Time_local, CS%diag)
+    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_cycle, &
                                   sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -1979,7 +1976,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
   ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0
-  CS%cycle_time = 0.0
+  CS%time_in_cycle = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
