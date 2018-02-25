@@ -267,6 +267,7 @@ subroutine seamount_initialize_temperature_salinity ( T, S, h, G, GV, param_file
               S(i,j,k) = S_surf + S_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
               T(i,j,k) = T_surf + T_range * (2.0 / 3.0) * (xi1**3 - xi0**3) / (xi1 - xi0)
             case ('exponential')
+              r = 0.8 ! small values give sharp profiles
               S(i,j,k) = S_surf + S_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
               T(i,j,k) = T_surf + T_range * (exp(xi1/r)-exp(xi0/r)) / (xi1 - xi0)
             case default
