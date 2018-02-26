@@ -88,6 +88,7 @@ type, public :: OBC_segment_tracer_type
   character(len=32)               :: name                  !< tracer name used for error messages
   type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
   real, dimension(:,:,:), pointer :: tres       => NULL()  !< tracer reservoir array
+  logical                         :: is_initialized        !< reservoir values have been set when True
 end type OBC_segment_tracer_type
 
 !> Registry type for tracers on segments
@@ -2291,11 +2292,15 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-            ! if the tracer reservoir has not yet been initialized, then set to external value
-            if (segment%tr_Reg%Tr(1)%tres(i,j,k) <=0.) &
-                 segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
+! if the tracer reservoir has not yet been initialized, then set to external value.
+! Am using negative values here, which will not work for temperature in degC.
           enddo; enddo; enddo
-
+          if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
+            do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
+              segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
+            enddo; enddo; enddo
+            segment%tr_Reg%Tr(1)%is_initialized=.true.
+          endif
         else
           segment%tr_Reg%Tr(1)%OBC_inflow_conc = segment%field(m)%value
         endif
@@ -2303,10 +2308,14 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
         if (associated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-            ! if the tracer reservoir has not yet been initialized, then set to external value
-            if (segment%tr_Reg%Tr(2)%tres(i,j,k) <=0.) &
-                 segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
           enddo; enddo; enddo
+          if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
+            !if the tracer reservoir has not yet been initialized, then set to external value
+            do k=1,nz; do j=js_obc2, je_obc;do i=is_obc2,ie_obc
+              segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
+            enddo; enddo; enddo
+            segment%tr_Reg%Tr(1)%is_initialized=.true.
+          endif
         else
           segment%tr_Reg%Tr(2)%OBC_inflow_conc = segment%field(m)%value
         endif
@@ -2488,9 +2497,11 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
     if (segment%is_E_or_W) then
       allocate(segment%tr_Reg%Tr(ntseg)%t(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
       allocate(segment%tr_Reg%Tr(ntseg)%tres(IsdB:IedB,jsd:jed,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
+      segment%tr_Reg%Tr(ntseg)%is_initialized=.false.
     elseif (segment%is_N_or_S) then
       allocate(segment%tr_Reg%Tr(ntseg)%t(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%t(:,:,:)=0.0
       allocate(segment%tr_Reg%Tr(ntseg)%tres(isd:ied,JsdB:JedB,1:GV%ke));segment%tr_Reg%Tr(ntseg)%tres(:,:,:)=0.0
+      segment%tr_Reg%Tr(ntseg)%is_initialized=.false.
     endif
   endif
 
