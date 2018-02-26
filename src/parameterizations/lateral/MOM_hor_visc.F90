@@ -552,13 +552,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo ; enddo
 
 ! Divergence gradient
-    do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-      div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
-    enddo ; enddo
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+      enddo ; enddo
 
-    do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-      div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
-    enddo ; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
+        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+      enddo ; enddo
+    endif
 
 ! Coefficient for modified Leith
     if (CS%Modified_Leith) then
