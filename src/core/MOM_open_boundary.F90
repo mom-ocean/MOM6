@@ -268,7 +268,10 @@ subroutine open_boundary_config(G, param_file, OBC)
   character(len=100) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries
+  logical            :: first_data
+
   allocate(OBC)
+  first_data = .true.
 
   call log_version(param_file, mdl, version, "Controls where open boundaries are located, what "//&
                  "kind of boundary condition to impose, and what data to apply, if any.")
@@ -369,6 +372,10 @@ subroutine open_boundary_config(G, param_file, OBC)
     enddo
 
     !    if (open_boundary_query(OBC, needs_ext_seg_data=.true.)) &
+    if (first_data) then
+      call time_interp_external_init()
+      first_data = .false.
+    endif
     call initialize_segment_data(G, OBC, param_file)
 
     if ( OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally ) then
@@ -393,12 +400,12 @@ subroutine open_boundary_config(G, param_file, OBC)
                    units="nondim",  default=0.2)
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
                  "An effective length scale for restoring the tracer concentration \n"//&
-                 "at the boundaries to externally imposed values when the flow. \n"//&
+                 "at the boundaries to externally imposed values when the flow \n"//&
                  "is entering the domain .", units="m", default=0.0)
 
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN ", Lscale_in, &
                  "An effective length scale for restoring the tracer concentration \n"//&
-                 "at the boundaries to values from the interior when the flow. \n"//&
+                 "at the boundaries to values from the interior when the flow \n"//&
                  "is exiting the domain .", units="m", default=0.0)
 
     endif
@@ -425,7 +432,7 @@ subroutine open_boundary_config(G, param_file, OBC)
     call open_boundary_dealloc(OBC)
   else
     ! Need this for ocean_only mode boundary interpolation.
-    call time_interp_external_init()
+!   call time_interp_external_init()
   endif
 
 end subroutine open_boundary_config
