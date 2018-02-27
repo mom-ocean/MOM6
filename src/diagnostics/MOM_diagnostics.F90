@@ -1723,12 +1723,11 @@ end subroutine MOM_diagnostics_init
 
 
 !> Register diagnostics of the surface state and integrated quantities
-subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
+subroutine register_surface_diags(Time, G, IDs, diag, tv)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
   type(surface_diag_IDs),  intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
-  real,                    intent(in)    :: missing !< The value to use to fill in missing data
   type(thermo_var_ptrs),   intent(in)    :: tv    !< A structure pointing to various thermodynamic variables
 
   ! Vertically integrated, budget, and surface state diagnostics
@@ -1737,46 +1736,46 @@ subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
       standard_name='sea_water_volume')
   IDs%id_zos = register_diag_field('ocean_model', 'zos', diag%axesT1, Time,&
       standard_name = 'sea_surface_height_above_geoid',                   &
-      long_name= 'Sea surface height above geoid', units='m', missing_value=missing)
+      long_name= 'Sea surface height above geoid', units='m')
   IDs%id_zossq = register_diag_field('ocean_model', 'zossq', diag%axesT1, Time,&
       standard_name='square_of_sea_surface_height_above_geoid',             &
-      long_name='Square of sea surface height above geoid', units='m2', missing_value=missing)
+      long_name='Square of sea surface height above geoid', units='m2')
   IDs%id_ssh = register_diag_field('ocean_model', 'SSH', diag%axesT1, Time, &
-      'Sea Surface Height', 'm', missing)
+      'Sea Surface Height', 'm')
   IDs%id_ssh_ga = register_scalar_field('ocean_model', 'ssh_ga', Time, diag,&
       long_name='Area averaged sea surface height', units='m',            &
       standard_name='area_averaged_sea_surface_height')
   IDs%id_ssu = register_diag_field('ocean_model', 'SSU', diag%axesCu1, Time, &
-      'Sea Surface Zonal Velocity', 'm s-1', missing)
+      'Sea Surface Zonal Velocity', 'm s-1')
   IDs%id_ssv = register_diag_field('ocean_model', 'SSV', diag%axesCv1, Time, &
-      'Sea Surface Meridional Velocity', 'm s-1', missing)
+      'Sea Surface Meridional Velocity', 'm s-1')
   IDs%id_speed = register_diag_field('ocean_model', 'speed', diag%axesT1, Time, &
-      'Sea Surface Speed', 'm s-1', missing)
+      'Sea Surface Speed', 'm s-1')
 
   if (associated(tv%T)) then
     IDs%id_sst = register_diag_field('ocean_model', 'SST', diag%axesT1, Time,     &
-        'Sea Surface Temperature', 'degC', missing, cmor_field_name='tos', &
+        'Sea Surface Temperature', 'degC', cmor_field_name='tos', &
         cmor_long_name='Sea Surface Temperature',                                &
         cmor_standard_name='sea_surface_temperature')
     IDs%id_sst_sq = register_diag_field('ocean_model', 'SST_sq', diag%axesT1, Time, &
-        'Sea Surface Temperature Squared', 'degC2', missing, cmor_field_name='tossq', &
+        'Sea Surface Temperature Squared', 'degC2', cmor_field_name='tossq', &
         cmor_long_name='Square of Sea Surface Temperature ',                      &
         cmor_standard_name='square_of_sea_surface_temperature')
     IDs%id_sss = register_diag_field('ocean_model', 'SSS', diag%axesT1, Time, &
-        'Sea Surface Salinity', 'psu', missing, cmor_field_name='sos', &
+        'Sea Surface Salinity', 'psu', cmor_field_name='sos', &
         cmor_long_name='Sea Surface Salinity',                            &
         cmor_standard_name='sea_surface_salinity')
     IDs%id_sss_sq = register_diag_field('ocean_model', 'SSS_sq', diag%axesT1, Time, &
-        'Sea Surface Salinity Squared', 'psu', missing, cmor_field_name='sossq', &
+        'Sea Surface Salinity Squared', 'psu', cmor_field_name='sossq', &
         cmor_long_name='Square of Sea Surface Salinity ',                     &
         cmor_standard_name='square_of_sea_surface_salinity')
     if (tv%T_is_conT) then
       IDs%id_sstcon = register_diag_field('ocean_model', 'conSST', diag%axesT1, Time,     &
-          'Sea Surface Conservative Temperature', 'Celsius', missing)
+          'Sea Surface Conservative Temperature', 'Celsius')
     endif
     if (tv%S_is_absS) then
       IDs%id_sssabs = register_diag_field('ocean_model', 'absSSS', diag%axesT1, Time,     &
-          'Sea Surface Absolute Salinity', 'g kg-1', missing)
+          'Sea Surface Absolute Salinity', 'g kg-1')
     endif
     if (ASSOCIATED(tv%frazil)) then
       IDs%id_fraz = register_diag_field('ocean_model', 'frazil', diag%axesT1, Time, &
@@ -1796,13 +1795,12 @@ subroutine register_surface_diags(Time, G, IDs, diag, missing, tv)
 end subroutine register_surface_diags
 
 !> Register certain diagnostics related to transports
-subroutine register_transport_diags(Time, G, GV, IDs, diag, missing)
+subroutine register_transport_diags(Time, G, GV, IDs, diag)
   type(time_type),          intent(in)    :: Time  !< current model time
   type(ocean_grid_type),    intent(in)    :: G     !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV    !< ocean vertical grid structure
   type(transport_diag_IDs), intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),          intent(inout) :: diag  !< regulates diagnostic output
-  real,                     intent(in)    :: missing !< The value to use to fill in missing data
 
   real :: H_convert
   character(len=48) :: thickness_units

@@ -1531,9 +1531,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, &
                  "If True, exercises unit tests at model start up.", &
                  default=.false.)
-  call get_param(param_file, "MOM", "MODEL_MISVAL", CS%missing, &
-                 "Sets a missing value to be used internally within the model.", &
-                 default=-1.e34)
   if (do_unit_tests) then
     call unit_tests(verbosity)
   endif
@@ -2249,9 +2246,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
 
   ! now register some diagnostics since the tracer registry is now locked
-  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, CS%tv)
-  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
-  call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag, CS%missing)
+  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
+  call register_diags(Time, G, GV, CS%IDs, CS%diag)
+  call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
@@ -2380,13 +2377,12 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes, restart_CSp)
 end subroutine finish_MOM_initialization
 
 !> Register certain diagnostics
-subroutine register_diags(Time, G, GV, IDs, diag, missing)
+subroutine register_diags(Time, G, GV, IDs, diag)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
   type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
-  real,                    intent(in)    :: missing !< The value to use to fill in missing data
 
   real :: H_convert
   character(len=48) :: thickness_units
@@ -2407,7 +2403,7 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
       'Layer Thickness after the dynamics update', thickness_units, &
       v_extensive=.true., conversion=H_convert)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
-      Time, 'Instantaneous Sea Surface Height', 'm', missing)
+      Time, 'Instantaneous Sea Surface Height', 'm')
 end subroutine register_diags
 
 !> This subroutine sets up clock IDs for timing various subroutines.
