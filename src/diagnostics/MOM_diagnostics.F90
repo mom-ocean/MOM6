@@ -29,7 +29,9 @@ use MOM_diag_mediator,     only : post_data, post_data_1d_k, get_diag_time_end
 use MOM_diag_mediator,     only : register_diag_field, register_scalar_field
 use MOM_diag_mediator,     only : register_static_field, diag_register_area_ids
 use MOM_diag_mediator,     only : diag_ctrl, time_type, safe_alloc_ptr
-use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id, diag_update_remap_grids
+use MOM_diag_mediator,     only : diag_get_volume_cell_measure_dm_id
+use MOM_diag_mediator,     only : diag_grid_storage
+use MOM_diag_mediator,     only : diag_save_grids, diag_restore_grids, diag_copy_storage_to_diag
 use MOM_diag_to_Z,         only : calculate_Z_transport, diag_to_Z_CS
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : To_North, To_East
@@ -42,6 +44,7 @@ use MOM_grid,              only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean
 use MOM_spatial_means,     only : global_volume_mean, global_area_integral
+use MOM_tracer_registry,   only : tracer_registry_type, post_tracer_transport_diagnostics
 use MOM_variables,         only : thermo_var_ptrs, ocean_internal_state, p3d
 use MOM_variables,         only : accel_diag_ptrs, cont_diag_ptrs, surface
 use MOM_verticalGrid,      only : verticalGrid_type, get_thickness_units
@@ -57,7 +60,6 @@ public find_eta
 public MOM_diagnostics_init, MOM_diagnostics_end
 public register_surface_diags, post_surface_diagnostics
 public register_transport_diags, post_transport_diagnostics
-public transport_remap_grid_needed
 
 type, public :: diagnostics_CS ; private
   real :: mono_N2_column_fraction = 0. !< The lower fraction of water column over which N2 is limited as
@@ -141,7 +143,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
-
+  integer :: id_h_pre_sync     = -1
   type(wave_speed_CS), pointer :: wave_speed_CSp => NULL()
 
   ! pointers used in calculation of time derivatives
@@ -180,13 +182,15 @@ type, public :: transport_diag_IDs ; private
   ! Diagnostics for tracer horizontal transport
   integer :: id_uhtr = -1, id_umo = -1, id_umo_2d = -1
   integer :: id_vhtr = -1, id_vmo = -1, id_vmo_2d = -1
+  integer :: id_dynamics_h = -1, id_dynamics_h_tendency = -1
+
 end type transport_diag_IDs
 
 
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
 subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
-                                       dt, G, GV, CS, eta_bt)
+                                       dt, diag_pre_sync, G, GV, CS, eta_bt)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
                                                                    !! structure.
@@ -214,6 +218,10 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   real,                                      intent(in)    :: dt   !< The time difference in s since
                                                                    !! the last call to this
                                                                    !! subroutine.
+
+  type(diag_grid_storage),                   intent(in)    ::  diag_pre_sync
+                                                                   !< Target grids from previous
+                                                                   !! timestep
   type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
                                                                    !! a previous call to
                                                                    !! diagnostics_init.
@@ -253,6 +261,24 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
   is  = G%isc  ; ie   = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq  = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   nz  = G%ke   ; nkmb = GV%nk_rho_varies
+
+  if (dt > 0.0) then
+    call diag_save_grids(CS%diag)
+    call diag_copy_storage_to_diag(CS%diag, diag_pre_sync)
+
+    if (CS%id_h_pre_sync > 0) &
+        call post_data(CS%id_h_pre_sync, diag_pre_sync%h_state, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag, alt_h = diag_pre_sync%h_state)
+
+    call diag_restore_grids(CS%diag)
+
+    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
+  endif
 
   ! smg: is the following robust to ALE? It seems a bit opaque.
   ! If the model is NOT in isopycnal mode then nkmb=0. But we need all the
@@ -666,16 +692,6 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       enddo ; enddo
       call post_data(CS%id_Rd_ebt, CS%Rd1, CS%diag)
     endif
-  endif
-
-  if (dt > 0.0) then
-    if (CS%id_du_dt>0) call post_data(CS%id_du_dt, CS%du_dt, CS%diag)
-
-    if (CS%id_dv_dt>0) call post_data(CS%id_dv_dt, CS%dv_dt, CS%diag)
-
-    if (CS%id_dh_dt>0) call post_data(CS%id_dh_dt, CS%dh_dt, CS%diag)
-
-    call calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, CS)
   endif
 
 end subroutine calculate_diagnostic_fields
@@ -1309,11 +1325,9 @@ subroutine post_surface_diagnostics(IDs, G, GV, diag, dt_int, sfc_state, tv, &
 
 end subroutine post_surface_diagnostics
 
-
 !> This routine posts diagnostics of the transports, including the subgridscale
 !! contributions.
-subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans, &
-                                      diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag_pre_dyn, diag, dt_trans, diag_to_Z_CSp, Reg)
   type(ocean_grid_type),    intent(inout) :: G   !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV  !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
@@ -1325,33 +1339,31 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans,
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
                             intent(in)    :: h   !< The updated layer thicknesses, in H
   type(transport_diag_IDs), intent(in)    :: IDs !< A structure with the diagnostic IDs.
+  type(diag_grid_storage),  intent(inout) :: diag_pre_dyn !< Stored grids from before dynamics
   type(diag_ctrl),          intent(inout) :: diag !< regulates diagnostic output
   real,                     intent(in)    :: dt_trans !< total time step associated with the transports, in s.
   type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< A control structure for remapping
-                                                 !! the transports to depth space
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: T_pre_dyn !< Temperature before the transports, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: S_pre_dyn !< Salinity before the transports, in H.
+                                                           !! the transports to depth space
+  type(tracer_registry_type), pointer     :: Reg !< Pointer to the tracer registry
 
   real, dimension(SZIB_(G), SZJ_(G)) :: umo2d ! Diagnostics of integrated mass transport, in kg s-1
   real, dimension(SZI_(G), SZJB_(G)) :: vmo2d ! Diagnostics of integrated mass transport, in kg s-1
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)) :: umo ! Diagnostics of layer mass transport, in kg s-1
   real, dimension(SZI_(G), SZJB_(G), SZK_(G)) :: vmo ! Diagnostics of layer mass transport, in kg s-1
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G))    :: h_tend ! Change in layer thickness due to dynamics m s-1
+  real :: Idt
   real :: H_to_kg_m2_dt   ! A conversion factor from accumulated transports to fluxes, in kg m-2 H-1 s-1.
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
 
+  Idt = 1. / dt_trans
+  H_to_kg_m2_dt = GV%H_to_kg_m2 * Idt
+
   call calculate_Z_transport(uhtr, vhtr, h, dt_trans, G, GV, diag_to_Z_CSp)
 
-  ! Post mass transports, including SGS
-  ! Build the remap grids using the layer thicknesses from before the dynamics
-  if (transport_remap_grid_needed(IDs)) &
-    call diag_update_remap_grids(diag, alt_h = h_pre_dyn, alt_T = T_pre_dyn, alt_S = S_pre_dyn)
+  call diag_save_grids(diag)
+  call diag_copy_storage_to_diag(diag, diag_pre_dyn)
 
-  H_to_kg_m2_dt = GV%H_to_kg_m2 / dt_trans
   if (IDs%id_umo_2d > 0) then
     umo2d(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -1364,7 +1376,7 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans,
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       umo(I,j,k) = uhtr(I,j,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_umo, umo, diag, alt_h = h_pre_dyn)
+    call post_data(IDs%id_umo, umo, diag, alt_h = diag_pre_dyn%h_state)
   endif
   if (IDs%id_vmo_2d > 0) then
     vmo2d(:,:) = 0.0
@@ -1378,11 +1390,24 @@ subroutine post_transport_diagnostics(G, GV, uhtr, vhtr, h, IDs, diag, dt_trans,
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       vmo(i,J,k) = vhtr(i,J,k) * H_to_kg_m2_dt
     enddo ; enddo ; enddo
-    call post_data(IDs%id_vmo, vmo, diag, alt_h = h_pre_dyn)
+    call post_data(IDs%id_vmo, vmo, diag, alt_h = diag_pre_dyn%h_state)
   endif
 
-  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = h_pre_dyn)
-  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = h_pre_dyn)
+  if (IDs%id_uhtr > 0) call post_data(IDs%id_uhtr, uhtr, diag, alt_h = diag_pre_dyn%h_state)
+  if (IDs%id_vhtr > 0) call post_data(IDs%id_vhtr, vhtr, diag, alt_h = diag_pre_dyn%h_state)
+  if (IDs%id_dynamics_h > 0 ) call post_data(IDs%id_dynamics_h, diag_pre_dyn%h_state, diag, alt_h = diag_pre_dyn%h_state)
+  ! Post the change in thicknesses
+  if (IDs%id_dynamics_h_tendency > 0) then
+    h_tend(:,:,:) = 0.
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      h_tend(i,j,k) = (h(i,j,k) - diag_pre_dyn%h_state(i,j,k))*Idt
+    enddo ; enddo ; enddo
+    call post_data(IDs%id_dynamics_h_tendency, h_tend, diag, alt_h = diag_pre_dyn%h_state)
+  endif
+
+  call post_tracer_transport_diagnostics(G, GV, Reg, diag_pre_dyn%h_state, diag)
+
+  call diag_restore_grids(diag)
 
 end subroutine post_transport_diagnostics
 
@@ -1472,6 +1497,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
 
   CS%id_thkcello = register_diag_field('ocean_model', 'thkcello', diag%axesTL, Time, &
       long_name = 'Cell Thickness', standard_name='cell_thickness', units='m', v_extensive=.true.)
+  CS%id_h_pre_sync = register_diag_field('ocean_model', 'h_pre_sync', diag%axesTL, Time, &
+      long_name = 'Cell thickness from the previous timestep', units='m', v_extensive=.true.)
 
   ! Note that CS%id_volcello would normally be registered here but because it is a "cell measure" and
   ! must be registered first. We earlier stored the handle of volcello but need it here for posting
@@ -1564,7 +1591,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, param_file, diag, CS
   endif
 
   CS%id_dh_dt = register_diag_field('ocean_model', 'dhdt', diag%axesTL, Time, &
-      'Thickness tendency', trim(thickness_units)//" s-1")
+      'Thickness tendency', trim(thickness_units)//" s-1", v_extensive = .true.)
   if ((CS%id_dh_dt>0) .and. .not.ASSOCIATED(CS%dh_dt)) then
     call safe_alloc_ptr(CS%dh_dt,isd,ied,jsd,jed,nz)
     call register_time_deriv(MIS%h, CS%dh_dt, CS)
@@ -1806,21 +1833,14 @@ subroutine register_transport_diags(Time, G, GV, IDs, diag, missing)
   IDs%id_vmo_2d = register_diag_field('ocean_model', 'vmo_2d', &
       diag%axesCv1, Time, 'Ocean Mass Y Transport Vertical Sum', 'kg s-1', &
       standard_name='ocean_mass_y_transport_vertical_sum', x_cell_method='sum')
+  IDs%id_dynamics_h = register_diag_field('ocean_model','dynamics_h',  &
+      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
+      'm s-1', v_extensive = .true.)
+  IDs%id_dynamics_h_tendency = register_diag_field('ocean_model','dynamics_h_tendency',  &
+      diag%axesTl, Time, 'Change in layer thicknesses due to horizontal dynamics', &
+      'm s-1', v_extensive = .true.)
 
 end subroutine register_transport_diags
-
-
-!> Indicate whether it is necessary to save and recalculate the grid for finding
-!! remapped transports.
-function transport_remap_grid_needed(IDs) result(needed)
-  type(transport_diag_IDs), intent(in)    :: IDs !< A structure with transport-related diagnostic IDs
-  logical :: needed
-
-  needed = .false.
-  needed = needed .or. (IDs%id_uhtr > 0) .or. (IDs%id_vhtr > 0)
-  needed = needed .or. (IDs%id_umo > 0)  .or. (IDs%id_vmo > 0)
-end function transport_remap_grid_needed
-
 
 !> Offers the static fields in the ocean grid type for output via the diag_manager.
 subroutine write_static_fields(G, GV, tv, diag)
@@ -2058,7 +2078,6 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, CS)
   if (ASSOCIATED(CS%vhGM_Rlay)) call safe_alloc_ptr(CDp%vhGM,isd,ied,JsdB,JedB,nz)
 
 end subroutine set_dependent_diagnostics
-
 
 subroutine MOM_diagnostics_end(CS, ADp)
   type(diagnostics_CS),   pointer       :: CS

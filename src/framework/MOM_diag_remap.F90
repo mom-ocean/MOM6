@@ -17,7 +17,7 @@ module MOM_diag_remap
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,             only : sum_across_PEs
-use MOM_error_handler,    only : MOM_error, FATAL, assert
+use MOM_error_handler,    only : MOM_error, FATAL, assert, WARNING
 use MOM_diag_vkernels,    only : interpolate_column, reintegrate_column
 use MOM_file_parser,      only : get_param, log_param, param_file_type
 use MOM_io,               only : slasher, mom_read_data
@@ -40,6 +40,7 @@ use coord_rho,            only : build_rho_column
 use diag_axis_mod,     only : get_diag_axis_name
 use diag_manager_mod,  only : diag_axis_init
 
+use MOM_debugging,     only : check_column_integrals
 implicit none ; private
 
 public diag_remap_ctrl
