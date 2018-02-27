@@ -1,4 +1,4 @@
-module channel4_initialization
+module channel6_initialization
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -17,8 +17,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public channel4_initialize_topography
-public channel4_initialize_sponges
+public channel6_initialize_sponges
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -27,105 +26,16 @@ contains
 
 
 ! -----------------------------------------------------------------------------
-!> This subroutine sets up the channel4 test case topography.
-!> channel4 is similar to channel but:
-!> 1) with sloped side walls to mimic continental slope, and to reduce numerical instability
-!> 2) the sponge layer has no slope
-!> 3) the slope on west/east boundaries decay abruptly to zero at the edge of sponge
-!> 4) the shape of Drake Passage in the east is modified so as to match that in the west
-
-!> update: 1/24/2018: use diagnosed vertical rho profile from sb8sG as sponge layer rho profile
-
-subroutine channel4_initialize_topography(D, G, param_file, max_depth)
-  type(dyn_horgrid_type),             intent(in)  :: G !< The dynamic horizontal grid type
-  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                      intent(out) :: D !< Ocean bottom depth in m
-  type(param_file_type),              intent(in)  :: param_file !< Parameter file structure
-  real,                               intent(in)  :: max_depth  !< Maximum depth of model in m
-
-  real :: PI = 4.0*atan(1.0)   ! 3.1415926... calculated as 4*atan(1)
-  real :: latext, lonext       ! latitude extent of the model area
-  real :: ep = epsilon(1.)     ! an infinitesimally small quantity
-  real :: x, y, sa_dim = 1500.0! dimensional height of Scotia Arc
-  real :: sa                   ! the non-dimensional height of Scotia Arc top;
-                               ! default value is 1500/4000=0.375
-  real :: dx                   ! non-dimensional longitudinal grid scale
-  real :: reentrants, reentrantn  ! the non-dimensional latitudes of the southern and northern
-                                  ! boundary of the reentrant channel
-  real :: sdp = 6.0, ll=6.0, ssp = 2.0    ! the width of the slope in Drake Passage, the half width of continental slope, and sponge width
-
-  character(len=40)  :: mod = "channel4_initialize_topography" ! This subroutine's name.
-  integer :: i, j, is, ie, js, je
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
-  sa = sa_dim / max_depth
-  latext = G%len_lat
-  lonext = G%len_lon
-  reentrants = 6.0/latext          ! non-dimensional southern bound of the reentrant zone
-  reentrantn = 10.0/latext         ! non-dimensional northern bound of the reentrant zone
-  sdp = sdp/latext
-  ssp = ssp/latext
-  D = 0.0
-  dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/lonext
-
-  call MOM_mesg("  channel4_initialization.F90, channel4_initialize_topography: setting topography", 5)
-
-  call log_version(param_file, mod, version, "")
-
-
-  !  Calculate the depth of the bottom.
-  do j = js,je                ! meridional grid points
-  do i = is,ie                ! zonal grid points
-    x = (G%geoLonT(i,j)-G%west_lon) / lonext      ! non-dimensional longitude
-    y=(G%geoLatT(i,j)-G%south_lat) / latext     ! non-dimensional latitude
-
-    D(i,j) = 1.0 - spike(x-dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &                 ! Patagonia, west
-                -spike(x-1.0+dx/2, ll/lonext)*spike(min(0.0, y-reentrantn-sdp/2.0), sdp) &               ! Patagonia, east, original
-                -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-12.0/latext, 2.5/latext) &                  ! Patagonia, east, extra slope
-                -spike(x-dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &                   ! Antarctic Peninsula, west
-                -spike(x-1.0+dx/2, ll/lonext)*spike(max(0.0, y-reentrants+sdp/2.0), sdp) &               ! Antarctic Peninsula, east, original
-                -sa * spike(x-1.0+dx/2, ll/lonext)*cosbell(y-4.0/latext, 2.5/latext) &                   ! Antarctic Peninsula, east, extra slope
-                -spike(y, ll/latext) &                                                                   ! Antarctica
-                - sa *cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * homo(y-8.0/latext, 2.0/latext) &              !Scotia Arc East, center
-                - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-10.0/latext-ep, 3.0/latext, 1.) & !Scotia Arc East, north slope
-                - sa * cosbell(x-dx/2-20.0/lonext, 2.5/lonext) * cosbellh(y-6.0/latext+ep, 3.0/latext, -1.) & !Scotia Arc East, south slope
-                - sa * cosbell(y-12.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext-ep, 2.5/lonext, 1.) & !Scotia Arc North, east half (slope side)
-                - sa * cosbell(y-12.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext) &             !Scotia Arc North, west half
-                - sa * cosbell(y-4.0/latext, 2.5/latext) * cosbellh(x-dx/2-18.0/lonext-ep, 2.5/lonext, 1.) &  !Scotia Arc South, east half (slope side)
-                - sa * cosbell(y-4.0/latext, 2.5/latext) * homo(x-dx/2-9.0/lonext, 9.0/lonext)                !Scotia Arc South, west half
-
-      ! make sure no deeper than max depth and no shallower than Scotia Arc top IN the ocean interior
-      if (D(i,j)<1.0 - sa .and. x>=dx/1.5+ll/2/lonext .and. x<=1.0-ll/2/lonext-dx/1.5 .and. y>=ll/2/latext .and. y<=1.0-ll/2/latext) then
-        D(i,j) = 1 - sa
-      else if (D(i,j) > 1.0) then
-        D(i,j) = 1.0
-      endif
-      
-      ! no continental slope in the sponge layer
-      if (y >= 1.0-ssp) then
-        D(i,j)=1.0
-      endif
-
-      ! make sure the model is not zonally reentrant outside of Drake Passage
-      if (((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x<dx/1.5) &
-                .or. ((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x>1.0-dx/1.5)) then 
-        D(i,j) = 0.0
-      endif
-
-    D(i,j) = D(i,j) * max_depth
-  enddo
-  enddo
-
-
-end subroutine channel4_initialize_topography
-
-
-
-! -----------------------------------------------------------------------------
 !> Sets up the the inverse restoration time (Idamp), and
 ! the values towards which the interface heights and an arbitrary
 ! number of tracers should be restored within each sponge.
-subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, CSp, h)
+!
+! difference from channel 4: 
+! sponge layer set as 1 deg, to check if the recirculation can be damped
+! same: both use diagnosed zonal mean vertical rho profile from sb8sG (without
+! adjustment)
+
+subroutine channel6_initialize_sponges(G, GV, use_temperature, tv, param_file, CSp, h)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
                                              ! so as to be used as input of set_coord_from_file
@@ -147,21 +57,21 @@ subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, C
   real :: Idamp(SZI_(G),SZJ_(G))         ! The inverse damping rate, in s-1.
                                          ! Idamp only varies in y; /= 0 only within the sponge layer
   real, dimension(SZK_(G)+1) :: eta0    ! target interface heights for density class in the sponge layer
-  real :: damp_rate, damp, spongelen = 2.0,  min_depth, nlat, dx
+  real :: damp_rate, damp, spongelen = 1.0,  min_depth, nlat, dx
   ! spongelen: thickness of sponge layer in dimensional degree
   ! dx is non-dimensional longitudinal grid increment
   integer :: i, j, k, is, ie, js, je, nz
   logical, save :: first_call = .true.
-  character(len=40)  :: mdl = "channel4_initialize_sponges" ! This subroutine's name
+  character(len=40)  :: mdl = "channel6_initialize_sponges" ! This subroutine's name
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   eta(:,:,:) = 0.0 ; Idamp(:,:) = 0.0; eta0(:) = 0.0; 
   dx = (G%geoLonT(is+1,js)-G%geoLonT(is,js))/G%len_lon
 
   ! target interface heights: all negative values
-  ! corresponds to rho8a (diagnosed from sb8sG, zonal mean along 30S)
+  ! corresponds to rho 8
   
-  eta0 = (/0.139014429059522, 0.139014429059522, 0.139014429059522, &
+    eta0 = (/0.139014429059522, 0.139014429059522, 0.139014429059522, &
         0.138097949711413, -3.03516385164754, -36.3033413229318, &
         -74.3258283549342, -129.677962599130, -203.404488662194, &
         -300.373813497609, -400.174464258654, -488.574700717268, &
@@ -170,7 +80,7 @@ subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, C
         -1031.69079589844, -1146.23940724340, -1303.42024809739, &
         -1550.78595602101, -1854.75769463901, -2146.14440061335, &
         -2448.03345598493, -2738.49512154715, -3023.71094621931, &
-        -3311.24889470881, -3622.51995738636, -3921.27119584517, -4000.0 /)
+        -3311.24889470881, -3622.51995738636, -3921.27119584517, -4000.0 /)    
 
   if (first_call) call log_version(param_file, mdl, version)
   first_call = .false.
@@ -218,7 +128,7 @@ subroutine channel4_initialize_sponges(G, GV, use_temperature, tv, param_file, C
 !                 for this module
 
 
-end subroutine channel4_initialize_sponges
+end subroutine channel6_initialize_sponges
 
 
 ! -----------------------------------------------------------------------------
@@ -300,4 +210,4 @@ end subroutine channel4_initialize_sponges
     endif
    end function homo
 
-end module channel4_initialization
+end module channel6_initialization

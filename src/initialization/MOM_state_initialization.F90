@@ -61,9 +61,12 @@ use channel_initialization, only: channel_initialize_sponges
 use channelssp_initialization, only: channelssp_initialize_sponges
 use channel2_initialization, only: channel2_initialize_sponges
 use channel4_initialization, only: channel4_initialize_sponges
+use channel42d_initialization, only: channel42d_initialize_sponges
 use channel47_initialization, only: channel47_initialize_sponges
 use channel4t_initialization, only: channel4t_initialize_sponges
+use channel4tt_initialization, only: channel4tt_initialize_sponges
 use channel5_initialization, only: channel5_initialize_sponges
+use channel6_initialization, only: channel6_initialize_sponges
 use channel7_initialization, only: channel7_initialize_sponges
 use channel74_initialization, only: channel74_initialize_sponges
 use circle_obcs_initialization, only : circle_obcs_initialize_thickness
@@ -533,7 +536,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                  " \t channel4 - Sponge at the northern boundary of the domain\n"//&
                  " \t channel47 - Sponge at the northern boundary of the domain\n"//&
                  " \t channel4t - Sponge at the northern boundary of the domain\n"//&            
+                 " \t channel4tt - Sponge at the northern boundary of the domain\n"//&
+                 " \t channel42d - Sponge at the northern boundary of the domain\n"//&
                  " \t channel5 - Sponge at the northern boundary of the domain\n"//&
+                 " \t channel6 - Sponge at the northern boundary of the domain\n"//&
                  " \t channel7 - Sponge at the northern boundary of the domain\n"//&
                  " \t channel74 - Sponge at the northern boundary of the domain\n"//&
                  " \t channelssp - Sponge at the northern boundary of the domain but avoid e/w boundaries\n"//&
@@ -561,7 +567,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                                 tv, PF, sponge_CSp, h)
       case ("channel4t"); call channel4t_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
+      case ("channel4tt"); call channel4tt_initialize_sponges(G, GV, use_temperature, &
+                                                tv, PF, sponge_CSp, h)
+      case ("channel42d"); call channel42d_initialize_sponges(G, GV, use_temperature, &
+                                                tv, PF, sponge_CSp, h)      
       case ("channel5"); call channel5_initialize_sponges(G, GV, use_temperature, &
+                                                tv, PF, sponge_CSp, h)
+      case ("channel6"); call channel6_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
       case ("channel7"); call channel7_initialize_sponges(G, GV, use_temperature, &
                                                 tv, PF, sponge_CSp, h)
