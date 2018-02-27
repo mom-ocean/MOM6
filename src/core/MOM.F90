@@ -1,4 +1,3 @@
-!> This is the main routine for MOM
 module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
@@ -20,6 +19,9 @@ use MOM_diag_mediator,        only : disable_averaging, post_data, safe_alloc_pt
 use MOM_diag_mediator,        only : register_diag_field, register_cell_measure
 use MOM_diag_mediator,        only : set_axes_info, diag_ctrl, diag_masks_set
 use MOM_diag_mediator,        only : set_masks_for_axes
+use MOM_diag_mediator,        only : diag_grid_storage, diag_grid_storage_init
+use MOM_diag_mediator,        only : diag_save_grids, diag_restore_grids
+use MOM_diag_mediator,        only : diag_copy_storage_to_diag, diag_copy_diag_to_storage
 use MOM_domains,              only : MOM_domains_init, clone_MOM_domain
 use MOM_domains,              only : sum_across_PEs, pass_var, pass_vector
 use MOM_domains,              only : To_North, To_East, To_South, To_West
@@ -59,7 +61,7 @@ use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
 use MOM_diagnostics,           only : register_surface_diags, post_surface_diagnostics
-use MOM_diagnostics,           only : write_static_fields, transport_remap_grid_needed
+use MOM_diagnostics,           only : write_static_fields
 use MOM_diagnostics,           only : diagnostics_CS, surface_diag_IDs, transport_diag_IDs
 use MOM_diag_to_Z,             only : calculate_Z_diag_fields, register_Z_tracer
 use MOM_diag_to_Z,             only : MOM_diag_to_Z_init, MOM_diag_to_Z_end, diag_to_Z_CS
@@ -107,6 +109,7 @@ use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
 use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : tracer_registry_type, register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics
+use MOM_tracer_registry,       only : post_tracer_transport_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
@@ -188,6 +191,8 @@ type, public :: MOM_control_struct ; private
   real :: t_dyn_rel_diag      !< The time of the diagnostics relative to diabatic
                               !! processes and remapping (in seconds).  t_dyn_rel_diag
                               !! is always positive, since the diagnostics must lag.
+  integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection
+                              !! Must be saved if thermo spans coupling?
 
   type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
   type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
@@ -293,6 +298,7 @@ type, public :: MOM_control_struct ; private
   type(MOM_diag_IDs) :: IDs
   type(transport_diag_IDs) :: transport_IDs
   type(surface_diag_IDs) :: sfc_IDs
+  type(diag_grid_storage) :: diag_pre_sync, diag_pre_dyn
 
   ! The remainder of this type provides pointers to child module control structures.
 
@@ -424,12 +430,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
   real :: I_wt_ssh
-
-  ! Store the layer thicknesses, temperature, and salinity before any changes by the dynamics.
-  ! This is necessary for remapped mass transport diagnostics
-!  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: h_pre_dyn
-!  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: T_pre_dyn
-!  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)) :: S_pre_dyn
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -604,14 +604,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
-      ! Store pre-dynamics state for proper diagnostic remapping if mass transports requested
-      if (CS%t_dyn_rel_adv==0.0) then ; if (transport_remap_grid_needed(CS%transport_IDs)) then
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
-          CS%h_pre_dyn(i,j,k) = h(i,j,k)
-          if (associated(CS%tv%T)) CS%T_pre_dyn(i,j,k) = CS%tv%T(i,j,k)
-          if (associated(CS%tv%S)) CS%S_pre_dyn(i,j,k) = CS%tv%S(i,j,k)
-        enddo ; enddo ; enddo
-      endif ; endif
+      ! Store pre-dynamics grids for proper diagnostic remapping for transports or advective tendencies
+      ! If there are more dynamics steps per advective steps (i.e DT_THERM /= DT), this needs to be the
+      ! stored at the first call
+      if (CS%ndyn_per_adv == 0 .and. CS%t_dyn_rel_adv == 0.) then
+        call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
+        CS%ndyn_per_adv = CS%ndyn_per_adv + 1
+      endif
 
       ! The pre-dynamics velocities might be stored for debugging truncations.
       if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
@@ -663,8 +662,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       endif
 
       if (do_advection) then ! Do advective transport and lateral tracer mixing.
-        call step_MOM_tracer_dyn(CS, G, GV, h, CS%h_pre_dyn, CS%T_pre_dyn, CS%S_pre_dyn, &
-                                 Time_local)
+        call step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
+        CS%ndyn_per_adv = 0
         if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
                 "step_MOM: Mismatch between the dynamics and diabatic times "//&
                 "with DIABATIC_FIRST.")
@@ -714,9 +713,11 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
-      call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp, &
-                          CS%CDp, fluxes, CS%t_dyn_rel_diag, G, GV, CS%diagnostics_CSp)
-      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
+                          CS%CDp, fluxes, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
+                          G, GV, CS%diagnostics_CSp)
+      call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
       CS%t_dyn_rel_diag = 0.0
@@ -976,19 +977,12 @@ end subroutine step_MOM_dynamics
 !> step_MOM_tracer_dyn does tracer advection and lateral diffusion, bringing the
 !! tracers up to date with the changes in state due to the dynamics.  Surface
 !! sources and sinks and remapping are handled via step_MOM_thermo.
-subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
-                               Time_local)
-  type(MOM_control_struct), intent(inout) :: CS     !< MOM6 master control structure
+subroutine step_MOM_tracer_dyn(CS, G, GV, h, Time_local)
+  type(MOM_control_struct), intent(inout) :: CS     !< control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(in)    :: GV     !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                             intent(in)    :: h      !< layer thicknesses after the transports (m or kg/m2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: h_pre_dyn !< The thickness before the transports, in H.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: T_pre_dyn !< The temperatures before the transports, in deg C.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                            intent(in)    :: S_pre_dyn !< The salinities before the transports, in psu.
   type(time_type),          intent(in)    :: Time_local !< The model time at the end
                                                     !! of the time step.
   type(group_pass_type) :: pass_T_S
@@ -1022,7 +1016,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, h, h_pre_dyn, T_pre_dyn, S_pre_dyn, &
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
   call post_transport_diagnostics(G, GV, CS%uhtr, CS%vhtr, h, CS%transport_IDs, &
-           CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, h_pre_dyn, T_pre_dyn, S_pre_dyn)
+           CS%diag_pre_dyn, CS%diag, CS%t_dyn_rel_adv, CS%diag_to_Z_CSp, CS%tracer_reg)
   ! Rebuild the remap grids now that we've posted the fields which rely on thicknesses
   ! from before the dynamics calls
   call diag_update_remap_grids(CS%diag)
@@ -1915,12 +1909,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            tr_desc=vd_T, registry_diags=.true., flux_nameroot='T', &
                            flux_units='W m-2', flux_longname='Heat', &
                            flux_scale=conv2watt, convergence_units='W m-2', &
-                           convergence_scale=conv2watt, CMOR_tendname="opottemptend", diag_form=2)
+                           convergence_scale=conv2watt, CMOR_tendprefix="opottemp", diag_form=2)
       call register_tracer(CS%tv%S, CS%tracer_Reg, param_file, dG%HI, GV, &
                            tr_desc=vd_S, registry_diags=.true., flux_nameroot='S', &
                            flux_units=S_flux_units, flux_longname='Salt', &
                            flux_scale=conv2salt, convergence_units='kg m-2 s-1', &
-                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendname="osalttend", diag_form=2)
+                           convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
     if (associated(CS%OBC)) &
       call register_temp_salt_segments(GV, CS%OBC, CS%tv, vd_T, vd_S, param_file)
@@ -2159,6 +2153,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ! FIXME: are h, T, S updated at the same time? Review these for T, S updates.
   call diag_update_remap_grids(diag)
 
+  ! Setup the diagnostic grid storage types
+  call diag_grid_storage_init(CS%diag_pre_sync, G, diag)
+  call diag_grid_storage_init(CS%diag_pre_dyn, G, diag)
+
   ! Calculate masks for diagnostics arrays in non-native coordinates
   ! This step has to be done after set_axes_info() because the axes needed
   ! to be configured, and after diag_update_remap_grids() because the grids
@@ -2216,6 +2214,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, &
                             param_file, diag, CS%diagnostics_CSp, CS%tv)
+  call diag_copy_diag_to_storage(CS%diag_pre_sync, CS%h, CS%diag)
 
   CS%Z_diag_interval = set_time(int((CS%dt_therm) * &
        max(1,floor(0.01 + Z_diag_int/(CS%dt_therm)))))
@@ -2247,18 +2246,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
 
   ! now register some diagnostics since the tracer registry is now locked
-  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%missing, CS%tv)
-  call register_diags(Time, G, GV, CS%IDs, CS%diag, CS%missing)
-  call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag, CS%missing)
-  if (transport_remap_grid_needed(CS%transport_IDs)) then
-    allocate(CS%h_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%h_pre_dyn(:,:,:) = 0.0
-    if (associated(CS%tv%T)) then
-      allocate(CS%T_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%T_pre_dyn(:,:,:) = 0.0
-    endif
-    if (associated(CS%tv%S)) then
-      allocate(CS%S_pre_dyn(isd:ied,jsd:jed,nz)) ; CS%S_pre_dyn(:,:,:) = 0.0
-    endif
-  endif
+  call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
+  call register_diags(Time, G, GV, CS%IDs, CS%diag)
+  call register_transport_diags(Time, G, GV, CS%transport_IDs, CS%diag)
   call register_tracer_diagnostics(CS%tracer_Reg, CS%h, Time, diag, G, GV, &
                                    CS%use_ALE_algorithm, CS%diag_to_Z_CSp)
   if (CS%use_ALE_algorithm) then
@@ -2387,13 +2377,12 @@ subroutine finish_MOM_initialization(Time, dirs, CS, fluxes, restart_CSp)
 end subroutine finish_MOM_initialization
 
 !> Register certain diagnostics
-subroutine register_diags(Time, G, GV, IDs, diag, missing)
+subroutine register_diags(Time, G, GV, IDs, diag)
   type(time_type),         intent(in)    :: Time  !< current model time
   type(ocean_grid_type),   intent(in)    :: G     !< ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV    !< ocean vertical grid structure
   type(MOM_diag_IDs),      intent(inout) :: IDs   !< A structure with the diagnostic IDs.
   type(diag_ctrl),         intent(inout) :: diag  !< regulates diagnostic output
-  real,                    intent(in)    :: missing !< The value to use to fill in missing data
 
   real :: H_convert
   character(len=48) :: thickness_units
@@ -2414,7 +2403,7 @@ subroutine register_diags(Time, G, GV, IDs, diag, missing)
       'Layer Thickness after the dynamics update', thickness_units, &
       v_extensive=.true., conversion=H_convert)
   IDs%id_ssh_inst = register_diag_field('ocean_model', 'SSH_inst', diag%axesT1, &
-      Time, 'Instantaneous Sea Surface Height', 'm', missing)
+      Time, 'Instantaneous Sea Surface Height', 'm')
 end subroutine register_diags
 
 !> This subroutine sets up clock IDs for timing various subroutines.
@@ -2446,7 +2435,6 @@ subroutine MOM_timing_init(CS)
  endif
 
 end subroutine MOM_timing_init
-
 
 !> Set the fields that are needed for bitwise identical restarting
 !! the time stepping scheme.  In addition to those specified here
