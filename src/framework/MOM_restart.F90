@@ -112,7 +112,7 @@ type, public :: MOM_restart_CS ; private
                                     ! initializedfrom restart files.
   logical :: new_run_set = .false.  ! If true, new_run has been determined for this restart_CS.
   logical :: checksum_required      ! If true, require the restart checksums to match and error out otherwise.
-                                    ! Users may want to avoid this comparison if for example the restarts are 
+                                    ! Users may want to avoid this comparison if for example the restarts are
                                     ! made from a run with a different mask_table than the current run,
                                     ! in which case the checksums will not match and cause crash.
   character(len=240) :: restartfile ! The name or name root for MOM restart files.
