@@ -50,7 +50,6 @@ use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -206,9 +205,7 @@ subroutine initialize_pseudo_salt_tracer(restart, day, G, GV, h, diag, OBC, CS, 
   endif
 
   if (associated(OBC)) then
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  !  call add_tracer_OBC_values(trim(CS%tr_desc%name), CS%tr_Reg, 0.0)
+  ! Steal from updated DOME in the fullness of time.
   endif
 
   CS%id_psd = register_diag_field("ocean_model", "pseudo_salt_diff", CS%diag%axesTL, &

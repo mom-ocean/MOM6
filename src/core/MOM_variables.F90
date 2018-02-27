@@ -8,13 +8,14 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_grid, only : ocean_grid_type
 use MOM_EOS, only : EOS_type
 
-use coupler_types_mod, only : coupler_2d_bc_type
+use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type
+use coupler_types_mod, only : coupler_type_spawn, coupler_type_destructor
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_thermovar_chksum
+public allocate_surface_state, deallocate_surface_state, MOM_thermovar_chksum
 public ocean_grid_type, alloc_BT_cont_type, dealloc_BT_cont_type
 
 type, public :: p3d
@@ -268,6 +269,89 @@ type, public :: BT_cont_type
 end type BT_cont_type
 
 contains
+
+
+!> This subroutine allocates the fields for the surface (return) properties of
+!! the ocean model.  Unused fields are unallocated.
+subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
+                                  gas_fields_ocn)
+  type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
+  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
+  logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
+  logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically integrated fields.
+  type(coupler_1d_bc_type), &
+               optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the ocean
+                                              !! ocean and surface-ice fields that will participate
+                                              !! in the calculation of additional gas or other
+                                              !! tracer fluxes, and can be used to spawn related
+                                              !! internal variables in the ice model.
+
+  logical :: use_temp, alloc_integ
+  integer :: is, ie, js, je, isd, ied, jsd, jed
+  integer :: isdB, iedB, jsdB, jedB
+
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+  isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+
+  use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
+  alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals
+
+  if (sfc_state%arrays_allocated) return
+
+  if (use_temp) then
+    allocate(sfc_state%SST(isd:ied,jsd:jed)) ; sfc_state%SST(:,:) = 0.0
+    allocate(sfc_state%SSS(isd:ied,jsd:jed)) ; sfc_state%SSS(:,:) = 0.0
+  else
+    allocate(sfc_state%sfc_density(isd:ied,jsd:jed)) ; sfc_state%sfc_density(:,:) = 0.0
+  endif
+  allocate(sfc_state%sea_lev(isd:ied,jsd:jed)) ; sfc_state%sea_lev(:,:) = 0.0
+  allocate(sfc_state%Hml(isd:ied,jsd:jed)) ; sfc_state%Hml(:,:) = 0.0
+  allocate(sfc_state%u(IsdB:IedB,jsd:jed)) ; sfc_state%u(:,:) = 0.0
+  allocate(sfc_state%v(isd:ied,JsdB:JedB)) ; sfc_state%v(:,:) = 0.0
+
+  if (alloc_integ) then
+    ! Allocate structures for the vertically integrated ocean_mass, ocean_heat,
+    ! and ocean_salt.
+    allocate(sfc_state%ocean_mass(isd:ied,jsd:jed)) ; sfc_state%ocean_mass(:,:) = 0.0
+    if (use_temp) then
+      allocate(sfc_state%ocean_heat(isd:ied,jsd:jed)) ; sfc_state%ocean_heat(:,:) = 0.0
+      allocate(sfc_state%ocean_salt(isd:ied,jsd:jed)) ; sfc_state%ocean_salt(:,:) = 0.0
+    endif
+    allocate(sfc_state%salt_deficit(isd:ied,jsd:jed)) ; sfc_state%salt_deficit(:,:) = 0.0
+  endif
+
+  if (present(gas_fields_ocn)) &
+    call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
+                            (/isd,is,ie,ied/), (/jsd,js,je,jed/), as_needed=.true.)
+
+  sfc_state%arrays_allocated = .true.
+
+end subroutine allocate_surface_state
+
+!> This subroutine deallocates the elements of a surface state type.
+subroutine deallocate_surface_state(sfc_state)
+  type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be deallocated.
+
+  if (.not.sfc_state%arrays_allocated) return
+
+  if (allocated(sfc_state%SST)) deallocate(sfc_state%SST)
+  if (allocated(sfc_state%SSS)) deallocate(sfc_state%SSS)
+  if (allocated(sfc_state%sfc_density)) deallocate(sfc_state%sfc_density)
+  if (allocated(sfc_state%sea_lev)) deallocate(sfc_state%sea_lev)
+  if (allocated(sfc_state%Hml)) deallocate(sfc_state%Hml)
+  if (allocated(sfc_state%u)) deallocate(sfc_state%u)
+  if (allocated(sfc_state%v)) deallocate(sfc_state%v)
+  if (allocated(sfc_state%ocean_mass)) deallocate(sfc_state%ocean_mass)
+  if (allocated(sfc_state%ocean_heat)) deallocate(sfc_state%ocean_heat)
+  if (allocated(sfc_state%ocean_salt)) deallocate(sfc_state%ocean_salt)
+  if (allocated(sfc_state%salt_deficit)) deallocate(sfc_state%salt_deficit)
+
+  call coupler_type_destructor(sfc_state%tr_fields)
+
+  sfc_state%arrays_allocated = .false.
+
+end subroutine deallocate_surface_state
 
 !> alloc_BT_cont_type allocates the arrays contained within a BT_cont_type and
 !! initializes them to 0.
