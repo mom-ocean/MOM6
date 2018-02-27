@@ -352,7 +352,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
   type(OBC_segment_type), pointer :: segment=>NULL()
-  integer :: ishift
+  integer :: ishift, idir
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
@@ -538,18 +538,23 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             if (segment%specified) cycle
             if (.not. associated(segment%tr_Reg)) cycle
             ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
-            if (segment%direction == OBC_DIRECTION_W) ishift=1
+            idir=1   ! idir switches the sign of the flow so that positive is into the reservoir
+            if (segment%direction == OBC_DIRECTION_W) then
+                ishift=1
+                idir=-1
+            endif
             ! update the reservoir tracer concentration implicitly
             ! using Backward-Euler timestep
             do m=1,ntr
              if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 uhh(I)=uhr(I,j,k)
-                u_L_in=max(uhh(I)*segment%Tr_InvLscale_in,0.)
-                u_L_out=min(uhh(I)*segment%Tr_InvLscale_out,0.)
+                u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale_in,0.)
+                u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale_out,0.)
                 fac1=1.0+u_L_in-u_L_out
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
                      u_L_in*Tr(m)%t(I+ishift,j,k) - &
                      u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k))
+!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k)
               endif
             enddo
 
@@ -662,7 +667,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   integer :: i, j, j2, m, n, j_up, stencil
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
-  integer :: jshift
+  integer :: jshift, jdir
   type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
 
@@ -860,15 +865,19 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           if (segment%is_N_or_S .and. &
              (J >= segment%HI%JsdB .and. J<= segment%HI%JedB)) then
             jshift=0
-            if (segment%direction == OBC_DIRECTION_S) jshift=1
+            jdir=1
+            if (segment%direction == OBC_DIRECTION_S) then
+                jshift=1
+                jdir=-1
+            endif
             do i=segment%HI%isd,segment%HI%ied
             ! update the reservoir tracer concentration implicitly
             ! using Backward-Euler timestep
               do m=1,ntr
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
                   vhh(i,J)=vhr(i,J,k)
-                  v_L_in=max(vhh(i,J)*segment%Tr_InvLscale_in,0.)
-                  v_L_out=min(vhh(i,J)*segment%Tr_InvLscale_out,0.)
+                  v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale_in,0.)
+                  v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale_out,0.)
                   fac1=1.0+v_L_in-v_L_out
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                        v_L_in*Tr(m)%t(i,j+jshift,k) - &
