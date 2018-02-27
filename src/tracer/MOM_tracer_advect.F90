@@ -532,10 +532,11 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
       if (OBC%open_u_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          I = OBC%segment(n)%HI%IsdB
-          if (OBC%segment(n)%is_E_or_W .and. (j >= OBC%segment(n)%HI%jsd .and. j<= OBC%segment(n)%HI%jed)) then
-            if (OBC%segment(n)%specified) cycle
-            if (.not. associated(OBC%segment(n)%tr_Reg)) cycle
+          segment=>OBC%segment(n)
+          I = segment%HI%IsdB
+          if (segment%is_E_or_W .and. (j >= segment%HI%jsd .and. j<= segment%HI%jed)) then
+            if (segment%specified) cycle
+            if (.not. associated(segment%tr_Reg)) cycle
             ishift=0 ! ishift+I corresponds to the nearest interior tracer cell index
             if (segment%direction == OBC_DIRECTION_W) ishift=1
             ! update the reservoir tracer concentration implicitly
@@ -833,16 +834,18 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
           if (.not. associated(segment%tr_Reg)) cycle
           if (OBC%segment(n)%is_N_or_S) then
             if (J >= segment%HI%JsdB .and. J<= segment%HI%JedB) then
-              ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
-              if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
+              do i=segment%HI%isd,segment%HI%ied
+                ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
+                if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                   (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
-                vhh(i,J) = vhr(i,J,k)
-                do m=1,ntr
-                  if (associated(segment%tr_Reg%Tr(m)%t)) then
-                    flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
-                  else ; flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
-                enddo
-              endif
+                  vhh(i,J) = vhr(i,J,k)
+                  do m=1,ntr
+                    if (associated(segment%tr_Reg%Tr(m)%t)) then
+                      flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
+                    else ; flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
+                  enddo
+                endif
+              enddo
             endif
           endif
         enddo
@@ -851,12 +854,14 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
       if (OBC%open_v_BCs_exist_globally) then
         do n=1,OBC%number_of_segments
-          if (OBC%segment(n)%specified) cycle
-          if (.not. associated(OBC%segment(n)%tr_Reg)) cycle
-          if (OBC%segment(n)%is_N_or_S .and. &
-             (J >= OBC%segment(n)%HI%JsdB .and. J<= OBC%segment(n)%HI%JedB)) then
-              jshift=0
-              if (segment%direction == OBC_DIRECTION_S) jshift=1
+          segment=>OBC%segment(n)
+          if (segment%specified) cycle
+          if (.not. associated(segment%tr_Reg)) cycle
+          if (segment%is_N_or_S .and. &
+             (J >= segment%HI%JsdB .and. J<= segment%HI%JedB)) then
+            jshift=0
+            if (segment%direction == OBC_DIRECTION_S) jshift=1
+            do i=segment%HI%isd,segment%HI%ied
             ! update the reservoir tracer concentration implicitly
             ! using Backward-Euler timestep
               do m=1,ntr
@@ -866,21 +871,21 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                   v_L_out=min(vhh(i,J)*segment%Tr_InvLscale_out,0.)
                   fac1=1.0+v_L_in-v_L_out
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                     v_L_in*Tr(m)%t(i,j+jshift,k) - &
-                     v_L_out*segment%tr_Reg%Tr(m)%t(i,j+jshift,k))
+                       v_L_in*Tr(m)%t(i,j+jshift,k) - &
+                       v_L_out*segment%tr_Reg%Tr(m)%t(i,j+jshift,k))
                 endif
               enddo
-
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
               if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
                   (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
                 vhh(i,J) = vhr(i,J,k)
                 do m=1,ntr
                   if (associated(segment%tr_Reg%Tr(m)%t)) then
-                    flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
-                  else ; flux_y(i,m,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
+                    flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
+                  else ; flux_y(i,m,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%OBC_inflow_conc ; endif
                 enddo
               endif
+            enddo
           endif
         enddo
       endif
