@@ -318,7 +318,8 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhr !< accumulated volume/mass flux through
+                                                                  !!the zonal face (m3 or kg)
    real, dimension(SZIB_(G),SZJ_(G)),        intent(inout) :: uh_neglect
   type(ocean_OBC_type),                      pointer       :: OBC
   logical, dimension(SZJ_(G),SZK_(G)),       intent(inout) :: domore_u
@@ -353,6 +354,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   real :: fac1,u_L_in,u_L_out  ! terms used for time-stepping OBC reservoirs
   type(OBC_segment_type), pointer :: segment=>NULL()
   integer :: ishift, idir
+  real    :: dt ! the inverse of Idt, needed for time-stepping of tracer reservoirs
   logical :: usePLMslope
 
   usePLMslope = .not. (usePPM .and. useHuynh)
@@ -362,6 +364,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
+  dt=1.0/Idt
 
 ! do I=is-1,ie ; ts2(I) = 0.0 ; enddo
   do I=is-1,ie ; CFL(I) = 0.0 ; enddo
@@ -548,13 +551,15 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             do m=1,ntr
              if (associated(segment%tr_Reg%Tr(m)%tres)) then
                 uhh(I)=uhr(I,j,k)
-                u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale_in,0.)
-                u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale_out,0.)
-                fac1=1.0+u_L_in-u_L_out
+                u_L_in=max(idir*uhh(I)*segment%Tr_InvLscale3_in,0.)
+                u_L_out=min(idir*uhh(I)*segment%Tr_InvLscale3_out,0.)
+                fac1=1.0+dt*(u_L_in-u_L_out)
                 segment%tr_Reg%Tr(m)%tres(I,j,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(I,j,k) + &
-                     u_L_in*Tr(m)%t(I+ishift,j,k) - &
-                     u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k))
-!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k)
+                     dt*(u_L_in*Tr(m)%t(I+ishift,j,k) - &
+                     u_L_out*segment%tr_Reg%Tr(m)%t(I,j,k)))
+!                if (j.eq.10 .and. segment%direction==OBC_DIRECTION_E .and. m==2 .and. k.eq.1) &
+!                  print *,'tres=',segment%tr_Reg%Tr(m)%tres(I,j,k),&
+!                segment%tr_Reg%Tr(m)%t(I,j,k), fac1
               endif
             enddo
 
@@ -633,7 +638,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
   type(tracer_type), dimension(ntr),         intent(inout) :: Tr
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: hprev
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhr !< accumulated volume/mass flux through
+                                                                  !! the meridional face (m3 or kg)
   real, dimension(SZI_(G),SZJB_(G)),         intent(inout) :: vh_neglect
   type(ocean_OBC_type),                      pointer       :: OBC
   logical, dimension(SZJB_(G),SZK_(G)),      intent(inout) :: domore_v
@@ -668,6 +674,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   real :: aR, aL, dMx, dMn, Tp, Tc, Tm, dA, mA, a6
   real :: fac1,v_L_in,v_L_out  ! terms used for time-stepping OBC reservoirs
   integer :: jshift, jdir
+  real  :: dt ! The inverse of Idt, needed for segment reservoir time-stepping
   type(OBC_segment_type), pointer :: segment=>NULL()
   logical :: usePLMslope
 
@@ -678,7 +685,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
 
   min_h = 0.1*GV%Angstrom
   h_neglect = GV%H_subroundoff
-
+  dt=1.0/Idt
   !do i=is,ie ; ts2(i) = 0.0 ; enddo
 
   ! We conditionally perform work on tracer points: calculating the PLM slope,
@@ -876,12 +883,12 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
               do m=1,ntr
                 if (associated(segment%tr_Reg%Tr(m)%tres)) then
                   vhh(i,J)=vhr(i,J,k)
-                  v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale_in,0.)
-                  v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale_out,0.)
-                  fac1=1.0+v_L_in-v_L_out
+                  v_L_in=max(jdir*vhh(i,J)*segment%Tr_InvLscale3_in,0.)
+                  v_L_out=min(jdir*vhh(i,J)*segment%Tr_InvLscale3_out,0.)
+                  fac1=1.0+dt*(v_L_in-v_L_out)
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                       v_L_in*Tr(m)%t(i,j+jshift,k) - &
-                       v_L_out*segment%tr_Reg%Tr(m)%t(i,j,k))
+                       dt*v_L_in*Tr(m)%t(i,j+jshift,k) - &
+                       dt*v_L_out*segment%tr_Reg%Tr(m)%t(i,j,k))
                 endif
               enddo
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.

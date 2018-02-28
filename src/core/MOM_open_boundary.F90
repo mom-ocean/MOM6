@@ -147,11 +147,11 @@ type, public :: OBC_segment_type
                                                             !! that values should be nudged towards (m s-1).
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
-  real :: Tr_InvLscale_out                                     !< An effective inverse length scale (m-1)
-  real :: Tr_InvLscale_in                                      !< for restoring the tracer concentration in a
-                                                               !< ficticious reservior towards interior values
-                                                               !< when flow is exiting the domain, or towards
-                                                               !< an externally imposed value when flow is entering
+  real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)
+  real :: Tr_InvLscale3_in                                      !! for restoring the tracer concentration in a
+                                                                !! ficticious reservior towards interior values
+                                                                !! when flow is exiting the domain, or towards
+                                                                !! an externally imposed value when flow is entering
 end type OBC_segment_type
 
 !> Open-boundary data
@@ -410,10 +410,10 @@ subroutine open_boundary_config(G, param_file, OBC)
   ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
   ! by data while others are well constrained - MJH.
   do l = 1, OBC%number_of_segments
-    OBC%segment(l)%Tr_InvLscale_in=0.0
-    if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale_in =  1.0/Lscale_in
-    OBC%segment(l)%Tr_InvLscale_out=0.0
-    if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale_out =  1.0/Lscale_out
+    OBC%segment(l)%Tr_InvLscale3_in=0.0
+    if (Lscale_in>0.) OBC%segment(l)%Tr_InvLscale3_in =  1.0/(Lscale_in*Lscale_in*Lscale_in)
+    OBC%segment(l)%Tr_InvLscale3_out=0.0
+    if (Lscale_out>0.) OBC%segment(l)%Tr_InvLscale3_out =  1.0/(Lscale_out*Lscale_out*Lscale_out)
   enddo
 
     ! Safety check
