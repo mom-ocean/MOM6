@@ -203,7 +203,7 @@ contains
 !> RK2 splitting for time stepping MOM adiabatic dynamics
 subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
                  Time_local, dt, forces, p_surf_begin, p_surf_end, &
-                 dt_since_flux, dt_therm, uh, vh, uhtr, vhtr, eta_av, &
+                 uh, vh, uhtr, vhtr, eta_av, &
                  G, GV, CS, calc_dtbt, VarMix, MEKE)
   type(ocean_grid_type),                     intent(inout) :: G             !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV            !< ocean vertical grid structure
@@ -217,8 +217,6 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   type(mech_forcing),                        intent(in)    :: forces        !< A structure with the driving mechanical forces
   real, dimension(:,:),                      pointer       :: p_surf_begin  !< surf pressure at start of this dynamic time step (Pa)
   real, dimension(:,:),                      pointer       :: p_surf_end    !< surf pressure at end   of this dynamic time step (Pa)
-  real,                                      intent(in)    :: dt_since_flux !< elapsed time since fluxes were applied (sec)
-  real,                                      intent(in)    :: dt_therm      !< thermodynamic time step (sec)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), target, intent(inout) :: uh    !< zonal volume/mass transport (m3/s or kg/s)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), target, intent(inout) :: vh    !< merid volume/mass transport (m3/s or kg/s)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr          !< accumulatated zonal volume/mass transport since last tracer advection (m3 or kg)
@@ -463,8 +461,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! Calculate the relative layer weights for determining barotropic quantities.
   if (.not.BT_cont_BT_thick) &
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
-  call bt_mass_source(h, eta, forces, .true., dt_therm, dt_since_flux, &
-                      G, GV, CS%barotropic_CSp)
+  call bt_mass_source(h, eta, .true., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (G%nonblocking_updates) &
@@ -603,8 +600,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, &
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  call bt_mass_source(hp, eta_pred, forces, .false., dt_therm, &
-                      dt_since_flux+dt, G, GV, CS%barotropic_CSp)
+  call bt_mass_source(hp, eta_pred, .false., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
   if (CS%begw /= 0.0) then
