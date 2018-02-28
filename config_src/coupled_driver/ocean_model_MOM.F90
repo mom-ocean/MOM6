@@ -343,7 +343,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   endif
 
   OS%use_waves=.false. ;
-  call get_param(param_file,mod,"USE_WAVES",OS%Use_Waves,&
+  call get_param(param_file,mdl,"USE_WAVES",OS%Use_Waves,&
        "If true, uses waves.",default=.false.)
   if (OS%use_waves) then
      call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%MOM_CSp%Wave_Parameter_CSp,OS%MOM_CSp%diag)
