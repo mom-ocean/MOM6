@@ -881,7 +881,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                   fac1=1.0+v_L_in-v_L_out
                   segment%tr_Reg%Tr(m)%tres(i,J,k)= (1.0/fac1)*(segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                        v_L_in*Tr(m)%t(i,j+jshift,k) - &
-                       v_L_out*segment%tr_Reg%Tr(m)%t(i,j+jshift,k))
+                       v_L_out*segment%tr_Reg%Tr(m)%t(i,j,k))
                 endif
               enddo
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
