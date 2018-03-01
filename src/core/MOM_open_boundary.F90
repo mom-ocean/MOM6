@@ -148,7 +148,7 @@ type, public :: OBC_segment_type
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
   real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)
-  real :: Tr_InvLscale3_in                                      !! for restoring the tracer concentration in a
+  real :: Tr_InvLscale3_in                                      !< for restoring the tracer concentration in a
                                                                 !! ficticious reservior towards interior values
                                                                 !! when flow is exiting the domain, or towards
                                                                 !! an externally imposed value when flow is entering
@@ -2604,6 +2604,8 @@ subroutine fill_temp_salt_segments(G, OBC, tv)
         endif
       enddo ; enddo
     endif
+    segment%tr_Reg%Tr(1)%tres(:,:,:) = segment%tr_Reg%Tr(1)%t(:,:,:)
+    segment%tr_Reg%Tr(2)%tres(:,:,:) = segment%tr_Reg%Tr(2)%t(:,:,:)
   enddo
 end subroutine fill_temp_salt_segments
 
