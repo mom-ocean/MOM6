@@ -2246,7 +2246,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(:,:,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
-        zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
+        zTopOfCell = 0. ; zBottomOfCell = 0.
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
         do k = 1, nz
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
@@ -2262,7 +2262,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
             tmpS1dIn(i,j,k) = -99.9
           endif
           h1(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
-          if (h1(i,j,k)>0.) nPoints = nPoints + 1
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
         h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
