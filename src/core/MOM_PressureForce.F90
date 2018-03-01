@@ -114,7 +114,7 @@ subroutine PressureForce_init(Time, G, GV, param_file, diag, CS, tides_CSp)
   call get_param(param_file, mdl, "BLOCKED_ANALYTIC_FV_PGF", CS%blocked_AFV, &
                  "If true, used the blocked version of the ANALYTIC_FV_PGF \n"//&
                  "code.  The value of this parameter should not change answers.", &
-                 default=.false., do_not_log=.true., debuggingParam=.true.) 
+                 default=.false., do_not_log=.true., debuggingParam=.true.)
 
   if (CS%Analytic_FV_PGF .and. CS%blocked_AFV) then
     call PressureForce_blk_AFV_init(Time, G, GV, param_file, diag, &
