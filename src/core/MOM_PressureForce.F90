@@ -71,7 +71,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
                                    ALE_CSp, p_atm, pbce, eta)
     else
       call PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS%PressureForce_AFV_CSp, &
-                                      p_atm, pbce, eta)
+                                      ALE_CSp, p_atm, pbce, eta)
     endif
   else
     if (GV%Boussinesq) then

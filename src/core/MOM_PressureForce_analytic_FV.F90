@@ -15,7 +15,8 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
-use MOM_EOS, only : int_density_dz_generic_plm_analytic
+use MOM_EOS, only : int_spec_vol_dp_generic_plm
+use MOM_EOS, only : int_density_dz_generic, int_spec_vol_dp_generic
 use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm
 use MOM_ALE, only : usePressureReconstruction, pressureReconstructionScheme
 use MOM_ALE, only : ALE_CS
@@ -68,7 +69,7 @@ subroutine PressureForce_AFV(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, e
   if (GV%Boussinesq) then
     call PressureForce_AFV_bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   else
-    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
+    call PressureForce_AFV_nonbouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
   endif
 
 end subroutine PressureForce_AFV
@@ -83,14 +84,15 @@ end subroutine PressureForce_AFV
 !! ie to ie, je to je range before this subroutine is called:
 !!  h[ie+1] and h[je+1] and (if tv%eqn_of_state is set) T[ie+1], S[ie+1],
 !!  T[je+1], and S[je+1].
-subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, eta)
-  type(ocean_grid_type),                     intent(in)    :: G   !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV  !< Vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thickness (kg/m2)
-  type(thermo_var_ptrs),                     intent(in)    :: tv  !< Thermodynamic variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out)   :: PFu !< Zonal acceleration (m/s2)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out)   :: PFv !< Meridional acceleration (m/s2)
-  type(PressureForce_AFV_CS),                pointer       :: CS  !< Finite volume PGF control structure
+subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, pbce, eta)
+  type(ocean_grid_type),                     intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV  !< Vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)  :: h   !< Layer thickness (kg/m2)
+  type(thermo_var_ptrs),                     intent(in)  :: tv  !< Thermodynamic variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: PFu !< Zonal acceleration (m/s2)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: PFv !< Meridional acceleration (m/s2)
+  type(PressureForce_AFV_CS),                pointer     :: CS  !< Finite volume PGF control structure
+  type(ALE_CS),                              pointer     :: ALE_CSp !< ALE control structure
   real, dimension(:,:),                      optional, pointer :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface in Pa.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  optional, intent(out) :: pbce !< The baroclinic pressure
@@ -106,6 +108,9 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
                 ! than the mixed layer have the mixed layer's properties, in C.
     S_tmp       ! Temporary array of salinities where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties, in psu.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
+    S_t, S_b, T_t, T_b ! Top and bottom edge values for linear reconstructions
+                       ! of salinity and temperature within each layer.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G))  :: &
     dza, &      ! The change in geopotential anomaly between the top and bottom
                 ! of a layer, in m2 s-2.
@@ -141,6 +146,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref, in m3 kg-1.
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
+  logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS    ! If true, density is calculated from T & S using an
                         ! equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
@@ -154,17 +160,21 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
+  integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  if (.not.associated(CS)) call MOM_error(FATAL, &
+       "MOM_PressureForce_AFV_nonBouss: Module must be initialized before it is used.")
+
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
   use_EOS = associated(tv%eqn_of_state)
-
-  if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce: Module must be initialized before it is used.")
+  use_ALE = .false.
+  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
+  PRScheme = pressureReconstructionScheme(ALE_CSp)
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
@@ -217,15 +227,46 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, p_atm, pbce, e
     endif
   endif
 
+  ! If regridding is activated, do a linear reconstruction of salinity
+  ! and temperature across each layer. The subscripts 't' and 'b' refer
+  ! to top and bottom values within each layer (these are the only degrees
+  ! of freedeom needed to know the linear profile).
+  if ( use_ALE ) then
+    if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+    elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+    endif
+  endif
+
   !$OMP parallel do default(shared) private(alpha_anom,dp)
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
     if (use_EOS) then
-      call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
+      if ( use_ALE ) then
+        if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+          call int_spec_vol_dp_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
+                    S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
+                    alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
+                    tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
+                    intx_dza(:,:,k), inty_dza(:,:,k), &
+                    useMassWghtInterp = CS%useMassWghtInterp)
+          i=k
+        elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+          call MOM_error(FATAL, "PressureForce_AFV_nonBouss: "//&
+                         "int_spec_vol_dp_generic_ppm does not exist yet.")
+        !  call int_spec_vol_dp_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
+        !            tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
+        !            alpha_ref, G%HI, tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
+        !            intx_dza(:,:,k), inty_dza(:,:,k))
+        endif
+      else
+        call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
                                p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k))
+      endif
     else
       alpha_anom = 1.0/GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -462,7 +503,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
-       "MOM_PressureForce: Module must be initialized before it is used.")
+       "MOM_PressureForce_AFV_Bouss: Module must be initialized before it is used.")
 
   use_p_atm = .false.
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
@@ -470,8 +511,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
-
   PRScheme = pressureReconstructionScheme(ALE_CSp)
+
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_m
   I_Rho0 = 1.0/GV%Rho0
@@ -569,8 +610,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
       enddo ; enddo
     endif
   endif
-
-! Have checked that rho_0 drops out and that the 1-layer case is right. RWH.
+  ! I have checked that rho_0 drops out and that the 1-layer case is right. RWH.
 
   ! If regridding is activated, do a linear reconstruction of salinity
   ! and temperature across each layer. The subscripts 't' and 'b' refer
