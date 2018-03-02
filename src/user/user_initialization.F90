@@ -14,7 +14,7 @@ use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
-use MOM_tracer_registry, only : tracer_registry_type, add_tracer_OBC_values
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
