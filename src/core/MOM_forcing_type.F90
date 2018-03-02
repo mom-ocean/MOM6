@@ -314,54 +314,55 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
                   aggregate_FW_forcing, nonpenSW, netmassInOut_rate,net_Heat_Rate,      &
                   net_salt_rate, pen_sw_bnd_Rate, skip_diags)
 
-  type(ocean_grid_type),             intent(in)    :: G                        !< ocean grid structure
-  type(verticalGrid_type),           intent(in)    :: GV                       !< ocean vertical grid structure
-  type(forcing),                     intent(inout) :: fluxes                   !< structure containing pointers to possible
-                                                                               !! forcing fields. NULL unused fields.
-  type(optics_type),                 pointer       :: optics                   !< pointer to optics
-  integer,                           intent(in)    :: nsw                      !< number of bands of penetrating SW
-  integer,                           intent(in)    :: j                        !< j-index to work on
-  real,                              intent(in)    :: dt                       !< time step in seconds
-  real,                              intent(in)    :: DepthBeforeScalingFluxes !< min ocean depth before scale away fluxes (H)
-  logical,                           intent(in)    :: useRiverHeatContent      !< logical for river heat content
-  logical,                           intent(in)    :: useCalvingHeatContent    !< logical for calving heat content
-  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: h                        !< layer thickness (in H units)
-  real, dimension(SZI_(G),SZK_(G)),  intent(in)    :: T                        !< layer temperatures (deg C)
-  real, dimension(SZI_(G)),          intent(out)   :: netMassInOut             !<  net mass flux (non-Bouss) or volume flux
-                                                                               !! (if Bouss) of water in/out of ocean over
-                                                                               !! a time step (H units)
-  real, dimension(SZI_(G)),          intent(out)   :: netMassOut               !< net mass flux (non-Bouss) or volume flux
-                                                                               !! (if Bouss) of water leaving ocean surface
-                                                                               !! over a time step (H units).
-                                                                               !! netMassOut < 0 means mass leaves ocean.
-  real, dimension(SZI_(G)),          intent(out)   :: net_heat                 !< net heat at the surface accumulated over a
-                                                                               !! time step for coupler + restoring.
-                                                                               !! Exclude two terms from net_heat:
-                                                                               !! (1) downwelling (penetrative) SW,
-                                                                               !! (2) evaporation heat content,
-                                                                               !! (since do not yet know evap temperature).
-                                                                               !! Units of net_heat are (K * H).
-  real, dimension(SZI_(G)),          intent(out)   :: net_salt                 !< surface salt flux into the ocean accumulated
-                                                                               !! over a time step (ppt * H)
-  real, dimension(:,:),              intent(out)   :: pen_SW_bnd               !< penetrating SW flux, split into bands.
-                                                                               !! Units are (deg K * H) and array size
-                                                                               !! nsw x SZI_(G), where nsw=number of SW bands
-                                                                               !! in pen_SW_bnd. This heat flux is not part
-                                                                               !! of net_heat.
-  type(thermo_var_ptrs),             intent(inout) :: tv                       !< structure containing pointers to available
-                                                                               !! thermodynamic fields. Used to keep
-                                                                               !! track of the heat flux associated with net
-                                                                               !! mass fluxes into the ocean.
-  logical,                           intent(in)    :: aggregate_FW_forcing     !< For determining how to aggregate forcing.
-  real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW                 !< non-downwelling SW; use in net_heat.
-                                                                               !! Sum over SW bands when diagnosing nonpenSW.
-                                                                               !! Units are (K * H).
-  real, dimension(SZI_(G)), optional, intent(out) :: net_Heat_rate             !< Optional outputs of contributions to surface
-  real, dimension(SZI_(G)), optional, intent(out) :: net_salt_rate             !<  buoyancy flux which do not include dt
-  real, dimension(SZI_(G)), optional, intent(out) :: netmassInOut_rate         !<  and therefore are used to compute the rate.
-  real, dimension(:,:), optional, intent(out)     :: pen_sw_bnd_rate           !<  Perhaps just a temporary fix.
-  logical, optional,                 intent(in)    :: skip_diags               !< If present and true, skip calculating
-                                                                               !! diagnostics
+  type(ocean_grid_type),    intent(in)    :: G                        !< ocean grid structure
+  type(verticalGrid_type),  intent(in)    :: GV                       !< ocean vertical grid structure
+  type(forcing),            intent(inout) :: fluxes                   !< structure containing pointers to possible
+                                                                      !! forcing fields. NULL unused fields.
+  type(optics_type),        pointer       :: optics                   !< pointer to optics
+  integer,                  intent(in)    :: nsw                      !< number of bands of penetrating SW
+  integer,                  intent(in)    :: j                        !< j-index to work on
+  real,                     intent(in)    :: dt                       !< time step in seconds
+  real,                     intent(in)    :: DepthBeforeScalingFluxes !< min ocean depth before scale away fluxes (H)
+  logical,                  intent(in)    :: useRiverHeatContent      !< logical for river heat content
+  logical,                  intent(in)    :: useCalvingHeatContent    !< logical for calving heat content
+  real, dimension(SZI_(G),SZK_(G)), &
+                            intent(in)    :: h                        !< layer thickness (in H units)
+  real, dimension(SZI_(G),SZK_(G)), &
+                            intent(in)    :: T                        !< layer temperatures (deg C)
+  real, dimension(SZI_(G)), intent(out)   :: netMassInOut             !< net mass flux (non-Bouss) or volume flux
+                                                                      !! (if Bouss) of water in/out of ocean over
+                                                                      !! a time step (H units)
+  real, dimension(SZI_(G)), intent(out)   :: netMassOut               !< net mass flux (non-Bouss) or volume flux
+                                                                      !! (if Bouss) of water leaving ocean surface
+                                                                      !! over a time step (H units).
+                                                                      !! netMassOut < 0 means mass leaves ocean.
+  real, dimension(SZI_(G)), intent(out)   :: net_heat                 !< net heat at the surface accumulated over a
+                                                                      !! time step for coupler + restoring.
+                                                                      !! Exclude two terms from net_heat:
+                                                                      !! (1) downwelling (penetrative) SW,
+                                                                      !! (2) evaporation heat content,
+                                                                      !! (since do not yet know evap temperature).
+                                                                      !! Units of net_heat are (K * H).
+  real, dimension(SZI_(G)), intent(out)   :: net_salt                 !< surface salt flux into the ocean accumulated
+                                                                      !! over a time step (ppt * H)
+  real, dimension(:,:),     intent(out)   :: pen_SW_bnd               !< penetrating SW flux, split into bands.
+                                                                      !! Units are (deg K * H) and array size
+                                                                      !! nsw x SZI_(G), where nsw=number of SW bands
+                                                                      !! in pen_SW_bnd. This heat flux is not part
+                                                                      !! of net_heat.
+  type(thermo_var_ptrs),    intent(inout) :: tv                       !< structure containing pointers to available
+                                                                      !! thermodynamic fields. Used to keep
+                                                                      !! track of the heat flux associated with net
+                                                                      !! mass fluxes into the ocean.
+  logical,                  intent(in)    :: aggregate_FW_forcing     !< For determining how to aggregate forcing.
+  real, dimension(SZI_(G)), optional, intent(out)  :: nonpenSW        !< non-downwelling SW; use in net_heat.
+                                                                      !! Sum over SW bands when diagnosing nonpenSW.
+                                                                      !! Units are (K * H).
+  real, dimension(SZI_(G)), optional, intent(out)  :: net_Heat_rate   !< Rate of net surface heating in H K s-1.
+  real, dimension(SZI_(G)), optional, intent(out)  :: net_salt_rate   !< Surface salt flux into the ocean in ppt H s-1.
+  real, dimension(SZI_(G)), optional, intent(out)  :: netmassInOut_rate !< Rate of net mass flux into the ocean in H s-1.
+  real, dimension(:,:),     optional, intent(out)  :: pen_sw_bnd_rate !< Rate of penetrative shortwave heating in degC H s-1.
+  logical,                  optional, intent(in)   :: skip_diags      !< If present and true, skip calculating diagnostics
 
   ! local
   real :: htot(SZI_(G))       ! total ocean depth (m for Bouss or kg/m^2 for non-Bouss)
@@ -451,9 +452,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
       Pen_SW_bnd(1,i) = 0.0
     endif
 
-    !BGR-Jul 5, 2017{
-    !Repeats above code w/ dt=1. for legacy reason
-    if (do_PSWBR) then
+    if (do_PSWBR) then  ! Repeat the above code w/ dt=1s for legacy reasons
       pen_sw_tot_rate(i) = 0.0
       if (nsw >= 1) then
         do n=1,nsw
@@ -464,7 +463,6 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
         pen_sw_bnd_rate(1,i) = 0.0
       endif
     endif
-    !}BGR
 
     ! net volume/mass of liquid and solid passing through surface boundary fluxes
     netMassInOut(i) = dt * (scale * ((((( fluxes%lprec(i,j)      &
@@ -474,9 +472,7 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
                                         + fluxes%vprec(i,j)   )  &
                                         + fluxes%frunoff(i,j) ) )
 
-    !BGR-Jul 5, 2017{
-    !Repeats above code w/ dt=1. for legacy reason
-    if (do_NMIOr) then
+    if (do_NMIOr) then  ! Repeat the above code w/ dt=1s for legacy reasons
       netMassInOut_rate(i) = (scale * ((((( fluxes%lprec(i,j)      &
                                         + fluxes%fprec(i,j)   )  &
                                         + fluxes%evap(i,j)    )  &
@@ -484,19 +480,15 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
                                         + fluxes%vprec(i,j)   )  &
                                         + fluxes%frunoff(i,j) ) )
     endif
-    !}BGR
 
     ! smg:
     ! for non-Bouss, we add/remove salt mass to total ocean mass. to conserve
-    ! total salt mass ocean+ice, the sea ice model must lose mass when
-    ! salt mass is added to the ocean, which may still need to be coded.
+    ! total salt mass ocean+ice, the sea ice model must lose mass when salt mass
+    ! is added to the ocean, which may still need to be coded.  Not that the units
+    ! of netMassInOut are still kg_m2, so no conversion to H should occur yet.
     if (.not.GV%Boussinesq .and. ASSOCIATED(fluxes%salt_flux)) then
-      netMassInOut(i) = netMassInOut(i) + (dt * GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
-
-      !BGR-Jul 5, 2017{
-      !Repeats above code w/ dt=1. for legacy reason
-      if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + (GV%kg_m2_to_H) * (scale * fluxes%salt_flux(i,j))
-      !}BGR
+      netMassInOut(i) = netMassInOut(i) + dt * (scale * fluxes%salt_flux(i,j))
+      if (do_NMIOr) netMassInOut_rate(i) = netMassInOut_rate(i) + (scale * fluxes%salt_flux(i,j))
     endif
 
     ! net volume/mass of water leaving the ocean.
@@ -526,21 +518,16 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
 
     ! convert to H units (Bouss=meter or non-Bouss=kg/m^2)
     netMassInOut(i) = GV%kg_m2_to_H * netMassInOut(i)
-    !BGR-Jul 5, 2017{
-    !Repeats above code w/ dt=1. for legacy reason
     if (do_NMIOr) netMassInOut_rate(i) = GV%kg_m2_to_H * netMassInOut_rate(i)
-    !}BGR
     netMassOut(i)   = GV%kg_m2_to_H * netMassOut(i)
 
     ! surface heat fluxes from radiation and turbulent fluxes (K * H)
     ! (H=m for Bouss, H=kg/m2 for non-Bouss)
     net_heat(i) = scale * dt * J_m2_to_H * &
                   ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-    !BGR-Jul 5, 2017{
     !Repeats above code w/ dt=1. for legacy reason
     if (do_NHR)  net_heat_rate(i) = scale * J_m2_to_H * &
          ( fluxes%sw(i,j) +  ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)) )
-    !}BGR
     ! Add heat flux from surface damping (restoring) (K * H) or flux adjustments.
     if (ASSOCIATED(fluxes%heat_added)) then
        net_heat(i) = net_heat(i) + (scale * (dt * J_m2_to_H)) * fluxes%heat_added(i,j)
@@ -612,10 +599,8 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! remove penetrative portion of the SW that is NOT absorbed within a
     ! tiny layer at the top of the ocean.
     net_heat(i) = net_heat(i) - Pen_SW_tot(i)
-    !BGR-Jul 5, 2017{
     !Repeat above code for 'rate' term
     if (do_NHR) net_heat_rate(i) = net_heat_rate(i) - Pen_SW_tot_rate(i)
-    !}BGR
 
     ! diagnose non-downwelling SW
     if (present(nonPenSW)) then
@@ -630,10 +615,8 @@ subroutine extractFluxes1d(G, GV, fluxes, optics, nsw, j, dt,                   
     ! non-Bouss:  (g/m^2)
     if (ASSOCIATED(fluxes%salt_flux)) then
       Net_salt(i) = (scale * dt * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
-      !BGR-Jul 5, 2017{
       !Repeat above code for 'rate' term
       if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0 * fluxes%salt_flux(i,j))) * GV%kg_m2_to_H
-      !}BGR
     endif
 
     ! Diagnostics follow...
