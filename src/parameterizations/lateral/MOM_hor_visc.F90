@@ -552,13 +552,15 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, CS, 
     enddo ; enddo
 
 ! Divergence gradient
-    do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
-      div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
-    enddo ; enddo
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
+      enddo ; enddo
 
-    do J=js-2,Jeq+1 ; do i=Isq-1,Ieq+2
-      div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
-    enddo ; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
+        div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
+      enddo ; enddo
+    endif
 
 ! Coefficient for modified Leith
     if (CS%Modified_Leith) then
@@ -1038,11 +1040,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
   real :: bound_Cor_vel    ! grid-scale velocity variations at which value
                            ! the quadratically varying biharmonic viscosity
                            ! balances Coriolis acceleration (m/s)
+  real :: Kh_sin_lat       ! Amplitude of latitudinally dependent viscosity (m2/s)
+  real :: Kh_pwr_of_sine   ! Power used to raise sin(lat) when using Kh_sin_lat
   logical :: bound_Cor_def ! parameter setting of BOUND_CORIOLIS
   logical :: get_all       ! If true, read and log all parameters, regardless of
                            ! whether they are used, to enable spell-checking of
                            ! valid parameters.
   character(len=64) :: inputdir, filename
+  real    :: deg2rad       ! Converts degrees to radians
+  real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -1097,6 +1103,15 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
                  "The final viscosity is the largest of this scaled \n"//&
                  "viscosity, the Smagorinsky and Leith viscosities, and KH.", &
                  units="m s-1", default=0.0)
+    call get_param(param_file, mdl, "KH_SIN_LAT", Kh_sin_lat, &
+                 "The amplitude of a latidutinally-dependent background\n"//&
+                 "viscosity of the form KH_SIN_LAT*(SIN(LAT)**KH_PWR_OF_SINE).", &
+                 units = "m2 s-1",  default=0.0)
+    if (Kh_sin_lat>0. .or. get_all) &
+      call get_param(param_file, mdl, "KH_PWR_OF_SINE", Kh_pwr_of_sine, &
+                 "The power used to raise SIN(LAT) when using a latidutinally-\n"//&
+                 "dependent background viscosity.", &
+                 units = "nondim",  default=4.0)
 
     call get_param(param_file, mdl, "SMAGORINSKY_KH", CS%Smagorinsky_Kh, &
                  "If true, use a Smagorinsky nonlinear eddy viscosity.", &
@@ -1239,6 +1254,8 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
     return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
   endif
 
+  deg2rad = atan(1.0) / 45.
+
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0
   ALLOC_(CS%dx2q(IsdB:IedB,JsdB:JedB))    ; CS%dx2q(:,:)    = 0.0
@@ -1351,32 +1368,56 @@ subroutine hor_visc_init(Time, G, param_file, diag, CS)
    ! The 0.3 below was 0.4 in MOM1.10.  The change in hq requires
    ! this to be less than 1/3, rather than 1/2 as before.
     if (CS%bound_Kh .or. CS%bound_Ah) Kh_Limit = 0.3 / (dt*4.0)
+
+    ! Calculate and store the background viscosity at h-points
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_h2 = (2.0*CS%DX2h(i,j)*CS%DY2h(i,j)) / (CS%DX2h(i,j) + CS%DY2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xx(i,j) = Smag_Lap_const * grid_sp_h2
       if (CS%Leith_Kh) CS%LAPLAC3_CONST_xx(i,j) = Leith_Lap_const * grid_sp_h3
 
+      ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xx(i,j) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_h2))
 
+      ! Use the larger of the above and values read from a file
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xx(i,j) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xx(i,j))
 
+      ! Use the larger of the above and a function of sin(latitude)
+      if (Kh_sin_lat>0.) then
+        slat_fn = abs( sin( deg2rad * G%geoLatT(i,j) ) ) ** Kh_pwr_of_sine
+        CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
+      endif
+
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
+        ! Limit the background viscosity to be numerically stable
         CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
         CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
       endif
     enddo ; enddo
+
+    ! Calculate and store the background viscosity at q-points
     do J=js-1,Jeq ; do I=is-1,Ieq
+      ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_q2 = (2.0*CS%DX2q(I,J)*CS%DY2q(I,J)) / (CS%DX2q(I,J) + CS%DY2q(I,J))
       grid_sp_q3 = grid_sp_q2*sqrt(grid_sp_q2)
       if (CS%Smagorinsky_Kh) CS%LAPLAC_CONST_xy(I,J) = Smag_Lap_const * grid_sp_q2
       if (CS%Leith_Kh) CS%LAPLAC3_CONST_xy(I,J) = Leith_Lap_const * grid_sp_q3
 
+      ! Maximum of constant background and MICOM viscosity
       CS%Kh_bg_xy(I,J) = MAX(Kh, Kh_vel_scale * sqrt(grid_sp_q2))
 
+      ! Use the larger of the above and values read from a file
       if (CS%use_Kh_bg_2d) CS%Kh_bg_xy(I,J) = MAX(CS%Kh_bg_2d(i,j), CS%Kh_bg_xy(I,J))
 
+      ! Use the larger of the above and a function of sin(latitude)
+      if (Kh_sin_lat>0.) then
+        slat_fn = abs( sin( deg2rad * G%geoLatBu(I,J) ) ) ** Kh_pwr_of_sine
+        CS%Kh_bg_xy(I,J) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xy(I,J))
+      endif
+
       if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
+        ! Limit the background viscosity to be numerically stable
         CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
         CS%Kh_bg_xy(I,J) = MIN(CS%Kh_bg_xy(I,J), CS%Kh_Max_xy(I,J))
       endif

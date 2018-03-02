@@ -187,6 +187,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
   call obsolete_logical(param_file, "RESCALE_BT_FACE_AREAS", .false.)
   call obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
+  call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
 
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
 
