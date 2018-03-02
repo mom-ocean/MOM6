@@ -295,26 +295,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
                                                !! structure for diagnostics in depth space.
   type(thermo_var_ptrs),                 intent(in)    :: tv      !< A structure pointing to various
                                                                   !! thermodynamic variables
-!   This subroutine calls all registered tracer initialization
-! subroutines.
 
-! Arguments: restart - 1 if the fields have already been read from
-!                     a restart file.
-!  (in)      day - Time of the start of the run.
-!  (in)      G - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      h - Layer thickness, in m (Boussinesq) or kg m-2 (non-Boussinesq).
-!  (in)      diag - A structure that is used to regulate diagnostic output.
-!  (in)      OBC - This open boundary condition type specifies whether, where,
-!                  and what open boundary conditions are used.
-!  (in)      CS - The control structure returned by a previous call to
-!                 call_tracer_register.
-!  (in/out)  sponge_CSp - A pointer to the control structure for the sponges, if
-!                         they are in use.  Otherwise this may be unassociated.
-!  (in/out)  ALE_sponge_CSp - A pointer to the control structure for the ALE sponges, if they are
-!                             in use.  Otherwise this may be unassociated.
-!  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
-!                            in depth space.
   if (.not. associated(CS)) call MOM_error(FATAL, "tracer_flow_control_init: "// &
          "Module must be initialized via call_tracer_register before it is used.")
 
@@ -324,7 +305,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, h, param_file, diag, OB
                                 sponge_CSp, diag_to_Z_CSp)
   if (CS%use_DOME_tracer) &
     call initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS%DOME_tracer_CSp, &
-                                sponge_CSp, diag_to_Z_CSp)
+                                sponge_CSp, diag_to_Z_CSp, param_file)
   if (CS%use_ISOMIP_tracer) &
     call initialize_ISOMIP_tracer(restart, day, G, GV, h, diag, OBC, CS%ISOMIP_tracer_CSp, &
                                 ALE_sponge_CSp, diag_to_Z_CSp)
