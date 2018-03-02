@@ -395,12 +395,12 @@ subroutine open_boundary_config(G, param_file, OBC)
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT ", Lscale_out, &
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to externally imposed values when the flow \n"//&
-                 "is exiting the domain .", units="m", default=0.0)
+                 "is exiting the domain.", units="m", default=0.0)
 
       call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN ", Lscale_in, &
                  "An effective length scale for restoring the tracer concentration \n"//&
                  "at the boundaries to values from the interior when the flow \n"//&
-                 "is entering the domain .", units="m", default=0.0)
+                 "is entering the domain.", units="m", default=0.0)
 
     endif
     if (mask_outside) call mask_outside_OBCs(G, param_file, OBC)
