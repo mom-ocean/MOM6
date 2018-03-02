@@ -670,34 +670,29 @@ end subroutine ALE_build_grid
 
 !> For a state-based coordinate, accelerate the process of regridding by
 !! repeatedly applying the grid calculation algorithm
-subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
-  type(ALE_CS),                               intent(in)    :: CS     !< ALE control structure
+subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, initial)
+  type(ALE_CS),                      pointer, intent(in)    :: CS     !< ALE control structure
   type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV     !< Vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_orig !< Original thicknesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h !< Original thicknesses
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermo vars (T/S/EOS)
   integer,                                    intent(in)    :: n      !< Number of times to regrid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(out)   :: h_new  !< Thicknesses after regridding
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u      !< Zonal velocity
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v      !< Meridional velocity
+  type(tracer_registry_type), pointer, optional, intent(in) :: Reg    !< Tracer registry to remap onto new grid
+  real, intent(in), optional :: dt !< Model timestep to provide a timescale for regridding
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout), optional :: dzRegrid !< Final change in interface positions
+  logical, intent(in), optional :: initial !< Whether we're being called from an initialization routine (and expect diagnostics to work)
 
   ! Local variables
   integer :: i, j, k, nz
   type(thermo_var_ptrs) :: tv_local ! local/intermediate temp/salt
   type(group_pass_type) :: pass_T_S_h ! group pass if the coordinate has a stencil
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h ! A working copy of layer thickesses
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! temporary state
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h_loc, h_orig ! A working copy of layer thickesses
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T, S ! local temporary state
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface, dzIntTotal
-  real :: h_neglect, h_neglect_edge
-
-  !### Try replacing both of these with GV%H_subroundoff
-  if (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
 
   nz = GV%ke
 
@@ -706,7 +701,7 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
 
   call create_group_pass(pass_T_S_h, T, G%domain)
   call create_group_pass(pass_T_S_h, S, G%domain)
-  call create_group_pass(pass_T_S_h, h, G%domain)
+  call create_group_pass(pass_T_S_h, h_loc, G%domain)
 
   ! copy original temp/salt and set our local tv_pointers to them
   tv_local = tv
@@ -715,36 +710,36 @@ subroutine ALE_regrid_accelerated(CS, G, GV, h_orig, tv, n, h_new, u, v)
   tv_local%T => T
   tv_local%S => S
 
-  ! get local copy of thickness
-  h(:,:,:) = h_orig(:,:,:)
+  ! get local copy of thickness and save original state for remapping
+  h_loc(:,:,:) = h(:,:,:)
+  h_orig(:,:,:) = h(:,:,:)
+
+  ! Apply timescale to regridding (for e.g. filtered_grid_motion)
+  if (present(dt)) &
+       call ALE_update_regrid_weights(dt, CS)
 
   do k = 1, n
     call do_group_pass(pass_T_S_h, G%domain)
 
     ! generate new grid
-    call regridding_main(CS%remapCS, CS%regridCS, G, GV, h, tv_local, h_new, dzInterface)
+    call regridding_main(CS%remapCS, CS%regridCS, G, GV, h_loc, tv_local, h, dzInterface)
     dzIntTotal(:,:,:) = dzIntTotal(:,:,:) + dzInterface(:,:,:)
 
     ! remap from original grid onto new grid
-    ! we need to use remapping_core because there isn't a tracer registry set up in
-    ! the state initialization routine
-    do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h_new(i,j,:), &
-                            tv_local%S(i,j,:), h_neglect, h_neglect_edge)
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h_new(i,j,:), &
-                            tv_local%T(i,j,:), h_neglect, h_neglect_edge)
+    do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:))
     enddo ; enddo
 
-
-    h(:,:,:) = h_new(:,:,:)
+    ! starting grid for next iteration
+    h_loc(:,:,:) = h(:,:,:)
   enddo
 
-  ! save the final temp/salt
-  tv%S(:,:,:) = S(:,:,:)
-  tv%T(:,:,:) = T(:,:,:)
+  ! remap all state variables (including those that weren't needed for regridding)
+  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h, Reg, dzIntTotal, u, v, dt=dt)
 
-  ! remap velocities
-  call remap_all_state_vars(CS%remapCS, CS, G, GV, h_orig, h_new, null(), dzIntTotal, u, v)
+  ! save total dzregrid for diags if needed?
+  if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
 end subroutine ALE_regrid_accelerated
 
 !> This routine takes care of remapping all variable between the old and the
