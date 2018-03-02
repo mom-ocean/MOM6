@@ -111,6 +111,10 @@ type, public :: MOM_restart_CS ; private
                                     ! existence will result in a new run that is not
                                     ! initializedfrom restart files.
   logical :: new_run_set = .false.  ! If true, new_run has been determined for this restart_CS.
+  logical :: checksum_required      ! If true, require the restart checksums to match and error out otherwise.
+                                    ! Users may want to avoid this comparison if for example the restarts are
+                                    ! made from a run with a different mask_table than the current run,
+                                    ! in which case the checksums will not match and cause crash.
   character(len=240) :: restartfile ! The name or name root for MOM restart files.
 
   type(field_restart), pointer :: restart_field(:) => NULL()
@@ -1047,7 +1051,6 @@ subroutine restore_state(filename, directory, day, G, CS)
   real    :: t1, t2 ! Two times.
   real, allocatable :: time_vals(:)
   type(fieldtype), allocatable :: fields(:)
-  logical,parameter                :: checksum_required = .true.
   logical                          :: check_exist, is_there_a_checksum
   integer(kind=8),dimension(1)     :: checksum_file
   integer(kind=8)                  :: checksum_data
@@ -1149,7 +1152,7 @@ subroutine restore_state(filename, directory, day, G, CS)
             call mpp_get_atts(fields(i),checksum=checksum_file)
             is_there_a_checksum = .true.
           endif
-          if (.NOT. checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
+          if (.NOT. CS%checksum_required ) is_there_a_checksum = .false. ! Do not need to do data checksumming.
 
           if (ASSOCIATED(CS%var_ptr1d(m)%p))  then
             ! Read a 1d array, which should be invariant to domain decomposition.
@@ -1571,6 +1574,12 @@ subroutine restart_init(param_file, CS, restart_root)
   call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, &
                  "The maximum number of restart fields that can be used.", &
                  default=100)
+  call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
+                 "If true, require the restart checksums to match and error out otherwise. \n"//&
+                 "Users may want to avoid this comparison if for example the restarts are  \n"//&
+                 "made from a run with a different mask_table than the current run,  \n"//&
+                 "in which case the checksums will not match and cause crash.",&
+                 default=.true.)
 
   allocate(CS%restart_field(CS%max_fields))
   allocate(CS%var_ptr0d(CS%max_fields))
