@@ -23,7 +23,8 @@ use MOM_io, only : slasher, vardesc, write_field
 use MOM_io, only : EAST_FACE, NORTH_FACE , SINGLE_FILE, MULTIPLE
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
-use MOM_open_boundary, only : open_boundary_query, set_tracer_data
+use MOM_open_boundary, only : open_boundary_query
+use MOM_open_boundary, only : set_tracer_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments
 !use MOM_open_boundary, only : set_3D_OBC_data
@@ -35,7 +36,7 @@ use MOM_ALE_sponge, only : set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_ALE_sponge, only : ALE_sponge_CS
 use MOM_string_functions, only : uppercase, lowercase
 use MOM_time_manager, only : time_type, set_time
-use MOM_tracer_registry, only : add_tracer_OBC_values, tracer_registry_type
+use MOM_tracer_registry, only : tracer_registry_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : setVerticalGridAxes, verticalGrid_type
 use MOM_ALE, only : pressure_gradient_plm
@@ -174,6 +175,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
 #include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+
+  real :: dt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -464,8 +467,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
            "an initial grid that is consistent with the initial conditions.", &
            default=1, do_not_log=just_read)
 
-      if (new_sim) &
-        call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, h, u, v)
+      call get_param(PF, mdl, "DT", dt, "Timestep", fail_if_missing=.true.)
+
+      call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, u, v, tracer_Reg, dt=dt, initial=.true.)
     endif
   endif
   ! This is the end of the block of code that might have initialized fields

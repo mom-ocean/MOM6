@@ -1066,8 +1066,8 @@ subroutine find_neutral_surface_positions_discontinuous(CS, nk, ns,             
     dRho = 0.5 * &
       ( ( dRdT_r(kl_right,ki_right) + dRdT_l(kl_left,ki_left) ) * ( Tr(kl_right,ki_right) - Tl(kl_left,ki_left) ) &
       + ( dRdS_r(kl_right,ki_right) + dRdS_l(kl_left,ki_left) ) * ( Sr(kl_right,ki_right) - Sl(kl_left,ki_left) ) )
-    if (CS%debug)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,"  &
-        kl_left=",kl_left, "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
+    if (CS%debug)  write(*,'(A,I2,A,E12.4,A,I2,A,I2,A,I2,A,I2)') "k_surface=",k_surface,"  dRho=",dRho,  &
+        "kl_left=",kl_left, "  ki_left=",ki_left,"  kl_right=",kl_right, "  ki_right=",ki_right
     ! Which column has the lighter surface for the current indexes, kr and kl
     if (.not. reached_bottom) then
       if (dRho < 0.) then
