@@ -8,7 +8,7 @@ module MOM_diag_mediator
 !*  diag_manager interfaces with additional diagnostic capabilies.     *
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
-
+use MOM_checksums,        only : chksum_general
 use MOM_coms,             only : PE_here
 use MOM_cpu_clock,        only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,        only : CLOCK_MODULE, CLOCK_ROUTINE
@@ -114,7 +114,7 @@ type, private :: diag_type
   logical :: in_use !< True if this entry is being used.
   integer :: fms_diag_id !< Underlying FMS diag_manager id.
   integer :: fms_xyave_diag_id = -1 !< For a horizontally area-averaged diagnostic.
-  character(32) :: debug_str = '' !< For FATAL errors and debugging.
+  character(64) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null()
   type(diag_type), pointer :: next => null() !< Pointer to the next diag.
   real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
@@ -124,8 +124,11 @@ end type diag_type
 !> The following data type a list of diagnostic fields an their variants,
 !! as well as variables that control the handling of model output.
 type, public :: diag_ctrl
-  integer :: doc_unit = -1 !< The unit number of a diagnostic documentation file.
-                           !! This file is open if doc_unit is > 0.
+  integer :: available_diag_doc_unit = -1 !< The unit number of a diagnostic documentation file.
+                                          !! This file is open if available_diag_doc_unit is > 0.
+  integer :: chksum_diag_doc_unit = -1 !< The unit number of a diagnostic documentation file.
+                                          !! This file is open if available_diag_doc_unit is > 0.
+  logical :: diag_as_chksum !< If true, log chksums in a text file instead of posting diagnostics
 
 ! The following fields are used for the output of the data.
   integer :: is, ie, js, je
@@ -784,7 +787,7 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
 
   real, dimension(:,:), pointer :: locfield => NULL()
   logical :: used, is_stat
-  integer :: isv, iev, jsv, jev, i, j
+  integer :: isv, iev, jsv, jev, i, j, chksum
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -831,35 +834,41 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   else
     locfield => field
   endif
-
-  if (is_stat) then
-    if (present(mask)) then
-      call assert(size(locfield) == size(mask), &
-          'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
-      used = send_data(diag%fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-   !elseif(associated(diag%axes%mask2d)) then
-   !  used = send_data(diag%fms_diag_id, locfield, &
-   !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
-    else
-      used = send_data(diag%fms_diag_id, locfield, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+  if (diag_cs%diag_as_chksum) then
+    if (is_root_pe()) then
+      chksum = chksum_general(locfield)
+      call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
     endif
-  elseif (diag_cs%ave_enabled) then
-    if (present(mask)) then
-      call assert(size(locfield) == size(mask), &
-          'post_data_2d_low: mask size mismatch: '//diag%debug_str)
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=mask)
-    elseif(associated(diag%axes%mask2d)) then
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int, rmask=diag%axes%mask2d)
-    else
-      used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                       is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                       weight=diag_cs%time_int)
+  else
+    if (is_stat) then
+      if (present(mask)) then
+        call assert(size(locfield) == size(mask), &
+            'post_data_2d_low is_stat: mask size mismatch: '//diag%debug_str)
+        used = send_data(diag%fms_diag_id, locfield, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
+     !elseif(associated(diag%axes%mask2d)) then
+     !  used = send_data(diag%fms_diag_id, locfield, &
+     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask2d)
+      else
+        used = send_data(diag%fms_diag_id, locfield, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+      endif
+    elseif (diag_cs%ave_enabled) then
+      if (present(mask)) then
+        call assert(size(locfield) == size(mask), &
+            'post_data_2d_low: mask size mismatch: '//diag%debug_str)
+        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                         weight=diag_cs%time_int, rmask=mask)
+      elseif(associated(diag%axes%mask2d)) then
+        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                         weight=diag_cs%time_int, rmask=diag%axes%mask2d)
+      else
+        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                         weight=diag_cs%time_int)
+      endif
     endif
   endif
   if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.)) &
@@ -1009,6 +1018,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c
+  integer :: chksum
 
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1073,36 +1083,43 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag%fms_diag_id>0) then
-    if (is_stat) then
-      if (present(mask)) then
-        call assert(size(locfield) == size(mask), &
-            'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
-     !elseif(associated(diag%axes%mask3d)) then
-     !  used = send_data(diag_field_id, locfield, &
-     !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
-      else
-        used = send_data(diag%fms_diag_id, locfield, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+    if (diag_cs%diag_as_chksum) then
+      if (is_root_pe()) then
+        chksum = chksum_general(locfield)
+        call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
       endif
-    elseif (diag_cs%ave_enabled) then
-      if (present(mask)) then
-        call assert(size(locfield) == size(mask), &
-            'post_data_3d_low: mask size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=mask)
-      elseif(associated(diag%axes%mask3d)) then
-        call assert(size(locfield) == size(diag%axes%mask3d), &
-            'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int, rmask=diag%axes%mask3d)
-      else
-        used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
-                         is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
-                         weight=diag_cs%time_int)
+    else
+      if (is_stat) then
+        if (present(mask)) then
+          call assert(size(locfield) == size(mask), &
+              'post_data_3d_low is_stat: mask size mismatch: '//diag%debug_str)
+          used = send_data(diag%fms_diag_id, locfield, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=mask)
+       !elseif(associated(diag%axes%mask3d)) then
+       !  used = send_data(diag_field_id, locfield, &
+       !                   is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, rmask=diag%axes%mask3d)
+        else
+          used = send_data(diag%fms_diag_id, locfield, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev)
+        endif
+      elseif (diag_cs%ave_enabled) then
+        if (present(mask)) then
+          call assert(size(locfield) == size(mask), &
+              'post_data_3d_low: mask size mismatch: '//diag%debug_str)
+          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                           weight=diag_cs%time_int, rmask=mask)
+        elseif(associated(diag%axes%mask3d)) then
+          call assert(size(locfield) == size(diag%axes%mask3d), &
+              'post_data_3d_low: mask3d size mismatch: '//diag%debug_str)
+          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                           weight=diag_cs%time_int, rmask=diag%axes%mask3d)
+        else
+          used = send_data(diag%fms_diag_id, locfield, diag_cs%time_end, &
+                           is_in=isv, js_in=jsv, ie_in=iev, je_in=jev, &
+                           weight=diag_cs%time_int)
+        endif
       endif
     endif
   endif
@@ -1389,7 +1406,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   call attach_cell_methods(fms_id, axes, cm_string, &
                            cell_methods, x_cell_method, y_cell_method, v_cell_method, &
                            v_extensive=v_extensive)
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+  if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
     call log_available_diag(fms_id>0, module_name, field_name, cm_string, &
@@ -1406,7 +1423,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
              interp_method=interp_method, tile_count=tile_count)
     call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                              cell_methods, v_cell_method, v_extensive=v_extensive)
-    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
       msg = ''
       if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'_xyave"'
       call log_available_diag(fms_xyave_id>0, module_name, trim(field_name)//'_xyave', cm_string, &
@@ -1449,7 +1466,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
     call attach_cell_methods(fms_id, axes, cm_string, &
                              cell_methods, x_cell_method, y_cell_method, v_cell_method, &
                              v_extensive=v_extensive)
-    if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+    if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
       msg = 'native name is "'//trim(field_name)//'"'
       call log_available_diag(fms_id>0, module_name, cmor_field_name, cm_string, &
                               msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
@@ -1466,7 +1483,7 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                err_msg=err_msg, interp_method=interp_method, tile_count=tile_count)
       call attach_cell_methods(fms_xyave_id, axes%xyave_axes, cm_string, &
                                cell_methods, v_cell_method, v_extensive=v_extensive)
-      if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+      if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
         msg = 'native name is "'//trim(field_name)//'_xyave"'
         call log_available_diag(fms_xyave_id>0, module_name, trim(cmor_field_name)//'_xyave', cm_string, &
                                 msg, diag_CS, posted_cmor_long_name, posted_cmor_units, &
@@ -1805,7 +1822,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   endif
 
   ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+  if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
@@ -1940,7 +1957,7 @@ function register_static_field(module_name, field_name, axes, &
   endif
 
   ! Document diagnostics in list of available diagnostics
-  if (is_root_pe() .and. diag_CS%doc_unit > 0) then
+  if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                             long_name, units, standard_name)
     if (present(cmor_field_name)) then
@@ -1964,7 +1981,7 @@ subroutine describe_option(opt_name, value, diag_CS)
   len_ind = len_trim(value)  ! Add error handling for long values?
 
   mesg = "    ! "//trim(opt_name)//": "//trim(value)
-  write(diag_CS%doc_unit, '(a)') trim(mesg)
+  write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
 end subroutine describe_option
 
 !> Registers a diagnostic using the information encapsulated in the vardesc
@@ -2148,6 +2165,10 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   call get_param(param_file, mod, 'DIAG_MISVAL', diag_cs%missing_value, &
                  'Set the default missing value to use for diagnostics.', &
                  default=1.e20)
+  call get_param(param_file, mod, 'DIAG_AS_CHKSUM', diag_cs%diag_as_chksum, &
+                 'Instead of writing diagnostics to the diag manager, write\n' //&
+                 'a textfile containing the checksum (bitcount) of the array.',  &
+                 default=.false.)
 
   ! Keep pointers grid, h, T, S needed diagnostic remapping
   diag_cs%G => G
@@ -2167,15 +2188,16 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
   diag_cs%isd = G%isd ; diag_cs%ied = G%ied
   diag_cs%jsd = G%jsd ; diag_cs%jed = G%jed
 
-  if (is_root_pe() .and. (diag_CS%doc_unit < 0)) then
+  ! Initialze available diagnostic log file
+  if (is_root_pe() .and. (diag_CS%available_diag_doc_unit < 0)) then
     write(this_pe,'(i6.6)') PE_here()
     doc_file_dflt = "available_diags."//this_pe
     call get_param(param_file, mod, "AVAILABLE_DIAGS_FILE", doc_file, &
                  "A file into which to write a list of all available \n"//&
                  "ocean diagnostics that can be included in a diag_table.", &
-                 default=doc_file_dflt, do_not_log=(diag_CS%doc_unit/=-1))
+                 default=doc_file_dflt, do_not_log=(diag_CS%available_diag_doc_unit/=-1))
     if (len_trim(doc_file) > 0) then
-      new_file = .true. ; if (diag_CS%doc_unit /= -1) new_file = .false.
+      new_file = .true. ; if (diag_CS%available_diag_doc_unit /= -1) new_file = .false.
     ! Find an unused unit number.
       do new_unit=512,42,-1
         inquire( new_unit, opened=opened)
@@ -2189,18 +2211,56 @@ subroutine diag_mediator_init(G, GV, nz, param_file, diag_cs, doc_file_dir)
         doc_path = trim(slasher(doc_file_dir))//trim(doc_file)
       endif ; endif
 
-      diag_CS%doc_unit = new_unit
+      diag_CS%available_diag_doc_unit = new_unit
 
       if (new_file) then
-        open(diag_CS%doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%available_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='REPLACE', iostat=ios)
       else ! This file is being reopened, and should be appended.
-        open(diag_CS%doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+        open(diag_CS%available_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
              action='WRITE', status='OLD', position='APPEND', iostat=ios)
       endif
-      inquire(diag_CS%doc_unit, opened=opened)
+      inquire(diag_CS%available_diag_doc_unit, opened=opened)
       if ((.not.opened) .or. (ios /= 0)) then
         call MOM_error(FATAL, "Failed to open available diags file "//trim(doc_path)//".")
+      endif
+    endif
+  endif
+
+  if (is_root_pe() .and. (diag_CS%chksum_diag_doc_unit < 0) .and. diag_CS%diag_as_chksum) then
+    write(this_pe,'(i6.6)') PE_here()
+    doc_file_dflt = "chksum_diag."//this_pe
+    call get_param(param_file, mod, "CHKSUM_DIAG_FILE", doc_file, &
+                 "A file into which to write all checksums of the \n"//&
+                 "diagnostics listed in the diag_table.", &
+                 default=doc_file_dflt, do_not_log=(diag_CS%chksum_diag_doc_unit/=-1))
+    if (len_trim(doc_file) > 0) then
+      new_file = .true. ; if (diag_CS%chksum_diag_doc_unit /= -1) new_file = .false.
+    ! Find an unused unit number.
+      do new_unit=512,42,-1
+        inquire( new_unit, opened=opened)
+        if (.not.opened) exit
+      enddo
+      if (opened) call MOM_error(FATAL, &
+          "diag_mediator_init failed to find an unused unit number.")
+
+      doc_path = doc_file
+      if (present(doc_file_dir)) then ; if (len_trim(doc_file_dir) > 0) then
+        doc_path = trim(slasher(doc_file_dir))//trim(doc_file)
+      endif ; endif
+
+      diag_CS%chksum_diag_doc_unit = new_unit
+
+      if (new_file) then
+        open(diag_CS%chksum_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+             action='WRITE', status='REPLACE', iostat=ios)
+      else ! This file is being reopened, and should be appended.
+        open(diag_CS%chksum_diag_doc_unit, file=trim(doc_path), access='SEQUENTIAL', form='FORMATTED', &
+             action='WRITE', status='OLD', position='APPEND', iostat=ios)
+      endif
+      inquire(diag_CS%chksum_diag_doc_unit, opened=opened)
+      if ((.not.opened) .or. (ios /= 0)) then
+        call MOM_error(FATAL, "Failed to open checksum diags file "//trim(doc_path)//".")
       endif
     endif
   endif
@@ -2322,8 +2382,8 @@ subroutine diag_mediator_close_registration(diag_CS)
 
   integer :: i
 
-  if (diag_CS%doc_unit > -1) then
-    close(diag_CS%doc_unit) ; diag_CS%doc_unit = -2
+  if (diag_CS%available_diag_doc_unit > -1) then
+    close(diag_CS%available_diag_doc_unit) ; diag_CS%available_diag_doc_unit = -2
   endif
 
   do i=1, diag_cs%num_diag_coords
@@ -2340,8 +2400,11 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   ! Local variables
   integer :: i
 
-  if (diag_CS%doc_unit > -1) then
-    close(diag_CS%doc_unit) ; diag_CS%doc_unit = -3
+  if (diag_CS%available_diag_doc_unit > -1) then
+    close(diag_CS%available_diag_doc_unit) ; diag_CS%available_diag_doc_unit = -3
+  endif
+  if (diag_CS%chksum_diag_doc_unit > -1) then
+    close(diag_CS%chksum_diag_doc_unit) ; diag_CS%chksum_diag_doc_unit = -3
   endif
 
   deallocate(diag_cs%diags)
@@ -2479,9 +2542,9 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     mesg = '"'//trim(module_name)//'", "'//trim(field_name)//'"  [Unused]'
   endif
   if (len(trim((comment)))>0) then
-    write(diag_CS%doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
+    write(diag_CS%available_diag_doc_unit, '(a,x,"(",a,")")') trim(mesg),trim(comment)
   else
-    write(diag_CS%doc_unit, '(a)') trim(mesg)
+    write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
@@ -2491,5 +2554,16 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     call describe_option("cell_methods", trim(cell_methods_string), diag_CS)
 
 end subroutine log_available_diag
+
+!> Log the diagnostic chksum to the chksum diag file
+subroutine log_chksum_diag(docunit, description, chksum)
+  integer,          intent(in) :: docunit     !< Handle of the log file
+  character(len=*), intent(in) :: description !< Name of the diagnostic module
+  integer,          intent(in) :: chksum      !< chksum of the diagnostic
+
+  write(docunit, '(a,x,i9.8)') description, chksum
+  flush(docunit)
+
+end subroutine log_chksum_diag
 
 end module MOM_diag_mediator
