@@ -9,13 +9,13 @@ use MOM_debugging, only : hchksum, uvchksum
 use MOM_domains, only : sum_across_PEs, min_across_PEs, max_across_PEs
 use MOM_error_handler, only : MOM_mesg, is_root_pe
 use MOM_grid, only : ocean_grid_type
-use MOM_variables, only : thermo_var_ptrs
+use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
 
 public MOM_state_chksum, MOM_thermo_chksum, MOM_accel_chksum
-public MOM_state_stats
+public MOM_state_stats, MOM_surface_chksum
 
 interface MOM_state_chksum
   module procedure MOM_state_chksum_5arg
@@ -135,6 +135,39 @@ subroutine MOM_thermo_chksum(mesg, tv, G, haloshift)
   if (associated(tv%salt_deficit)) call hchksum(tv%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs)
 
 end subroutine MOM_thermo_chksum
+
+! =============================================================================
+
+subroutine MOM_surface_chksum(mesg, sfc, G, haloshift, symmetric)
+  character(len=*),      intent(in) :: mesg !< A message that appears on the chksum lines.
+  type(surface),         intent(inout) :: sfc !< transparent ocean surface state
+                                              !! structure shared with the calling routine;
+                                              !! data in this structure is intent out.
+  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
+  integer, optional,     intent(in) :: haloshift
+  logical, optional,     intent(in) :: symmetric
+!   This subroutine writes out chksums for the model's thermodynamic state
+! variables.
+! Arguments: mesg - A message that appears on the chksum lines.
+!  (in)      tv - A structure containing pointers to any thermodynamic
+!                 fields that are in use.
+!  (in)      G - The ocean's grid structure.
+  integer :: hs
+  logical :: sym
+
+  sym = .false. ; if (present(symmetric)) sym = symmetric
+  hs = 1 ; if (present(haloshift)) hs = haloshift
+
+  if (allocated(sfc%SST)) call hchksum(sfc%SST, mesg//" SST",G%HI,haloshift=hs)
+  if (allocated(sfc%SSS)) call hchksum(sfc%SSS, mesg//" SSS",G%HI,haloshift=hs)
+  if (allocated(sfc%sea_lev)) call hchksum(sfc%sea_lev, mesg//" sea_lev",G%HI,haloshift=hs)
+  if (allocated(sfc%Hml)) call hchksum(sfc%Hml, mesg//" Hml",G%HI,haloshift=hs)
+  if (allocated(sfc%u) .and. allocated(sfc%v)) &
+    call uvchksum(mesg//" SSU", sfc%u, sfc%v, G%HI, haloshift=hs, symmetric=sym)
+!  if (allocated(sfc%salt_deficit)) call hchksum(sfc%salt_deficit, mesg//" salt deficit",G%HI,haloshift=hs)
+  if (associated(sfc%frazil)) call hchksum(sfc%frazil, mesg//" frazil",G%HI,haloshift=hs)
+
+end subroutine MOM_surface_chksum
 
 ! =============================================================================
 

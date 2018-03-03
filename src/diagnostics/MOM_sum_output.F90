@@ -16,8 +16,7 @@ module MOM_sum_output
 !*                                                                     *
 !*    In addition, if the number of velocity truncations since the     *
 !*  previous call to write_energy exceeds maxtrunc or the total energy *
-!*  exceeds a very large threshold, the day is increased to Huge_time  *
-!*  so that the model will gracefully halt itself.                     *
+!*  exceeds a very large threshold, a fatal termination is triggered.  *
 !*                                                                     *
 !*    This file also contains a few miscelaneous initialization        *
 !*  calls to FMS-related modules.                                      *
@@ -51,8 +50,10 @@ use MOM_io, only : file_exists, slasher, vardesc, var_desc, write_field
 use MOM_io, only : APPEND_FILE, ASCII_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
-use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>), operator(-)
-use MOM_time_manager, only : get_calendar_type, NO_CALENDAR
+use MOM_time_manager, only : time_type, get_time, get_date, set_time, operator(>)
+use MOM_time_manager, only : operator(+), operator(-), operator(*), operator(/)
+use MOM_time_manager, only : operator(/=), operator(<=), operator(>=), operator(<)
+use MOM_time_manager, only : get_calendar_type, time_type_to_real, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -114,15 +115,25 @@ type, public :: sum_output_CS ; private
     net_salt_in_EFP, &          ! correspondingly named variables above.
     net_heat_in_EFP, heat_prev_EFP, salt_prev_EFP, mass_prev_EFP
   real    :: dt                 ! The baroclinic dynamics time step, in s.
+
+  type(time_type) :: energysavedays            !< The interval between writing the energies
+                                               !! and other integral quantities of the run.
+  type(time_type) :: energysavedays_geometric  !< The starting interval for computing a geometric
+                                               !! progression of time deltas between calls to
+                                               !! write_energy. This interval will increase by a factor of 2.
+                                               !! after each call to write_energy.
+  logical         :: energysave_geometric      !< Logical to control whether calls to write_energy should
+                                               !! follow a geometric progression
+  type(time_type) :: write_energy_time         !< The next time to write to the energy file.
+  type(time_type) :: geometric_end_time        !< Time at which to stop the geometric progression
+                                               !! of calls to write_energy and revert to the standard
+                                               !! energysavedays interval
+
   real    :: timeunit           !   The length of the units for the time
                                 ! axis, in s.
   logical :: date_stamped_output ! If true, use dates (not times) in messages to stdout.
   type(time_type) :: Start_time ! The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
-  type(time_type) :: Huge_time  ! A large time, which is used to indicate
-                                ! that an error has been encountered
-                                ! and the run should be terminated with
-                                ! an error code.
   integer, pointer :: ntrunc    ! The number of times the velocity has been
                                 ! truncated since the last call to write_energy.
   real    :: max_Energy         ! The maximum permitted energy per unit mass;
@@ -145,7 +156,7 @@ contains
 
 !> MOM_sum_output_init initializes the parameters and settings for the MOM_sum_output module.
 subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
-                                Input_start_time, CS)
+                               Input_start_time, CS)
   type(ocean_grid_type),  intent(in)    :: G          !< The ocean's grid structure.
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time
                                                       !! parameters.
@@ -165,6 +176,7 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
 !  (in)      Input_start_time - The start time of the simulation.
 !  (in/out)  CS - A pointer that is set to point to the control structure
 !                 for this module
+  real :: Time_unit   ! The time unit in seconds for ENERGYSAVEDAYS.
   real :: Rho_0, maxvel
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -261,7 +273,26 @@ subroutine MOM_sum_output_init(G, param_file, directory, ntrnc, &
     CS%list_size = 0
   endif
 
-  CS%Huge_time = set_time(INT(1e9),0)
+  call get_param(param_file, mdl, "TIMEUNIT", Time_unit, &
+                 "The time unit for ENERGYSAVEDAYS.", &
+                 units="s", default=86400.0)
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS",CS%energysavedays, &
+                 "The interval in units of TIMEUNIT between saves of the \n"//&
+                 "energies of the run and other globally summed diagnostics.",&
+                 default=set_time(0,days=1), timeunit=Time_unit)
+  call get_param(param_file, mdl, "ENERGYSAVEDAYS_GEOMETRIC",CS%energysavedays_geometric, &
+                 "The starting interval in units of TIMEUNIT for the first call \n"//&
+                 "to save the energies of the run and other globally summed diagnostics. \n"//&
+                 "The interval increases by a factor of 2. after each call to write_energy.",&
+                 default=set_time(seconds=0), timeunit=Time_unit)
+
+  if ((time_type_to_real(CS%energysavedays_geometric) > 0.) .and. &
+     (CS%energysavedays_geometric < CS%energysavedays)) then
+         CS%energysave_geometric = .true.
+  else
+         CS%energysave_geometric = .false.
+  endif
+
   CS%Start_time = Input_start_time
   CS%ntrunc => ntrnc
 
@@ -281,28 +312,29 @@ subroutine MOM_sum_output_end(CS)
   endif
 end subroutine MOM_sum_output_end
 
-!>  This subroutine calculates and writes the total model energy, the
-!! energy and mass of each layer, and other globally integrated
-!! physical quantities.
-subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
-  type(ocean_grid_type),                     intent(in)    :: G   !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV  !< The ocean's vertical grid
-                                                                  !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u   !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v   !< The meridional velocity,
-                                                                  !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h   !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                     intent(in)    :: tv  !< A structure pointing to various
-                                                                  !! thermodynamic variables.
-  type(time_type),                           intent(inout) :: day !< The current model time.
-  integer,                                   intent(in)    :: n   !< The time step number of the
-                                                                  !! current execution.
-  type(Sum_output_CS),                       pointer       :: CS  !< The control structure returned
-                                                                  !! by a previous call to
-                                                                  !! MOM_sum_output_init.
-  type(tracer_flow_control_CS),    optional, pointer       :: tracer_CSp !< tracer constrol structure.
-  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
+!>  This subroutine calculates and writes the total model energy, the energy and
+!! mass of each layer, and other globally integrated  physical quantities.
+subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forcing)
+  type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u   !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v   !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in)    :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
+                                                !! thermodynamic variables.
+  type(time_type),         intent(in)    :: day !< The current model time.
+  integer,                 intent(in)    :: n   !< The time step number of the
+                                                !! current execution.
+  type(Sum_output_CS),     pointer       :: CS  !< The control structure returned by a
+                                                !! previous call to MOM_sum_output_init.
+  type(tracer_flow_control_CS), &
+                    optional, pointer    :: tracer_CSp !< tracer control structure.
+  type(ocean_OBC_type),         &
+                    optional, pointer    :: OBC !< Open boundaries control structure.
+  type(time_type),  optional, intent(in) :: dt_forcing !< The forcing time step
 
   real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! The height of interfaces, in m.
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT, in m2.
@@ -381,6 +413,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
   character(len=200) :: mesg
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
+  type(time_type) :: dt_force
   real :: Tr_stocks(MAX_FIELDS_)
   real :: Tr_min(MAX_FIELDS_),Tr_max(MAX_FIELDS_)
   real :: Tr_min_x(MAX_FIELDS_), Tr_min_y(MAX_FIELDS_), Tr_min_z(MAX_FIELDS_)
@@ -397,6 +430,39 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
+
+  ! write_energy_time is the next integral multiple of energysavedays.
+  dt_force = set_time(seconds=2) ; if (present(dt_forcing)) dt_force = dt_forcing
+  if (CS%previous_calls == 0) then
+    if (CS%energysave_geometric) then
+      if (CS%energysavedays_geometric < CS%energysavedays) then
+        CS%write_energy_time = day + CS%energysavedays_geometric
+        CS%geometric_end_time = CS%Start_time + CS%energysavedays * &
+          (1 + (day - CS%Start_time) / CS%energysavedays)
+      else
+        CS%write_energy_time = CS%Start_time + CS%energysavedays * &
+          (1 + (day - CS%Start_time) / CS%energysavedays)
+      endif
+    else
+      CS%write_energy_time = CS%Start_time + CS%energysavedays * &
+        (1 + (day - CS%Start_time) / CS%energysavedays)
+    endif
+  elseif (day + (dt_force/2) <= CS%write_energy_time) then
+    return  ! Do not write this step
+  else ! Determine the next write time before proceeding
+    if (CS%energysave_geometric) then
+      if (CS%write_energy_time + CS%energysavedays_geometric >= &
+          CS%geometric_end_time) then
+        CS%write_energy_time = CS%geometric_end_time
+        CS%energysave_geometric = .false.  ! stop geometric progression
+      else
+        CS%write_energy_time = CS%write_energy_time + CS%energysavedays_geometric
+      endif
+      CS%energysavedays_geometric = CS%energysavedays_geometric*2
+    else
+      CS%write_energy_time = CS%write_energy_time + CS%energysavedays
+    endif
+  endif
 
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
@@ -860,15 +926,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC)
   ! The second (impossible-looking) test looks for a NaN in En_mass.
   if ((En_mass>CS%max_Energy) .or. &
      ((En_mass>CS%max_Energy) .and. (En_mass<CS%max_Energy))) then
-    day = CS%Huge_time
     write(mesg,'("Energy per unit mass of ",ES11.4," exceeds ",ES11.4)') &
                   En_mass, CS%max_Energy
-    call MOM_error(WARNING, "write_energy : "//trim(mesg))
-    call MOM_error(WARNING, &
-      "write_energy : Time set to a large value to force model termination.")
+    call MOM_error(FATAL, &
+      "write_energy : Excessive energy per unit mass or NaNs forced model termination.")
   endif
   if (CS%ntrunc>CS%maxtrunc) then
-    day = CS%Huge_time
     call MOM_error(FATAL, "write_energy : Ocean velocity has been truncated too many times.")
   endif
   CS%ntrunc = 0
