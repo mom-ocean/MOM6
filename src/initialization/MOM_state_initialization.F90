@@ -2028,6 +2028,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   integer :: nkml, nkbl         ! number of mixed and buffer layers
 
   integer :: kd, inconsistent
+  integer :: nkd ! number of levels to use for regridding input arrays
   real    :: PI_180             ! for conversion from degrees to radians
 
   real, dimension(:,:), pointer :: shelf_area
@@ -2239,21 +2240,22 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
 ! Now remap to model coordinates
   if (useALEremapping) then
     call cpu_clock_begin(id_clock_ALE)
+    nkd = max(GV%ke, kd)
     ! The regridding tools (grid generation) are coded to work on model arrays of the same
     ! vertical shape. We need to re-write the regridding if the model has fewer layers
     ! than the data. -AJA
-    if (kd>nz) call MOM_error(FATAL,"MOM_initialize_state, MOM_temp_salt_initialize_from_Z(): "//&
-         "Data has more levels than the model - this has not been coded yet!")
+   !if (kd>nz) call MOM_error(FATAL,"MOM_initialize_state, MOM_temp_salt_initialize_from_Z(): "//&
+   !     "Data has more levels than the model - this has not been coded yet!")
     ! Build the source grid and copy data onto model-shaped arrays with vanished layers
-    allocate( tmp_mask_in(isd:ied,jsd:jed,nz) ) ; tmp_mask_in(:,:,:) = 0.
-    allocate( h1(isd:ied,jsd:jed,nz) ) ; h1(:,:,:) = 0.
-    allocate( tmpT1dIn(isd:ied,jsd:jed,nz) ) ; tmpT1dIn(:,:,:) = 0.
-    allocate( tmpS1dIn(isd:ied,jsd:jed,nz) ) ; tmpS1dIn(:,:,:) = 0.
+    allocate( tmp_mask_in(isd:ied,jsd:jed,nkd) ) ; tmp_mask_in(:,:,:) = 0.
+    allocate( h1(isd:ied,jsd:jed,nkd) ) ; h1(:,:,:) = 0.
+    allocate( tmpT1dIn(isd:ied,jsd:jed,nkd) ) ; tmpT1dIn(:,:,:) = 0.
+    allocate( tmpS1dIn(isd:ied,jsd:jed,nkd) ) ; tmpS1dIn(:,:,:) = 0.
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         zTopOfCell = 0. ; zBottomOfCell = 0.
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
-        do k = 1, nz
+        do k = 1, nkd
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
             zBottomOfCell = max( -z_edges_in(k+1), -G%bathyT(i,j) )
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
@@ -2311,8 +2313,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       tv_loc%T => tmpT1dIn
       tv_loc%S => tmpS1dIn
       GV_loc = GV
-      GV_loc%ke = nz
-      allocate( dz_interface(isd:ied,jsd:jed,max(kd,nz)+1) ) ! Need for argument to regridding_main() but is not used
+      GV_loc%ke = nkd
+      allocate( dz_interface(isd:ied,jsd:jed,nkd+1) ) ! Need for argument to regridding_main() but is not used
       if (use_ice_shelf) then
         call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, shelf_area )
       else
@@ -2320,8 +2322,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
       endif
       deallocate( dz_interface )
     endif
-    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
-    call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
+    call ALE_remap_scalar( remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
     deallocate( h1 )
     deallocate( tmpT1dIn )
     deallocate( tmpS1dIn )
