@@ -785,8 +785,8 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
   type(verticalGrid_type),                    intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h      !< Current 3D grid obtained after the last time step
   type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermodynamical variables (T, S, ...)
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)+1), intent(inout) :: dzInterface !< The change in position of each interface
+  real, dimension(SZI_(G),SZJ_(G), CS%nk),    intent(inout) :: h_new  !< New 3D grid consistent with target coordinate
+  real, dimension(SZI_(G),SZJ_(G), CS%nk+1),  intent(inout) :: dzInterface !< The change in position of each interface
   real, dimension(:,:),                   optional, pointer :: frac_shelf_h !< Fractional ice shelf coverage
   logical,                          optional, intent(in   ) :: conv_adjust ! If true, do convective adjustment
   ! Local variables
@@ -810,35 +810,35 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       else
         call build_zstar_grid( CS, G, GV, h, dzInterface )
       endif
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA_SHELF_ZSTAR)
       call build_zstar_grid( CS, G, GV, h, dzInterface )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_SIGMA )
       call build_sigma_grid( CS, G, GV, h, dzInterface )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_RHO )
       if (do_convective_adjustment) call convective_adjustment(G, GV, h, tv)
       call build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ARBITRARY )
       call build_grid_arbitrary( G, GV, h, dzInterface, trickGnuCompiler, CS )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
       call build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, h, tv, dzInterface, CS )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_ADAPTIVE )
       call build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
@@ -853,24 +853,34 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
 end subroutine regridding_main
 
 !> Calculates h_new from h + delta_k dzInterface
-subroutine calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
-  type(ocean_grid_type),                      intent(in)    :: G !< Grid structure
-  type(verticalGrid_type),                    intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h !< Old layer thicknesses (m)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: dzInterface !< Change in interface positions (m)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h_new !< New layer thicknesses (m)
+subroutine calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
+  type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
+  type(ocean_grid_type),                     intent(in)    :: G !< Grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h !< Old layer thicknesses (m)
+  real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(in)    :: dzInterface !< Change in interface positions (m)
+  real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses (m)
   ! Local variables
-  integer :: i, j, k
+  integer :: i, j, k, nki
 
-!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new)
+  nki = min(CS%nk, GV%ke)
+
+!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new,nki)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) then
-        do k=1,GV%ke
+        do k=1,nki
           h_new(i,j,k) = max( 0., h(i,j,k) + ( dzInterface(i,j,k) - dzInterface(i,j,k+1) ) )
         enddo
+        if (CS%nk > GV%ke) then
+          do k=nki+1, CS%nk
+            h_new(i,j,k) = max( 0., dzInterface(i,j,k) - dzInterface(i,j,k+1) )
+          enddo
+        endif
       else
-        h_new(i,j,:) = h(i,j,:)
+        h_new(i,j,1:nki) = h(i,j,1:nki)
+        if (CS%nk > GV%ke) h_new(i,j,nki+1:CS%nk) = 0.
+        ! On land points, why are we keeping the original h rather than setting to zero? -AJA
       endif
     enddo
   enddo
@@ -1381,9 +1391,6 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
 
 end subroutine build_rho_grid
 
-
-
-
 !> Builds a simple HyCOM-like grid with the deepest location of potential
 !! density interpolated from the column profile and a clipping of depth for
 !! each interface to a fixed z* or p* grid.  This should probably be (optionally?)
@@ -1454,7 +1461,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
     endif ! mask2dT
   enddo; enddo ! i,j
 
-  call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+  call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
 end subroutine build_grid_HyCOM1
 
