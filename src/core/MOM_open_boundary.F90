@@ -18,7 +18,7 @@ use MOM_io,                   only : vardesc, query_vardesc, var_desc
 use MOM_restart,              only : register_restart_field, MOM_restart_CS
 use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
 use MOM_string_functions,     only : extract_word, remove_spaces
-use MOM_tracer_registry,      only : tracer_registry_type
+use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
 use MOM_variables,            only : thermo_var_ptrs
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -86,7 +86,7 @@ type, public :: OBC_segment_tracer_type
   real, dimension(:,:,:), pointer :: t          => NULL()  !< tracer concentration array
   real                            :: OBC_inflow_conc = 0.0 !< tracer concentration for generic inflows
   character(len=32)               :: name                  !< tracer name used for error messages
-  type(vardesc), pointer          :: vd         => NULL()  !< metadata describing the tracer
+  type(tracer_type), pointer      :: Tr         => NULL()  !< metadata describing the tracer
   real, dimension(:,:,:), pointer :: tres       => NULL()  !< tracer reservoir array
   logical                         :: is_initialized        !< reservoir values have been set when True
 end type OBC_segment_tracer_type
@@ -2441,21 +2441,22 @@ subroutine segment_tracer_registry_init(param_file, segment)
 
 end subroutine segment_tracer_registry_init
 
-subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr, &
+subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                    OBC_scalar, OBC_array)
-  type(verticalGrid_type),        intent(in)    :: GV           !< ocean vertical grid structure
-  type(vardesc),         intent(in)             :: tr_desc      !< metadata about the tracer
-  type(param_file_type), intent(in)             :: param_file   !< file to parse for  model parameter values
-  type(OBC_segment_type), intent(inout)         :: segment      !< current segment data structure
-  type(vardesc), target, optional               :: tr_desc_ptr  !< A target that can be used to set a pointer to the
-                                                                !! stored value of tr%tr_desc. This target must be
-                                                                !! an enduring part of the control structure,
-                                                                !! because the tracer registry will use this memory,
-                                                                !! but it also means that any updates to this
-                                                                !! structure in the calling module will be
-                                                                !! available subsequently to the tracer registry.
-  real, optional                                :: OBC_scalar   !< If present, use scalar value for segment tracer inflow concentration.
-  logical, optional                             :: OBC_array    !< If true, use array values for segment tracer inflow concentration.
+  type(verticalGrid_type), intent(in)   :: GV         !< ocean vertical grid structure
+  type(tracer_type), target             :: tr_ptr     !< A target that can be used to set a pointer to the
+                                                      !! stored value of tr. This target must be
+                                                      !! an enduring part of the control structure,
+                                                      !! because the tracer registry will use this memory,
+                                                      !! but it also means that any updates to this
+                                                      !! structure in the calling module will be
+                                                      !! available subsequently to the tracer registry.
+  type(param_file_type), intent(in)     :: param_file !< file to parse for  model parameter values
+  type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
+  real, optional                        :: OBC_scalar !< If present, use scalar value for segment tracer
+                                                      !! inflow concentration.
+  logical, optional                     :: OBC_array  !< If true, use array values for segment tracer
+                                                      !! inflow concentration.
 
 
 ! Local variables
@@ -2464,7 +2465,6 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   integer :: IsdB, IedB, JsdB, JedB
   character(len=256) :: mesg    ! Message for error messages.
 
-!  if (.not. associated(segment%tr_Reg)) call segment_tracer_registry_init(param_file, segment)
   call segment_tracer_registry_init(param_file, segment)
 
   if (segment%tr_Reg%ntseg>=MAX_FIELDS_) then
@@ -2480,13 +2480,8 @@ subroutine register_segment_tracer(tr_desc, param_file, GV, segment, tr_desc_ptr
   IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
   JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
-  if (present(tr_desc_ptr)) then
-    segment%tr_Reg%Tr(ntseg)%vd => tr_desc_ptr
-  else
-    allocate(segment%tr_Reg%Tr(ntseg)%vd) ; segment%tr_Reg%Tr(ntseg)%vd = tr_desc
-  endif
-
-  call query_vardesc(segment%tr_Reg%Tr(ntseg)%vd, name=segment%tr_Reg%Tr(ntseg)%name)
+  segment%tr_Reg%Tr(ntseg)%Tr => tr_ptr
+  segment%tr_Reg%Tr(ntseg)%name = tr_ptr%name
 
   if (segment%tr_Reg%locked) call MOM_error(FATAL, &
       "MOM register_tracer was called for variable "//trim(segment%tr_Reg%Tr(ntseg)%name)//&
@@ -2522,18 +2517,18 @@ subroutine segment_tracer_registry_end(Reg)
   endif
 end subroutine segment_tracer_registry_end
 
-subroutine register_temp_salt_segments(GV, OBC, tv, vd_T, vd_S, param_file)
+subroutine register_temp_salt_segments(GV, OBC, tr_Reg, param_file)
   type(verticalGrid_type),    intent(in)    :: GV         !< ocean vertical grid structure
   type(ocean_OBC_type),       pointer       :: OBC        !< Open boundary structure
-  type(thermo_var_ptrs),      intent(in)    :: tv         !< Thermodynamics structure
-  type(vardesc),              intent(in)    :: vd_T       !< Temperature descriptor
-  type(vardesc),              intent(in)    :: vd_S       !< Salinity descriptor
+  type(tracer_registry_type), pointer       :: tr_Reg     !< Tracer registry
   type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
 
 ! Local variables
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, nz, nf
   integer :: i, j, k, n
+  character(len=32)  :: name
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
+  type(tracer_type), pointer      :: tr_ptr
 
   if (.not. associated(OBC)) return
 
@@ -2544,9 +2539,13 @@ subroutine register_temp_salt_segments(GV, OBC, tv, vd_T, vd_S, param_file)
     if (associated(segment%tr_Reg)) &
          call MOM_error(FATAL,"register_temp_salt_segments: tracer array was previously allocated")
 
-    call register_segment_tracer(vd_T, param_file, GV, segment, &
+    name = 'Heat'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                  OBC_array=segment%temp_segment_data_exists)
-    call register_segment_tracer(vd_S, param_file, GV, segment, &
+    name = 'Salt'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                  OBC_array=segment%salt_segment_data_exists)
   enddo
 
