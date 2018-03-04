@@ -62,7 +62,7 @@ type, public :: regridding_CS
   !! It specifies the maximum depth that every interface is allowed to take, in H.
   real, dimension(:), allocatable :: max_layer_thickness
 
-  integer :: nk !< Number of layers/levels
+  integer :: nk !< Number of layers/levels in generated grid
 
   !> Indicates which grid to use in the vertical (z*, sigma, target interface
   !! densities)
@@ -830,8 +830,7 @@ subroutine regridding_main( remapCS, CS, G, GV, h, tv, h_new, dzInterface, frac_
       call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
     case ( REGRIDDING_HYCOM1 )
-      call build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
-      call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
+      call build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
     case ( REGRIDDING_SLIGHT )
       call build_grid_SLight( G, GV, h, tv, dzInterface, CS )
@@ -1392,11 +1391,12 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An oceanice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
+subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   type(ocean_grid_type),                       intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H units
   type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h_new !< New layer thicknesses (H units)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
 
@@ -1404,7 +1404,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
   real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
-  integer   :: i, j, k, nz
+  integer   :: i, j, k
   real :: depth
   real :: h_neglect, h_neglect_edge
 
@@ -1414,8 +1414,6 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
   else
     h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
   endif
-
-  nz = GV%ke
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
         "Target densities must be set before build_grid_HyCOM1 is called.")
@@ -1427,28 +1425,32 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
       depth = G%bathyT(i,j) * GV%m_to_H
 
       z_col(1) = 0. ! Work downward rather than bottom up
-      do K = 1, nz
+      do K = 1, GV%ke
         z_col(K+1) = z_col(K) + h(i,j,k) ! Work in units of h (m or Pa)
         p_col(k) = CS%ref_pressure + CS%compressibility_fraction * &
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * GV%H_to_Pa - CS%ref_pressure )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, nz, depth, &
+      call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, GV%ke, depth, &
                                h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, &
                                z_col, z_col_new, zScale=GV%m_to_H, &
                                h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
-      do K=1,nz+1 ; dzInterface(i,j,K) = -dz_col(K) ; enddo
+      call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
+      dz_col(:) = -dz_col(:)
 
       ! This adjusts things robust to round-off errors
-      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+      call adjust_interface_motion( GV%ke, CS%min_thickness, h(i,j,:), dz_col(:) )
+
+      dzInterface(i,j,:) = dz_col(:)
 
     else ! on land
       dzInterface(i,j,:) = 0.
     endif ! mask2dT
   enddo; enddo ! i,j
+
+  call calc_h_new_by_dz(G, GV, h, dzInterface, h_new)
 
 end subroutine build_grid_HyCOM1
 
