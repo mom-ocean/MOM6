@@ -94,6 +94,7 @@ use midas_vertmap, only : determine_temperature
 use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_build_grid, ALE_regrid_accelerated
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
+use MOM_regridding, only : regridding_main
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_remapping, only : remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
@@ -2010,6 +2011,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   character(len=200) :: mesg, area_varname, ice_shelf_file
 
   type(EOS_type), pointer :: eos => NULL()
+  type(thermo_var_ptrs) :: tv_loc   ! A temporary thermo_var container
+  type(verticalGrid_type) :: GV_loc ! A temporary vertical grid structure
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -2055,9 +2058,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
   ! Local variables for ALE remapping
   real, dimension(:), allocatable :: hTarget
   real, dimension(:,:), allocatable :: area_shelf_h
-  real, dimension(:,:), allocatable, target  :: frac_shelf_h
-  real, dimension(:,:,:), allocatable :: tmpT1dIn, tmpS1dIn, tmp_mask_in
+  real, dimension(:,:), allocatable, target :: frac_shelf_h
+  real, dimension(:,:,:), allocatable, target :: tmpT1dIn, tmpS1dIn
+  real, dimension(:,:,:), allocatable :: tmp_mask_in
   real, dimension(:,:,:), allocatable :: h1 ! Thicknesses in H.
+  real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to regridding
   real :: zTopOfCell, zBottomOfCell
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
@@ -2250,7 +2255,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
         tmp_mask_in(i,j,1:kd) = mask_z(i,j,:)
         do k = 1, nz
           if (tmp_mask_in(i,j,k)>0. .and. k<=kd) then
-            zBottomOfCell = -min( z_edges_in(k+1), G%bathyT(i,j) )
+            zBottomOfCell = max( -z_edges_in(k+1), -G%bathyT(i,j) )
             tmpT1dIn(i,j,k) = temp_z(i,j,k)
             tmpS1dIn(i,j,k) = salt_z(i,j,k)
           elseif (k>1) then
@@ -2264,7 +2269,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
           h1(i,j,k) = GV%m_to_H * (zTopOfCell - zBottomOfCell)
           zTopOfCell = zBottomOfCell ! Bottom becomes top for next value of k
         enddo
-        h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * ( zTopOfCell + G%bathyT(i,j) ) ! In case data is deeper than model
+        h1(i,j,kd) = h1(i,j,kd) + GV%m_to_H * max(0., zTopOfCell + G%bathyT(i,j) ) ! In case data is shallower than model
       endif ! mask2dT
     enddo ; enddo
     deallocate( tmp_mask_in )
@@ -2302,21 +2307,18 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, G, GV, PF, just_read_params)
     call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false. ) ! Reconstruction parameters
     if (remap_general) then
       call set_regrid_params( regridCS, min_thickness=0. )
-      h(:,:,:) = h1(:,:,:) ; tv%T(:,:,:) = tmpT1dIn(:,:,:) ; tv%S(:,:,:) = tmpS1dIn(:,:,:)
-      do j = js, je ; do i = is, ie
-        if (G%mask2dT(i,j)==0.) then ! Ensure there are no nonsense values on land
-          h(i,j,:) = 0. ; tv%T(i,j,:) = 0. ; tv%S(i,j,:) = 0.
-        endif
-      enddo ; enddo
-      call pass_var(h, G%Domain)    ! Regridding might eventually use spatial information and
-      call pass_var(tv%T, G%Domain) ! thus needs to be up to date in the halo regions even though
-      call pass_var(tv%S, G%Domain) ! ALE_build_grid() only updates h on the computational domain.
-
+      tv_loc = tv
+      tv_loc%T => tmpT1dIn
+      tv_loc%S => tmpS1dIn
+      GV_loc = GV
+      GV_loc%ke = nz
+      allocate( dz_interface(isd:ied,jsd:jed,max(kd,nz)+1) ) ! Need for argument to regridding_main() but is not used
       if (use_ice_shelf) then
-         call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true., shelf_area)
+        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, shelf_area )
       else
-         call ALE_build_grid( G, GV, regridCS, remapCS, h, tv, .true. )
+        call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface )
       endif
+      deallocate( dz_interface )
     endif
     call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, old_remap=remap_old_alg )
     call ALE_remap_scalar( remapCS, G, GV, nz, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, old_remap=remap_old_alg )
