@@ -1396,15 +1396,16 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
   type(verticalGrid_type),                     intent(in)    :: GV !< Ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h  !< Existing model thickness, in H units
   type(thermo_var_ptrs),                       intent(in)    :: tv !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(inout) :: h_new !< New layer thicknesses (H units)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: dzInterface !< Changes in interface position
   type(regridding_CS),                         intent(in)    :: CS !< Regridding control structure
+  real, dimension(SZI_(G),SZJ_(G),CS%nk),   intent(inout) :: h_new !< New layer thicknesses (H units)
+  real, dimension(SZI_(G),SZJ_(G),CS%nk+1), intent(inout) :: dzInterface !< Changes in interface position
 
   ! Local variables
-  real, dimension(SZK_(GV)+1) :: z_col, z_col_new ! Interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(SZK_(GV)+1) :: z_col ! Source interface positions relative to the surface in H units (m or kg m-2)
+  real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(SZK_(GV)+1) :: dz_col  ! The realized change in z_col in H units (m or kg m-2)
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
-  integer   :: i, j, k
+  integer   :: i, j, k, nki
   real :: depth
   real :: h_neglect, h_neglect_edge
 
@@ -1417,6 +1418,8 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
         "Target densities must be set before build_grid_HyCOM1 is called.")
+
+  nki = min(GV%ke, CS%nk)
 
   ! Build grid based on target interface densities
   do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -1438,12 +1441,13 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
-      dz_col(:) = -dz_col(:)
 
       ! This adjusts things robust to round-off errors
+      dz_col(:) = -dz_col(:)
       call adjust_interface_motion( GV%ke, CS%min_thickness, h(i,j,:), dz_col(:) )
 
-      dzInterface(i,j,:) = dz_col(:)
+      dzInterface(i,j,1:nki+1) = dz_col(1:nki+1)
+      if (nki<CS%nk) dzInterface(i,j,nki+2:CS%nk+1) = 0.
 
     else ! on land
       dzInterface(i,j,:) = 0.
