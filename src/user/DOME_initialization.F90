@@ -10,7 +10,8 @@ use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
-use MOM_tracer_registry, only : tracer_registry_type
+use MOM_tracer_registry, only : tracer_registry_type, tracer_type
+use MOM_tracer_registry, only : tracer_name_lookup
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
@@ -260,9 +261,11 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, nz
+  character(len=32)  :: name
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment
+  type(tracer_type), pointer      :: tr_ptr
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -318,9 +321,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
     ! In this example, all S inflows have values of 35 psu.
-!   call add_tracer_OBC_values("S", tr_Reg, OBC_inflow=35.0)
-!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-!                                segment, OBC_scalar=35.0)
+    name = 'Salt'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
@@ -338,15 +341,39 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     enddo
 
     ! This is no longer a full 3-D array thanks to the segment code above,
-    ! which is what we want now.
+    ! which is what we want now. But, but, not attached to segment.
     allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       OBC_T_v(i,J,k) = T0(k)
     enddo ; enddo ; enddo
-!   call add_tracer_OBC_values("T", tr_Reg, OBC_in_v=OBC_T_v)
-!   call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-!                                segment, OBC_array=.true.)
+    name = 'Heat'
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
   endif
+
+  ! Dye tracers - fight with T,S???
+  ! First dye - only one with OBC values
+  NTR = tr_Reg%NTR
+  allocate(segment%field(NTR))
+  allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+  do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
+    if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
+    else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
+  enddo ; enddo ; enddo
+  name = 'tr_1'
+  call tracer_name_lookup(tr_Reg, tr_ptr, name)
+  call register_segment_tracer(tr_ptr, param_file, GV, &
+                               OBC%segment(1), OBC_array=.true.)
+
+  ! All tracers but the first have 0 concentration in their inflows. As this
+  ! is the default value, the following calls are unnecessary.
+  do m=2,NTR
+    if (m < 10) then ; write(name,'("tr_D",I1.1)') m
+    else ; write(name,'("tr_D",I2.2)') m ; endif
+    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, param_file, GV, &
+                                 OBC%segment(1), OBC_scalar=0.0)
+  enddo
 
 end subroutine DOME_set_OBC_data
 
