@@ -32,6 +32,7 @@ public MOM_tracer_chksum, MOM_tracer_chkinv
 public register_tracer_diagnostics, post_tracer_diagnostics, post_tracer_transport_diagnostics
 public preALE_tracer_diagnostics, postALE_tracer_diagnostics
 public tracer_registry_init, lock_tracer_registry, tracer_registry_end
+public tracer_name_lookup
 
 !> The tracer type
 type, public :: tracer_type
@@ -740,6 +741,19 @@ subroutine MOM_tracer_chkinv(mesg, G, h, Tr, ntr)
   enddo
 
 end subroutine MOM_tracer_chkinv
+
+!> Find a tracer in the tracer registry by name.
+subroutine tracer_name_lookup(Reg, tr_ptr, name)
+  type(tracer_registry_type), pointer    :: Reg     !< pointer to tracer registry
+  type(tracer_type), pointer             :: tr_ptr  !< target or pointer to the tracer array
+  character(len=32), intent(in)          :: name    !< tracer name
+
+  integer n
+  do n=1,Reg%ntr
+    if (Reg%Tr(n)%name == name) tr_ptr => Reg%Tr(n)
+  enddo
+
+end subroutine tracer_name_lookup
 
 !> Initialize the tracer registry.
 subroutine tracer_registry_init(param_file, Reg)
