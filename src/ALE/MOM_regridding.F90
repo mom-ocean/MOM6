@@ -117,7 +117,6 @@ end type
 ! The following routines are visible to the outside world
 public initialize_regridding, end_regridding, regridding_main
 public inflate_vanished_layers_old, check_remapping_grid, check_grid_column
-public adjust_interface_motion
 public set_regrid_params, get_regrid_size
 public uniformResolution, setCoordinateResolution
 public build_rho_column
@@ -1182,7 +1181,7 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
       endif
 #endif
 
-      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+      call adjust_interface_motion( CS, nz, h(i,j,:), dzInterface(i,j,:) )
 
     end do
   end do
@@ -1451,7 +1450,7 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, h_new, dzInterface, CS )
 
       ! This adjusts things robust to round-off errors
       dz_col(:) = -dz_col(:)
-      call adjust_interface_motion( GV%ke, CS%min_thickness, h(i,j,:), dz_col(:) )
+      call adjust_interface_motion( CS, GV%ke, h(i,j,:), dz_col(:) )
 
       dzInterface(i,j,1:nki+1) = dz_col(1:nki+1)
       if (nki<CS%nk) dzInterface(i,j,nki+2:CS%nk+1) = 0.
@@ -1516,7 +1515,7 @@ subroutine build_grid_adaptive(G, GV, h, tv, dzInterface, remapCS, CS)
     call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
     ! convert from depth to z
     do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
-    call adjust_interface_motion(nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:))
+    call adjust_interface_motion(CS, nz, h(i,j,:), dzInterface(i,j,:))
   enddo ; enddo
 end subroutine build_grid_adaptive
 
@@ -1582,7 +1581,7 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
 #endif
 
       ! This adjusts things robust to round-off errors
-      call adjust_interface_motion( nz, CS%min_thickness, h(i,j,:), dzInterface(i,j,:) )
+      call adjust_interface_motion( CS, nz, h(i,j,:), dzInterface(i,j,:) )
 
     else ! on land
       dzInterface(i,j,:) = 0.
@@ -1592,11 +1591,11 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
 end subroutine build_grid_SLight
 
 !> Adjust dz_Interface to ensure non-negative future thicknesses
-subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
-  integer,               intent(in)    :: nk !< Number of layers
-  real,                  intent(in)    :: min_thickness !< Minium allowed thickness of h (H units)
-  real, dimension(nk),   intent(in)    :: h_old !< Minium allowed thickness of h (H units)
-  real, dimension(nk+1), intent(inout) :: dz_int !< Minium allowed thickness of h (H units)
+subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
+  type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
+  integer,                  intent(in)    :: nk !< Number of layers in h_old
+  real, dimension(nk),      intent(in)    :: h_old !< Minium allowed thickness of h (H units)
+  real, dimension(CS%nk+1), intent(inout) :: dz_int !< Minium allowed thickness of h (H units)
   ! Local variables
   integer :: k
   real :: h_new, eps, h_total, h_err
@@ -1604,7 +1603,7 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
   eps = 1. ; eps = epsilon(eps)
 
   h_total = 0. ; h_err = 0.
-  do k = 1, nk
+  do k = 1, min(CS%nk,nk)
     h_total = h_total + h_old(k)
     h_err = h_err + max( h_old(k), abs(dz_int(k)), abs(dz_int(k+1)) )*eps
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
@@ -1616,9 +1615,22 @@ subroutine adjust_interface_motion( nk, min_thickness, h_old, dz_int )
                      'implied h<0 is larger than roundoff!')
     endif
   enddo
-  do k = nk,2,-1
+  if (CS%nk>nk) then
+    do k = nk+1, CS%nk
+      h_err = h_err + max( abs(dz_int(k)), abs(dz_int(k+1)) )*eps
+      h_new = ( dz_int(k) - dz_int(k+1) )
+      if (h_new < -3.0*h_err) then
+        write(0,*) 'h<0 at k=',k,'h_old was empty',&
+          'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+          'h_new=',h_new,'h_err=',h_err
+        call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
+                       'implied h<0 is larger than roundoff!')
+      endif
+    enddo
+  endif
+  do k = min(CS%nk,nk),2,-1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
-    if (h_new<min_thickness) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + min_thickness ! Implies next h_new = min_thickness
+    if (h_new<CS%min_thickness) dz_int(k) = ( dz_int(k+1) - h_old(k) ) + CS%min_thickness ! Implies next h_new = min_thickness
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<0.) dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) ) ! Backup in case min_thickness==0
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
