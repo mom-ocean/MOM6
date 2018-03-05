@@ -264,7 +264,7 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
     endif
 
     if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
-      call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), nz, &
+      call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
                               G%bathyT(i,j)*GV%m_to_H, sum(h(i,j,:)), &
                               zInterfaces, zScale=GV%m_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then

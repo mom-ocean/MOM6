@@ -1149,15 +1149,15 @@ subroutine build_zstar_grid( CS, G, GV, h, dzInterface, frac_shelf_h)
 
       if (ice_shelf) then
         if (frac_shelf_h(i,j) > 0.) then ! under ice shelf
-          call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, zNew, &
+          call build_zstar_column(CS%zlike_CS, nominalDepth, totalThickness, zNew, &
                                 z_rigid_top = totalThickness-nominalDepth, &
                                 eta_orig=zOld(1), zScale=GV%m_to_H)
         else
-          call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, &
+          call build_zstar_column(CS%zlike_CS, nominalDepth, totalThickness, &
                                 zNew, zScale=GV%m_to_H)
         endif
       else
-        call build_zstar_column(CS%zlike_CS, nz, nominalDepth, totalThickness, &
+        call build_zstar_column(CS%zlike_CS, nominalDepth, totalThickness, &
                                 zNew, zScale=GV%m_to_H)
       endif
 
