@@ -132,14 +132,14 @@ subroutine fill_miss_2d(aout,good,fill,prev,G,smooth,num_pass,relc,crit,keep_bug
   real, parameter :: relc_default = 0.25, crit_default = 1.e-3
 
   integer :: npass
-  integer :: is, ie, js, je, nz
+  integer :: is, ie, js, je
   real    :: relax_coeff, acrit, ares
   logical :: debug_it
 
   debug_it=.false.
   if (PRESENT(debug)) debug_it=debug
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   npass = num_pass_default
   if (PRESENT(num_pass)) npass = num_pass
@@ -298,7 +298,6 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   character(len=12)  :: dim_name(4)
   logical :: debug=.false.
@@ -309,7 +308,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam,  conversion, 
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
@@ -616,7 +615,6 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   integer :: isc,iec,jsc,jec    ! global compute domain indices
   integer :: isg, ieg, jsg, jeg ! global extent
   integer :: isd, ied, jsd, jed ! data domain indices
-  integer :: ni, nj, nz         ! global grid size
   integer :: id_clock_read
   integer, dimension(4) :: fld_sz
   character(len=12)  :: dim_name(4)
@@ -628,7 +626,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(fms_id,  Time, conversion, G, t
   real, dimension(SZI_(G),SZJ_(G))  :: good2,fill2
   real, dimension(SZI_(G),SZJ_(G))  :: nlevs
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   isg = G%isg ; ieg = G%ieg ; jsg = G%jsg ; jeg = G%jeg
 
