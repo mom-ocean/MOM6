@@ -268,7 +268,7 @@ subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
                               G%bathyT(i,j)*GV%m_to_H, sum(h(i,j,:)), &
                               zInterfaces, zScale=GV%m_to_H)
     elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
-      call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), nz, &
+      call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
                               GV%m_to_H*G%bathyT(i,j), sum(h(i,j,:)), zInterfaces)
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), G%ke, &
