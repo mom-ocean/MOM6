@@ -2539,11 +2539,11 @@ subroutine register_temp_salt_segments(GV, OBC, tr_Reg, param_file)
     if (associated(segment%tr_Reg)) &
          call MOM_error(FATAL,"register_temp_salt_segments: tracer array was previously allocated")
 
-    name = 'Heat'
+    name = 'temp'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
     call register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                  OBC_array=segment%temp_segment_data_exists)
-    name = 'Salt'
+    name = 'salt'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
     call register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                  OBC_array=segment%salt_segment_data_exists)
