@@ -360,7 +360,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
     else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
   enddo ; enddo ; enddo
-  name = 'tr_1'
+  name = 'tr_D1'
   call tracer_name_lookup(tr_Reg, tr_ptr, name)
   call register_segment_tracer(tr_ptr, param_file, GV, &
                                OBC%segment(1), OBC_array=.true.)
