@@ -59,18 +59,17 @@ end subroutine set_sigma_params
 
 
 !> Build a sigma coordinate column
-subroutine build_sigma_column(CS, nz, depth, totalThickness, zInterface)
-  type(sigma_CS),        intent(in)    :: CS !< Coordinate control structure
-  integer,               intent(in)    :: nz !< Number of levels
-  real,                  intent(in)    :: depth !< Depth of ocean bottom (positive in m)
-  real,                  intent(in)    :: totalThickness !< Column thickness (positive in m)
-  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+subroutine build_sigma_column(CS, depth, totalThickness, zInterface)
+  type(sigma_CS),           intent(in)    :: CS !< Coordinate control structure
+  real,                     intent(in)    :: depth !< Depth of ocean bottom (positive in m)
+  real,                     intent(in)    :: totalThickness !< Column thickness (positive in m)
+  real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces
 
   ! Local variables
   integer :: k
 
-  zInterface(nz+1) = -depth
-  do k = nz,1,-1
+  zInterface(CS%nk+1) = -depth
+  do k = CS%nk,1,-1
     zInterface(k) = zInterface(k+1) + (totalThickness * CS%coordinateResolution(k))
     ! Adjust interface position to accomodate inflating layers
     ! without disturbing the interface above
