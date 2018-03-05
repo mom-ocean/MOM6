@@ -1021,7 +1021,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
 
   dz_g(1) = 0.0
   z_old_k = z_old(1)
-  do k = 2,CS%nk
+  do k = 2,CS%nk+1
     if (k<=nk+1) z_old_k = z_old(k) ! This allows for virtual z_old interface at bottom of the model
     ! zr1 is positive and increases with depth, and dz_tgt is positive downward.
     dz_tgt = sgn*(z_new(k) - z_old_k)
@@ -1086,7 +1086,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
 
     endif
   enddo
-  dz_g(CS%nk+1) = 0.0
+ !dz_g(CS%nk+1) = 0.0
 
   if (debug) then
     z_old_k = z_old(1)
