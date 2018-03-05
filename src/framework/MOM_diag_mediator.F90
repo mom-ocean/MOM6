@@ -854,8 +854,8 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
     locfield => field
   endif
   if (diag_cs%diag_as_chksum) then
+    chksum = chksum_general(locfield)
     if (is_root_pe()) then
-      chksum = chksum_general(locfield)
       call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
     endif
   else
@@ -1103,8 +1103,8 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%fms_diag_id>0) then
     if (diag_cs%diag_as_chksum) then
+      chksum = chksum_general(locfield)
       if (is_root_pe()) then
-        chksum = chksum_general(locfield)
         call log_chksum_diag(diag_cs%chksum_diag_doc_unit, diag%debug_str, chksum)
       endif
     else
