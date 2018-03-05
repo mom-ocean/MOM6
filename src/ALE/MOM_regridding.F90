@@ -968,14 +968,14 @@ end subroutine check_grid_column
 !! over the trajectory of the interface.  By design, this code can not give
 !! tangled interfaces provided that z_old and z_new are not already tangled.
 subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
-  type(regridding_CS),                           intent(in)    :: CS !< Regridding control structure
-  integer,               intent(in)    :: nk !< Number of cells
-  real, dimension(nk+1), intent(in)    :: z_old !< Old grid position (m)
-  real, dimension(nk+1), intent(in)    :: z_new !< New grid position (m)
-  real, dimension(nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
+  type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
+  integer,                  intent(in)    :: nk !< Number of cells in source grid
+  real, dimension(nk+1),    intent(in)    :: z_old !< Old grid position (m)
+  real, dimension(CS%nk+1), intent(in)    :: z_new !< New grid position (m)
+  real, dimension(CS%nk+1), intent(inout) :: dz_g !< Change in interface positions (m)
   ! Local variables
   real :: sgn  ! The sign convention for downward.
-  real :: dz_tgt, zr1
+  real :: dz_tgt, zr1, z_old_k
   real :: Aq, Bq, dz0, z0, F0
   real :: zs, zd, dzwt, Idzwt
   real :: wtd, Iwtd
@@ -986,21 +986,23 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   logical :: debug = .false.
   integer :: k
 
-  if ((z_old(nk+1) - z_old(1)) * (z_new(nk+1) - z_new(1)) < 0.0) then
+  if ((z_old(nk+1) - z_old(1)) * (z_new(CS%nk+1) - z_new(1)) < 0.0) then
     call MOM_error(FATAL, "filtered_grid_motion: z_old and z_new use different sign conventions.")
-  elseif ((z_old(nk+1) - z_old(1)) * (z_new(nk+1) - z_new(1)) == 0.0) then
+  elseif ((z_old(nk+1) - z_old(1)) * (z_new(CS%nk+1) - z_new(1)) == 0.0) then
     ! This is a massless column, so do nothing and return.
-    do k=1,nk+1 ; dz_g(k) = 0.0 ; enddo ; return
-  elseif ((z_old(nk+1) - z_old(1)) + (z_new(nk+1) - z_new(1)) > 0.0) then
+    do k=1,CS%nk+1 ; dz_g(k) = 0.0 ; enddo ; return
+  elseif ((z_old(nk+1) - z_old(1)) + (z_new(CS%nk+1) - z_new(1)) > 0.0) then
     sgn = 1.0
   else
     sgn = -1.0
   endif
 
   if (debug) then
-    do k=2,nk+1
+    do k=2,CS%nk+1
       if (sgn*(z_new(k)-z_new(k-1)) < -5e-16*(abs(z_new(k))+abs(z_new(k-1))) ) &
         call MOM_error(FATAL, "filtered_grid_motion: z_new is tangled.")
+    enddo
+    do k=2,nk+1
       if (sgn*(z_old(k)-z_old(k-1)) < -5e-16*(abs(z_old(k))+abs(z_old(k-1))) ) &
         call MOM_error(FATAL, "filtered_grid_motion: z_old is tangled.")
     enddo
@@ -1018,10 +1020,12 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   Aq = 0.5*(Iwtd - 1.0)
 
   dz_g(1) = 0.0
-  do k = 2,nk
+  z_old_k = z_old(1)
+  do k = 2,CS%nk
+    if (k<=nk+1) z_old_k = z_old(k) ! This allows for virtual z_old interface at bottom of the model
     ! zr1 is positive and increases with depth, and dz_tgt is positive downward.
-    dz_tgt = sgn*(z_new(k) - z_old(k))
-    zr1 = sgn*(z_old(k) - z_old(1))
+    dz_tgt = sgn*(z_new(k) - z_old_k)
+    zr1 = sgn*(z_old_k - z_old(1))
 
     !   First, handle the two simple and common cases that do not pass through
     ! the adjustment rate transition zone.
@@ -1082,11 +1086,15 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
 
     endif
   enddo
-  dz_g(nk+1) = 0.0
+  dz_g(CS%nk+1) = 0.0
 
   if (debug) then
-    do k=1,nk+1 ; z_act(k) = z_old(k) + dz_g(k) ; enddo
-    do k=2,nk+1
+    z_old_k = z_old(1)
+    do k=1,CS%nk+1
+      if (k<=nk+1) z_old_k = z_old(k) ! This allows for virtual z_old interface at bottom of the model
+      z_act(k) = z_old_k + dz_g(k)
+    enddo
+    do k=2,CS%nk+1
       if (sgn*((z_act(k))-z_act(k-1)) < -1e-15*(abs(z_act(k))+abs(z_act(k-1))) ) &
         call MOM_error(FATAL, "filtered_grid_motion: z_output is tangled.")
     enddo
