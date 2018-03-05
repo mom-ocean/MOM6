@@ -10,7 +10,7 @@ implicit none ; private
 !> Control structure containing required parameters for a z-like coordinate
 type, public :: zlike_CS ; private
 
-  !> Number of levels
+  !> Number of levels to be generated
   integer :: nk
 
   !> Minimum thickness allowed for layers, in the same thickness units that will
@@ -39,18 +39,20 @@ subroutine init_coord_zlike(CS, nk, coordinateResolution)
   CS%coordinateResolution = coordinateResolution
 end subroutine init_coord_zlike
 
+!> Deallocates the zlike control structure
 subroutine end_coord_zlike(CS)
-  type(zlike_CS), pointer :: CS
+  type(zlike_CS), pointer :: CS !< Coordinate control structure
 
-  ! nothing to do
+  ! Nothing to do
   if (.not. associated(CS)) return
   deallocate(CS%coordinateResolution)
   deallocate(CS)
 end subroutine end_coord_zlike
 
+!> Set parameters in the zlike structure
 subroutine set_zlike_params(CS, min_thickness)
-  type(zlike_CS), pointer    :: CS
-  real, optional, intent(in) :: min_thickness
+  type(zlike_CS), pointer    :: CS !< Coordinate control structure
+  real, optional, intent(in) :: min_thickness !< Minimum allowed thickness
 
   if (.not. associated(CS)) call MOM_error(FATAL, "set_zlike_params: CS not associated")
 
