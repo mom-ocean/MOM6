@@ -321,7 +321,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
     ! In this example, all S inflows have values of 35 psu.
-    name = 'Salt'
+    name = 'salt'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
     call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0)
   endif
@@ -346,7 +346,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
       OBC_T_v(i,J,k) = T0(k)
     enddo ; enddo ; enddo
-    name = 'Heat'
+    name = 'temp'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
     call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
   endif
