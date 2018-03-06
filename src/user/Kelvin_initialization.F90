@@ -206,7 +206,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
     if (segment%direction == OBC_DIRECTION_N) cycle
 
     ! This should be somewhere else...
-    segment%Tnudge_in = 1.0/(0.3*86400)
+    segment%Velocity_nudging_timescale_in = 1.0/(0.3*86400)
 
     if (segment%direction == OBC_DIRECTION_W) then
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
