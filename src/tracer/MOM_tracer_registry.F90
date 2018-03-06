@@ -750,7 +750,7 @@ subroutine tracer_name_lookup(Reg, tr_ptr, name)
 
   integer n
   do n=1,Reg%ntr
-    if (Reg%Tr(n)%name == name) tr_ptr => Reg%Tr(n)
+    if (lowercase(Reg%Tr(n)%name) == lowercase(name)) tr_ptr => Reg%Tr(n)
   enddo
 
 end subroutine tracer_name_lookup
