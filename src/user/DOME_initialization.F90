@@ -242,9 +242,6 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
 ! Local variables
-  real, pointer, dimension(:,:,:) :: &
-    OBC_T_v => NULL(), &    ! specify the values of T and S that should come
-    OBC_S_v => NULL()       ! boundary conditions, in C and psu.
   ! The following variables are used to set the target temperature and salinity.
   real :: T0(SZK_(G)), S0(SZK_(G))
   real :: pres(SZK_(G))      ! An array of the reference pressure in Pa.
@@ -288,6 +285,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   endif
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
+
+  NTR = tr_Reg%NTR
+  allocate(segment%field(NTR))
 
   do k=1,nz
     rst = -1.0
@@ -340,11 +340,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 
-    ! This is no longer a full 3-D array thanks to the segment code above,
-    ! which is what we want now. But, but, not attached to segment.
-    allocate(OBC_T_v(isd:ied,JsdB:JedB,nz))
+    ! Temperature on tracer 1???
+    allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
-      OBC_T_v(i,J,k) = T0(k)
+      segment%field(1)%buffer_src(i,j,k) = T0(k)
     enddo ; enddo ; enddo
     name = 'temp'
     call tracer_name_lookup(tr_Reg, tr_ptr, name)
@@ -353,8 +352,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
 
   ! Dye tracers - fight with T,S???
   ! First dye - only one with OBC values
-  NTR = tr_Reg%NTR
-  allocate(segment%field(NTR))
+  ! This field(1) requires tr_D1 to be the first tracer.
   allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
   do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
     if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
