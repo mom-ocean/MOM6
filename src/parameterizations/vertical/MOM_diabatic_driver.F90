@@ -240,7 +240,7 @@ end type diabatic_CS
 integer :: id_clock_entrain, id_clock_mixedlayer, id_clock_set_diffusivity
 integer :: id_clock_tracers, id_clock_tridiag, id_clock_pass, id_clock_sponge
 integer :: id_clock_geothermal, id_clock_differential_diff, id_clock_remap
-integer :: id_clock_kpp
+integer :: id_clock_kpp, id_clock_epbl
 
 contains
 
@@ -783,7 +783,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
         h_prebound(i,j,k) = h(i,j,k)
     enddo ; enddo ; enddo
     if (CS%use_energetic_PBL) then
-
+      call cpu_clock_begin(id_clock_epbl)
       skinbuoyflux(:,:) = 0.0
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
               h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit,                         &
@@ -835,6 +835,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
         call hchksum(eb, "after ePBL eb",G%HI,haloshift=0, scale=GV%H_to_m)
         call hchksum(Kd_ePBL, "after ePBL Kd_ePBL",G%HI,haloshift=0)
       endif
+      call cpu_clock_end(id_clock_epbl)
 
     else
       call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, dt, fluxes, CS%optics, &
@@ -2361,6 +2362,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   id_clock_pass = cpu_clock_id('(Ocean diabatic message passing)', grain=CLOCK_ROUTINE)
   id_clock_differential_diff = -1 ; if (differentialDiffusion) &
     id_clock_differential_diff = cpu_clock_id('(Ocean differential diffusion)', grain=CLOCK_ROUTINE)
+  id_clock_epbl = cpu_clock_id('(Ocean energetic PBL)', grain=CLOCK_MODULE)
 
   ! initialize the auxiliary diabatic driver module
   call diabatic_aux_init(Time, G, GV, param_file, diag, CS%diabatic_aux_CSp, &
