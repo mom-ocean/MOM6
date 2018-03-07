@@ -15,7 +15,6 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_density_derivs
 use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
-use MOM_EOS, only : int_density_dz_generic_plm_analytic
 use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm
 use MOM_ALE, only : usePressureReconstruction, pressureReconstructionScheme
 use MOM_ALE, only : ALE_CS
