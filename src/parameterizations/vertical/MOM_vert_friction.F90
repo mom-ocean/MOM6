@@ -139,6 +139,7 @@ contains
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                     taux_bot, tauy_bot)
+!  type(param_file_type),   intent(in)    :: param_file !< File to parse for parameters
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, intent(inout), &
@@ -193,15 +194,19 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   real :: surface_stress(SZIB_(G))! The same as stress, unless the wind
                            ! stress is applied as a body force, in
                            ! units of m2 s-1.
+  character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
 
   logical :: do_i(SZIB_(G))
-  real :: ssp = 1.0, xvisc=10.     ! width of sponge; extra viscosity to damp sponge velocity
+  real :: ssp = 1.0, xvisc=1.E5     ! width of sponge; extra viscosity to damp sponge velocity
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
+
+!  call get_param(param_file, mdl, "XVISC", xvisc, &
+!                 "extra viscosity to damp velocity in the sponge", default=0.0)
 
   if (CS%direct_stress) then
     Hmix = CS%Hmix_stress*GV%m_to_H
@@ -448,6 +453,7 @@ end subroutine vertvisc
 !! worth of barotropic acceleration that a layer experiences after
 !! viscosity is applied.
 subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
+!  type(param_file_type),   intent(in)    :: param_file !< File to parse for parameters
   type(ocean_grid_type), intent(in)   :: G    !< Ocean grid structure
   type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
   type(vertvisc_type), intent(in)     :: visc !< Viscosities and bottom drag
@@ -472,7 +478,8 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   real :: dt_m_to_H        ! The time step times the conversion from m to the
                            ! units of thickness - either s or s m3 kg-1.
   logical :: do_i(SZIB_(G))
-  real :: ssp = 1.0, xvisc=10.0 ! sponge width; extra viscosity to remove sponge velocity
+  real :: ssp = 1.0, xvisc=1.E5 ! sponge width; extra viscosity to remove sponge velocity
+  character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -480,6 +487,9 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
 
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
+
+!  call get_param(param_file, mdl, "XVISC", xvisc, &
+!                 "extra viscosity to damp velocity in the sponge", default=0.0)
 
   dt_m_to_H = dt*GV%m_to_H
 
