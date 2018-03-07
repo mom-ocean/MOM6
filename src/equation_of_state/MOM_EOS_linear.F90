@@ -13,7 +13,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_compress_linear, calculate_density_linear
+public calculate_compress_linear, calculate_density_linear, calculate_spec_vol_linear
 public calculate_density_derivs_linear, calculate_density_derivs_scalar_linear
 public calculate_specvol_derivs_linear
 public calculate_density_scalar_linear, calculate_density_array_linear
@@ -23,6 +23,10 @@ public int_density_dz_linear, int_spec_vol_dp_linear
 interface calculate_density_linear
   module procedure calculate_density_scalar_linear, calculate_density_array_linear
 end interface calculate_density_linear
+
+interface calculate_spec_vol_linear
+  module procedure calculate_spec_vol_scalar_linear, calculate_spec_vol_array_linear
+end interface calculate_spec_vol_linear
 
 interface calculate_density_derivs_linear
   module procedure calculate_density_derivs_scalar_linear, calculate_density_derivs_array_linear
@@ -97,13 +101,70 @@ subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
 ! *  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.         *
 ! *  (in)      dRho_dT - The derivatives of density with temperature   *
 ! *  (in)      dRho_dS - and salinity, in kg m-3 C-1 and kg m-3 psu-1. *
-  real :: al0, p0, lambda
   integer :: j
 
   do j=start,start+npts-1
     rho(j) = Rho_T0_S0 + dRho_dT*T(j) + dRho_dS*S(j)
   enddo
 end subroutine calculate_density_array_linear
+
+!> This subroutine computes the in situ specific volume of sea water (specvol in
+!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! and pressure in Pa, using a trivial linear equation of state for density.
+!! If spv_ref is present, specvol is an anomaly from spv_ref.
+subroutine calculate_spec_vol_scalar_linear(T, S, pressure, specvol, &
+                                            Rho_T0_S0, dRho_dT, dRho_dS, spv_ref)
+  real,    intent(in)  :: T        !< potential temperature relative to the surface
+                                   !! in C.
+  real,    intent(in)  :: S        !< salinity in PSU.
+  real,    intent(in)  :: pressure !< pressure in Pa.
+  real,    intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
+  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,    intent(in)  :: dRho_dT, dRho_dS !< The derivatives of density with
+                                    !! temperature and salinity, in kg m-3 C-1
+                                    !! and kg m-3 psu-1.
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  integer :: j
+
+  if (present(spv_ref)) then
+    specvol = ((1.0 - Rho_T0_S0*spv_ref) + spv_ref*(dRho_dT*T + dRho_dS*S)) / &
+             ( Rho_T0_S0 + (dRho_dT*T + dRho_dS*S))
+  else
+    specvol = 1.0 / ( Rho_T0_S0 + (dRho_dT*T + dRho_dS*S))
+  endif
+
+end subroutine calculate_spec_vol_scalar_linear
+
+!> This subroutine computes the in situ specific volume of sea water (specvol in
+!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! and pressure in Pa, using a trivial linear equation of state for density.
+!! If spv_ref is present, specvol is an anomaly from spv_ref.
+subroutine calculate_spec_vol_array_linear(T, S, pressure, specvol, start, npts, &
+                                           Rho_T0_S0, dRho_dT, dRho_dS, spv_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
+                                              !! in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,               intent(in)  :: dRho_dT, dRho_dS !< The derivatives of density with
+                                               !! temperature and salinity, in kg m-3 C-1
+                                               !! and kg m-3 psu-1.
+  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  integer :: j
+
+  if (present(spv_ref)) then ; do j=start,start+npts-1
+    specvol(j) = ((1.0 - Rho_T0_S0*spv_ref) + spv_ref*(dRho_dT*T(j) + dRho_dS*S(j))) / &
+                 ( Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
+  enddo ; else ; do j=start,start+npts-1
+    specvol(j) = 1.0 / ( Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
+  enddo ; endif
+
+end subroutine calculate_spec_vol_array_linear
 
 !> This subroutine calculates the partial derivatives of density    *
 !! with potential temperature and salinity.

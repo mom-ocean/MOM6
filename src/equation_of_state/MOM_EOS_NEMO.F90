@@ -198,7 +198,7 @@ end subroutine calculate_density_scalar_nemo
 !! conservative temperature (T in deg C), and pressure in Pa.
 subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
   real,    intent(in),  dimension(:) :: T     !< Conservative temperature in C.
-  real,    intent(in),  dimension(:) :: S     !< Absoulte salinity in g/Kg.
+  real,    intent(in),  dimension(:) :: S     !< Absolute salinity in g/Kg.
   real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
   real,    intent(out), dimension(:) :: rho   !< In situ density in kg m-3.
   integer, intent(in)                :: start !< The starting point in the arrays.
