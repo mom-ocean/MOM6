@@ -14,7 +14,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_compress_wright, calculate_density_wright
+public calculate_compress_wright, calculate_density_wright, calculate_spec_vol_wright
 public calculate_density_derivs_wright, calculate_specvol_derivs_wright
 public calculate_density_second_derivs_wright
 public int_density_dz_wright, int_spec_vol_dp_wright
@@ -22,6 +22,10 @@ public int_density_dz_wright, int_spec_vol_dp_wright
 interface calculate_density_wright
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
 end interface calculate_density_wright
+
+interface calculate_spec_vol_wright
+  module procedure calculate_spec_vol_scalar_wright, calculate_spec_vol_array_wright
+end interface calculate_spec_vol_wright
 
 interface calculate_density_derivs_wright
   module procedure calculate_density_derivs_scalar_wright, calculate_density_derivs_array_wright
@@ -77,10 +81,7 @@ real,    intent(out) :: rho      !< In situ density in kg m-3.
 ! *  Coded by R. Hallberg, 7/00                                        *
 ! *====================================================================*
 
-  real :: al0, p0, lambda
-  integer :: j
-  real, dimension(1) :: T0, S0, pressure0
-  real, dimension(1) :: rho0
+  real, dimension(1) :: T0, S0, pressure0, rho0
 
   T0(1) = T
   S0(1) = S
@@ -130,6 +131,57 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
   enddo
 end subroutine calculate_density_array_wright
+
+!> This subroutine computes the in situ specific volume of sea water (specvol in
+!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! and pressure in Pa.  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! If spv_ref is present, specvol is an anomaly from spv_ref.
+subroutine calculate_spec_vol_scalar_wright(T, S, pressure, specvol, spv_ref)
+  real,           intent(in)  :: T        !< potential temperature relative to the surface in C.
+  real,           intent(in)  :: S        !< salinity in PSU.
+  real,           intent(in)  :: pressure !< pressure in Pa.
+  real,           intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  real, dimension(1) :: T0, S0, pressure0, spv0
+
+  T0(1) = T ; S0(1) = S ; pressure0(1) = pressure
+
+  call calculate_spec_vol_array_wright(T0, S0, pressure0, spv0, 1, 1, spv_ref)
+  specvol = spv0(1)
+end subroutine calculate_spec_vol_scalar_wright
+
+!> This subroutine computes the in situ specific volume of sea water (specvol in
+!! units of m^3/kg) from salinity (S in psu), potential temperature (T in deg C)
+!! and pressure in Pa.  It uses the expression from
+!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
+!! If spv_ref is present, specvol is an anomaly from spv_ref.
+subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts, spv_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
+                                              !! in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: specvol  !< in situ specific volume in m3 kg-1.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  real :: al0, p0, lambda
+  integer :: j
+
+  do j=start,start+npts-1
+    al0 = (a0 + a1*T(j)) +a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+
+    if (present(spv_ref)) then
+      specvol(j) = (lambda + (al0 - spv_ref)*(pressure(j) + p0)) / (pressure(j) + p0)
+    else
+      specvol(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
+    endif
+  enddo
+end subroutine calculate_spec_vol_array_wright
 
 !> For a given thermodynamic state, return the thermal/haline expansion coefficients
 subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_dS, start, npts)
@@ -529,7 +581,7 @@ end subroutine int_density_dz_wright
 !! model.  There are essentially no free assumptions, apart from the use of
 !! Bode's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
+subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size)
   type(hor_index_type), intent(in)  :: HI
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -541,9 +593,9 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
                         intent(in)  :: p_t       !< Pressure at the top of the layer in Pa.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: p_b       !< Pressure at the top of the layer in Pa.
-  real,                 intent(in)  :: alpha_ref !< A mean specific volume that is subtracted out
+  real,                 intent(in)  :: spv_ref   !< A mean specific volume that is subtracted out
            !! to reduce the magnitude of each of the integrals, m3 kg-1.The calculation is
-           !! mathematically identical with different values of alpha_ref, but this reduces the
+           !! mathematically identical with different values of spv_ref, but this reduces the
            !! effects of roundoff.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
@@ -576,11 +628,11 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
 !  (in)      S - salinity in PSU.
 !  (in)      p_t - pressure at the top of the layer in Pa.
 !  (in)      p_b - pressure at the top of the layer in Pa.
-!  (in)      alpha_ref - A mean specific volume that is subtracted out to reduce
-!                        the magnitude of each of the integrals, m3 kg-1.
-!                        The calculation is mathematically identical with
-!                        different values of alpha_ref, but this reduces the
-!                        effects of roundoff.
+!  (in)      spv_ref - A mean specific volume that is subtracted out to reduce
+!                      the magnitude of each of the integrals, m3 kg-1.
+!                      The calculation is mathematically identical with
+!                      different values of spv_ref, but this reduces the
+!                      effects of roundoff.
 !  (in)      HI - The ocean's horizontal index structure.
 !  (out)     dza - The change in the geopotential anomaly across the layer,
 !                  in m2 s-2.
@@ -610,38 +662,22 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
 
-  if (present(intp_dza)) then
-    do j=jsh,jeh ; do i=ish,ieh
-      al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
-      p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
-      lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
+  do j=jsh,jeh ; do i=ish,ieh
+    al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
+    p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
+    lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
 
-      al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
-      dp = p_b(i,j) - p_t(i,j)
-      p_ave = 0.5*(p_t(i,j)+p_b(i,j))
+    al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
+    dp = p_b(i,j) - p_t(i,j)
+    p_ave = 0.5*(p_t(i,j)+p_b(i,j))
 
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      alpha_anom = al0 + lambda / (p0 + p_ave) - alpha_ref
-      rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-      dza(i,j) = alpha_anom*dp + 2.0*eps*rem
+    eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
+    alpha_anom = al0 + lambda / (p0 + p_ave) - spv_ref
+    rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+    dza(i,j) = alpha_anom*dp + 2.0*eps*rem
+    if (present(intp_dza)) &
       intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*(1.0-eps)*rem
-    enddo ; enddo
-  else
-    do j=jsh,jeh ; do i=ish,ieh
-      al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
-      p0_2d(i,j) = (b0 + b4*S(i,j)) + T(i,j) * (b1 + T(i,j)*((b2 + b3*T(i,j))) + b5*S(i,j))
-      lambda_2d(i,j) = (c0 +c4*S(i,j)) + T(i,j) * (c1 + T(i,j)*((c2 + c3*T(i,j))) + c5*S(i,j))
-
-      al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
-      dp = p_b(i,j) - p_t(i,j)
-      p_ave = 0.5*(p_t(i,j)+p_b(i,j))
-
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      alpha_anom = al0 + lambda / (p0 + p_ave) - alpha_ref
-      rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-      dza(i,j) = alpha_anom*dp + 2.0*eps*rem
-    enddo ; enddo
-  endif
+  enddo ; enddo
 
   if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
@@ -655,7 +691,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
       p_ave = 0.5*(w_left*(p_t(i,j)+p_b(i,j)) + w_right*(p_t(i+1,j)+p_b(i+1,j)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - alpha_ref)*dp + 2.0*eps* &
+      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Bode's rule to integrate the values.
@@ -675,7 +711,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, &
       p_ave = 0.5*(w_left*(p_t(i,j)+p_b(i,j)) + w_right*(p_t(i,j+1)+p_b(i,j+1)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - alpha_ref)*dp + 2.0*eps* &
+      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Bode's rule to integrate the values.
