@@ -17,10 +17,7 @@ use MOM_EOS, only : int_density_dz, int_specific_vol_dp
 use MOM_EOS, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_EOS, only : int_spec_vol_dp_generic_plm
 use MOM_EOS, only : int_density_dz_generic, int_spec_vol_dp_generic
-use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm
-use MOM_ALE, only : usePressureReconstruction, pressureReconstructionScheme
-use MOM_ALE, only : ALE_CS
-use regrid_defs, only: PRESSURE_RECONSTRUCTION_PLM, PRESSURE_RECONSTRUCTION_PPM
+use MOM_ALE, only : pressure_gradient_plm, pressure_gradient_ppm, ALE_CS
 
 implicit none ; private
 
@@ -40,6 +37,18 @@ type, public :: PressureForce_AFV_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
   logical :: useMassWghtInterp !< Use mass weighting in T/S interpolation
+  logical :: boundary_extrap !< Indicate whether high-order boundary
+                            !! extrapolation should be used within boundary cells
+
+  logical :: reconstruct    !< If true, polynomial profiles of T & S will be
+                            !! reconstructed and used in the integrals for the
+                            !! finite volume pressure gradient calculation.
+                            !! The default depends on whether regridding is being used.
+
+  integer :: Recon_Scheme   !< Order of the polynomial of the reconstruction of T & S
+                            !! for the finite volume pressure gradient calculation.
+                            !! By the default (1) is for a piecewise linear method
+
   integer :: id_e_tidal = -1 !< Diagnostic identifier
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_AFV_CS
@@ -160,7 +169,6 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
-  integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
@@ -173,8 +181,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   if (present(p_atm)) then ; if (associated(p_atm)) use_p_atm = .true. ; endif
   use_EOS = associated(tv%eqn_of_state)
   use_ALE = .false.
-  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
-  PRScheme = pressureReconstructionScheme(ALE_CSp)
+  if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   dp_neglect = GV%H_to_Pa * GV%H_subroundoff
   alpha_ref = 1.0/CS%Rho0
@@ -232,10 +239,10 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
-    if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
-    elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+    if ( CS%Recon_Scheme == 1 ) then
+      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+    elseif ( CS%Recon_Scheme == 2) then
+      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 
@@ -245,7 +252,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
     ! subsequent calculation.
     if (use_EOS) then
       if ( use_ALE ) then
-        if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+        if ( CS%Recon_Scheme == 1 ) then
           call int_spec_vol_dp_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                     S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
                     alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
@@ -253,7 +260,7 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
                     intx_dza(:,:,k), inty_dza(:,:,k), &
                     useMassWghtInterp = CS%useMassWghtInterp)
           i=k
-        elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+        elseif ( CS%Recon_Scheme == 2 ) then
           call MOM_error(FATAL, "PressureForce_AFV_nonBouss: "//&
                          "int_spec_vol_dp_generic_ppm does not exist yet.")
         !  call int_spec_vol_dp_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
@@ -496,7 +503,6 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   real, parameter :: C1_6 = 1.0/6.0
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
-  integer :: PRScheme
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
   nkmb=GV%nk_rho_varies
@@ -510,8 +516,7 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   use_EOS = associated(tv%eqn_of_state)
   do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
   use_ALE = .false.
-  if (associated(ALE_CSp)) use_ALE = usePressureReconstruction(ALE_CSp) .and. use_EOS
-  PRScheme = pressureReconstructionScheme(ALE_CSp)
+  if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%H_subroundoff * GV%H_to_m
@@ -617,10 +622,10 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
   ! to top and bottom values within each layer (these are the only degrees
   ! of freedeom needed to know the linear profile).
   if ( use_ALE ) then
-    if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
-    elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-      call pressure_gradient_ppm (ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h);
+    if ( CS%Recon_Scheme == 1 ) then
+      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
+    elseif ( CS%Recon_Scheme == 2 ) then
+      call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, CS%boundary_extrap)
     endif
   endif
 
@@ -658,14 +663,14 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
       ! is used, whereby densities within each layer are constant no matter
       ! where the layers are located.
       if ( use_ALE ) then
-        if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
+        if ( CS%Recon_Scheme == 1 ) then
           call int_density_dz_generic_plm ( T_t(:,:,k), T_b(:,:,k), &
                     S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth,    &
                     dz_neglect, G%bathyT, G%HI, G%HI, &
                     tv%eqn_of_state, dpa, intz_dpa, intx_dpa, inty_dpa, &
                     useMassWghtInterp = CS%useMassWghtInterp)
-        elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
+        elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
                     tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), e(:,:,K), e(:,:,K+1), &
                     rho_ref, CS%Rho0, GV%g_Earth, &
@@ -777,6 +782,7 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
+  logical :: use_ALE
 
   if (associated(CS)) then
     call MOM_error(WARNING, "PressureForce_init called with an associated "// &
@@ -799,9 +805,30 @@ subroutine PressureForce_AFV_init(Time, G, GV, param_file, diag, CS, tides_CSp)
                  units="kg m-3", default=1035.0)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
+                 "If True, use the ALE algorithm (regridding/remapping).\n"//&
+                 "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
-                 "If true, use mass weighting when interpolation T/S for\n"//&
-                 "top/bottom integrals in AFV pressure gradient calculation.", default=.false.)
+                 "If true, use mass weighting when interpolating T/S for\n"//&
+                 "integrals near the bathymetry in AFV pressure gradient\n"//&
+                 "calculations.", default=.false.)
+  call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", CS%reconstruct, &
+                 "If True, use vertical reconstruction of T & S within\n"//&
+                 "the integrals of the FV pressure gradient calculation.\n"//&
+                 "If False, use the constant-by-layer algorithm.\n"//&
+                 "The default is set by USE_REGRIDDING.", &
+                 default=use_ALE )
+  call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", CS%Recon_Scheme, &
+                 "Order of vertical reconstruction of T/S to use in the\n"//&
+                 "integrals within the FV pressure gradient calculation."//&
+                 " 0: PCM or no reconstruction.\n"//&
+                 " 1: PLM reconstruction.\n"//&
+                 " 2: PPM reconstruction.", default=1)
+  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", CS%boundary_extrap, &
+                 "If true, the reconstruction of T & S for pressure in \n"//&
+                 "boundary cells is extrapolated, rather than using PCM \n"//&
+                 "in these cells. If true, the same order polynomial is \n"//&
+                 "used as is used for the interior cells.", default=.true.)
 
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
