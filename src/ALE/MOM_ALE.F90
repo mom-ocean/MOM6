@@ -970,53 +970,47 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   integer :: i, j, k
   real    :: hTmp(GV%ke)
   real    :: tmp(GV%ke)
-  real, dimension(CS%nk,2) :: ppoly_linear_E            !Edge value of polynomial
-  real, dimension(CS%nk,2) :: ppoly_linear_coefs !Coefficients of polynomial
+  real, dimension(CS%nk,2) :: ppol_E     !Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppol_coefs !Coefficients of polynomial
   real :: h_neglect
 
   !### Replace this with GV%H_subroundoff
-  !### Omit the rescaling by H_to_m here. It should not be needed.
   if (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 * GV%H_to_m
+    h_neglect = GV%m_to_H*1.0e-30
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 * GV%H_to_m
+    h_neglect = GV%kg_m2_to_H*1.0e-30
   endif
 
-  ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_linear' are declared at
-  ! the module level.
-
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b,h_neglect) &
-!$OMP                          private(hTmp,ppoly_linear_E,ppoly_linear_coefs,tmp)
+  !$OMP parallel do default(shared) private(hTmp,ppol_E,ppol_coefs,tmp)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       ! Build current grid
-  !### Omit the rescaling by H_to_m here. It should not be needed.
-      hTmp(:) = h(i,j,:)*GV%H_to_m
+      hTmp(:) = h(i,j,:)
       tmp(:) = tv%S(i,j,:)
       ! Reconstruct salinity profile
-      ppoly_linear_E(:,:) = 0.0
-      ppoly_linear_coefs(:,:) = 0.0
-      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
+      ppol_E(:,:) = 0.0
+      ppol_coefs(:,:) = 0.0
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
       if (bdry_extrap) call &
-        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
       do k = 1,GV%ke
-        S_t(i,j,k) = ppoly_linear_E(k,1)
-        S_b(i,j,k) = ppoly_linear_E(k,2)
+        S_t(i,j,k) = ppol_E(k,1)
+        S_b(i,j,k) = ppol_E(k,2)
       end do
 
       ! Reconstruct temperature profile
-      ppoly_linear_E(:,:) = 0.0
-      ppoly_linear_coefs(:,:) = 0.0
+      ppol_E(:,:) = 0.0
+      ppol_coefs(:,:) = 0.0
       tmp(:) = tv%T(i,j,:)
-      call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
+      call PLM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
       if (bdry_extrap) call &
-        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
+        PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
       do k = 1,GV%ke
-        T_t(i,j,k) = ppoly_linear_E(k,1)
-        T_b(i,j,k) = ppoly_linear_E(k,2)
+        T_t(i,j,k) = ppol_E(k,1)
+        T_b(i,j,k) = ppol_E(k,2)
       end do
 
     end do
@@ -1053,62 +1047,54 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   real    :: hTmp(GV%ke)
   real    :: tmp(GV%ke)
   real, dimension(CS%nk,2) :: &
-      ppoly_parab_E            !Edge value of polynomial
+      ppol_E            !Edge value of polynomial
   real, dimension(CS%nk,3) :: &
-      ppoly_parab_coefs !Coefficients of polynomial
-  real :: h_neglect
+      ppol_coefs !Coefficients of polynomial
+  real :: h_neglect, h_neglect_edge
 
-  !### Replace this with GV%H_subroundoff
-  !### Omit the rescaling by H_to_m here. It should not be needed.
+  !### Try replacing both of these with GV%H_subroundoff
   if (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30  * GV%H_to_m
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 * GV%H_to_m
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
   endif
 
-  ! NOTE: the variables 'CS%grid_generic' and 'CS%ppoly_parab' are declared at
-  ! the module level.
-
   ! Determine reconstruction within each column
-!$OMP parallel do default(none) shared(G,GV,h,tv,CS,S_t,S_b,T_t,T_b,h_neglect) &
-!$OMP                          private(hTmp,tmp,ppoly_parab_E,ppoly_parab_coefs)
+  !$OMP parallel do default(shared) private(hTmp,tmp,ppol_E,ppol_coefs)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
 
       ! Build current grid
-  !### Omit the rescaling by H_to_m here. It should not be needed.
-      hTmp(:) = h(i,j,:) * GV%H_to_m
+      hTmp(:) = h(i,j,:)
       tmp(:) = tv%S(i,j,:)
 
       ! Reconstruct salinity profile
-      ppoly_parab_E(:,:) = 0.0
-      ppoly_parab_coefs(:,:) = 0.0
+      ppol_E(:,:) = 0.0
+      ppol_coefs(:,:) = 0.0
       !### Try to replace the following value of h_neglect with GV%H_subroundoff.
-      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
-      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=h_neglect_edge )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
       if (bdry_extrap) call &
-        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
-                                    ppoly_parab_coefs, h_neglect )
+        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
       do k = 1,GV%ke
-        S_t(i,j,k) = ppoly_parab_E(k,1)
-        S_b(i,j,k) = ppoly_parab_E(k,2)
+        S_t(i,j,k) = ppol_E(k,1)
+        S_b(i,j,k) = ppol_E(k,2)
       end do
 
       ! Reconstruct temperature profile
-      ppoly_parab_E(:,:) = 0.0
-      ppoly_parab_coefs(:,:) = 0.0
+      ppol_E(:,:) = 0.0
+      ppol_coefs(:,:) = 0.0
       tmp(:) = tv%T(i,j,:)
       !### Try to replace the following value of h_neglect with GV%H_subroundoff.
-      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
-      call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
+      call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppol_E, h_neglect=1.0e-10*GV%m_to_H )
+      call PPM_reconstruction( GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
       if (bdry_extrap) call &
-        PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
-                                    ppoly_parab_coefs, h_neglect )
+        PPM_boundary_extrapolation(GV%ke, hTmp, tmp, ppol_E, ppol_coefs, h_neglect )
 
       do k = 1,GV%ke
-        T_t(i,j,k) = ppoly_parab_E(k,1)
-        T_b(i,j,k) = ppoly_parab_E(k,2)
+        T_t(i,j,k) = ppol_E(k,1)
+        T_b(i,j,k) = ppol_E(k,2)
       end do
 
     end do
