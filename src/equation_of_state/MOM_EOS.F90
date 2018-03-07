@@ -3,23 +3,23 @@ module MOM_EOS
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_EOS_linear, only : calculate_density_linear
+use MOM_EOS_linear, only : calculate_density_linear, calculate_spec_vol_linear
 use MOM_EOS_linear, only : calculate_density_derivs_linear
 use MOM_EOS_linear, only : calculate_specvol_derivs_linear, int_density_dz_linear
 use MOM_EOS_linear, only : calculate_density_second_derivs_linear
 use MOM_EOS_linear, only : calculate_compress_linear, int_spec_vol_dp_linear
-use MOM_EOS_Wright, only : calculate_density_wright, calculate_density_wright
+use MOM_EOS_Wright, only : calculate_density_wright, calculate_spec_vol_wright
 use MOM_EOS_Wright, only : calculate_density_derivs_wright
 use MOM_EOS_Wright, only : calculate_specvol_derivs_wright, int_density_dz_wright
 use MOM_EOS_Wright, only : calculate_compress_wright, int_spec_vol_dp_wright
 use MOM_EOS_Wright, only : calculate_density_second_derivs_wright
-use MOM_EOS_UNESCO, only : calculate_density_unesco
+use MOM_EOS_UNESCO, only : calculate_density_unesco, calculate_spec_vol_unesco
 use MOM_EOS_UNESCO, only : calculate_density_derivs_unesco, calculate_density_unesco
 use MOM_EOS_UNESCO, only : calculate_compress_unesco
 use MOM_EOS_NEMO,   only : calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_density_derivs_nemo, calculate_density_nemo
 use MOM_EOS_NEMO,   only : calculate_compress_nemo
-use MOM_EOS_TEOS10, only : calculate_density_teos10
+use MOM_EOS_TEOS10, only : calculate_density_teos10, calculate_spec_vol_teos10
 use MOM_EOS_TEOS10, only : calculate_density_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_specvol_derivs_teos10
 use MOM_EOS_TEOS10, only : calculate_density_second_derivs_teos10
@@ -37,9 +37,10 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_compress, calculate_density, query_compressible
-public calculate_density_derivs, calculate_specific_vol_derivs, calculate_density_second_derivs
+public calculate_density_derivs, calculate_specific_vol_derivs
+public calculate_density_second_derivs
 public EOS_init, EOS_manual_init, EOS_end, EOS_allocate
-public EOS_use_linear
+public EOS_use_linear, calculate_spec_vol
 public int_density_dz, int_specific_vol_dp
 public int_density_dz_generic_plm, int_density_dz_generic_ppm
 public int_spec_vol_dp_generic_plm !, int_spec_vol_dz_generic_ppm
@@ -55,6 +56,11 @@ public extract_member_EOS
 interface calculate_density
   module procedure calculate_density_scalar, calculate_density_array
 end interface calculate_density
+
+!> Calculates specific volume of sea water from T, S and P
+interface calculate_spec_vol
+  module procedure calculate_spec_vol_scalar, calculate_spec_vol_array
+end interface calculate_spec_vol
 
 interface calculate_density_derivs
   module procedure calculate_density_derivs_scalar, calculate_density_derivs_array
@@ -87,6 +93,8 @@ type, public :: EOS_type ; private
   real :: TFr_S0_P0   !< The freezing potential temperature at S=0, P=0 in deg C.
   real :: dTFr_dS !< The derivative of freezing point with salinity, in deg C PSU-1.
   real :: dTFr_dp !< The derivative of freezing point with pressure, in deg C Pa-1.
+
+  logical :: test_EOS = .true.
 end type EOS_type
 
 ! The named integers that might be stored in eqn_of_state_type%form_of_EOS.
@@ -174,6 +182,90 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
   end select
 
 end subroutine calculate_density_array
+
+!> Calls the appropriate subroutine to calculate specific volume of sea water
+!! for scalar inputs.
+subroutine calculate_spec_vol_scalar(T, S, pressure, specvol, EOS, spv_ref)
+  real,           intent(in)  :: T !< Potential temperature referenced to the surface (degC)
+  real,           intent(in)  :: S !< Salinity (PSU)
+  real,           intent(in)  :: pressure !< Pressure (Pa)
+  real,           intent(out) :: specvol  !< specific volume (in-situ if pressure is local) (m3 kg-1)
+  type(EOS_type), pointer     :: EOS      !< Equation of state structure
+  real, optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  real :: rho
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_spec_vol_scalar called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_spec_vol_linear(T, S, pressure, specvol, &
+               EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
+    case (EOS_UNESCO)
+      call calculate_spec_vol_unesco(T, S, pressure, specvol, spv_ref)
+    case (EOS_WRIGHT)
+      call calculate_spec_vol_wright(T, S, pressure, specvol, spv_ref)
+    case (EOS_TEOS10)
+      call calculate_spec_vol_teos10(T, S, pressure, specvol, spv_ref)
+    case (EOS_NEMO)
+      call calculate_density_nemo(T, S, pressure, rho)
+      if (present(spv_ref)) then
+        specvol = 1.0 / rho - spv_ref
+      else
+        specvol = 1.0 / rho
+      endif
+    case default
+      call MOM_error(FATAL, &
+           "calculate_spec_vol_scalar: EOS is not valid.")
+  end select
+
+end subroutine calculate_spec_vol_scalar
+
+
+!> Calls the appropriate subroutine to calculate the specific volume of sea water
+!! for 1-D array inputs.
+subroutine calculate_spec_vol_array(T, S, pressure, specvol, start, npts, EOS, spv_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
+                                              !! in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: specvol  !< in situ specific volume in kg m-3.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  type(EOS_type),     pointer     :: EOS      !< Equation of state structure
+  real,     optional, intent(in)  :: spv_ref  !< A reference specific volume in m3 kg-1.
+
+  real, dimension(size(specvol)) :: rho
+
+
+  if (.not.associated(EOS)) call MOM_error(FATAL, &
+    "calculate_spec_vol_array called with an unassociated EOS_type EOS.")
+
+  select case (EOS%form_of_EOS)
+    case (EOS_LINEAR)
+      call calculate_spec_vol_linear(T, S, pressure, specvol, start, npts, &
+               EOS%rho_T0_S0, EOS%drho_dT, EOS%drho_dS, spv_ref)
+    case (EOS_UNESCO)
+      call calculate_spec_vol_unesco(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_WRIGHT)
+      call calculate_spec_vol_wright(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_TEOS10)
+      call calculate_spec_vol_teos10(T, S, pressure, specvol, start, npts, spv_ref)
+    case (EOS_NEMO)
+      call calculate_density_nemo  (T, S, pressure, rho, start, npts)
+      if (present(spv_ref)) then
+        specvol(:) = 1.0 / rho(:) - spv_ref
+      else
+        specvol(:) = 1.0 / rho(:)
+      endif
+    case default
+      call MOM_error(FATAL, &
+           "calculate_spec_vol_array: EOS%form_of_EOS is not valid.")
+  end select
+
+end subroutine calculate_spec_vol_array
+
 
 !> Calls the appropriate subroutine to calculate the freezing point for scalar inputs.
 subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS)
@@ -2198,7 +2290,7 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
-  real :: T5(5), S5(5), p5(5), r5(5), a5(5)
+  real :: T5(5), S5(5), p5(5), a5(5)
   real :: alpha_anom
   real :: w_left, w_right, intp(5)
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
@@ -2217,12 +2309,10 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
       T5(n) = T(i,j) ; S5(n) = S(i,j)
       p5(n) = p_b(i,j) - 0.25*real(n-1)*dp
     enddo
-    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-    do n=1,5 ; a5(n) = 1.0 / r5(n) ; enddo
+    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
-    alpha_anom = C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + 12.0*a5(3)) - &
-                 alpha_ref
+    alpha_anom = C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + 12.0*a5(3))
     dza(i,j) = dp*alpha_anom
     ! Use a Bode's-rule-like fifth-order accurate estimate of the double integral of
     ! the interface height anomaly.
@@ -2241,12 +2331,11 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
       do n=2,5
         T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - 0.25*dp
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-      do n=1,5 ; a5(n) = 1.0 / r5(n) ; enddo
+      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
       intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
-                                12.0*a5(3)) - alpha_ref)
+                                12.0*a5(3)))
     enddo
     ! Use Bode's rule to integrate the interface height anomaly values in x.
     intx_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
@@ -2264,12 +2353,11 @@ subroutine int_spec_vol_dp_generic(T, S, p_t, p_b, alpha_ref, HI, EOS, &
       do n=2,5
         T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) - 0.25*dp
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-      do n=1,5 ; a5(n) = 1.0 / r5(n) ; enddo
+      call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
       intp(m) = dp*( C1_90*(7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4)) + &
-                                12.0*a5(3)) - alpha_ref)
+                                12.0*a5(3)))
     enddo
     ! Use Bode's rule to integrate the interface height anomaly values in y.
     inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
@@ -2333,8 +2421,8 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 
-  real, dimension(5) :: T5, S5, p5, r5, a5
-  real, dimension(15) :: T15, S15, p15, r15, a15
+  real, dimension(5) :: T5, S5, p5, a5
+  real, dimension(15) :: T15, S15, p15, a15
   real :: wt_t(5), wt_b(5)
   real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
 
@@ -2369,8 +2457,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       S5(n) = wt_t(n) * S_t(i,j) + wt_b(n) * S_b(i,j)
       T5(n) = wt_t(n) * T_t(i,j) + wt_b(n) * T_b(i,j)
     enddo
-    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-    do n=1,5 ; a5(n) = 1.0 / r5(n) - alpha_ref ; enddo
+    call calculate_spec_vol(T5, S5, p5, a5, 1, 5, EOS, alpha_ref)
 
     ! Use Bode's rule to estimate the interface height anomaly change.
     alpha_anom = C1_90*((7.0*(a5(1)+a5(5)) + 32.0*(a5(2)+a5(4))) + 12.0*a5(3))
@@ -2429,8 +2516,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       enddo
     enddo
 
-    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
-    do n=1,15 ; a15(n) = 1.0 / r15(n) - alpha_ref ; enddo
+    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref)
 
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
     do m=2,4
@@ -2491,8 +2577,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       enddo
     enddo
 
-    call calculate_density(T15, S15, p15, r15, 1, 15, EOS)
-    do n=1,15 ; a15(n) = 1.0 / r15(n) - alpha_ref ; enddo
+    call calculate_spec_vol(T15, S15, p15, a15, 1, 15, EOS, alpha_ref)
 
     intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
     do m=2,4
