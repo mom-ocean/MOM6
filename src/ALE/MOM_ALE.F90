@@ -45,7 +45,6 @@ use MOM_tracer_registry,  only : tracer_registry_type, tracer_type, MOM_tracer_c
 use MOM_variables,        only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,     only : get_thickness_units, verticalGrid_type
 
-use regrid_defs,          only : PRESSURE_RECONSTRUCTION_PLM
 !use regrid_consts,       only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts,        only : coordinateUnits, coordinateMode, state_dependent
 use regrid_edge_values,   only : edge_values_implicit_h4
@@ -60,22 +59,7 @@ implicit none ; private
 
 
 !> ALE control structure
-type, public :: ALE_CS
-  private
-
-  logical :: boundary_extrapolation_for_pressure !< Indicate whether high-order boundary
-                                                 !! extrapolation should be used within boundary cells
-
-  logical :: reconstructForPressure = .false.    !< Indicates whether integrals for FV
-                                                 !! pressure gradient calculation will
-                                                 !! use reconstruction of T/S.
-                                                 !! By default, it is true if regridding
-                                                 !! has been initialized, otherwise false.
-
-  integer :: pressureReconstructionScheme        !< Form of the reconstruction of T/S
-                                                 !! for FV pressure gradient calculation.
-                                                 !! By default, it is =1 (PLM)
-
+type, public :: ALE_CS ; private
   logical :: remap_uv_using_old_alg              !< If true, uses the old "remapping via a delta z"
                                                  !! method. If False, uses the new method that
                                                  !! remaps between grids described by h.
@@ -87,8 +71,6 @@ type, public :: ALE_CS
   type(remapping_CS)  :: remapCS  !< Remapping parameters and work arrays
 
   integer :: nk              !< Used only for queries, not directly by this module
-  integer :: degree_linear=1 !< Degree of linear piecewise polynomial
-  integer :: degree_parab=2  !< Degree of parabolic piecewise polynomial
 
   logical :: remap_after_initialization !<   Indicates whether to regrid/remap after initializing the state.
 
@@ -126,8 +108,6 @@ public ALE_regrid_accelerated
 public ALE_remap_scalar
 public pressure_gradient_plm
 public pressure_gradient_ppm
-public usePressureReconstruction
-public pressureReconstructionScheme
 public adjustGridForIntegrity
 public ALE_initRegridding
 public ALE_getCoordinate
@@ -171,33 +151,6 @@ subroutine ALE_init( param_file, GV, max_depth, CS)
 
   CS%show_call_tree = callTree_showQuery()
   if (CS%show_call_tree) call callTree_enter("ALE_init(), MOM_ALE.F90")
-
-  ! --- BOUNDARY EXTRAPOLATION --
-  ! This sets whether high-order (rather than PCM) reconstruction schemes
-  ! should be used within boundary cells
-  call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION_PRESSURE", &
-                 CS%boundary_extrapolation_for_pressure, &
-                 "When defined, the reconstruction is extrapolated\n"//&
-                 "within boundary cells rather than assume PCM for the.\n"//&
-                 "calculation of pressure. e.g. if PPM is used, a\n"//&
-                 "PPM reconstruction will also be used within\n"//&
-                 "boundary cells.", default=.true.)
-
-  ! --- PRESSURE GRADIENT CALCULATION ---
-  call get_param(param_file, mdl, "RECONSTRUCT_FOR_PRESSURE", &
-                 CS%reconstructForPressure , &
-                 "If True, use vertical reconstruction of T/S within\n"//&
-                 "the integrals of teh FV pressure gradient calculation.\n"//&
-                 "If False, use the constant-by-layer algorithm.\n"//&
-                 "By default, this is True when using ALE and False otherwise.", &
-                 default=.true. )
-
-  call get_param(param_file, mdl, "PRESSURE_RECONSTRUCTION_SCHEME", &
-                 CS%pressureReconstructionScheme, &
-                 "Type of vertical reconstruction of T/S to use in integrals\n"//&
-                 "within the FV pressure gradient calculation."//&
-                 " 1: PLM reconstruction.\n"//&
-                 " 2: PPM reconstruction.", default=PRESSURE_RECONSTRUCTION_PLM)
 
   call get_param(param_file, mdl, "REMAP_UV_USING_OLD_ALG", &
                  CS%remap_uv_using_old_alg, &
@@ -995,23 +948,30 @@ end subroutine ALE_remap_scalar
 !! routine determines the edge values for the salinity and temperature
 !! within each layer. These edge values are returned and are used to compute
 !! the pressure gradient (by computing the densities).
-subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
-  type(ocean_grid_type),                     intent(in)    :: G    !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean vertical grid structure
-  type(ALE_CS),                              intent(inout) :: CS   !< module control structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_t  !< Salinity at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< layer thickness
+subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),            intent(inout) :: CS   !< module control structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: S_t  !< Salinity at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h    !< layer thickness in H
+  logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
+                                                 !! extrapolation within boundary cells 
 
   ! Local variables
   integer :: i, j, k
   real    :: hTmp(GV%ke)
   real    :: tmp(GV%ke)
-  real, dimension(CS%nk,2)                  :: ppoly_linear_E            !Edge value of polynomial
-  real, dimension(CS%nk,CS%degree_linear+1) :: ppoly_linear_coefs !Coefficients of polynomial
+  real, dimension(CS%nk,2) :: ppoly_linear_E            !Edge value of polynomial
+  real, dimension(CS%nk,2) :: ppoly_linear_coefs !Coefficients of polynomial
   real :: h_neglect
 
   !### Replace this with GV%H_subroundoff
@@ -1038,7 +998,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ppoly_linear_E(:,:) = 0.0
       ppoly_linear_coefs(:,:) = 0.0
       call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
-      if (CS%boundary_extrapolation_for_pressure) call &
+      if (bdry_extrap) call &
         PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
 
       do k = 1,GV%ke
@@ -1051,7 +1011,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       ppoly_linear_coefs(:,:) = 0.0
       tmp(:) = tv%T(i,j,:)
       call PLM_reconstruction( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
-      if (CS%boundary_extrapolation_for_pressure) call &
+      if (bdry_extrap) call &
         PLM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_linear_E, ppoly_linear_coefs, h_neglect )
 
       do k = 1,GV%ke
@@ -1070,16 +1030,23 @@ end subroutine pressure_gradient_plm
 !> routine determines the edge values for the salinity and temperature
 !> within each layer. These edge values are returned and are used to compute
 !> the pressure gradient (by computing the densities).
-subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
-  type(ocean_grid_type),                     intent(in)    :: G    !< ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean vertical grid structure
-  type(ALE_CS),                              intent(inout) :: CS   !< module control structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_t  !< Salinity at top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: S_b  !< Salinity at bottom edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_t  !< Temperature at the top edge of each layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< ocean thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< layer thickness
+subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_extrap )
+  type(ocean_grid_type),   intent(in)    :: G    !< ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV   !< Ocean vertical grid structure
+  type(ALE_CS),            intent(inout) :: CS   !< module control structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: S_t  !< Salinity at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: S_b  !< Salinity at the bottom edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: T_t  !< Temperature at the top edge of each layer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: T_b  !< Temperature at the bottom edge of each layer
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h    !< layer thicknesses in H
+  logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
+                                                 !! extrapolation within boundary cells 
 
   ! Local variables
   integer :: i, j, k
@@ -1087,7 +1054,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
   real    :: tmp(GV%ke)
   real, dimension(CS%nk,2) :: &
       ppoly_parab_E            !Edge value of polynomial
-  real, dimension(CS%nk,CS%degree_parab+1) :: &
+  real, dimension(CS%nk,3) :: &
       ppoly_parab_coefs !Coefficients of polynomial
   real :: h_neglect
 
@@ -1119,7 +1086,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       !### Try to replace the following value of h_neglect with GV%H_subroundoff.
       call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
       call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
-      if (CS%boundary_extrapolation_for_pressure) call &
+      if (bdry_extrap) call &
         PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
                                     ppoly_parab_coefs, h_neglect )
 
@@ -1135,7 +1102,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
       !### Try to replace the following value of h_neglect with GV%H_subroundoff.
       call edge_values_implicit_h4( GV%ke, hTmp, tmp, ppoly_parab_E, h_neglect=1.0e-10) !###*GV%m_to_H )
       call PPM_reconstruction( GV%ke, hTmp, tmp, ppoly_parab_E, ppoly_parab_coefs, h_neglect )
-      if (CS%boundary_extrapolation_for_pressure) call &
+      if (bdry_extrap) call &
         PPM_boundary_extrapolation( GV%ke, hTmp, tmp, ppoly_parab_E, &
                                     ppoly_parab_coefs, h_neglect )
 
@@ -1149,31 +1116,6 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h )
 
 end subroutine pressure_gradient_ppm
 
-
-!> pressure reconstruction logical
-logical function usePressureReconstruction(CS)
-  type(ALE_CS), pointer :: CS  !< control structure
-
-  if (associated(CS)) then
-    usePressureReconstruction=CS%reconstructForPressure
-  else
-    usePressureReconstruction=.false.
-  endif
-
-end function usePressureReconstruction
-
-
-!> pressure reconstruction integer
-integer function pressureReconstructionScheme(CS)
-  type(ALE_CS), pointer :: CS !< control structure
-
-  if (associated(CS)) then
-    pressureReconstructionScheme=CS%pressureReconstructionScheme
-  else
-    pressureReconstructionScheme=-1
-  endif
-
-end function pressureReconstructionScheme
 
 !> Initializes regridding for the main ALE algorithm
 subroutine ALE_initRegridding(GV, max_depth, param_file, mdl, regridCS)
