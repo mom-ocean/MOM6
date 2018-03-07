@@ -451,7 +451,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
     return  ! Do not write this step
   else ! Determine the next write time before proceeding
     if (CS%energysave_geometric) then
-      CS%energysavedays_geometric = CS%energysavedays_geometric*2
       if (CS%write_energy_time + CS%energysavedays_geometric >= &
           CS%geometric_end_time) then
         CS%write_energy_time = CS%geometric_end_time
@@ -459,6 +458,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, CS, tracer_CSp, OBC, dt_forc
       else
         CS%write_energy_time = CS%write_energy_time + CS%energysavedays_geometric
       endif
+      CS%energysavedays_geometric = CS%energysavedays_geometric*2
     else
       CS%write_energy_time = CS%write_energy_time + CS%energysavedays
     endif
