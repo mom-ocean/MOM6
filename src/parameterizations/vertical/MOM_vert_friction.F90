@@ -195,7 +195,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                            ! units of m2 s-1.
 
   logical :: do_i(SZIB_(G))
-
+  real :: ssp = 1.0, xvisc=10.     ! width of sponge; extra viscosity to damp sponge velocity
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = G%ke
@@ -249,10 +249,21 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       surface_stress(I) = dt_Rho0 * (G%mask2dCu(I,j)*forces%taux(I,j))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = visc%Ray_u(I,j,k)
-    enddo ; enddo ; endif
-
+!    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+!      Ray(I,k) = visc%Ray_u(I,j,k)
+!    enddo ; enddo ; endif
+    
+    if (CS%Channel_drag .AND. &
+        G%geoLatCu(is,j)<G%south_lat+G%len_lat-ssp) then ! outside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_u(I,j,k)
+      enddo ; enddo
+    elseif (CS%Channel_drag) then       ! inside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_u(I,j,k)+xvisc      ! set some spuriously large value
+      enddo ; enddo
+    endif
+    
     ! perform forward elimination on the tridiagonal system
     !
     ! denote the diagonal of the system as b_k, the subdiagonal as a_k
@@ -348,9 +359,20 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       surface_stress(i) = dt_Rho0 * (G%mask2dCv(i,J)*forces%tauy(i,J))
     enddo ; endif ! direct_stress
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = visc%Ray_v(i,J,k)
-    enddo ; enddo ; endif
+!    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+!      Ray(i,k) = visc%Ray_v(i,J,k)
+!    enddo ; enddo ; endif
+
+      if (CS%Channel_drag .AND. &
+        G%geoLatCv(is,j)<G%south_lat+G%len_lat-ssp) then ! outside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_v(I,j,k)
+      enddo ; enddo
+    elseif (CS%Channel_drag) then       ! inside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_v(I,j,k)+xvisc      ! set some spuriously large value
+      enddo ; enddo
+    endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))
@@ -450,6 +472,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   real :: dt_m_to_H        ! The time step times the conversion from m to the
                            ! units of thickness - either s or s m3 kg-1.
   logical :: do_i(SZIB_(G))
+  real :: ssp = 1.0, xvisc=10.0 ! sponge width; extra viscosity to remove sponge velocity
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -469,9 +492,20 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = visc%Ray_u(I,j,k)
-    enddo ; enddo ; endif
+!    if (CS%Channel_drag) then ; do k=1,nz ; do I=Isq,Ieq
+!      Ray(I,k) = visc%Ray_u(I,j,k)
+!    enddo ; enddo ; endif
+
+    if (CS%Channel_drag .AND. &
+        G%geoLatCu(is,j)<G%south_lat+G%len_lat-ssp) then ! outside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_u(I,j,k)
+      enddo ; enddo
+    elseif (CS%Channel_drag) then       ! inside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_u(I,j,k)+xvisc      ! set some spuriously large value
+      enddo ; enddo
+    endif
 
     do I=Isq,Ieq ; if (do_i(I)) then
       b_denom_1 = CS%h_u(I,j,1) + dt_m_to_H * (Ray(I,1) + CS%a_u(I,j,1))
@@ -500,9 +534,20 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, CS)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0) ; enddo
 
-    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = visc%Ray_v(i,J,k)
-    enddo ; enddo ; endif
+!    if (CS%Channel_drag) then ; do k=1,nz ; do i=is,ie
+!      Ray(i,k) = visc%Ray_v(i,J,k)
+!    enddo ; enddo ; endif
+
+    if (CS%Channel_drag .AND. &
+        G%geoLatCv(is,j)<G%south_lat+G%len_lat-ssp) then ! outside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_v(I,j,k)
+      enddo ; enddo
+    elseif (CS%Channel_drag) then       ! inside of the sponge
+      do k=1,nz ; do I=Isq,Ieq
+        Ray(I,k) = visc%Ray_v(I,j,k)+xvisc      ! set some spuriously large value
+      enddo ; enddo
+    endif
 
     do i=is,ie ; if (do_i(i)) then
       b_denom_1 = CS%h_v(i,J,1) + dt_m_to_H * (Ray(i,1) + CS%a_v(i,J,1))

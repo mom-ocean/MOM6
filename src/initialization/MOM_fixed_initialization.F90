@@ -41,6 +41,7 @@ use channel2_initialization, only : channel2_initialize_topography
 use channel3_initialization, only : channel3_initialize_topography
 use channel4_initialization, only : channel4_initialize_topography
 use channel5_initialization, only : channel5_initialize_topography
+use channel6_initialization, only : channel6_initialize_topography
 use box_initialization, only : box_initialize_topography
 use bowlhk_initialization, only : bowlhk_initialize_topography
 use DOME2d_initialization, only : DOME2d_initialize_topography
@@ -216,6 +217,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
                  " \t channel3 - use the channel3 test case topography. \n"//&
                  " \t channel4 - use the channel4 test case topography. \n"//&
                  " \t channel5 - use the channel5 test case topography. \n"//&
+                 " \t channel6 - use the channel6 test case topography. \n"//&
                  " \t box - use the box test case topography. \n"//&
                  " \t bowlhk - use the bowlhk test case topography. \n"//&
                  " \t DOME - use a slope and channel configuration for the \n"//&
@@ -254,6 +256,7 @@ subroutine MOM_initialize_topography(D, max_depth, G, PF)
     case ("channel3"); call channel3_initialize_topography(D, G, PF, max_depth)
     case ("channel4"); call channel4_initialize_topography(D, G, PF, max_depth)
     case ("channel5"); call channel5_initialize_topography(D, G, PF, max_depth)
+    case ("channel6"); call channel6_initialize_topography(D, G, PF, max_depth)
     case ("box"); call box_initialize_topography(D, G, PF, max_depth)
     case ("bowlhk"); call bowlhk_initialize_topography(D, G, PF, max_depth)    
     case ("DOME2D");    call DOME2d_initialize_topography(D, G, PF, max_depth)
