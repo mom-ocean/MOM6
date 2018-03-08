@@ -1246,7 +1246,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
   real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
   real :: GxRho, I_Rho
   real :: dz(HIO%iscB:HIO%iecB+1), dz_x(5,HIO%iscB:HIO%iecB), dz_y(5,HIO%isc:HIO%iec)
-  real :: weight_t, weight_b, hWght, massWeightingToggle
+  real :: weight_t, weight_b, hWght, massWeightToggle
   real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n
   integer :: iin, jin, ioff, joff
@@ -1259,9 +1259,9 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
-  massWeightingToggle = 0.
+  massWeightToggle = 0.
   if (present(useMassWghtInterp)) then
-    if (useMassWghtInterp) massWeightingToggle = 1.
+    if (useMassWghtInterp) massWeightToggle = 1.
   endif
 
   do n = 1, 5
@@ -1313,7 +1313,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       ! weighting.
       ! Note: To work in terrain following coordinates we could offset
       ! this distance by the layer thickness to replicate other models.
-      hWght = massWeightingToggle * &
+      hWght = massWeightToggle * &
               max(0., -bathyT(iin,jin)-z_t(iin+1,jin), -bathyT(iin+1,jin)-z_t(iin,jin))
       if (hWght > 0.) then
         hL = (z_t(iin,jin) - z_b(iin,jin)) + dz_subroundoff
@@ -1394,7 +1394,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     ! weighting.
     ! Note: To work in terrain following coordinates we could offset
     ! this distance by the layer thickness to replicate other models.
-      hWght = massWeightingToggle * &
+      hWght = massWeightToggle * &
               max(0., -bathyT(i,j)-z_t(iin,jin+1), -bathyT(i,j+1)-z_t(iin,jin))
       if (hWght > 0.) then
         hL = (z_t(iin,jin) - z_b(iin,jin)) + dz_subroundoff
@@ -2187,20 +2187,27 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real :: wt_t(5), wt_b(5)
   real :: T_top, T_bot, S_top, S_bot, P_top, P_bot
 
-  real :: alpha_anom
-  real :: dp ! The pressure change through a layer, in Pa.
-  real :: dp_90(2:4)
-  real :: weight_t, weight_b, hWght, massWeightingToggle
-  real :: Ttl, Tbl, Ttr, Tbr, Stl, Sbl, Str, Sbr, hL, hR, iDenom
-  real :: w_left, w_right, intp(5)
-  real, parameter :: C1_90 = 1.0/90.0  ! Rational constants.
+  real :: alpha_anom ! The depth averaged specific density anomaly in m3 kg-1.
+  real :: dp         ! The pressure change through a layer, in Pa.
+  real :: dp_90(2:4) ! The pressure change through a layer divided by 90, in Pa.
+  real :: massWeightToggle ! A 0 or 1 toggle that determines whether to do mass weighting.
+  real :: hWght      ! A pressure-thickness below topography, in Pa.
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: iDenom     ! The inverse of the denominator in the wieghts, in Pa-2.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
+  real :: wt_L, wt_R ! The linear wieghts of the left and right columns, nonDim.
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: intp(5)    ! The integrals of specific volume with pressure at the
+                     ! 5 sub-column locations, in m2 s-2.
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant.
   integer :: Isq, Ieq, Jsq, Jeq, i, j, m, n, pos
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
-  massWeightingToggle = 0.
+  massWeightToggle = 0.
   if (present(useMassWghtInterp)) then
-    if (useMassWghtInterp) massWeightingToggle = 1.
+    if (useMassWghtInterp) massWeightToggle = 1.
   endif
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
@@ -2238,34 +2245,32 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
     ! of T,S along the top and bottom integrals, almost like thickness
     ! weighting. Note: To work in terrain following coordinates we could
     ! offset this distance by the layer thickness to replicate other models.
-    hWght = massWeightingToggle * &
+    hWght = massWeightToggle * &
             max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_subroundoff
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1./( hWght*(hR + hL) + hL*hR )
-      Ttl = ( (hWght*hR)*T_t(i+1,j) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i+1,j) ) * iDenom
-      Tbl = ( (hWght*hR)*T_b(i+1,j) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i+1,j) ) * iDenom
-      Stl = ( (hWght*hR)*S_t(i+1,j) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i+1,j) ) * iDenom
-      Sbl = ( (hWght*hR)*S_b(i+1,j) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i+1,j) ) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
     else
-      Ttl = T_t(i,j); Tbl = T_b(i,j); Ttr = T_t(i+1,j); Tbr = T_b(i+1,j)
-      Stl = S_t(i,j); Sbl = S_b(i,j); Str = S_t(i+1,j); Sbr = S_b(i+1,j)
+      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
     endif
 
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
+      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL
+      wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      ! T, S, and p are linearly interpolated in the horizontal.
-      P_top = w_left*p_t(i,j) + w_right*p_t(i+1,j)
-      P_bot = w_left*p_b(i,j) + w_right*p_b(i+1,j)
-      T_top = w_left*Ttl + w_right*Ttr ; T_bot = w_left*Tbl + w_right*Tbr
-      S_top = w_left*Stl + w_right*Str ; S_bot = w_left*Sbl + w_right*Sbr
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
+      ! is linear, but for T and S it may be thickness wekghted.
+      P_top = wt_L*p_t(i,j) + wt_R*p_t(i+1,j)
+      P_bot = wt_L*p_b(i,j) + wt_R*p_b(i+1,j)
+      T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i+1,j)
+      T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i+1,j)
+      S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i+1,j)
+      S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i+1,j)
       dp_90(m) = C1_90*(P_bot - P_top)
 
       ! Salinity, temperature and pressure with linear interpolation in the vertical.
@@ -2299,34 +2304,32 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
     ! hWght is the distance measure by which the cell is violation of
     ! hydrostatic consistency. For large hWght we bias the interpolation
     ! of T,S along the top and bottom integrals, like thickness weighting.
-    hWght = massWeightingToggle * &
+    hWght = massWeightToggle * &
             max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_subroundoff
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1./( hWght*(hR + hL) + hL*hR )
-      Ttl = ( (hWght*hR)*T_t(i,j+1) + (hWght*hL + hR*hL)*T_t(i,j) ) * iDenom
-      Ttr = ( (hWght*hL)*T_t(i,j) + (hWght*hR + hR*hL)*T_t(i,j+1) ) * iDenom
-      Tbl = ( (hWght*hR)*T_b(i,j+1) + (hWght*hL + hR*hL)*T_b(i,j) ) * iDenom
-      Tbr = ( (hWght*hL)*T_b(i,j) + (hWght*hR + hR*hL)*T_b(i,j+1) ) * iDenom
-      Stl = ( (hWght*hR)*S_t(i,j+1) + (hWght*hL + hR*hL)*S_t(i,j) ) * iDenom
-      Str = ( (hWght*hL)*S_t(i,j) + (hWght*hR + hR*hL)*S_t(i,j+1) ) * iDenom
-      Sbl = ( (hWght*hR)*S_b(i,j+1) + (hWght*hL + hR*hL)*S_b(i,j) ) * iDenom
-      Sbr = ( (hWght*hL)*S_b(i,j) + (hWght*hR + hR*hL)*S_b(i,j+1) ) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
     else
-      Ttl = T_t(i,j) ; Tbl = T_b(i,j) ; Ttr = T_t(i,j+1) ; Tbr = T_b(i,j+1)
-      Stl = S_t(i,j) ; Sbl = S_b(i,j) ; Str = S_t(i,j+1) ; Sbr = S_b(i,j+1)
+      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
     endif
 
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
+      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
+      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL
+      wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      ! T, S, and p are linearly interpolated in the horizontal.
-      P_top = w_left*p_t(i,j) + w_right*p_t(i,j+1)
-      P_bot = w_left*p_b(i,j) + w_right*p_b(i,j+1)
-      T_top = w_left*Ttl + w_right*Ttr ; T_bot = w_left*Tbl + w_right*Tbr
-      S_top = w_left*Stl + w_right*Str ; S_bot = w_left*Sbl + w_right*Sbr
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
+      ! is linear, but for T and S it may be thickness wekghted.
+      P_top = wt_L*p_t(i,j) + wt_R*p_t(i,j+1)
+      P_bot = wt_L*p_b(i,j) + wt_R*p_b(i,j+1)
+      T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i,j+1)
+      T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i,j+1)
+      S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i,j+1)
+      S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i,j+1)
       dp_90(m) = C1_90*(P_bot - P_top)
 
       ! Salinity, temperature and pressure with linear interpolation in the vertical.
