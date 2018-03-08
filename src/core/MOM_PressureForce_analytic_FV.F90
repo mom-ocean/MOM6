@@ -272,7 +272,8 @@ subroutine PressureForce_AFV_nonBouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm
         call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
                                p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
-                               inty_dza(:,:,k))
+                               inty_dza(:,:,k), bathyP=p(:,:,nz+1), dP_tiny=dp_neglect, &
+                               useMassWghtInterp = CS%useMassWghtInterp)
       endif
     else
       alpha_anom = 1.0/GV%Rlay(k) - alpha_ref

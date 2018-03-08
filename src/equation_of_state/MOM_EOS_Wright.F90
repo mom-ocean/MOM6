@@ -582,7 +582,8 @@ end subroutine int_density_dz_wright
 !! Bode's rule to do the horizontal integrals, and from a truncation in the
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
-                                  intp_dza, intx_dza, inty_dza, halo_size)
+                                  intp_dza, intx_dza, inty_dza, halo_size, &
+                                  bathyP, dP_neglect, useMassWghtInterp)
   type(hor_index_type), intent(in)  :: HI
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -616,6 +617,12 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                                  !! in m2 s-2.
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate
                                                  !! dza.
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: bathyP !< The pressure at the bathymetry in Pa
+  real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
+                                             !! the same units as p_t (Pa?)
+  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
+                            !! to interpolate T/S for top and bottom integrals.
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -623,35 +630,23 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 ! model.  There are essentially no free assumptions, apart from the use of
 ! Bode's rule to do the horizontal integrals, and from a truncation in the
 ! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-!
-! Arguments: T - potential temperature relative to the surface in C.
-!  (in)      S - salinity in PSU.
-!  (in)      p_t - pressure at the top of the layer in Pa.
-!  (in)      p_b - pressure at the top of the layer in Pa.
-!  (in)      spv_ref - A mean specific volume that is subtracted out to reduce
-!                      the magnitude of each of the integrals, m3 kg-1.
-!                      The calculation is mathematically identical with
-!                      different values of spv_ref, but this reduces the
-!                      effects of roundoff.
-!  (in)      HI - The ocean's horizontal index structure.
-!  (out)     dza - The change in the geopotential anomaly across the layer,
-!                  in m2 s-2.
-!  (out,opt) intp_dza - The integral in pressure through the layer of the
-!                       geopotential anomaly relative to the anomaly at the
-!                       bottom of the layer, in Pa m2 s-2.
-!  (out,opt) intx_dza - The integral in x of the difference between the
-!                       geopotential anomaly at the top and bottom of the layer
-!                       divided by the x grid spacing, in m2 s-2.
-!  (out,opt) inty_dza - The integral in y of the difference between the
-!                       geopotential anomaly at the top and bottom of the layer
-!                       divided by the y grid spacing, in m2 s-2.
-!  (in,opt)  halo_size - The width of halo points on which to calculate dza.
 
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d, p0_2d, lambda_2d
   real :: al0, p0, lambda
-  real :: alpha_anom, dp, p_ave
+  real :: p_ave
   real :: rem, eps, eps2
-  real :: w_left, w_right, intp(5)
+  real :: alpha_anom ! The depth averaged specific density anomaly in m3 kg-1.
+  real :: dp         ! The pressure change through a layer, in Pa.
+  real :: hWght      ! A pressure-thickness below topography, in Pa.
+  real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right, in Pa.
+  real :: iDenom     ! The inverse of the denominator in the wieghts, in Pa-2.
+  real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column, nonDim.
+  real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column, nonDim.
+  real :: wt_L, wt_R ! The linear wieghts of the left and right columns, nonDim.
+  real :: wtT_L, wtT_R ! The weights for tracers from the left and right columns, nonDim.
+  real :: intp(5)    ! The integrals of specific volume with pressure at the
+                     ! 5 sub-column locations, in m2 s-2.
+  logical :: do_massWeight ! Indicates whether to do mass weighting.
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants.
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants.
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
@@ -661,6 +656,15 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   ish = HI%isc-halo ; ieh = HI%iec+halo ; jsh = HI%jsc-halo ; jeh = HI%jec+halo
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh); endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh); endif
+
+  do_massWeight = .false.
+  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
+    do_massWeight = .true.
+!    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
+!        "bathyP must be present if useMassWghtInterp is present and true.")
+!    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
+!        "dP_neglect must be present if useMassWghtInterp is present and true.")
+  endif ; endif
 
   do j=jsh,jeh ; do i=ish,ieh
     al0_2d(i,j) = (a0 + a1*T(i,j)) + a2*S(i,j)
@@ -680,15 +684,36 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   enddo ; enddo
 
   if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation of
+    ! T & S along the top and bottom integrals, akin to thickness weighting.
+    hWght = 0.0
+    if (do_massWeight) &
+      hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
+    if (hWght > 0.) then
+      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
+      hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+    else
+      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
+    endif
+
     intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-      al0 = w_left*al0_2d(i,j) + w_right*al0_2d(i+1,j)
-      p0 = w_left*p0_2d(i,j) + w_right*p0_2d(i+1,j)
-      lambda = w_left*lambda_2d(i,j) + w_right*lambda_2d(i+1,j)
+      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
+      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      dp = w_left*(p_b(i,j) - p_t(i,j)) + w_right*(p_b(i+1,j) - p_t(i+1,j))
-      p_ave = 0.5*(w_left*(p_t(i,j)+p_b(i,j)) + w_right*(p_t(i+1,j)+p_b(i+1,j)))
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
+      ! is linear, but for T and S it may be thickness wekghted.
+      al0 = wtT_L*al0_2d(i,j) + wtT_R*al0_2d(i+1,j)
+      p0 = wtT_L*p0_2d(i,j) + wtT_R*p0_2d(i+1,j)
+      lambda = wtT_L*lambda_2d(i,j) + wtT_R*lambda_2d(i+1,j)
+
+      dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
+      p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i+1,j)+p_b(i+1,j)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
       intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
@@ -700,15 +725,36 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   enddo ; enddo ; endif
 
   if (present(inty_dza)) then ; do J=Jsq,Jeq ; do i=HI%isc,HI%iec
+    ! hWght is the distance measure by which the cell is violation of
+    ! hydrostatic consistency. For large hWght we bias the interpolation of
+    ! T & S along the top and bottom integrals, akin to thickness weighting.
+    hWght = 0.0
+    if (do_massWeight) &
+      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
+    if (hWght > 0.) then
+      hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
+      hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
+      hWght = hWght * ( (hL-hR)/(hL+hR) )**2
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+    else
+      hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
+    endif
+
     intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
     do m=2,4
-      w_left = 0.25*real(5-m) ; w_right = 1.0-w_left
-      al0 = w_left*al0_2d(i,j) + w_right*al0_2d(i,j+1)
-      p0 = w_left*p0_2d(i,j) + w_right*p0_2d(i,j+1)
-      lambda = w_left*lambda_2d(i,j) + w_right*lambda_2d(i,j+1)
+      wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
+      wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      dp = w_left*(p_b(i,j) - p_t(i,j)) + w_right*(p_b(i,j+1) - p_t(i,j+1))
-      p_ave = 0.5*(w_left*(p_t(i,j)+p_b(i,j)) + w_right*(p_t(i,j+1)+p_b(i,j+1)))
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
+      ! is linear, but for T and S it may be thickness wekghted.
+      al0 = wt_L*al0_2d(i,j) + wt_R*al0_2d(i,j+1)
+      p0 = wt_L*p0_2d(i,j) + wt_R*p0_2d(i,j+1)
+      lambda = wt_L*lambda_2d(i,j) + wt_R*lambda_2d(i,j+1)
+
+      dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
+      p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i,j+1)+p_b(i,j+1)))
 
       eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
       intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
