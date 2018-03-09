@@ -964,7 +964,7 @@ subroutine pressure_gradient_plm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< layer thickness in H
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
-                                                 !! extrapolation within boundary cells 
+                                                 !! extrapolation within boundary cells
 
   ! Local variables
   integer :: i, j, k
@@ -1040,7 +1040,7 @@ subroutine pressure_gradient_ppm( CS, S_t, S_b, T_t, T_b, G, GV, tv, h, bdry_ext
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h    !< layer thicknesses in H
   logical,                 intent(in)    :: bdry_extrap !< If true, use high-order boundary
-                                                 !! extrapolation within boundary cells 
+                                                 !! extrapolation within boundary cells
 
   ! Local variables
   integer :: i, j, k
