@@ -682,7 +682,8 @@ subroutine PressureForce_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_atm, p
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
                   e(:,:,K), e(:,:,K+1),             &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%HI, tv%eqn_of_state, &
-                  dpa, intz_dpa, intx_dpa, inty_dpa)
+                  dpa, intz_dpa, intx_dpa, inty_dpa, &
+                  G%bathyT, dz_neglect, CS%useMassWghtInterp)
       endif
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
