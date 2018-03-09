@@ -25,10 +25,10 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public Calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used
+public calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used
 
 !> Control structure including parameters for CVMix interior shear schemes.
-type, public :: CVMix_shear_CS
+type, public :: cvmix_shear_cs
   logical :: use_LMD94, use_PP81            !< Flags for various schemes
   real    :: Ri_zero                        !< LMD94 critical Richardson number
   real    :: Nu_zero                        !< LMD94 maximum interior diffusivity
@@ -36,14 +36,14 @@ type, public :: CVMix_shear_CS
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
-end type CVMix_shear_CS
+end type cvmix_shear_cs
 
 character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
 
 contains
 
 !> Subroutine for calculating (internal) diffusivity
-subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
+subroutine calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
                                  KM, G, GV, CS )
   type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
@@ -55,7 +55,7 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
                                                                 !! (not layer!) in m2 s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: KM !< The vertical viscosity at each interface
                                                                 !! (not layer!) in m2 s-1.
-  type(CVMix_shear_CS),                       pointer     :: CS !< The control structure returned by a previous call to
+  type(cvmix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
                                                                 !! CVMix_shear_init.
   ! Local variables
   integer :: i, j, k, kk, km1
@@ -120,7 +120,7 @@ subroutine Calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
     enddo
   enddo
 
-end subroutine Calculate_cvmix_shear
+end subroutine calculate_cvmix_shear
 
 
 !> Initialized the cvmix internal shear mixing routine.
@@ -133,7 +133,7 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure.
-  type(CVMix_shear_CS),    pointer       :: CS !< This module's control structure.
+  type(cvmix_shear_cs),    pointer       :: CS !< This module's control structure.
   ! Local variables
   integer :: NumberTrue=0
   logical :: use_JHL
