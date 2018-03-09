@@ -680,7 +680,8 @@ subroutine PressureForce_blk_AFV_Bouss(h, tv, PFu, PFv, G, GV, CS, ALE_CSp, p_at
           call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), &
                     e(:,:,K), e(:,:,K+1),             &
                     rho_ref, CS%Rho0, GV%g_Earth, G%HI, G%Block(n), tv%eqn_of_state, &
-                    dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk )
+                    dpa_bk, intz_dpa_bk, intx_dpa_bk, inty_dpa_bk, &
+                    G%bathyT, dz_neglect, CS%useMassWghtInterp)
         endif
         do jb=Jsq_bk,Jeq_bk+1 ; do ib=Isq_bk,Ieq_bk+1
           intz_dpa_bk(ib,jb) = intz_dpa_bk(ib,jb)*GV%m_to_H
