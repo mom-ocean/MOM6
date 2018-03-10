@@ -44,6 +44,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
+public IOB_allocate
 public convert_IOB_to_fluxes
 public surface_forcing_init
 public ice_ocn_bnd_type_chksum
@@ -187,6 +188,58 @@ end type ice_ocean_boundary_type
 integer :: id_clock_forcing
 
 contains
+
+subroutine IOB_allocate(IOB, isc, iec, jsc, jec)
+
+  type(ice_ocean_boundary_type), intent(inout)    :: IOB    !< An ice-ocean boundary type with fluxes to drive
+  integer, intent(in) :: isc, iec, jsc, jec                 !< The ocean's local grid size
+
+    allocate ( IOB% u_flux (isc:iec,jsc:jec),          &
+               IOB% v_flux (isc:iec,jsc:jec),          &
+               IOB% t_flux (isc:iec,jsc:jec),          &
+               IOB% q_flux (isc:iec,jsc:jec),          &
+               IOB% salt_flux (isc:iec,jsc:jec),       &
+               IOB% lw_flux (isc:iec,jsc:jec),         &
+               IOB% sw_flux_vis_dir (isc:iec,jsc:jec), &
+               IOB% sw_flux_vis_dif (isc:iec,jsc:jec), &
+               IOB% sw_flux_nir_dir (isc:iec,jsc:jec), &
+               IOB% sw_flux_nir_dif (isc:iec,jsc:jec), &
+               IOB% lprec (isc:iec,jsc:jec),           &
+               IOB% fprec (isc:iec,jsc:jec),           &
+               IOB% runoff (isc:iec,jsc:jec),          &
+               IOB% ustar_berg (isc:iec,jsc:jec),      &
+               IOB% area_berg (isc:iec,jsc:jec),       &
+               IOB% mass_berg (isc:iec,jsc:jec),       &
+               IOB% calving (isc:iec,jsc:jec),         &
+               IOB% runoff_hflx (isc:iec,jsc:jec),     &
+               IOB% calving_hflx (isc:iec,jsc:jec),    &
+               IOB% mi (isc:iec,jsc:jec),              &
+               IOB% p (isc:iec,jsc:jec))
+
+    IOB%u_flux          = 0.0
+    IOB%v_flux          = 0.0
+    IOB%t_flux          = 0.0
+    IOB%q_flux          = 0.0
+    IOB%salt_flux       = 0.0
+    IOB%lw_flux         = 0.0
+    IOB%sw_flux_vis_dir = 0.0
+    IOB%sw_flux_vis_dif = 0.0
+    IOB%sw_flux_nir_dir = 0.0
+    IOB%sw_flux_nir_dif = 0.0
+    IOB%lprec           = 0.0
+    IOB%fprec           = 0.0
+    IOB%runoff          = 0.0
+    IOB%ustar_berg      = 0.0
+    IOB%area_berg       = 0.0
+    IOB%mass_berg       = 0.0
+    IOB%calving         = 0.0
+    IOB%runoff_hflx     = 0.0
+    IOB%calving_hflx    = 0.0
+    IOB%mi              = 0.0
+    IOB%p               = 0.0
+
+end subroutine IOB_allocate
+
 
 subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS, &
                                  sfc_state, restore_salt, restore_temp)
