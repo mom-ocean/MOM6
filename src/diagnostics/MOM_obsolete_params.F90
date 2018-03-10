@@ -72,7 +72,7 @@ subroutine find_obsolete_params(param_file)
   call read_param(param_file, "OBC_NUMBER_OF_SEGMENTS", nseg)
   do l_seg = 1,nseg
     write(temp_string(1:22),"('OBC_SEGMENT_',i3.3,'_TNUDGE')") l_seg
-    call obsolete_char(param_file, temp_string, &
+    call obsolete_real(param_file, temp_string, &
          hint="Instead use OBC_SEGMENT_xxx_VELOCITY_NUDGING_TIMESCALES.")
   enddo
 
