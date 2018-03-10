@@ -42,16 +42,17 @@ contains
 !! linear equation of state (in kg/m^3) from salinity (sal in psu),
 !! potential temperature (T in deg C), and pressure in Pa.
 subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
-                                           Rho_T0_S0, dRho_dT, dRho_dS)
-  real,    intent(in)  :: T         !< Potential temperature relative to the surface in C.
-  real,    intent(in)  :: S         !< Salinity in PSU.
-  real,    intent(in)  :: pressure  !< Pressure in Pa.
-  real,    intent(out) :: rho       !< In situ density in kg m-3.
-  real,    intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)  :: dRho_dT   !< The derivatives of density with temperature and salinity,
-                                    !! in kg m-3 C-1 and kg m-3 psu-1.
-  real,    intent(in)  :: dRho_dS   !< The derivatives of density with temperature and salinity,
-                                    !! in kg m-3 C-1 and kg m-3 psu-1.
+                                           Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,           intent(in)  :: S        !< Salinity in PSU.
+  real,           intent(in)  :: pressure !< Pressure in Pa.
+  real,           intent(out) :: rho      !< In situ density in kg m-3.
+  real,           intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,           intent(in)  :: dRho_dT  !< The derivatives of density with temperature
+                                          !! in kg m-3 C-1.
+  real,           intent(in)  :: dRho_dS  !< The derivatives of density with salinity
+                                          !! in kg m-3 psu-1.
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
 ! *  This subroutine computes the density of sea water with a trivial  *
 ! *  linear equation of state (in kg/m^3) from salinity (sal in psu),  *
@@ -67,7 +68,11 @@ subroutine calculate_density_scalar_linear(T, S, pressure, rho, &
 ! *  (in)      dRho_dT - The derivatives of density with temperature   *
 ! *  (in)      dRho_dS - and salinity, in kg m-3 C-1 and kg m-3 psu-1. *
 
-  rho = Rho_T0_S0 + dRho_dT*T + dRho_dS*S
+  if (present(rho_ref)) then
+    rho = (Rho_T0_S0 - rho_ref) + (dRho_dT*T + dRho_dS*S)
+  else
+    rho = Rho_T0_S0 + dRho_dT*T + dRho_dS*S
+  endif
 
 end subroutine calculate_density_scalar_linear
 
@@ -75,37 +80,28 @@ end subroutine calculate_density_scalar_linear
 !! linear equation of state (in kg/m^3) from salinity (sal in psu),
 !! potential temperature (T in deg C), and pressure in Pa.
 subroutine calculate_density_array_linear(T, S, pressure, rho, start, npts, &
-                                          Rho_T0_S0, dRho_dT, dRho_dS)
-  real,    intent(in),  dimension(:) :: T         !< Potential temperature relative to the surface
-                                                  !! in C.
-  real,    intent(in),  dimension(:) :: S         !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure  !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: rho       !< In situ density in kg m-3.
-  integer, intent(in)                :: start     !< The starting point in the arrays.
-  integer, intent(in)                :: npts      !< The number of values to calculate.
-  real,    intent(in)                :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
-  real,    intent(in)                :: dRho_dT, dRho_dS !< The derivatives of density with
-                                                  !! temperature and salinity, in kg m-3 C-1
-                                                  !! and kg m-3 psu-1.
+                                          Rho_T0_S0, dRho_dT, dRho_dS, rho_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,               intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0, in kg m-3.
+  real,               intent(in)  :: dRho_dT  !< The derivatives of density with temperature
+                                              !! in kg m-3 C-1.
+  real,               intent(in)  :: dRho_dS  !< The derivatives of density with salinity
+                                              !! in kg m-3 psu-1.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
-! *  This subroutine computes the density of sea water with a trivial  *
-! *  linear equation of state (in kg/m^3) from salinity (sal in psu),  *
-! *  potential temperature (T in deg C), and pressure in Pa.           *
-! *                                                                    *
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-! *  (in)      Rho_T0_S0 - The density at T=0, S=0, in kg m-3.         *
-! *  (in)      dRho_dT - The derivatives of density with temperature   *
-! *  (in)      dRho_dS - and salinity, in kg m-3 C-1 and kg m-3 psu-1. *
   integer :: j
 
-  do j=start,start+npts-1
+  if (present(rho_ref)) then ; do j=start,start+npts-1
+    rho(j) = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(j) + dRho_dS*S(j))
+  enddo ; else ; do j=start,start+npts-1
     rho(j) = Rho_T0_S0 + dRho_dT*T(j) + dRho_dS*S(j)
-  enddo
+  enddo ; endif
+
 end subroutine calculate_density_array_linear
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in

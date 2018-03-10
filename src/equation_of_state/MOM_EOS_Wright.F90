@@ -47,10 +47,10 @@ end interface
 
 
 ! Following are the values for the reduced range formula.
-real, parameter :: a0 = 7.057924e-4, a1 = 3.480336e-7, a2 = -1.112733e-7
-real, parameter :: b0 = 5.790749e8,  b1 = 3.516535e6,  b2 = -4.002714e4
+real, parameter :: a0 = 7.057924e-4, a1 = 3.480336e-7, a2 = -1.112733e-7 ! a0/a1 ~= 2028 ; a0/a2 ~= -6343
+real, parameter :: b0 = 5.790749e8,  b1 = 3.516535e6,  b2 = -4.002714e4  ! b0/b1 ~= 165  ; b0/b4 ~= 974
 real, parameter :: b3 = 2.084372e2,  b4 = 5.944068e5,  b5 = -9.643486e3
-real, parameter :: c0 = 1.704853e5,  c1 = 7.904722e2,  c2 = -7.984422
+real, parameter :: c0 = 1.704853e5,  c1 = 7.904722e2,  c2 = -7.984422    ! c0/c1 ~= 216  ; c0/c4 ~= -740
 real, parameter :: c3 = 5.140652e-2, c4 = -2.302158e2, c5 = -3.079464
 
 contains
@@ -59,19 +59,12 @@ contains
 !! units of kg/m^3) from salinity (S in psu), potential temperature
 !! (T in deg C), and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
-!! Coded by R. Hallberg, 7/00
-subroutine calculate_density_scalar_wright(T, S, pressure, rho)
-real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
-real,    intent(in)  :: S        !< Salinity in PSU.
-real,    intent(in)  :: pressure !< Pressure in Pa.
-real,    intent(out) :: rho      !< In situ density in kg m-3.
-
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
+subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,           intent(in)  :: S        !< Salinity in PSU.
+  real,           intent(in)  :: pressure !< Pressure in Pa.
+  real,           intent(out) :: rho      !< In situ density in kg m-3.
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
 ! *====================================================================*
 ! *  This subroutine computes the in situ density of sea water (rho in *
@@ -87,7 +80,7 @@ real,    intent(out) :: rho      !< In situ density in kg m-3.
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_array_wright(T0, S0, pressure0, rho0, 1, 1)
+  call calculate_density_array_wright(T0, S0, pressure0, rho0, 1, 1, rho_ref)
   rho = rho0(1)
 
 end subroutine calculate_density_scalar_wright
@@ -96,39 +89,38 @@ end subroutine calculate_density_scalar_wright
 !! units of kg/m^3) from salinity (S in psu), potential temperature
 !! (T in deg C), and pressure in Pa.  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.
-!! Coded by R. Hallberg, 7/00
-subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< potential temperature relative to the surface
-                                                 !! in C.
-  real,    intent(in),  dimension(:) :: S        !< salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure !< pressure in Pa.
-  real,    intent(out), dimension(:) :: rho      !< in situ density in kg m-3.
-  integer, intent(in)                :: start    !< the starting point in the arrays.
-  integer, intent(in)                :: npts     !< the number of values to calculate.
+subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
-! * Arguments: T - potential temperature relative to the surface in C. *
-! *  (in)      S - salinity in PSU.                                    *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
-! *  (T in deg C), and pressure in Pa.  It uses the expression from    *
-! *  Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740.                *
-! *  Coded by R. Hallberg, 7/00                                        *
-! *====================================================================*
+  ! Original coded by R. Hallberg, 7/00, anomaly coded in 3/18.
   real :: al0, p0, lambda
+  real :: al_TS, p_TSp, lam_TS
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    if (present(rho_ref)) then
+      al_TS = a1*T(j) +a2*S(j)
+      al0 = a0 + al_TS
+      p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
+      lam_TS = c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j)))
 
-    rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
+      ! The following two expressions are mathematically equivalent.
+      ! rho(j) = (b0 + p0_TSp) / ((c0 + lam_TS) + al0*(b0 + p0_TSp)) - rho_ref
+      rho(j) = ( (b0*(1.0 - a0*rho_ref) - rho_ref*c0) + &
+                 (p_TSp - rho_ref * (p_TSp*al0 + (b0*al_TS + lam_TS))) ) / &
+               ( (c0 + lam_TS) + al0*(b0 + p_TSp) )
+    else
+      al0 = (a0 + a1*T(j)) +a2*S(j)
+      p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
+      lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+      rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
+    endif
   enddo
 end subroutine calculate_density_array_wright
 
