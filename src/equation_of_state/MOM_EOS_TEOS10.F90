@@ -42,27 +42,15 @@ real, parameter :: Pa2db  = 1.e-4  ! The conversion factor from Pa to dbar.
 contains
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
 !! (T in deg C), and pressure in Pa.  It uses the expression from the
 !! TEOS10 website.
-subroutine calculate_density_scalar_teos10(T, S, pressure, rho)
-  real,    intent(in)  :: T        !< Conservative temperature in C.
-  real,    intent(in)  :: S        !< Absolute salinity in g/kg.
-  real,    intent(in)  :: pressure !< Pressure in Pa.
-  real,    intent(out) :: rho      !< In situ density in kg m-3.
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absolute salinity in g/kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
-! *  (T in deg C), and pressure in Pa.  It uses the expression from    *
-! *  TEOS10 website.                                                   *
-! *====================================================================*
+subroutine calculate_density_scalar_teos10(T, S, pressure, rho, rho_ref)
+  real,           intent(in)  :: T        !< Conservative temperature in C.
+  real,           intent(in)  :: S        !< Absolute salinity in g/kg.
+  real,           intent(in)  :: pressure !< Pressure in Pa.
+  real,           intent(out) :: rho      !< In situ density in kg m-3.
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   real, dimension(1) :: T0, S0, pressure0
   real, dimension(1) :: rho0
@@ -71,23 +59,23 @@ subroutine calculate_density_scalar_teos10(T, S, pressure, rho)
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_array_teos10(T0, S0, pressure0, rho0, 1, 1)
+  call calculate_density_array_teos10(T0, S0, pressure0, rho0, 1, 1, rho_ref)
   rho = rho0(1)
 
 end subroutine calculate_density_scalar_teos10
 
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from salinity (S in psu), potential temperature
+!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
 !! (T in deg C), and pressure in Pa.  It uses the expression from the
 !! TEOS10 website.
-subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
-  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface
-                                              !! in C.
-  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts, rho_ref)
+  real, dimension(:), intent(in)  :: T        !< Conservative temperature in C.
+  real, dimension(:), intent(in)  :: S        !< Absolute salinity in g/kg
   real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
   real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
   integer,            intent(in)  :: start    !< the starting point in the arrays.
   integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   real :: zs, zt, zp
   integer :: j
@@ -103,6 +91,7 @@ subroutine calculate_density_array_teos10(T, S, pressure, rho, start, npts)
     else
       rho(j) = gsw_rho(zs,zt,zp)
     endif
+    if (present(rho_ref)) rho(j) = rho(j) - rho_ref
   enddo
 end subroutine calculate_density_array_teos10
 

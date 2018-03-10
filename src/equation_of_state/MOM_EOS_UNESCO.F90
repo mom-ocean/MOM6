@@ -49,11 +49,12 @@ contains
 !> This subroutine computes the in situ density of sea water (rho in
 !! units of kg/m^3) from salinity (S in psu), potential temperature
 !! (T in deg C), and pressure in Pa, using the UNESCO (1981) equation of state.
-subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho)
-  real,    intent(in)  :: T        !< Potential temperature relative to the surface in C.
-  real,    intent(in)  :: S        !< Salinity in PSU.
-  real,    intent(in)  :: pressure !< Pressure in Pa.
-  real,    intent(out) :: rho      !< In situ density in kg m-3.
+subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho, rho_ref)
+  real,           intent(in)  :: T        !< Potential temperature relative to the surface in C.
+  real,           intent(in)  :: S        !< Salinity in PSU.
+  real,           intent(in)  :: pressure !< Pressure in Pa.
+  real,           intent(out) :: rho      !< In situ density in kg m-3.
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   real, dimension(1) :: T0, S0, pressure0
   real, dimension(1) :: rho0
@@ -62,7 +63,7 @@ subroutine calculate_density_scalar_UNESCO(T, S, pressure, rho)
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_array_UNESCO(T0, S0, pressure0, rho0, 1, 1)
+  call calculate_density_array_UNESCO(T0, S0, pressure0, rho0, 1, 1, rho_ref)
   rho = rho0(1)
 
 end subroutine calculate_density_scalar_UNESCO
@@ -70,14 +71,14 @@ end subroutine calculate_density_scalar_UNESCO
 !> This subroutine computes the in situ density of sea water (rho in
 !! units of kg/m^3) from salinity (S in psu), potential temperature
 !! (T in deg C), and pressure in Pa, using the UNESCO (1981) equation of state.
-subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T        !< Potential temperature relative to the surface
-                                                 !! in C.
-  real,    intent(in),  dimension(:) :: S        !< Salinity in PSU.
-  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: rho      !< In situ density in kg m-3.
-  integer, intent(in)                :: start    !< The starting point in the arrays.
-  integer, intent(in)                :: npts     !< The number of values to calculate.
+subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts, rho_ref)
+  real, dimension(:), intent(in)  :: T        !< potential temperature relative to the surface in C.
+  real, dimension(:), intent(in)  :: S        !< salinity in PSU.
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
 ! *  This subroutine computes the in situ density of sea water (rho in *
 ! *  units of kg/m^3) from salinity (S in psu), potential temperature  *
@@ -90,11 +91,12 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
 ! *  (in)      start - the starting point in the arrays.               *
 ! *  (in)      npts - the number of values to calculate.               *
 
-  real :: t_local, t2, t3, t4, t5; ! Temperature to the 1st - 5th power.
-  real :: s_local, s32, s2;        ! Salinity to the 1st, 3/2, & 2nd power.
-  real :: p1, p2;      ! Pressure (in bars) to the 1st and 2nd power.
-  real :: rho0;        ! Density at 1 bar pressure, in kg m-3.
-  real :: ks;          ! The secant bulk modulus in bar.
+  real :: t_local, t2, t3, t4, t5 ! Temperature to the 1st - 5th power.
+  real :: s_local, s32, s2        ! Salinity to the 1st, 3/2, & 2nd power.
+  real :: p1, p2      ! Pressure (in bars) to the 1st and 2nd power.
+  real :: rho0        ! Density at 1 bar pressure, in kg m-3.
+  real :: sig0        ! The anomaly of rho0 from R00, in kg m-3.
+  real :: ks          ! The secant bulk modulus in bar.
   integer :: j
 
   do j=start,start+npts-1
@@ -109,9 +111,10 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
 
 !  Compute rho(s,theta,p=0) - (same as rho(s,t_insitu,p=0) ).
 
-    rho0 = R00 + R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
+    sig0 = R10*t_local + R20*t2 + R30*t3 + R40*t4 + R50*t5 + &
            s_local*(R01 + R11*t_local + R21*t2 + R31*t3 + R41*t4) + &
            s32*(R032 + R132*t_local + R232*t2) + R02*s2
+    rho0 = R00 + sig0
 
 !  Compute rho(s,theta,p), first calculating the secant bulk modulus.
 
@@ -121,7 +124,11 @@ subroutine calculate_density_array_UNESCO(T, S, pressure, rho, start, npts)
              s_local*(Sp01 + Sp11*t_local + Sp21*t2) + Sp032*s32) + &
          p2*(SP000 + SP010*t_local + SP020*t2 + s_local*(SP001 + SP011*t_local + SP021*t2))
 
-    rho(j) = rho0*ks / (ks - p1)
+    if (present(rho_ref)) then
+      rho(j) = ((R00 - rho_ref)*ks + (sig0*ks + p1*rho_ref)) / (ks - p1)
+    else
+      rho(j) = rho0*ks / (ks - p1)
+    endif
   enddo
 end subroutine calculate_density_array_UNESCO
 

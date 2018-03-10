@@ -121,12 +121,14 @@ character*(10), parameter :: TFREEZE_DEFAULT = TFREEZE_LINEAR_STRING
 contains
 
 !> Calls the appropriate subroutine to calculate density of sea water for scalar inputs.
-subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_density_scalar(T, S, pressure, rho, EOS, rho_ref)
   real,           intent(in)  :: T !< Potential temperature referenced to the surface (degC)
   real,           intent(in)  :: S !< Salinity (PSU)
   real,           intent(in)  :: pressure !< Pressure (Pa)
   real,           intent(out) :: rho !< Density (in-situ if pressure is local) (kg m-3)
   type(EOS_type), pointer     :: EOS !< Equation of state structure
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_scalar called with an unassociated EOS_type EOS.")
@@ -134,15 +136,15 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call calculate_density_linear(T, S, pressure, rho, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
     case (EOS_UNESCO)
-      call calculate_density_unesco(T, S, pressure, rho)
+      call calculate_density_unesco(T, S, pressure, rho, rho_ref)
     case (EOS_WRIGHT)
-      call calculate_density_wright(T, S, pressure, rho)
+      call calculate_density_wright(T, S, pressure, rho, rho_ref)
     case (EOS_TEOS10)
-      call calculate_density_teos10(T, S, pressure, rho)
+      call calculate_density_teos10(T, S, pressure, rho, rho_ref)
     case (EOS_NEMO)
-      call calculate_density_nemo(T, S, pressure, rho)
+      call calculate_density_nemo(T, S, pressure, rho, rho_ref)
     case default
       call MOM_error(FATAL, &
            "calculate_density_scalar: EOS is not valid.")
@@ -151,7 +153,8 @@ subroutine calculate_density_scalar(T, S, pressure, rho, EOS)
 end subroutine calculate_density_scalar
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs.
-subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
+!! If rho_ref is present, the anomaly with respect to rho_ref is returned.
+subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS, rho_ref)
   real, dimension(:), intent(in)  :: T !< Potential temperature referenced to the surface (degC)
   real, dimension(:), intent(in)  :: S !< Salinity (PSU)
   real, dimension(:), intent(in)  :: pressure !< Pressure (Pa)
@@ -159,6 +162,7 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
   integer,            intent(in)  :: start !< Start index for computation
   integer,            intent(in)  :: npts !< Number of point to compute
   type(EOS_type),     pointer     :: EOS !< Equation of state structure
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   if (.not.associated(EOS)) call MOM_error(FATAL, &
     "calculate_density_array called with an unassociated EOS_type EOS.")
@@ -166,15 +170,15 @@ subroutine calculate_density_array(T, S, pressure, rho, start, npts, EOS)
   select case (EOS%form_of_EOS)
     case (EOS_LINEAR)
       call calculate_density_linear(T, S, pressure, rho, start, npts, &
-                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS)
+                                      EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, rho_ref)
     case (EOS_UNESCO)
-      call calculate_density_unesco(T, S, pressure, rho, start, npts)
+      call calculate_density_unesco(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_WRIGHT)
-      call calculate_density_wright(T, S, pressure, rho, start, npts)
+      call calculate_density_wright(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_TEOS10)
-      call calculate_density_teos10(T, S, pressure, rho, start, npts)
+      call calculate_density_teos10(T, S, pressure, rho, start, npts, rho_ref)
     case (EOS_NEMO)
-      call calculate_density_nemo  (T, S, pressure, rho, start, npts)
+      call calculate_density_nemo  (T, S, pressure, rho, start, npts, rho_ref)
     case default
       call MOM_error(FATAL, &
            "calculate_density_array: EOS%form_of_EOS is not valid.")
@@ -933,7 +937,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
       T5(n) = T(i,j) ; S5(n) = S(i,j)
       p5(n) = -GxRho*(z_t(i,j) - 0.25*real(n-1)*dz)
     enddo
-    call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+    call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
     rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - &
@@ -976,7 +980,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
       do n=2,5
         T5(n) = T5(1) ; S5(n) = S5(1) ; p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
@@ -1019,7 +1023,7 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
         T5(n) = T5(1) ; S5(n) = S5(1)
         p5(n) = p5(n-1) + GxRho*0.25*dz
       enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
+      call calculate_density(T5, S5, p5, r5, 1, 5, EOS) !, rho_ref)
 
     ! Use Bode's rule to estimate the pressure anomaly change.
       intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
@@ -1027,211 +1031,9 @@ subroutine int_density_dz_generic(T, S, z_t, z_b, rho_ref, rho_0, G_e, HII, HIO,
     enddo
     ! Use Bode's rule to integrate the values.
     inty_dpa(i-ioff,j-joff) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                           12.0*intz(3))
+                                     12.0*intz(3))
   enddo ; enddo ; endif
 end subroutine int_density_dz_generic
-
-
-! ==============================================================================
-subroutine int_density_dz_generic_cell (T_t_arg, T_b_arg, S_t_arg, S_b_arg, &
-                                        z_t_arg, z_b_arg, depth, rho_ref, &
-                                        rho_0, G_e, EOS, dpa, &
-                                        intz_dpa, intx_dpa, inty_dpa)
-
-  ! Arguments
-  real, dimension(2), intent(in)     :: T_t_arg, T_b_arg, S_t_arg, S_b_arg
-  real, dimension(2), intent(inout)  :: z_t_arg, z_b_arg
-  real, dimension(2), intent(in)     :: depth
-  real, intent(in)                   :: rho_ref, rho_0, G_e
-  type(EOS_type), pointer            :: EOS !< Equation of state structure
-  real, dimension(2), intent(out)    :: dpa
-  real, dimension(2), intent(out)    :: intz_dpa
-  real, intent(out)                  :: intx_dpa
-  real, intent(out)                  :: inty_dpa
-
-  ! Local variables
-  real    :: T_t(2), T_b(2)             ! top and bottom temperatures
-  real    :: S_t(2), S_b(2)             ! top and bottom salinities
-  real    :: z_t(2), z_b(2)             ! top and bottom heights
-  real    :: h1, h2                     ! cell thicknesses
-  real    :: T5(5), S5(5), p5(5), r5(5) ! temperature, salinity, pressure and
-                                        ! density at quadrature points
-  real    :: rho_anom
-  real    :: w_left, w_right, intz(5)
-  real    :: GxRho
-  real    :: dz
-  real    :: weight_t, weight_b
-  real    :: Dmin ! minimum depth
-  integer :: n, m
-  real, parameter :: C1_90 = 1.0/90.0 ! Rational constants
-
-  GxRho = G_e * rho_0
-
-  ! -------------------------------------------------------
-  ! 0. Modify cell geometry to take topography into account
-  ! -------------------------------------------------------
-  Dmin = min ( depth(1), depth(2) )
-
-  z_b(1) = max ( z_b_arg(1), -Dmin )
-  z_b(2) = max ( z_b_arg(2), -Dmin )
-
-  if ( z_b(1) .GT. z_t_arg(1) ) z_b(1) = z_t_arg(1)
-  if ( z_b(2) .GT. z_t_arg(2) ) z_b(2) = z_t_arg(2)
-
-  ! We do not modify the heights at the top of the cell
-  z_t = z_t_arg
-
-  h1 = z_t(1) - z_b(1)
-  h2 = z_t(2) - z_b(2)
-
-  ! Compute new salinities and temperatures at the bottom
-  S_b(1) = S_t_arg(1) + (S_b_arg(1)-S_t_arg(1)) * (h1 / (z_t_arg(1)-z_b_arg(1)))
-  S_b(2) = S_t_arg(2) + (S_b_arg(2)-S_t_arg(2)) * (h2 / (z_t_arg(2)-z_b_arg(2)))
-
-  T_b(1) = T_t_arg(1) + (T_b_arg(1)-T_t_arg(1)) * (h1 / (z_t_arg(1)-z_b_arg(1)))
-  T_b(2) = T_t_arg(2) + (T_b_arg(2)-T_t_arg(2)) * (h2 / (z_t_arg(2)-z_b_arg(2)))
-  ! Temperatures and salinities at the top remain the same
-  S_t = S_t_arg
-  T_t = T_t_arg
-
-  ! Save layer bottom interface heights for use outside this routine
-  z_b_arg = z_b
-
-  ! ----------------------------------------
-  ! 1. Compute left side (vertical) integral
-  ! ----------------------------------------
-  dz = z_t(1) - z_b(1)
-
-  do n = 1,5
-    weight_t = 0.25 * real(5-n)
-    weight_b = 1.0 - weight_t
-    S5(n) = weight_t * S_t(1) + weight_b * S_b(1)
-    T5(n) = weight_t * T_t(1) + weight_b * T_b(1)
-    p5(n) = -GxRho*(z_t(1) - 0.25*real(n-1)*dz)
-  enddo
-
-  call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-
-  ! Use Boole's rule to estimate the pressure anomaly change.
-  rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - rho_ref
-  dpa(1) = G_e*dz*rho_anom
-
-  ! Use a Bode's-rule-like fifth-order accurate estimate of the
-  ! double integral of the pressure anomaly.
-  r5 = r5 - rho_ref
-  intz_dpa(1) = 0.5*G_e*dz**2 * &
-  (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
-
-  ! -----------------------------------------
-  ! 2. Compute right side (vertical) integral
-  ! -----------------------------------------
-  dz = z_t(2) - z_b(2)
-
-  do n = 1,5
-    weight_t = 0.25 * real(5-n)
-    weight_b = 1.0 - weight_t
-    S5(n) = weight_t * S_t(2) + weight_b * S_b(2)
-    T5(n) = weight_t * T_t(2) + weight_b * T_b(2)
-    p5(n) = -GxRho*(z_t(2) - 0.25*real(n-1)*dz)
-  enddo
-
-  call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-
-  ! Use Boole's rule to estimate the pressure anomaly change.
-  rho_anom = C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + 12.0*r5(3)) - rho_ref
-  dpa(2) = G_e*dz*rho_anom
-
-  ! Use a Bode's-rule-like fifth-order accurate estimate of the
-  ! double integral of the pressure anomaly.
-  r5 = r5 - rho_ref
-  intz_dpa(2) = 0.5*G_e*dz**2 * &
-  (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
-
-  ! ----------------------
-  ! 3. Compute x-intergral
-  ! ----------------------
-  !if (present(intx_dpa)) then
-
-    intz(1) = dpa(1)
-    intz(5) = dpa(2)
-
-    do m = 2,4
-      w_left = 0.25*real(5-m)
-      w_right = 1.0-w_left
-
-      dz = w_left*(z_t(1) - z_b(1)) + w_right*(z_t(2) - z_b(2))
-
-      T5(1) = w_left*T_t(1) + w_right*T_t(2)
-      T5(5) = w_left*T_b(1) + w_right*T_b(2)
-
-      S5(1) = w_left*S_t(1) + w_right*S_t(2)
-      S5(5) = w_left*S_b(1) + w_right*S_b(2)
-
-      p5(1) = -GxRho*(w_left*z_t(1) + w_right*z_t(2))
-      do n=2,5
-        p5(n) = p5(n-1) + GxRho*0.25*dz
-      enddo
-
-      do n = 1,5
-        weight_t = 0.25 * real(5-n)
-        weight_b = 1.0 - weight_t
-        S5(n) = weight_t * S5(1) + weight_b * S5(5)
-      enddo
-
-      call calculate_density (T5, S5, p5, r5, 1, 5, EOS)
-
-      ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
-                                12.0*r5(3)) - rho_ref)
-    enddo
-
-    ! Use Bode's rule to integrate the bottom pressure anomaly values in x.
-    intx_dpa = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                      12.0*intz(3))
-  !end if ! check if intx_dpa is present
-
-  ! ---------------------
-  ! 4. Compute y-intergal
-  ! ---------------------
-  !if (present(inty_dpa)) then
-
-    intz(1) = dpa(1)
-    intz(5) = dpa(2)
-
-    do m=2,4
-      w_left = 0.25*real(5-m)
-      w_right = 1.0-w_left
-
-      dz = w_left*(z_t(1) - z_b(2)) + w_right*(z_t(1) - z_b(2))
-
-      S5(1) = w_left*S_t(1) + w_right*S_t(2)
-      S5(5) = w_left*S_b(1) + w_right*S_b(2)
-      S5(1) = w_left*S_t(1) + w_right*S_t(2)
-      S5(5) = w_left*S_b(1) + w_right*S_b(2)
-      p5(1) = -GxRho*(w_left*z_t(1) + w_right*z_t(2))
-      do n=2,5
-        p5(n) = p5(n-1) + GxRho*0.25*dz
-      enddo
-      do n=1,5
-        weight_t = 0.25 * real(5-n)
-        weight_b = 1.0 - weight_t
-        S5(n) = weight_t * S5(1) + weight_b * S5(5)
-      enddo
-      call calculate_density(T5, S5, p5, r5, 1, 5, EOS)
-
-      ! Use Bode's rule to estimate the pressure anomaly change.
-      intz(m) = G_e*dz*( C1_90*(7.0*(r5(1)+r5(5)) + 32.0*(r5(2)+r5(4)) + &
-                         12.0*r5(3)) - rho_ref)
-      enddo
-
-      ! Use Bode's rule to integrate the values.
-      inty_dpa = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + &
-                        12.0*intz(3))
-
-  !end if ! check if inty_dpa is present
-
-end subroutine int_density_dz_generic_cell
-! ============================================================================
 
 
 ! ==========================================================================
@@ -1359,7 +1161,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
         T5(i*5+n) = wt_t(n) * T_t(iin,jin) + wt_b(n) * T_b(iin,jin)
       enddo
     enddo
-    call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS )
+    call calculate_density_array(T5, S5, p5, r5, 1, (ieq-isq+2)*5, EOS) !, rho_ref )
     u5 = r5 - rho_ref
 
     do i=isq,ieq+1 ; iin = i+ioff
@@ -1441,7 +1243,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       enddo
     enddo
 
-    call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS)
+    call calculate_density(T15, S15, p15, r15, 1, 15*(ieq-isq+1), EOS) !, rho_ref)
 
     do I=Isq,Ieq ; iin = i+ioff
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
@@ -1521,7 +1323,7 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     enddo
 
     call calculate_density_array(T15(15*HIO%isc+1:), S15(15*HIO%isc+1:), p15(15*HIO%isc+1:), &
-                                 r15(15*HIO%isc+1:), 1, 15*(HIO%iec-HIO%isc+1), EOS)
+                                 r15(15*HIO%isc+1:), 1, 15*(HIO%iec-HIO%isc+1), EOS) !, rho_ref)
     do i=HIO%isc,HIO%iec ; iin = i+ioff
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 
