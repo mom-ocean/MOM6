@@ -1184,7 +1184,7 @@ subroutine ocean_model_data2D_get(OS,Ocean, name, array2D,isc,jsc)
   case('sin_rot')
      array2D(isc:,jsc:) = OS%grid%sin_rot(g_isc:g_iec,g_jsc:g_jec) ! =0
   case default
-     call MOM_error(FATAL,'get_ocean_grid_data2D: unknown argument name='//name)
+     call MOM_error(FATAL,'ocean_model_data2D_get: unknown argument name='//name)
   end select
 
 
@@ -1203,7 +1203,7 @@ subroutine ocean_model_data1D_get(OS,Ocean, name, value)
   case('c_p')
      value = OS%C_p
   case default
-     call MOM_error(FATAL,'get_ocean_grid_data1D: unknown argument name='//name)
+     call MOM_error(FATAL,'ocean_model_data1D_get: unknown argument name='//name)
   end select
 
 

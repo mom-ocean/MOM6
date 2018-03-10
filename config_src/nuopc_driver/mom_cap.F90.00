@@ -139,7 +139,7 @@
 !! infrastructure when it's time for MOM to advance in time. During this subroutine, there is a
 !! call into the MOM update routine:
 !!
-!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_public, Time, Time_step_coupled)
+!!      call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_sfc, Time, Time_step_coupled)
 !!
 !! Prior to this call, the cap performs a few steps:
 !! - the `Time` and `Time_step_coupled` parameters, which are based on FMS types, are derived from the incoming ESMF clock
@@ -166,8 +166,8 @@
 !! from the native MOM grid by a call to `get_ocean_grid(Ocean_grid)`.
 !! The cosine and sine of the rotation angle are:
 !!
-!!     ocean_grid%cos_rot(i,j)
-!!     ocean_grid%sin_rot(i,j)
+!!     Ocean_grid%cos_rot(i,j)
+!!     Ocean_grid%sin_rot(i,j)
 !!
 !! The rotation of momentum flux from regular lat-lon to tripolar is:
 !! \f[
@@ -206,7 +206,7 @@
 !! at the end of the run. This subroutine is a hook to call into MOM's native shutdown
 !! procedures:
 !!
-!!     call ocean_model_end (ocean_public, ocean_State, Time)
+!!     call ocean_model_end (Ocean_sfc, Ocean_State, Time)
 !!     call diag_manager_end(Time )
 !!     call field_manager_end
 !!     call fms_io_exit
@@ -242,7 +242,7 @@
 !!
 !! @subsection ExportField Export Fields
 !!
-!! Export fields are populated from the `ocean_public` parameter (type `ocean_public_type`)
+!! Export fields are populated from the `ocean_sfc` parameter (type `ocean_public_type`)
 !! after the call to `update_ocean_model()`.
 !!
 !! Standard Name                     | Units      | Model Variable  | Description                               | Notes
@@ -377,36 +377,15 @@ module mom_cap_mod
   use time_manager_mod,         only: operator( * ), operator( /= ), operator( > )
   use time_manager_mod,         only: date_to_string
   use time_manager_mod,         only: fms_get_calendar_type => get_calendar_type
-  use MOM_domains,              only: MOM_infra_init, num_pes, root_pe, pe_here
 
-!#ifdef CESMCOUPLED
-!  use ocn_comp_nuopc,           only: ocean_public_type, ocean_state_type
-!  use ocn_comp_nuopc,           only: update_ocean_model, ocean_model_init
-!  use ocn_comp_nuopc,           only: ocn_export, get_ocean_grid, ocean_model_data_get
-!  use ocn_comp_nuopc,           only: ocean_model_end, ocean_model_init_sfc
-!#else
   use ocean_model_mod,          only: ocean_model_restart, ocean_public_type, ocean_state_type
   use ocean_model_mod,          only: ocean_model_data_get
   use ocean_model_mod,          only: ocean_model_init , update_ocean_model, ocean_model_end, get_ocean_grid
-  use MOM_surface_forcing,      only: IOB_allocate
-!#endif
-  use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
-  use MOM_get_input,            only: Get_MOM_Input, directories
-  use MOM_domains,              only: pass_var
 #ifdef MOM6_CAP
   use ocean_model_mod,          only: ice_ocean_boundary_type
   use MOM_grid,                 only: ocean_grid_type
 #else
   use ocean_types_mod,          only: ice_ocean_boundary_type, ocean_grid_type
-#endif
-#ifdef CESMCOUPLED
-  use mom_cap_methods,          only: ocn_export, ocn_import
-  use shr_nuopc_flds_mod,       only: flds_scalar_name
-  use shr_nuopc_flds_mod,       only: flds_x2o, flds_o2x, flds_x2o_map, flds_o2x_map
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_SetScalarField, shr_nuopc_fldList_type
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Advertise, shr_nuopc_fldList_Realize
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Zero, shr_nuopc_fldList_Add
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_fromflds
 #endif
 
   use ESMF
@@ -426,16 +405,13 @@ module mom_cap_mod
     type(ocean_public_type),       pointer :: ocean_public_type_ptr
     type(ocean_state_type),        pointer :: ocean_state_type_ptr
     type(ice_ocean_boundary_type), pointer :: ice_ocean_boundary_type_ptr
+    type(ocean_grid_type),         pointer :: ocean_grid_ptr
   end type
 
   type ocean_internalstate_wrapper
     type(ocean_internalstate_type), pointer :: ptr
   end type
 
-#ifdef CESMCOUPLED
-  type (shr_nuopc_fldList_Type) :: fldsToOcn
-  type (shr_nuopc_fldList_Type) :: fldsFrOcn
-#else
   type fld_list_type
     character(len=64) :: stdname
     character(len=64) :: shortname
@@ -449,22 +425,18 @@ module mom_cap_mod
   type (fld_list_type) :: fldsToOcn(fldsMax)
   integer :: fldsFrOcn_num = 0
   type (fld_list_type) :: fldsFrOcn(fldsMax)
-#endif
 
   integer   :: import_slice = 1
   integer   :: export_slice = 1
   character(len=256) :: tmpstr
   integer   :: dbrc
 
-  type(ESMF_Grid)         :: mom_grid_i
+  type(ESMF_Grid), save   :: mom_grid_i
   logical                 :: write_diagnostics = .true.
   logical                 :: profile_memory = .true.
   logical                 :: ocean_solo = .true.
   logical                 :: grid_attach_area = .false.
   integer(ESMF_KIND_I8)   :: restart_interval
-  logical                 :: sw_decomp
-  real(ESMF_KIND_R8)      :: c1, c2, c3, c4
-  character(len=*),parameter :: u_file_u = __FILE__
 
   contains
   !-----------------------------------------------------------------------
@@ -561,7 +533,7 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    call ESMF_AttributeGet(gcomp, name="DumpFields", value=value, defaultValue="false", &
+    call ESMF_AttributeGet(gcomp, name="DumpFields", value=value, defaultValue="true", &
       convention="NUOPC", purpose="Instance", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -645,11 +617,10 @@ module mom_cap_mod
     type(ESMF_Time)                        :: MyTime
     type(ESMF_TimeInterval)                :: TINT
     
-    type (ocean_public_type),      pointer :: ocean_public   => NULL()
-    type (ocean_state_type),       pointer :: ocean_state => NULL()
+    type (ocean_public_type),      pointer :: Ocean_sfc   => NULL()
+    type (ocean_state_type),       pointer :: Ocean_state => NULL()
     type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
-    type(ocean_grid_type),         pointer :: ocean_grid => NULL()
 
     type(time_type)                        :: Run_len      ! length of experiment 
     type(time_type)                        :: Time        
@@ -660,25 +631,22 @@ module mom_cap_mod
     integer                                :: dt_cpld  = 86400
     integer                                :: year=0, month=0, day=0, hour=0, minute=0, second=0
     integer                                :: mpi_comm_mom
-    integer                                :: npes, pe0, i
 
     type(ESMF_Grid)                        :: gridIn
     type(ESMF_Grid)                        :: gridOut
-    type(param_file_type) :: param_file           !< A structure to parse for run-time parameters
-    type(directories)     :: dirs_tmp             !< A structure containing several relevant directory paths
-    character(len=384) :: pointer_filename
+
     integer                                :: npet, npet_x, npet_y
     character(len=*),parameter  :: subname='(mom_cap:InitializeAdvertise)'
 
     rc = ESMF_SUCCESS
 
     allocate(Ice_ocean_boundary)
-    !allocate(ocean_state) ! ocean_model_init allocate this pointer
-    allocate(ocean_public)
+    !allocate(Ocean_state) ! ocean_model_init allocate this pointer
+    allocate(Ocean_sfc)
     allocate(ocean_internalstate%ptr)
     ocean_internalstate%ptr%ice_ocean_boundary_type_ptr => Ice_ocean_boundary
-    ocean_internalstate%ptr%ocean_public_type_ptr       => ocean_public
-    ocean_internalstate%ptr%ocean_state_type_ptr        => ocean_state
+    ocean_internalstate%ptr%ocean_public_type_ptr       => Ocean_sfc
+    ocean_internalstate%ptr%ocean_state_type_ptr        => Ocean_state
 
     call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -701,7 +669,7 @@ module mom_cap_mod
     call ESMF_TimeGet (MyTime,                    &
                        YY=YEAR, MM=MONTH, DD=DAY, &
                        H=HOUR,    M =MINUTE,    S =SECOND,  &
-                       RC=rc )
+                                        RC=rc )
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -713,89 +681,6 @@ module mom_cap_mod
       file=__FILE__)) &
       return  ! bail out
 
-#ifdef XXCESMCOUPLEDXX
-
-    ! Initialize MOM6 comm
-    call MOM_infra_init(mpi_comm_mom)
-    call set_calendar_type(NOLEAP)  !TODO: confirm this
-    Time = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
-
-! tcx, todo, first coupling period
-!  ! Compute time_in: time at the beginning of the first ocn coupling interval
-!  call ESMF_ClockGet(EClock, TimeStep=ocn_cpl_interval, rc=rc)
-!  if (runtype /= "continue") then
-!    ! In startup runs, take the one ocn coupling interval lag into account to
-!    ! compute the initial ocn time.  (time_in = time_init + ocn_cpl_interval)
-!    time_in_ESMF = ESMF_TimeInc(current_time, ocn_cpl_interval)
-!  else
-!    time_in_ESMF = current_time
-!  endif
-!  call ESMF_TimeGet(time_in_ESMF, yy=year, mm=month, dd=day, h=hour, m=minute, s=seconds, rc=rc)
-!  time_in = set_date(year, month, day, hour, minute, seconds, err_msg=err_msg)
-
-! tcx, todo, restart
-!  if (runtype == "initial") then ! startup (new run) - 'n' is needed below since we don't
-!                                 ! specify input_filename in input.nml
-    call ocean_model_init(ocean_public, ocean_state, time, time, input_restart_file = 'n')
-!  else                           ! hybrid or branch or continuos runs
-!    ! output path root
-!    call seq_infodata_GetData( glb%infodata, outPathRoot=restartpath )
-!    ! read name of restart file in the pointer file
-!    nu = shr_file_getUnit()
-!    restart_pointer_file = trim(glb%pointer_filename)
-!    if (is_root_pe()) write(glb%stdout,*) 'Reading ocn pointer file: ',restart_pointer_file
-!    open(nu, file=restart_pointer_file, form='formatted', status='unknown')
-!    read(nu,'(a)') restartfile
-!    close(nu)
-!    !restartfile = trim(restartpath) // trim(restartfile)
-!    if (is_root_pe()) write(glb%stdout,*) 'Reading restart file: ',trim(restartfile)
-!    !endif
-!    call shr_file_freeUnit(nu)
-!    call ocean_model_init(glb%ocean_public, glb%ocn_state, time_init, time_in, input_restart_file=trim(restartfile))
-!  endif
-
-    npes = num_pes()
-    pe0 = root_pe()
-
-    ocean_public%is_ocean_pe = .true.
-    allocate(ocean_public%pelist(npes))
-    ocean_public%pelist(:) = (/(i,i=pe0,pe0+npes)/)
-
-    ! This include declares and sets the variable "version".
-    ! read useful runtime params
-    call get_MOM_Input(param_file, dirs_tmp, check_params=.false.)
-    !call log_version(param_file, subname, version, "")
-    call get_param(param_file, subname, "POINTER_FILENAME", pointer_filename, &
-                   "Name of the ascii file that contains the path and filename of" // &
-                   " the latest restart file.", default='rpointer.ocn')
-    call get_param(param_file, subname, "SW_DECOMP", sw_decomp, &
-                   "If True, read coeffs c1, c2, c3 and c4 and decompose" // &
-                   "the net shortwave radiation (SW) into four components:\n" // &
-                   "visible, direct shortwave  = c1 * SW \n" // &
-                   "visible, diffuse shortwave = c2 * SW \n" // &
-                   "near-IR, direct shortwave  = c3 * SW \n" // &
-                   "near-IR, diffuse shortwave = c4 * SW", default=.true.)
-    if (sw_decomp) then
-      call get_param(param_file, subname, "SW_c1", c1, &
-                    "Coeff. used to convert net shortwave rad. into \n"//&
-                    "visible, direct shortwave.", units="nondim", default=0.285)
-      call get_param(param_file, subname, "SW_c2", c2, &
-                    "Coeff. used to convert net shortwave rad. into \n"//&
-                    "visible, diffuse shortwave.", units="nondim", default=0.285)
-      call get_param(param_file, subname, "SW_c3", c3, &
-                    "Coeff. used to convert net shortwave rad. into \n"//&
-                    "near-IR, direct shortwave.", units="nondim", default=0.215)
-      call get_param(param_file, subname, "SW_c4", c4, &
-                    "Coeff. used to convert net shortwave rad. into \n"//&
-                    "near-IR, diffuse shortwave.", units="nondim", default=0.215)
-    else
-      c1 = 0.0; c2 = 0.0; c3 = 0.0; c4 = 0.0
-    endif
-
-    ! Initialize ocn_state%state out of sight
-    call ocean_model_init_sfc(ocean_state, ocean_public)
-
-#else
     call fms_init(mpi_comm_mom)
     call constants_init
     call field_manager_init
@@ -806,18 +691,16 @@ module mom_cap_mod
     DT = set_time (DT_OCEAN, 0)         
     Time = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
-    ocean_public%is_ocean_pe = .true.
-    call ocean_model_init(ocean_public, ocean_state, Time, Time)
+    Ocean_sfc%is_ocean_pe = .true.
+    call ocean_model_init(Ocean_sfc, Ocean_state, Time, Time)
 
 !tcx tcraig This results in errors in CESM with help from Alper
 ! FATAL error "MPP_OPEN: error in OPEN for data_table"
 ! The subroutine data_override_init shouldn't be called because ALLOW_FLUX_ADJUSTMENTS is set to FALSE
-!tcx    call data_override_init(ocean_domain_in = ocean_public%domain)
+!tcx    call data_override_init(Ocean_domain_in = Ocean_sfc%domain)
 
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
-    call IOB_allocate(ice_ocean_boundary, isc, iec, jsc, jec)
+    call mpp_get_compute_domain(Ocean_sfc%domain, isc, iec, jsc, jec)
 
-#if (1 == 0)
     allocate ( Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
                Ice_ocean_boundary% v_flux (isc:iec,jsc:jec),          &
                Ice_ocean_boundary% t_flux (isc:iec,jsc:jec),          &
@@ -855,28 +738,18 @@ module mom_cap_mod
     Ice_ocean_boundary%calving_hflx    = 0.0
     Ice_ocean_boundary%mi              = 0.0
     Ice_ocean_boundary%p               = 0.0
-#endif
 
-#endif
+    call external_coupler_sbc_init(Ocean_sfc%domain, dt_cpld, Run_len)
 
-    call external_coupler_sbc_init(ocean_public%domain, dt_cpld, Run_len)
-
-    ocean_internalstate%ptr%ocean_state_type_ptr => ocean_state
+    ocean_internalstate%ptr%ocean_state_type_ptr => Ocean_state
     call ESMF_GridCompSetInternalState(gcomp, ocean_internalstate, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
 
-    call MOM_FieldsSetup(ice_ocean_boundary, ocean_public)
+    call MOM_FieldsSetup(ice_ocean_boundary, ocean_sfc)
 
-#ifdef CESMCOUPLED
-    call shr_nuopc_fldList_Advertise(importState, fldsToOcn, subname//':MOM6Import', rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_Advertise(exportState, fldsFrOcn, subname//':MOM6Export', rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-#else
     call MOM_AdvertiseFields(importState, fldsToOcn_num, fldsToOcn, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -887,9 +760,8 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-#endif
 
-!#ifdef MOM6_CAP
+#ifdef MOM6_CAP
     ! When running mom6 solo, the rotation angles are not computed internally
     ! in MOM6. We need to 
     ! calculate cos and sin of rotational angle for MOM6; the values
@@ -897,10 +769,9 @@ module mom_cap_mod
     ! The rotation angles are retrieved during run time to rotate incoming
     ! and outgoing vectors
     !
-!    call calculate_rot_angle(ocean_state, ocean_public)
-!#endif
-! tcraig, this is handled fine internally and if not, then later call this
-!    call initialize_grid_rotation_angle(ocean_grid, PF)
+    call calculate_rot_angle(Ocean_state, ocean_sfc, &
+      ocean_internalstate%ptr%ocean_grid_ptr)
+#endif
 
     write(*,*) '----- MOM initialization phase Advertise completed'
 
@@ -930,8 +801,8 @@ module mom_cap_mod
     type(ESMF_DeLayout)                    :: delayout
     type(ESMF_Distgrid)                    :: Distgrid
     type(ESMF_DistGridConnection), allocatable :: connectionList(:)
-    type (ocean_public_type),      pointer :: ocean_public   => NULL()
-    type (ocean_state_type),       pointer :: ocean_state => NULL()
+    type (ocean_public_type),      pointer :: Ocean_sfc   => NULL()
+    type (ocean_state_type),       pointer :: Ocean_state => NULL()
     type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
     integer                                :: npet, ntiles
@@ -967,8 +838,8 @@ module mom_cap_mod
       return  ! bail out
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
-    ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+    Ocean_sfc          => ocean_internalstate%ptr%ocean_public_type_ptr
+    Ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
 
     call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -986,7 +857,7 @@ module mom_cap_mod
     ! global mom grid size
     !---------------------------------
 
-    call mpp_get_global_domain(ocean_public%domain, xsize=nxg, ysize=nyg)
+    call mpp_get_global_domain(Ocean_sfc%domain, xsize=nxg, ysize=nyg)
     write(tmpstr,'(a,2i6)') subname//' nxg,nyg = ',nxg,nyg
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)  
 
@@ -994,7 +865,7 @@ module mom_cap_mod
     ! number of tiles per PET, assumed to be 1, and number of pes (tiles) total
     !---------------------------------
 
-    ntiles=mpp_get_ntile_count(ocean_public%domain) ! this is tiles on this pe
+    ntiles=mpp_get_ntile_count(Ocean_sfc%domain) ! this is tiles on this pe
     if (ntiles /= 1) then
       rc = ESMF_FAILURE
       call ESMF_LogWrite(subname//' ntiles must be 1', ESMF_LOGMSG_ERROR, rc=dbrc)  
@@ -1003,7 +874,7 @@ module mom_cap_mod
         file=__FILE__)) &
         return  ! bail out
     endif
-    ntiles=mpp_get_domain_npes(ocean_public%domain)
+    ntiles=mpp_get_domain_npes(Ocean_sfc%domain)
     write(tmpstr,'(a,1i6)') subname//' ntiles = ',ntiles
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)  
 
@@ -1012,8 +883,8 @@ module mom_cap_mod
     !---------------------------------
 
     allocate(xb(ntiles),xe(ntiles),yb(ntiles),ye(ntiles),pe(ntiles))
-    call mpp_get_compute_domains(ocean_public%domain, xbegin=xb, xend=xe, ybegin=yb, yend=ye)
-    call mpp_get_pelist(ocean_public%domain, pe)
+    call mpp_get_compute_domains(Ocean_sfc%domain, xbegin=xb, xend=xe, ybegin=yb, yend=ye)
+    call mpp_get_pelist(Ocean_sfc%domain, pe)
     do n = 1,ntiles
       write(tmpstr,'(a,6i6)') subname//' tiles ',n,pe(n),xb(n),xe(n),yb(n),ye(n)
       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)  
@@ -1198,7 +1069,7 @@ module mom_cap_mod
     !   for esmf and also need to "make up" j=1 values.  use wraparound in i
     !---------------------------------
 
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    call mpp_get_compute_domain(Ocean_sfc%domain, isc, iec, jsc, jec)
 
     lbnd1 = lbound(dataPtr_mask,1)
     ubnd1 = ubound(dataPtr_mask,1)
@@ -1230,10 +1101,10 @@ module mom_cap_mod
     allocate(ofld(isc:iec,jsc:jec))
     allocate(gfld(nxg,nyg))
 
-    call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'mask', ofld, isc, jsc)
     write(tmpstr,*) subname//' ofld mask = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
+    call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
     write(tmpstr,*) subname//' gfld mask = ',minval(gfld),maxval(gfld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
@@ -1245,10 +1116,10 @@ module mom_cap_mod
     enddo
 
     if(grid_attach_area) then
-      call ocean_model_data_get(ocean_state, ocean_public, 'area', ofld, isc, jsc)
+      call ocean_model_data_get(Ocean_state, Ocean_sfc, 'area', ofld, isc, jsc)
       write(tmpstr,*) subname//' ofld area = ',minval(ofld),maxval(ofld)
       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-      call mpp_global_field(ocean_public%domain, ofld, gfld)
+      call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
       write(tmpstr,*) subname//' gfld area = ',minval(gfld),maxval(gfld)
       call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
       do j = lbnd2, ubnd2
@@ -1260,10 +1131,10 @@ module mom_cap_mod
       enddo
     endif
 
-    call ocean_model_data_get(ocean_state, ocean_public, 'tlon', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'tlon', ofld, isc, jsc)
     write(tmpstr,*) subname//' ofld xt = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
+    call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
     write(tmpstr,*) subname//' gfld xt = ',minval(gfld),maxval(gfld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
@@ -1275,10 +1146,10 @@ module mom_cap_mod
     enddo
     enddo
 
-    call ocean_model_data_get(ocean_state, ocean_public, 'tlat', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'tlat', ofld, isc, jsc)
     write(tmpstr,*) subname//' ofld yt = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
+    call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
     write(tmpstr,*) subname//' gfld yt = ',minval(gfld),maxval(gfld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd2, ubnd2
@@ -1290,15 +1161,15 @@ module mom_cap_mod
     enddo
 
 #ifdef MOM5_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'ulon', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'ulon', ofld, isc, jsc)
 #endif
 
 #ifdef MOM6_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'geoLonBu', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'geoLonBu', ofld, isc, jsc)
 #endif
     write(tmpstr,*) subname//' ofld xu = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
+    call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
     write(tmpstr,*) subname//' gfld xu = ',minval(gfld),maxval(gfld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd4, ubnd4
@@ -1327,16 +1198,16 @@ module mom_cap_mod
 ! The corner latitude values are treated differently because MOM5 runs on B-Grid while
 ! MOM6 runs on C-Grid.
 #ifdef MOM5_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'ulat', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'ulat', ofld, isc, jsc)
 #endif
 
 #ifdef MOM6_CAP
-    call ocean_model_data_get(ocean_state, ocean_public, 'geoLatBu', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'geoLatBu', ofld, isc, jsc)
 #endif
 
     write(tmpstr,*) subname//' ofld yu = ',minval(ofld),maxval(ofld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-    call mpp_global_field(ocean_public%domain, ofld, gfld)
+    call mpp_global_field(Ocean_sfc%domain, ofld, gfld)
     write(tmpstr,*) subname//' gfld yu = ',minval(gfld),maxval(gfld)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     do j = lbnd4, ubnd4
@@ -1387,13 +1258,6 @@ module mom_cap_mod
     ! realize fields on grid
     !---------------------------------
 
-#ifdef CESMCOUPLED
-    call shr_nuopc_fldList_Realize(importState, grid=gridIn, fldlist=fldsToOcn, tag=subname//':MOM6Import', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_Realize(exportState, grid=gridOut, fldlist=fldsFrOcn, tag=subname//':MOM6Export', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-#else
     call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -1404,7 +1268,6 @@ module mom_cap_mod
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-#endif
 
     call ESMF_StateGet(exportState, itemSearch="sea_surface_temperature", itemCount=icount, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1425,7 +1288,7 @@ module mom_cap_mod
         file=__FILE__)) &
         return  ! bail out
 
-      call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+      call ocean_model_data_get(Ocean_state, Ocean_sfc, 'mask', ofld, isc, jsc)
 
       lbnd1 = lbound(t_surf,1)
       ubnd1 = ubound(t_surf,1)
@@ -1473,8 +1336,8 @@ module mom_cap_mod
     integer(ESMF_KIND_I8)                  :: n_interval, time_elapsed_sec
     character(len=64)                      :: timestamp
 
-    type (ocean_public_type),      pointer :: ocean_public          => NULL()
-    type (ocean_state_type),       pointer :: ocean_state        => NULL()
+    type (ocean_public_type),      pointer :: Ocean_sfc          => NULL()
+    type (ocean_state_type),       pointer :: Ocean_state        => NULL()
     type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
 
@@ -1486,13 +1349,9 @@ module mom_cap_mod
     integer :: dth, dtm, dts, dt_cpld  = 86400
     integer :: isc,iec,jsc,jec,lbnd1,ubnd1,lbnd2,ubnd2
     integer :: i,j,i1,j1
-    integer :: nc
-#ifdef CESMCOUPLED
-    ! in ocn_import, ocn_export
-
-#else
     real(ESMF_KIND_R8), allocatable        :: ofld(:,:), ocz(:,:), ocm(:,:)
     real(ESMF_KIND_R8), allocatable        :: mmmf(:,:), mzmf(:,:)
+    integer :: nc
     real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_mmmf(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_mzmf(:,:)
@@ -1501,8 +1360,7 @@ module mom_cap_mod
     real(ESMF_KIND_R8), pointer :: dataPtr_frazil(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_evap(:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_sensi(:,:)
-#endif
-    type(ocean_grid_type), pointer :: ocean_grid
+    type(ocean_grid_type), pointer :: Ocean_grid
     character(240)              :: msgString
     character(len=*),parameter  :: subname='(mom_cap:ModelAdvance)'
 
@@ -1524,8 +1382,8 @@ module mom_cap_mod
       return  ! bail out
 
     Ice_ocean_boundary => ocean_internalstate%ptr%ice_ocean_boundary_type_ptr
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
-    ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+    Ocean_sfc          => ocean_internalstate%ptr%ocean_public_type_ptr
+    Ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
 
     ! HERE THE MODEL ADVANCES: currTime -> currTime + timeStep
     
@@ -1573,7 +1431,7 @@ module mom_cap_mod
 
     call ice_ocn_bnd_from_data(Ice_ocean_boundary, Time, Time_step_coupled)
 
-    call external_coupler_sbc_before(Ice_ocean_boundary, ocean_public, nc, dt_cpld )
+    call external_coupler_sbc_before(Ice_ocean_boundary, Ocean_sfc, nc, dt_cpld )
 
     if(write_diagnostics) then
       call NUOPC_Write(importState, fileNamePrefix='field_ocn_import_', &
@@ -1587,20 +1445,9 @@ module mom_cap_mod
 
     ! rotate the lat/lon wind vector (CW) onto local tripolar coordinate system
 
-    call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
+    call mpp_get_compute_domain(Ocean_sfc%domain, isc, iec, jsc, jec)
 
    if(.not. ocean_solo) then
-
-!#ifdef MOM5_CAP
-    call get_ocean_grid(ocean_state, ocean_grid)
-!#endif
-!#ifdef MOM6_CAP
-!    ocean_grid => ocean_internalstate%ptr%ocean_grid_ptr
-!#endif
-
-#ifdef CESMCOUPLED
-    call ocn_import(ocean_public, ocean_grid, importState, ice_ocean_boundary)
-#else
     call State_getFldPtr(exportState,'ocean_mask',dataPtr_mask,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -1611,6 +1458,13 @@ module mom_cap_mod
     ubnd1 = ubound(dataPtr_mask,1)
     lbnd2 = lbound(dataPtr_mask,2)
     ubnd2 = ubound(dataPtr_mask,2)
+
+#ifdef MOM5_CAP
+    call get_ocean_grid(Ocean_grid)
+#endif
+#ifdef MOM6_CAP
+    Ocean_grid => ocean_internalstate%ptr%ocean_grid_ptr
+#endif
 
     call State_getFldPtr(importState,'mean_zonal_moment_flx',dataPtr_mzmf,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1642,21 +1496,17 @@ module mom_cap_mod
       do i = lbnd1, ubnd1
         j1 = j - lbnd2 + jsc  ! work around local vs global indexing
         i1 = i - lbnd1 + isc
-        mzmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
-                  + ocean_grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
-        mmmf(i,j) = ocean_grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
-                  - ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
+        mzmf(i,j) = Ocean_grid%cos_rot(i1,j1)*dataPtr_mzmf(i,j) &
+                  + Ocean_grid%sin_rot(i1,j1)*dataPtr_mmmf(i,j)
+        mmmf(i,j) = Ocean_grid%cos_rot(i1,j1)*dataPtr_mmmf(i,j) &
+                  - Ocean_grid%sin_rot(i1,j1)*dataPtr_mzmf(i,j)
       enddo
     enddo
     dataPtr_mzmf = mzmf
     dataPtr_mmmf = mmmf
     deallocate(mzmf, mmmf)
-#endif
    endif  ! not ocean_solo
 
-#ifdef XXCESMCOUPLEDXX
-    ! tcx todo
-#else
     !Optionally write restart files when currTime-startTime is integer multiples of restart_interval
     if(restart_interval > 0 ) then
       time_elapsed = currTime - startTime
@@ -1671,35 +1521,18 @@ module mom_cap_mod
           timestamp = date_to_string(time_restart_current)
           call ESMF_LogWrite("MOM: Writing restart at "//trim(timestamp), ESMF_LOGMSG_INFO, rc=dbrc)
           write(*,*) 'calling ocean_model_restart'
-          call ocean_model_restart(ocean_state, timestamp)
+          call ocean_model_restart(Ocean_state, timestamp)
       endif
     endif
-#endif
 
     if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
-#ifdef XXCESMCOUPLEDXX
-    call update_ocean_model(ImportState, ocean_state, ocean_public, Time, Time_step_coupled, &
-                           sw_decomp, c1, c2, c3, c4)
-#else
-    call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled)
-#endif
+    call update_ocean_model(Ice_ocean_boundary, Ocean_state, Ocean_sfc, Time, Time_step_coupled)
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
    if(.not. ocean_solo) then
-
-!#ifdef MOM5_CAP
-    call get_ocean_grid(ocean_state, ocean_grid)
-!#endif
-!#ifdef MOM6_CAP
-!    ocean_grid => ocean_internalstate%ptr%ocean_grid_ptr
-!#endif
-
-#ifdef CESMCOUPLED
-    call ocn_export(ocean_public, ocean_grid, exportState)
-#else
     allocate(ofld(isc:iec,jsc:jec))
 
-    call ocean_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
+    call ocean_model_data_get(Ocean_state, Ocean_sfc, 'mask', ofld, isc, jsc)
     do j = lbnd2, ubnd2
     do i = lbnd1, ubnd1
        j1 = j - lbnd2 + jsc
@@ -1737,63 +1570,16 @@ module mom_cap_mod
       do i = lbnd1, ubnd1
         j1 = j - lbnd2 + jsc  ! work around local vs global indexing
         i1 = i - lbnd1 + isc
-        dataPtr_ocz(i,j) = ocean_grid%cos_rot(i1,j1)*ocz(i,j) &
-                         - ocean_grid%sin_rot(i1,j1)*ocm(i,j)
-        dataPtr_ocm(i,j) = ocean_grid%cos_rot(i1,j1)*ocm(i,j) &
-                         + ocean_grid%sin_rot(i1,j1)*ocz(i,j)
+        dataPtr_ocz(i,j) = Ocean_grid%cos_rot(i1,j1)*ocz(i,j) &
+                         - Ocean_grid%sin_rot(i1,j1)*ocm(i,j)
+        dataPtr_ocm(i,j) = Ocean_grid%cos_rot(i1,j1)*ocm(i,j) &
+                         + Ocean_grid%sin_rot(i1,j1)*ocz(i,j)
       enddo
     enddo
     deallocate(ocz, ocm)
    endif  ! not ocean_solo
 
-    call ESMF_LogWrite("Before writing diagnostics", dataPtr_model_data_get(ocean_state, ocean_public, 'mask', ofld, isc, jsc)
-    do j = lbnd2, ubnd2
-    do i = lbnd1, ubnd1
-       j1 = j - lbnd2 + jsc
-       i1 = i - lbnd1 + isc
-       dataPtr_mask(i,j) = nint(ofld(i1,j1))
-    enddo
-    enddo
-    deallocate(ofld)
-
-    ! Now rotate ocn current from tripolar grid back to lat/lon grid (CCW)
-    allocate(ocz(lbnd1:ubnd1,lbnd2:ubnd2))
-    allocate(ocm(lbnd1:ubnd1,lbnd2:ubnd2))
-
-    call State_getFldPtr(exportState,'ocn_current_zonal',dataPtr_ocz,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(exportState,'ocn_current_merid',dataPtr_ocm,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call State_getFldPtr(exportState,'freezing_melting_potential',dataPtr_frazil,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    dataPtr_frazil = dataPtr_frazil/dt_cpld !convert from J/m^2 to W/m^2 for CICE coupling
-
-    ocz = dataPtr_ocz
-    ocm = dataPtr_ocm
-    do j  = lbnd2, ubnd2
-      do i = lbnd1, ubnd1
-        j1 = j - lbnd2 + jsc  ! work around local vs global indexing
-        i1 = i - lbnd1 + isc
-        dataPtr_ocz(i,j) = ocean_grid%cos_rot(i1,j1)*ocz(i,j) &
-                         - ocean_grid%sin_rot(i1,j1)*ocm(i,j)
-        dataPtr_ocm(i,j) = ocean_grid%cos_rot(i1,j1)*ocm(i,j) &
-                         + ocean_grid%sin_rot(i1,j1)*ocz(i,j)
-      enddo
-    enddo
-    deallocate(ocz, ocm)
-   endif  ! not ocean_solo
-
-    call ESMF_LogWrite(, rc=rc)
+    call ESMF_LogWrite("Before writing diagnostics", ESMF_LOGMSG_INFO, rc=rc)
     if(write_diagnostics) then
       call NUOPC_Write(exportState, fileNamePrefix='field_ocn_export_', &
         timeslice=export_slice, relaxedFlag=.true., rc=rc) 
@@ -1802,11 +1588,10 @@ module mom_cap_mod
         file=__FILE__)) &
         return  ! bail out
       export_slice = export_slice + 1
-#endif
-    endif  ! not ocean solo
+    endif
 
     call ESMF_LogWrite("Before calling sbc forcing", ESMF_LOGMSG_INFO, rc=rc)
-    call external_coupler_sbc_after(Ice_ocean_boundary, ocean_public, nc, dt_cpld )
+    call external_coupler_sbc_after(Ice_ocean_boundary, Ocean_sfc, nc, dt_cpld )
 
     call ESMF_LogWrite("Before dumpMomInternal", ESMF_LOGMSG_INFO, rc=rc)
     !write(*,*) 'MOM: --- run phase called ---'
@@ -1831,12 +1616,12 @@ module mom_cap_mod
 
 !--------- export fields -------------
 
-!    call dumpMomInternal(mom_grid_i, export_slice, "ocean_mask", "will provide", dataPtr_mask)
-    call dumpMomInternal(mom_grid_i, export_slice, "sea_surface_temperature", "will provide", ocean_public%t_surf)
-    call dumpMomInternal(mom_grid_i, export_slice, "s_surf"    , "will provide", ocean_public%s_surf )
-    call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_zonal", "will provide", ocean_public%u_surf )
-    call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_merid", "will provide", ocean_public%v_surf )
-    call dumpMomInternal(mom_grid_i, export_slice, "sea_lev"   , "will provide", ocean_public%sea_lev)
+    call dumpMomInternal(mom_grid_i, export_slice, "ocean_mask", "will provide", dataPtr_mask)
+    call dumpMomInternal(mom_grid_i, export_slice, "sea_surface_temperature", "will provide", Ocean_sfc%t_surf)
+    call dumpMomInternal(mom_grid_i, export_slice, "s_surf"    , "will provide", Ocean_sfc%s_surf )
+    call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_zonal", "will provide", Ocean_sfc%u_surf )
+    call dumpMomInternal(mom_grid_i, export_slice, "ocn_current_merid", "will provide", Ocean_sfc%v_surf )
+    call dumpMomInternal(mom_grid_i, export_slice, "sea_lev"   , "will provide", Ocean_sfc%sea_lev)
 
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
 
@@ -1853,8 +1638,8 @@ module mom_cap_mod
     integer, intent(out) :: rc
     
     ! local variables
-    type (ocean_public_type),      pointer :: ocean_public          
-    type (ocean_state_type),       pointer :: ocean_state
+    type (ocean_public_type),      pointer :: Ocean_sfc          
+    type (ocean_state_type),       pointer :: Ocean_state
     type(ocean_internalstate_wrapper)      :: ocean_internalstate
     type(TIME_TYPE)                        :: Time        
     type(ESMF_Clock)                       :: clock
@@ -1871,8 +1656,8 @@ module mom_cap_mod
       file=__FILE__)) &
       return  ! bail out
 
-    ocean_public          => ocean_internalstate%ptr%ocean_public_type_ptr
-    ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
+    Ocean_sfc          => ocean_internalstate%ptr%ocean_public_type_ptr
+    Ocean_state        => ocean_internalstate%ptr%ocean_state_type_ptr
 
     call NUOPC_ModelGet(gcomp, modelClock=clock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -1887,7 +1672,7 @@ module mom_cap_mod
       return  ! bail out
     Time = esmf2fms_time(currTime)
 
-    call ocean_model_end (ocean_public, ocean_State, Time)
+    call ocean_model_end (Ocean_sfc, Ocean_State, Time)
     call diag_manager_end(Time )
     call field_manager_end
 
@@ -1960,18 +1745,18 @@ module mom_cap_mod
   return
   end  subroutine external_coupler_sbc_init
 
-  subroutine external_coupler_sbc_before(Ice_ocean_boundary, ocean_public, nsteps, dt_cpld )
+  subroutine external_coupler_sbc_before(Ice_ocean_boundary, Ocean_sfc, nsteps, dt_cpld )
   implicit none
   type (ice_ocean_boundary_type), intent(INOUT) :: Ice_ocean_boundary
-  type (ocean_public_type) , intent(INOUT)        :: ocean_public
+  type (ocean_public_type) , intent(INOUT)        :: Ocean_sfc
   integer , intent(IN)                       :: nsteps, dt_cpld
   return
   end subroutine external_coupler_sbc_before
 
 
-  subroutine external_coupler_sbc_after(Ice_ocean_boundary, ocean_public, nsteps, dt_cpld )
+  subroutine external_coupler_sbc_after(Ice_ocean_boundary, Ocean_sfc, nsteps, dt_cpld )
   type (ice_ocean_boundary_type) :: Ice_ocean_boundary
-  type (ocean_public_type)         :: ocean_public
+  type (ocean_public_type)         :: Ocean_sfc
   integer                        :: nsteps, dt_cpld
   return
   end subroutine external_coupler_sbc_after
@@ -2085,7 +1870,6 @@ module mom_cap_mod
 
   end subroutine State_GetFldPtr
 
-#ifndef CESMCOUPLED
   !-----------------------------------------------------------------------------
   subroutine MOM_AdvertiseFields(state, nfields, field_defs, rc)
 
@@ -2135,63 +1919,46 @@ module mom_cap_mod
 
     do i = 1, nfields
 
+      if (field_defs(i)%assoc) then
+        write(tmpstr, *) subname, tag, ' Field ', field_defs(i)%shortname, ':', &
+          lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
+          lbound(field_defs(i)%farrayPtr,2), ubound(field_defs(i)%farrayPtr,2)
+        call ESMF_LogWrite(tmpstr, ESMF_LOGMSG_INFO, rc=dbrc)
+        field = ESMF_FieldCreate(grid=grid, &
+          farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
+!          farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
+          name=field_defs(i)%shortname, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      else
+        field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
+          name=field_defs(i)%shortname, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+      endif
+
       if (NUOPC_IsConnected(state, fieldName=field_defs(i)%shortname)) then
-
-        if (field_defs(i)%shortname == flds_scalar_name) then
-          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected on root pe.", &
-            ESMF_LOGMSG_INFO, &
-            line=__LINE__, &
-            file=__FILE__, &
-            rc=dbrc)
-          call shr_nuopc_fldList_SetScalarField(field, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-        elseif (field_defs(i)%assoc) then
-          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected and associated.", &
-            ESMF_LOGMSG_INFO, &
-            line=__LINE__, &
-            file=__FILE__, &
-            rc=dbrc)
-          write(tmpstr,'(a,4i12)') subname//trim(tag)//' Field '//trim(field_defs(i)%shortname)//':', &
-            lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
-            lbound(field_defs(i)%farrayPtr,2), ubound(field_defs(i)%farrayPtr,2)
-          call ESMF_LogWrite(tmpstr, ESMF_LOGMSG_INFO, rc=dbrc)
-          field = ESMF_FieldCreate(grid=grid, &
-            farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_DELOCAL, &
-!            farray=field_defs(i)%farrayPtr, indexflag=ESMF_INDEX_GLOBAL, &
-            name=field_defs(i)%shortname, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-        else
-          call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is connected.", &
-            ESMF_LOGMSG_INFO, &
-            line=__LINE__, &
-            file=__FILE__, &
-            rc=dbrc)
-          field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
-            name=field_defs(i)%shortname, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, &
-            file=__FILE__)) &
-            return  ! bail out
-        endif
-
         call NUOPC_Realize(state, field=field, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
           file=__FILE__)) &
           return  ! bail out
+        call ESMF_LogWrite(subname // tag // " Field "// field_defs(i)%stdname // " is connected.", &
+          ESMF_LOGMSG_INFO, &
+          line=__LINE__, &
+          file=__FILE__, &
+          rc=dbrc)
 !        call ESMF_FieldPrint(field=field, rc=rc)
 !        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
 !          line=__LINE__, &
 !          file=__FILE__)) &
 !          return  ! bail out
       else
-        call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is not connected.", &
+        call ESMF_LogWrite(subname // tag // " Field "// field_defs(i)%stdname // " is not connected.", &
           ESMF_LOGMSG_INFO, &
           line=__LINE__, &
           file=__FILE__, &
@@ -2209,14 +1976,17 @@ module mom_cap_mod
     enddo
 
   end subroutine MOM_RealizeFields
-#endif
+
   !-----------------------------------------------------------------------------
 
-  subroutine MOM_FieldsSetup(ice_ocean_boundary,ocean_public)
+  subroutine MOM_FieldsSetup(ice_ocean_boundary,ocean_sfc)
     type(ice_ocean_boundary_type), intent(in)   :: Ice_ocean_boundary
-    type(ocean_public_type), intent(in)         :: ocean_public
+    type(ocean_public_type), intent(in)         :: Ocean_sfc
 
-    integer :: rc
+#ifdef CESMCOUPLED
+!    type (shr_nuopc_fldList_Type) :: fldsList
+#endif
+
     character(len=*),parameter  :: subname='(mom_cap:MOM_FieldsSetup)'
 
   !!! fld_list_add(num, fldlist, stdname, transferOffer, data(optional), shortname(optional))
@@ -2230,14 +2000,14 @@ module mom_cap_mod
     ! create import fields list                                                                                        
     !--------------------------------                                                                                  
 
-    call shr_nuopc_fldList_Zero(fldsToOcn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_Zero(fldsList, rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
-    call shr_nuopc_fldList_fromflds(fldsToOcn, flds_x2o, flds_x2o_map, "will provide", subname//":flds_x2o", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_fromflds(fldsList, flds_x2o, flds_x2o_map, "will provide", subname//":flds_x2o", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
-    call shr_nuopc_fldList_Add(fldsToOcn, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_Add(fldsList, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
     ! convert to fldsToOcn
 
@@ -2245,14 +2015,51 @@ module mom_cap_mod
     ! create export fields list                                                                                        
     !--------------------------------                                                                                  
 
-    call shr_nuopc_fldList_Zero(fldsFrOcn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_Zero(fldsList, rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
-    call shr_nuopc_fldList_fromflds(fldsFrOcn, flds_o2x, flds_o2x_map, "will provide", subname//":flds_o2x", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_fromflds(fldsList, flds_o2x, flds_o2x_map, "will provide", subname//":flds_o2x", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
 
-    call shr_nuopc_fldList_Add(fldsFrOcn, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+!    call shr_nuopc_fldList_Add(fldsList, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+
+! WARNING tcx tcraig
+! tcraig this is just a starting point, the fields are not complete or correct here
+! tcraig we will need to figure out whether to adjust the mediator coupling fields for mom or vv or a bit of both
+
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_taux" , "will provide", data=Ice_ocean_boundary%u_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_tauy" , "will provide", data=Ice_ocean_boundary%v_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_sen"  , "will provide", data=Ice_ocean_boundary%t_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_evap" , "will provide", data=Ice_ocean_boundary%q_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_salt" , "will provide", data=Ice_ocean_boundary%salt_flux)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_lwdn" , "will provide", data=Ice_ocean_boundary%lw_flux  )
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdr", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dir)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swvdf", "will provide", data=Ice_ocean_boundary%sw_flux_vis_dif)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swidr", "will provide", data=Ice_ocean_boundary%sw_flux_nir_dir)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_swidf", "will provide", data=Ice_ocean_boundary%sw_flux_nir_dif)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rain" , "will provide", data=Ice_ocean_boundary%lprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_snow" , "will provide", data=Ice_ocean_boundary%fprec  )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofl" , "will provide", data=Ice_ocean_boundary%runoff )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_rofi" , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_meltw", "will provide", data=Ice_ocean_boundary%calving)
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "runoff_heat_flux" , "will provide", data=Ice_ocean_boundary%runoff_hflx )
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_melth", "will provide", data=Ice_ocean_boundary%calving_hflx)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_pslv" , "will provide", data=Ice_ocean_boundary%p )
+!    call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice", "will provide", data=Ice_ocean_boundary%mi)
+
+!--------- export fields -------------
+
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_omask", "will provide")
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_t", "will provide", data=Ocean_sfc%t_surf)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_s"    , "will provide", data=Ocean_sfc%s_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_u", "will provide", data=Ocean_sfc%u_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_v", "will provide", data=Ocean_sfc%v_surf )
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir", "will provide")
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir", "will provide")
+!    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=Ocean_sfc%sea_lev)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"   , "will provide", data=Ocean_sfc%frazil)
+
 
 #else
 !--------- import fields -------------
@@ -2281,21 +2088,21 @@ module mom_cap_mod
 !--------- export fields -------------
 
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask", "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature", "will provide", data=ocean_public%t_surf)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"    , "will provide", data=ocean_public%s_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal", "will provide", data=ocean_public%u_surf )
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid", "will provide", data=ocean_public%v_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature", "will provide", data=Ocean_sfc%t_surf)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "s_surf"    , "will provide", data=Ocean_sfc%s_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal", "will provide", data=Ocean_sfc%u_surf )
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid", "will provide", data=Ocean_sfc%v_surf )
 !    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_idir", "will provide")
 !    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_jdir", "will provide")
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=ocean_public%sea_lev)
-    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"   , "will provide", data=ocean_public%frazil)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=Ocean_sfc%sea_lev)
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"   , "will provide", data=Ocean_sfc%frazil)
 
 #endif
 
   end subroutine MOM_FieldsSetup
 
   !-----------------------------------------------------------------------------
-#ifndef CESMCOUPLED
+
   subroutine fld_list_add(num, fldlist, stdname, transferOffer, data, shortname)
     ! ----------------------------------------------
     ! Set up a list of field information
@@ -2335,7 +2142,6 @@ module mom_cap_mod
     endif
 
   end subroutine fld_list_add
-#endif
 
   subroutine dumpMomInternal(grid, slice, stdname, nop, farray)
 
@@ -2387,52 +2193,52 @@ module mom_cap_mod
     
   end subroutine
 
-#if (1 == 0)
 #ifdef MOM6_CAP
-  subroutine calculate_rot_angle(OS, OSFC)
+  subroutine calculate_rot_angle(OS, OSFC, OG)
     type(ocean_state_type), intent(in)    :: OS
     type(ocean_public_type), intent(in)   :: OSFC
+    type(ocean_grid_type), pointer        :: OG
 
     integer                               :: i,j,ishift,jshift,ilb,iub,jlb,jub
     real                                  :: angle, lon_scale
-    type(ocean_grid_type), pointer        :: grid
+    type(ocean_grid_type), pointer        :: G
 
-    call get_ocean_grid(OS, grid)
+    call get_ocean_grid(OS, G)
 
-    !print *, 'lbound: ', lbound(grid%geoLatT), lbound(grid%geoLonT), lbound(grid%sin_rot)
-    !print *, 'ubound: ', ubound(grid%geoLatT), ubound(grid%geoLonT), ubound(grid%sin_rot)
+    !print *, 'lbound: ', lbound(G%geoLatT), lbound(G%geoLonT), lbound(G%sin_rot)
+    !print *, 'ubound: ', ubound(G%geoLatT), ubound(G%geoLonT), ubound(G%sin_rot)
 
-    !print *, minval(grid%geoLatT), maxval(grid%geoLatT)
-    !print *, minval(grid%geoLonT), maxval(grid%geoLonT)
-    !print *, grid%isc, grid%jsc, grid%iec, grid%jec
+    !print *, minval(G%geoLatT), maxval(G%geoLatT)
+    !print *, minval(G%geoLonT), maxval(G%geoLonT)
+    !print *, G%isc, G%jsc, G%iec, G%jec
 
     !
     ! The bounds isc:iec goes from 5-104, isc-ishift:iec-ishift goes from 1:100
     !
     call mpp_get_compute_domain(OSFC%Domain, ilb, iub, jlb, jub)
-    ishift = ilb-grid%isc
-    jshift = jlb-grid%jsc
+    ishift = ilb-G%isc
+    jshift = jlb-G%jsc
     !print *, 'ilb, iub, jlb, jub', ilb, iub, jlb, jub, ishift, jshift
-    !print *, 'sizes', iub-ilb, jub-jlb, grid%iec-grid%isc, grid%jec-grid%jsc
-!    allocate(grid%sin_rot(ilb:iub, jlb:jub))
-!    allocate(grid%cos_rot(ilb:iub, jlb:jub))
+    !print *, 'sizes', iub-ilb, jub-jlb, G%iec-G%isc, G%jec-G%jsc
+    allocate(OG)
+    allocate(OG%sin_rot(ilb:iub, jlb:jub))
+    allocate(OG%cos_rot(ilb:iub, jlb:jub))
 
     ! loop 5-104
-    do j=grid%jsc,grid%jec ; do i=grid%isc,grid%iec
-      lon_scale    = cos((grid%geoLatBu(I-1,J-1) + grid%geoLatBu(I,J-1  ) + &
-                          grid%geoLatBu(I-1,J) + grid%geoLatBu(I,J)) * atan(1.0)/180)
-      angle        = atan2((grid%geoLonBu(I-1,J) + grid%geoLonBu(I,J) - &
-                            grid%geoLonBu(I-1,J-1) - grid%geoLonBu(I,J-1))*lon_scale, &
-                            grid%geoLatBu(I-1,J) + grid%geoLatBu(I,J) - &
-                            grid%geoLatBu(I-1,J-1) - grid%geoLatBu(I,J-1) )
-      grid%sin_rot(i+ishift,j+jshift) = sin(angle) ! angle is the clockwise angle from lat/lon to ocean
-      grid%cos_rot(i+ishift,j+jshift) = cos(angle) ! grid (e.g. angle of ocean "north" from true north)
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      lon_scale    = cos((G%geoLatBu(I-1,J-1) + G%geoLatBu(I,J-1  ) + &
+                          G%geoLatBu(I-1,J) + G%geoLatBu(I,J)) * atan(1.0)/180)
+      angle        = atan2((G%geoLonBu(I-1,J) + G%geoLonBu(I,J) - &
+                            G%geoLonBu(I-1,J-1) - G%geoLonBu(I,J-1))*lon_scale, &
+                            G%geoLatBu(I-1,J) + G%geoLatBu(I,J) - &
+                            G%geoLatBu(I-1,J-1) - G%geoLatBu(I,J-1) )
+      OG%sin_rot(i+ishift,j+jshift) = sin(angle) ! angle is the clockwise angle from lat/lon to ocean
+      OG%cos_rot(i+ishift,j+jshift) = cos(angle) ! grid (e.g. angle of ocean "north" from true north)
     enddo ; enddo
-    !print *, minval(grid%sin_rot), maxval(grid%sin_rot)
-    !print *, minval(grid%cos_rot), maxval(grid%cos_rot)
+    !print *, minval(OG%sin_rot), maxval(OG%sin_rot)
+    !print *, minval(OG%cos_rot), maxval(OG%cos_rot)
 
   end subroutine
-#endif
 #endif
 
 
