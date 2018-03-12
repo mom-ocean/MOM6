@@ -675,8 +675,15 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   endif  ! endif for KPP
 
   ! Add diffusivity due to convection (computed via CVMix)
-  if (CS%use_cvmix_conv) &
+  if (CS%use_cvmix_conv) then
     call calculate_cvmix_conv(h, tv, G, GV, Hml, CS%cvmix_conv_csp)
+
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        visc%Kd_turb(i,j,k) = visc%Kd_turb(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
+        visc%Kv_turb(i,j,k) = visc%Kv_turb(i,j,k) + CS%cvmix_conv_csp%kv_conv_3d(i,j,k)
+      enddo ; enddo ; enddo
+
+  endif
 
   if (CS%useKPP) then
 
