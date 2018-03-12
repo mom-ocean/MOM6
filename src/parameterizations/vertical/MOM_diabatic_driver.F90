@@ -635,6 +635,14 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 
+    ! If visc%MLD exists, copy the KPP BLD into it
+    if (associated(visc%MLD)) then
+      call pass_var(CS%KPP_CSp%OBLdepth, G%domain, halo=1)
+      visc%MLD(:,:) = CS%KPP_CSp%OBLdepth(:,:)
+      Hml(:,:) = CS%KPP_CSp%OBLdepth(:,:)
+    endif
+
+
     if (.not. CS%KPPisPassive) then
 !$OMP do
       do k=1,nz+1 ; do j=js,je ; do i=is,ie
