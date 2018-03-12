@@ -1162,11 +1162,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
 
   ! Find edge values of T and S used in reconstructions
   if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
-!   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
-!   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-!     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
-!   endif
+    call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, .true.)
   else
 !    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
     do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
