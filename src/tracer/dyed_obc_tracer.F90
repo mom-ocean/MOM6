@@ -69,8 +69,6 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 #include "version_variable.h"
   character(len=40)  :: mdl = "dyed_obc_tracer" ! This module's name.
   character(len=200) :: inputdir
-  character(len=48)  :: var_name ! The variable's name.
-  character(len=48)  :: desc_name ! The variable's descriptor.
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   real, pointer :: tr_ptr(:,:,:) => NULL()

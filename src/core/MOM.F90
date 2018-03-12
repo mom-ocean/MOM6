@@ -1917,7 +1917,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                            convergence_scale=0.001*GV%H_to_kg_m2, CMOR_tendprefix="osalt", diag_form=2)
     endif
     if (associated(CS%OBC)) &
-      call register_temp_salt_segments(GV, CS%OBC, CS%tv, vd_T, vd_S, param_file)
+      call register_temp_salt_segments(GV, CS%OBC, CS%tracer_Reg, param_file)
   endif
   if (use_frazil) then
     allocate(CS%tv%frazil(isd:ied,jsd:jed)) ; CS%tv%frazil(:,:) = 0.0

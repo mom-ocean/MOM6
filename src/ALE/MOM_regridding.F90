@@ -6,8 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
-use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,            only : create_file, write_field, close_file, slasher
+use MOM_io,            only : slasher
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : EOS_type, calculate_density
