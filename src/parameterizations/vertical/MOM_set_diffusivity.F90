@@ -2,28 +2,6 @@ module MOM_set_diffusivity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-!********+*********+*********+*********+*********+*********+*********+**
-!*                                                                     *
-!*  By Robert Hallberg, September 1997 - June 2007                     *
-!*                                                                     *
-!*    This file contains the subroutines that sets the diapycnal       *
-!*  diffusivity, perhaps adding up pieces that are calculated in other *
-!*  files and passed in via the vertvisc type argument.                *
-!*                                                                     *
-!*     A small fragment of the grid is shown below:                    *
-!*                                                                     *
-!*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v                                        *
-!*    j    x ^ x ^ x   At >:  u                                        *
-!*    j    > o > o >   At o:  h, buoy, ustar, T, S, Kd, ea, eb, etc.   *
-!*    j-1  x ^ x ^ x                                                   *
-!*        i-1  i  i+1  At x & ^:                                       *
-!*           i  i+1    At > & o:                                       *
-!*                                                                     *
-!*  The boundaries always run through q grid points (x).               *
-!*                                                                     *
-!********+*********+*********+*********+*********+*********+*********+**
-
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
 use MOM_diag_mediator,       only : diag_ctrl, time_type
@@ -41,12 +19,11 @@ use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_CS
+use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_cs
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
-use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_verticalGrid,        only : verticalGrid_type
 use user_change_diffusivity, only : user_change_diff, user_change_diff_init
 use user_change_diffusivity, only : user_change_diff_end, user_change_diff_CS
 
@@ -244,11 +221,9 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
   logical :: useKappaShear    ! If true, use the kappa_shear module to find the
                               ! shear-driven diapycnal diffusivity.
-
-  logical :: useCVmix         ! If true, use one of the CVMix modules to find
+  logical :: use_cvmix_shear  ! If true, use one of the CVMix modules to find
                               ! shear-driven diapycnal diffusivity.
-
-  logical :: double_diffusion           ! If true, enable double-diffusive mixing.
+  logical :: double_diffusion ! If true, enable double-diffusive mixing.
   logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
                               ! does not rely on a layer-formulation.
   real    :: Max_Rrho_salt_fingers      ! max density ratio for salt fingering
@@ -266,7 +241,7 @@ type, public :: set_diffusivity_CS ; private
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
-  type(CVMix_shear_CS),      pointer :: CVMix_Shear_CSp      => NULL()
+  type(cvmix_shear_cs),      pointer :: cvmix_shear_csp      => NULL()
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
 
   integer :: id_TKE_itidal  = -1
@@ -380,22 +355,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                    optional, intent(out)   :: Kd_int !< Diapycnal diffusivity at each interface
                                                    !! (m2/sec).
 
-! Arguments:
-!  (in)      u      - zonal velocity (m/s)
-!  (in)      v      - meridional velocity (m/s)
-!  (in)      h      - Layer thickness (m or kg/m2)
-!  (in)      tv     - structure with pointers to thermodynamic fields
-!  (in)      fluxes - structure of surface fluxes that may be used
-!  (in)      visc   - structure containing vertical viscosities, bottom boundary
-!                     layer properies, and related fields
-!  (in)      dt     - time increment (sec)
-!  (in)      G      - ocean grid structure
-!  (in)      GV     - The ocean's vertical grid structure.
-!  (in)      CS     - module control structure
-!  (in)      j      - meridional index upon which to work
-!  (out)     Kd     - diapycnal diffusivity of each layer (m2/sec)
-!  (out,opt) Kd_int - diapycnal diffusivity at each interface (m2/sec)
-
+  ! local variables
   real, dimension(SZI_(G)) :: &
     depth, &      ! distance from surface of an interface (meter)
     N2_bot        ! bottom squared buoyancy frequency (1/s2)
@@ -580,9 +540,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
-  elseif (CS%useCVMix) then
+  elseif (CS%use_cvmix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
-    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%CVMix_shear_CSp)
+    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%cvmix_shear_csp)
   elseif (associated(visc%Kv_turb)) then
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -674,6 +634,10 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
         Kd(i,j,k) = max(CS%Kd_min, Kd_sfc(i,j) * &
              ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
       enddo ; enddo
+   ! GMM, CVMix "internal" bg mixing can go here
+   !elseif (CS%use_cvmix_internal??) then
+
+
     else
       do k=1,nz ; do i=is,ie
         Kd(i,j,k) = Kd_sfc(i,j)
@@ -708,7 +672,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%useKappaShear .or. CS%useCVMix) then
+    if (CS%useKappaShear .or. CS%use_cvmix_shear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_turb(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
@@ -834,6 +798,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
                           T_f, S_f, dd%Kd_user)
   endif
 
+  ! GMM, post diags...
   if (CS%id_Kd_layer > 0) call post_data(CS%id_Kd_layer, Kd, CS%diag)
 
   num_z_diags = 0
@@ -2533,6 +2498,7 @@ subroutine set_density_ratios(h, tv, kb, G, GV, CS, j, ds_dsp1, rho_0)
 
 end subroutine set_density_ratios
 
+!> Initialized the set_diffusivity module
 subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp, int_tide_CSp)
   type(time_type),          intent(in)    :: Time
   type(ocean_grid_type),    intent(inout) :: G    !< The ocean's grid structure.
@@ -2547,21 +2513,14 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   type(int_tide_CS),        pointer       :: int_tide_CSp  !< pointer to the internal tides control
                                                   !! structure (BDM)
 
-! Arguments:
-!  (in)      Time          - current model time
-!  (in)      G             - ocean grid structure
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      param_file    - structure indicating open file to parse for params
-!  (in)      diag          - structure used to regulate diagnostic output
-!  (in/out)  CS            - pointer set to point to the module control structure
-!  (in)      diag_to_Z_CSp - pointer to the Z-diagnostics control structure
-!  (in)      int_tide_CSp  - pointer to the internal tides control structure (BDM)
-
+  ! local variables
   real :: decay_length, utide, zbot, hamp
   type(vardesc) :: vd
   logical :: read_tideamp, ML_use_omega
+
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
+
   character(len=40)  :: mdl = "MOM_set_diffusivity"  ! This module's name.
   character(len=20)  :: tmpstr
   character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
@@ -3131,6 +3090,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     endif
   endif
 
+
+  ! GMM, the following should be moved to the DD module
   call get_param(param_file, mdl, "DOUBLE_DIFFUSION", CS%double_diffusion, &
                  "If true, increase diffusivitives for temperature or salt \n"//&
                  "based on double-diffusive paramaterization from MOM4/KPP.", &
@@ -3181,9 +3142,9 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
   CS%useKappaShear = kappa_shear_init(Time, G, GV, param_file, CS%diag, CS%kappaShear_CSp)
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
-  CS%useCVMix = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_CSp)
 
-
+  ! CVMix shear-driven mixing
+  CS%use_cvmix_shear = cvmix_shear_init(Time, G, GV, param_file, CS%diag, CS%cvmix_shear_csp)
 
 end subroutine set_diffusivity_init
 
