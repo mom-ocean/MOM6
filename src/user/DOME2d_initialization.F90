@@ -8,9 +8,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, read_data, read_axis_data, SINGLE_FILE
-use MOM_io, only : write_field, slasher, vardesc
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
