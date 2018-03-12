@@ -22,8 +22,8 @@ use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
-use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
-use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
+use MOM_cvmix_conv,          only : cvmix_conv_init, cvmix_conv_cs
+use MOM_cvmix_conv,          only : cvmix_conv_end, calculate_cvmix_conv
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
@@ -90,6 +90,8 @@ type, public:: diabatic_CS ; private
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
+  logical :: use_cvmix_conv          !< If true, use the CVMix module to get enhanced
+                                     !! mixing due to convection.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
@@ -149,8 +151,6 @@ type, public:: diabatic_CS ; private
   logical :: useKPP                  !< use CVmix/KPP diffusivities and non-local transport
   logical :: salt_reject_below_ML    !< If true, add salt below mixed layer (layer mode only)
   logical :: KPPisPassive            !< If true, KPP is in passive mode, not changing answers.
-  logical :: useConvection           !< If true, calculate large diffusivities when column
-                                     !! is statically unstable.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debugConservation       !< If true, monitor conservation and extrema.
   logical :: tracer_tridiag          !< If true, use tracer_vertdiff instead of tridiagTS for
@@ -220,7 +220,7 @@ type, public:: diabatic_CS ; private
   type(optics_type),            pointer :: optics                => NULL()
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
-  type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
+  type(cvmix_conv_cs),          pointer :: cvmix_conv_csp        => NULL()
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
@@ -674,9 +674,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   endif  ! endif for KPP
 
-  ! Check for static instabilities and increase Kd_int where unstable
-  if (CS%useConvection) call diffConvection_calculate(CS%Conv_CSp, &
-         G, GV, h, tv%T, tv%S, tv%eqn_of_state, Kd_int)
+  ! Add diffusivity due to convection (computed via CVMix)
+  if (CS%use_cvmix_conv) &
+    call calculate_cvmix_conv(h, tv, G, GV, Hml, CS%cvmix_conv_csp)
 
   if (CS%useKPP) then
 
@@ -2332,9 +2332,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   endif
 
 
-  ! CS%useConvection is set to True IF convection will be used, otherwise False.
-  ! CS%Conv_CSp is allocated by diffConvection_init()
-  CS%useConvection = diffConvection_init(param_file, G, diag, Time, CS%Conv_CSp)
+  ! CS%use_cvmix_conv is set to True if CVMix convection will be used, otherwise
+  ! False.
+  CS%use_cvmix_conv = cvmix_conv_init(Time, G, GV, param_file, diag, CS%cvmix_conv_csp)
 
   call entrain_diffusive_init(Time, G, GV, param_file, diag, CS%entrain_diffusive_CSp)
 
@@ -2422,7 +2422,9 @@ subroutine diabatic_driver_end(CS)
     deallocate( CS%KPP_NLTscalar )
     call KPP_end(CS%KPP_CSp)
   endif
-  if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
+
+  if (CS%use_cvmix_conv) call cvmix_conv_end(CS%cvmix_conv_csp)
+
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
   if (CS%debug_energy_req) &
