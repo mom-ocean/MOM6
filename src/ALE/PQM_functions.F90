@@ -17,14 +17,14 @@ implicit none ; private
 
 public PQM_reconstruction, PQM_boundary_extrapolation, PQM_boundary_extrapolation_v1
 
-real, parameter :: h_neglect = 1.E-30
+real, parameter :: hNeglect_dflt = 1.E-30
 
 contains
 
 !------------------------------------------------------------------------------
 ! PQM_reconstruction
 ! -----------------------------------------------------------------------------
-subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by quartic polynomials within each cell.
 !
@@ -43,6 +43,9 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                          !! the purpose of cell reconstructions
+                                          !! in the same units as h
 
   ! Local variables
   integer   :: k                ! loop index
@@ -52,7 +55,7 @@ subroutine PQM_reconstruction( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
   real      :: a, b, c, d, e    ! parabola coefficients
 
   ! PQM limiter
-  call PQM_limiter( N, h, u, ppoly_E, ppoly_S )
+  call PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 
   ! Loop on cells to construct the cubic within each cell
   do k = 1,N
@@ -86,7 +89,7 @@ end subroutine PQM_reconstruction
 !------------------------------------------------------------------------------
 ! Limit pqm
 ! -----------------------------------------------------------------------------
-subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
+subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S, h_neglect )
 !------------------------------------------------------------------------------
 ! Standard PQM limiter (White & Adcroft, JCP 2008).
 !
@@ -99,31 +102,38 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  integer,              intent(in)    :: N ! Number of cells
-  real, dimension(:),   intent(in)    :: h ! cell widths (size N)
-  real, dimension(:),   intent(in)    :: u ! cell averages (size N)
-  real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
-  real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
+  integer,              intent(in)    :: N !< Number of cells
+  real, dimension(:),   intent(in)    :: h !< cell widths (size N)
+  real, dimension(:),   intent(in)    :: u !< cell average properties (size N)
+  real, dimension(:,:), intent(inout) :: ppoly_E !< Potentially modified edge values,
+                                           !! with the same units as u.
+  real, dimension(:,:), intent(inout) :: ppoly_S !< Potentially modified edge slopes,
+                                           !! with the same units as u.
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                           !! the purpose of cell reconstructions
+                                           !! in the same units as h
 
   ! Local variables
-  integer   :: k            ! loop index
-  integer   :: inflexion_l
-  integer   :: inflexion_r
-  real      :: u0_l, u0_r   ! edge values
-  real      :: u1_l, u1_r   ! edge slopes
-  real      :: u_l, u_c, u_r        ! left, center and right cell averages
-  real      :: h_l, h_c, h_r        ! left, center and right cell widths
-  real      :: sigma_l, sigma_c, sigma_r    ! left, center and right
-                                            ! van Leer slopes
-  real      :: slope        ! retained PLM slope
-  real      :: a, b, c, d, e
-  real      :: alpha1, alpha2, alpha3
-  real      :: rho, sqrt_rho
-  real      :: gradient1, gradient2
-  real      :: x1, x2
+  integer :: k            ! loop index
+  integer :: inflexion_l
+  integer :: inflexion_r
+  real    :: u0_l, u0_r     ! edge values
+  real    :: u1_l, u1_r     ! edge slopes
+  real    :: u_l, u_c, u_r  ! left, center and right cell averages
+  real    :: h_l, h_c, h_r  ! left, center and right cell widths
+  real    :: sigma_l, sigma_c, sigma_r ! left, center and right van Leer slopes
+  real    :: slope          ! retained PLM slope
+  real    :: a, b, c, d, e
+  real    :: alpha1, alpha2, alpha3
+  real    :: rho, sqrt_rho
+  real    :: gradient1, gradient2
+  real    :: x1, x2
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, ppoly_E )
+  call bound_edge_values( N, h, u, ppoly_E, hNeglect )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, ppoly_E )
@@ -152,9 +162,9 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
     u_r = u(k+1)
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
 
     if ( (sigma_l * sigma_r) .GT. 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -292,8 +302,8 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the left edge
-      u1_l = ( 10.0 * u_c - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h_c + h_neglect )
-      u1_r = ( -10.0 * u_c + 6.0 * u0_r + 4.0 * u0_l ) / ( h_c + h_neglect )
+      u1_l = ( 10.0 * u_c - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h_c + hNeglect )
+      u1_r = ( -10.0 * u_c + 6.0 * u0_r + 4.0 * u0_l ) / ( h_c + hNeglect )
 
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -303,13 +313,13 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
         u1_l = 0.0
         u0_r = 5.0 * u_c - 4.0 * u0_l
-        u1_r = 20.0 * (u_c - u0_l) / ( h_c + h_neglect )
+        u1_r = 20.0 * (u_c - u0_l) / ( h_c + hNeglect )
 
       else if ( u1_r * slope .LT. 0.0 ) then
 
         u1_r = 0.0
         u0_l = (5.0*u_c - 3.0*u0_r) / 2.0
-        u1_l = 10.0 * (-u_c + u0_r) / (3.0 * h_c + h_neglect)
+        u1_l = 10.0 * (-u_c + u0_r) / (3.0 * h_c + hNeglect)
 
       end if
 
@@ -317,8 +327,8 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the right edge
-      u1_r = ( -10.0 * u_c + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h_c + h_neglect)
-      u1_l = ( 10.0 * u_c - 4.0 * u0_r - 6.0 * u0_l ) / (h_c + h_neglect)
+      u1_r = ( -10.0 * u_c + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h_c + hNeglect)
+      u1_l = ( 10.0 * u_c - 4.0 * u0_r - 6.0 * u0_l ) / (h_c + hNeglect)
 
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -328,13 +338,13 @@ subroutine PQM_limiter( N, h, u, ppoly_E, ppoly_S )
 
         u1_l = 0.0
         u0_r = ( 5.0 * u_c - 3.0 * u0_l ) / 2.0
-        u1_r = 10.0 * (u_c - u0_l) / (3.0 * h_c + h_neglect)
+        u1_r = 10.0 * (u_c - u0_l) / (3.0 * h_c + hNeglect)
 
       else if ( u1_r * slope .LT. 0.0 ) then
 
         u1_r = 0.0
         u0_l = 5.0 * u_c - 4.0 * u0_r
-        u1_l = 20.0 * ( -u_c + u0_r ) / (h_c + h_neglect)
+        u1_l = 20.0 * ( -u_c + u0_r ) / (h_c + hNeglect)
 
       end if
 
@@ -520,7 +530,7 @@ end subroutine PQM_boundary_extrapolation
 !------------------------------------------------------------------------------
 ! pqm boundary extrapolation using rational function
 ! -----------------------------------------------------------------------------
-subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients )
+subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coefficients, h_neglect )
 !------------------------------------------------------------------------------
 ! Reconstruction by parabolas within boundary cells.
 !
@@ -550,23 +560,29 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   real, dimension(:,:), intent(inout) :: ppoly_E            !Edge value of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_S            !Edge slope of polynomial
   real, dimension(:,:), intent(inout) :: ppoly_coefficients !Coefficients of polynomial
+  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+                                          !! the purpose of cell reconstructions
+                                          !! in the same units as h.
 
   ! Local variables
-  integer       :: i0, i1
-  integer       :: inflexion_l
-  integer       :: inflexion_r
-  real          :: u0, u1, um
-  real          :: h0, h1
-  real          :: a, b, c, d, e
-  real          :: ar, br, beta
-  real          :: u0_l, u0_r
-  real          :: u1_l, u1_r
-  real          :: u_plm
-  real          :: slope
-  real          :: alpha1, alpha2, alpha3
-  real          :: rho, sqrt_rho
-  real          :: gradient1, gradient2
-  real          :: x1, x2
+  integer :: i0, i1
+  integer :: inflexion_l
+  integer :: inflexion_r
+  real    :: u0, u1, um
+  real    :: h0, h1
+  real    :: a, b, c, d, e
+  real    :: ar, br, beta
+  real    :: u0_l, u0_r
+  real    :: u1_l, u1_r
+  real    :: u_plm
+  real    :: slope
+  real    :: alpha1, alpha2, alpha3
+  real    :: rho, sqrt_rho
+  real    :: gradient1, gradient2
+  real    :: x1, x2
+  real    :: hNeglect
+
+  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! ----- Left boundary (TOP) -----
   i0 = 1
@@ -579,7 +595,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
   ! Compute real slope and express it w.r.t. local coordinate system
   ! within boundary cell
-  slope = 2.0 * ( u1 - u0 ) / ( ( h0 + h1 ) + h_neglect )
+  slope = 2.0 * ( u1 - u0 ) / ( ( h0 + h1 ) + hNeglect )
   slope = slope * h0
 
   ! The right edge value and slope of the boundary cell are taken to be the
@@ -588,12 +604,12 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   b = ppoly_coefficients(i1,2)
 
   u0_r = a          ! edge value
-  u1_r = b / (h1 + h_neglect) ! edge slope (w.r.t. global coord.)
+  u1_r = b / (h1 + hNeglect) ! edge slope (w.r.t. global coord.)
 
   ! Compute coefficient for rational function based on mean and right
   ! edge value and slope
   if (u1_r.ne.0.) then ! HACK by AJA
-    beta = 2.0 * ( u0_r - um ) / ( (h0 + h_neglect)*u1_r) - 1.0
+    beta = 2.0 * ( u0_r - um ) / ( (h0 + hNeglect)*u1_r) - 1.0
   else
     beta = 0.
   endif ! HACK by AJA
@@ -612,10 +628,10 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
   ! compute corresponding slope.
   if ( abs(um-u0_l) .lt. abs(um-u_plm) ) then
     u1_l = 2.0 * ( br - ar*beta)
-    u1_l = u1_l / (h0 + h_neglect)
+    u1_l = u1_l / (h0 + hNeglect)
   else
     u0_l = u_plm
-    u1_l = slope / (h0 + h_neglect)
+    u1_l = slope / (h0 + hNeglect)
   end if
 
   ! Monotonize quartic
@@ -673,8 +689,8 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
     ! We modify the edge slopes so that both inflexion points
     ! collapse onto the left edge
-    u1_l = ( 10.0 * um - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h0 + h_neglect)
-    u1_r = ( -10.0 * um + 6.0 * u0_r + 4.0 * u0_l ) / (h0 + h_neglect)
+    u1_l = ( 10.0 * um - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h0 + hNeglect)
+    u1_r = ( -10.0 * um + 6.0 * u0_r + 4.0 * u0_l ) / (h0 + hNeglect)
 
     ! One of the modified slopes might be inconsistent. When that happens,
     ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -684,13 +700,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, ppoly_E, ppoly_S, ppoly_coeff
 
       u1_l = 0.0
       u0_r = 5.0 * um - 4.0 * u0_l
-      u1_r = 20.0 * (um - u0_l) / ( h0 + h_neglect )
+      u1_r = 20.0 * (um - u0_l) / ( h0 + hNeglect )
 
     else if ( u1_r * slope .LT. 0.0 ) then
 
       u1_r = 0.0
       u0_l = (5.0*um - 3.0*u0_r) / 2.0
-      u1_l = 10.0 * (-um + u0_r) / (3.0 * h0 + h_neglect )
+      u1_l = 10.0 * (-um + u0_r) / (3.0 * h0 + hNeglect )
 
     end if
 

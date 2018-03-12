@@ -42,7 +42,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
   type(ocean_grid_type),   intent(in) :: G            !< Grid structure
   type(verticalGrid_type), intent(in) :: GV           !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized, in m.
+                           intent(out) :: h           !< The thickness that is being initialized, in H.
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
@@ -84,7 +84,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0
+          h(i,j,k) = h0 * GV%m_to_H
         enddo
       end do ; end do
 
@@ -95,7 +95,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, param_file, just_read_par
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
-          h(i,j,k) = h0
+          h(i,j,k) = h0 * GV%m_to_H
         enddo
       end do ; end do
 
@@ -109,16 +109,17 @@ end subroutine Rossby_front_initialize_thickness
 
 
 !> Initialization of temperature and salinity in the Rossby front test
-subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, &
+subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, &
                    param_file, eqn_of_state, just_read_params)
   type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T  !< Potential temperature [deg C]
   real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S  !< Salinity [ppt]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness in H
   type(param_file_type),                     intent(in)  :: param_file   !< Parameter file handle
   type(EOS_type),                            pointer     :: eqn_of_state !< Equation of state structure
   logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+                                                      !! only read parameters without changing T & S.
 
   integer   :: i, j, k, is, ie, js, je, nz
   real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
@@ -151,7 +152,7 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, &
     zi = 0.
     do k = 1, nz
       zi = zi - h(i,j,k)              ! Bottom interface position
-      zc = zi - 0.5*h(i,j,k)          ! Position of middle of cell
+      zc = GV%H_to_m * (zi - 0.5*h(i,j,k))    ! Position of middle of cell
       zc = min( zc, -Hml(G, G%geoLatT(i,j)) ) ! Bound by depth of mixed layer
       T(i,j,k) = T_ref + dTdz * zc ! Linear temperature profile
     enddo
@@ -162,21 +163,26 @@ end subroutine Rossby_front_initialize_temperature_salinity
 
 !> Initialization of u and v in the Rossby front test
 subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),                  intent(in)     :: G  !< Grid structure
-  type(verticalGrid_type),                intent(in)     :: GV !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [m/s]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H]
-  type(param_file_type),                  intent(in)     :: param_file !< A structure indicating the
-                                                               !! open file to parse for model
-                                                               !! parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  type(ocean_grid_type),      intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),    intent(in)  :: GV !< Vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                              intent(out) :: u  !< i-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                              intent(out) :: v  !< j-component of velocity [m/s]
+  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), &
+                              intent(in)  :: h  !< Thickness [H]
+  type(param_file_type),      intent(in)  :: param_file !< A structure indicating the open file
+                                                !! to parse for model parameter values.
+  logical,          optional, intent(in)  :: just_read_params !< If present and true, this call
+                                                !! will only read parameters without setting u & v.
 
-  real    :: y              ! Non-dimensional coordinate across channel, 0..pi
-  real    :: T_range        ! Range of salinities and temperatures over the vertical
-  real    :: dUdT           ! Factor to convert dT/dy into dU/dz, g*alpha/f
-  real    :: dRho_dT, zi, zc, zm, f, Ty, Dml, hAtU
+  real    :: y            ! Non-dimensional coordinate across channel, 0..pi
+  real    :: T_range      ! Range of salinities and temperatures over the vertical
+  real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f
+  real    :: dRho_dT
+  real    :: Dml, zi, zc, zm ! Depths in units of m.
+  real    :: f, Ty
+  real    :: hAtU         ! Interpolated layer thickness in units of m.
   integer :: i, j, k, is, ie, js, je, nz
   logical :: just_read    ! If true, just read parameters but set nothing.
   character(len=40) :: verticalCoordinate
@@ -204,7 +210,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, param_file, just_rea
     Ty = dTdy( G, T_range, G%geoLatT(i,j) )
     zi = 0.
     do k = 1, nz
-      hAtU = 0.5*(h(i,j,k)+h(i+1,j,k))
+      hAtU = 0.5*(h(i,j,k)+h(i+1,j,k)) * GV%H_to_m
       zi = zi - hAtU              ! Bottom interface position
       zc = zi - 0.5*hAtU          ! Position of middle of cell
       zm = max( zc + Dml, 0. )    ! Height above bottom of mixed layer

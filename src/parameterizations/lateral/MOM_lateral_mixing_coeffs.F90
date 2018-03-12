@@ -693,7 +693,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
     do I=is-1,ie
       !SN_u(I,j) = sqrt( SN_u(I,j) / ( max(G%bathyT(I,j), G%bathyT(I+1,j)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
         CS%SN_u(I,j) = G%mask2dCu(I,j) * sqrt( CS%SN_u(I,j) / max(G%bathyT(I,j), G%bathyT(I+1,j)) )
       else
         CS%SN_u(I,j) = 0.0
@@ -708,7 +708,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, CS, e, calculate_slopes)
     do i=is,ie
       !SN_v(i,J) = sqrt( SN_v(i,J) / ( max(G%bathyT(i,J), G%bathyT(i,J+1)) + GV%Angstrom ) )
       !The code below behaves better than the line above. Not sure why? AJA
-      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff ) then
+      if ( min(G%bathyT(I,j), G%bathyT(I+1,j)) > H_cutoff*GV%H_to_m ) then
         CS%SN_v(i,J) = G%mask2dCv(i,J) * sqrt( CS%SN_v(i,J) / max(G%bathyT(i,J), G%bathyT(i,J+1)) )
       else
         CS%SN_v(I,j) = 0.0
@@ -847,9 +847,9 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%SN_u(IsdB:IedB,jsd:jed)) ; CS%SN_u(:,:) = 0.0
     allocate(CS%SN_v(isd:ied,JsdB:JedB)) ; CS%SN_v(:,:) = 0.0
     CS%id_SN_u = register_diag_field('ocean_model', 'SN_u', diag%axesCu1, Time, &
-       'Inverse eddy time-scale, S*N, at u-points', 's^-1')
+       'Inverse eddy time-scale, S*N, at u-points', 's-1')
     CS%id_SN_v = register_diag_field('ocean_model', 'SN_v', diag%axesCv1, Time, &
-       'Inverse eddy time-scale, S*N, at v-points', 's^-1')
+       'Inverse eddy time-scale, S*N, at v-points', 's-1')
     call get_param(param_file, mdl, "VARMIX_KTOP", CS%VarMix_Ktop, &
                  "The layer number at which to start vertical integration \n"//&
                  "of S*N for purposes of finding the Eady growth rate.", &
@@ -865,20 +865,20 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%L2v(isd:ied,JsdB:JedB)) ; CS%L2v(:,:) = CS%Visbeck_L_scale**2
 
     CS%id_L2u = register_diag_field('ocean_model', 'L2u', diag%axesCu1, Time, &
-       'Length scale squared for mixing coefficient, at u-points', 'm^2')
+       'Length scale squared for mixing coefficient, at u-points', 'm2')
     CS%id_L2v = register_diag_field('ocean_model', 'L2v', diag%axesCv1, Time, &
-       'Length scale squared for mixing coefficient, at v-points', 'm^2')
+       'Length scale squared for mixing coefficient, at v-points', 'm2')
   endif
 
   if (CS%use_stored_slopes) then
     CS%id_N2_u = register_diag_field('ocean_model', 'N2_u', diag%axesCui, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's^-2')
+         'Square of Brunt-Vaisala frequency, N^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_N2_v = register_diag_field('ocean_model', 'N2_v', diag%axesCvi, Time, &
-         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's^-2')
+         'Square of Brunt-Vaisala frequency, N^2, at v-points, as used in Visbeck et al.', 's-2')
     CS%id_S2_u = register_diag_field('ocean_model', 'S2_u', diag%axesCu1, Time, &
-         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's^-2')
+         'Depth average square of slope magnitude, S^2, at u-points, as used in Visbeck et al.', 's-2')
     CS%id_S2_v = register_diag_field('ocean_model', 'S2_v', diag%axesCv1, Time, &
-         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's^-2')
+         'Depth average square of slope magnitude, S^2, at v-points, as used in Visbeck et al.', 's-2')
   endif
 
   if (CS%Resoln_scaled_Kh .or. CS%Resoln_scaled_KhTh .or. CS%Resoln_scaled_KhTr) then
@@ -896,7 +896,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
     allocate(CS%f2_dx2_v(isd:ied,JsdB:JedB))     ; CS%f2_dx2_v(:,:) = 0.0
 
     CS%id_Res_fn = register_diag_field('ocean_model', 'Res_fn', diag%axesT1, Time, &
-       'Resolution function for scaling diffusivities', 'Nondim')
+       'Resolution function for scaling diffusivities', 'nondim')
 
     call get_param(param_file, mdl, "KH_RES_SCALE_COEF", CS%Res_coef_khth, &
                  "A coefficient that determines how KhTh is scaled away if \n"//&
@@ -989,7 +989,7 @@ subroutine VarMix_init(Time, G, param_file, diag, CS)
 
   ! Resolution %Rd_dx_h
   CS%id_Rd_dx = register_diag_field('ocean_model', 'Rd_dx', diag%axesT1, Time, &
-       'Ratio between deformation radius and grid spacing', 'Nondim')
+       'Ratio between deformation radius and grid spacing', 'm m-1')
   CS%calculate_Rd_dx = CS%calculate_Rd_dx .or. (CS%id_Rd_dx>0)
 
   if (CS%calculate_Rd_dx) then

@@ -34,8 +34,7 @@ module MOM_regularize_layers
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : time_type, diag_ctrl
-use MOM_domains,       only : create_group_pass, do_group_pass
-use MOM_domains,       only : group_pass_type
+use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
@@ -72,8 +71,6 @@ type, public :: regularize_layers_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   logical :: debug           ! If true, do more thorough checks for debugging purposes.
-
-  type(group_pass_type) :: pass_h ! For group pass
 
   integer :: id_def_rat = -1
   logical :: allow_clocks_in_omp_loops  ! If true, clocks can be called
@@ -145,12 +142,8 @@ subroutine regularize_layers(h, tv, dt, ea, eb, G, GV, CS)
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_regularize_layers: "//&
          "Module must be initialized before it is used.")
 
-  if (CS%regularize_surface_layers) then
-    call cpu_clock_begin(id_clock_pass)
-    call create_group_pass(CS%pass_h,h,G%Domain)
-    call do_group_pass(CS%pass_h,G%Domain)
-    call cpu_clock_end(id_clock_pass)
-  endif
+  if (CS%regularize_surface_layers) &
+    call pass_var(h, G%Domain, clock=id_clock_pass)
 
   if (CS%regularize_surface_layers) then
     call regularize_surface(h, tv, dt, ea, eb, G, GV, CS)
@@ -846,6 +839,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
     h_def2_v
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected, in H.
+  real :: Hmix_min  ! CS%Hmix_min converted to units of H.
   real :: h1, h2  ! Temporary thicknesses, in H.
   integer :: i, j, k, is, ie, js, je, nz, nkmb
 
@@ -855,6 +849,7 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   endif
   nkmb = GV%nk_rho_varies
   h_neglect = GV%H_subroundoff
+  Hmix_min = CS%Hmix_min * GV%m_to_H
 
   ! Determine which zonal faces are problematic.
   do j=js,je ; do I=is-1,ie
@@ -897,12 +892,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   enddo ; enddo ; enddo
   if (present(def_rat_u_2lay)) then ; do j=js,je ; do I=is-1,ie
     def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
-                     (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                     (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
     def_rat_u_2lay(I,j) = G%mask2dCu(I,j) * h_def2_u(I,j) / &
-                          (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                          (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; else ; do j=js,je ; do I=is-1,ie
     def_rat_u(I,j) = G%mask2dCu(I,j) * h_def_u(I,j) / &
-                     (max(CS%Hmix_min, h_norm_u(I,j)) + h_neglect)
+                     (max(Hmix_min, h_norm_u(I,j)) + h_neglect)
   enddo ; enddo ; endif
 
   ! Determine which meridional faces are problematic.
@@ -946,12 +941,12 @@ subroutine find_deficit_ratios(e, def_rat_u, def_rat_v, G, GV, CS, &
   enddo ; enddo ; enddo
   if (present(def_rat_v_2lay)) then ; do J=js-1,je ; do i=is,ie
     def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
     def_rat_v_2lay(i,J) = G%mask2dCv(i,J) * h_def2_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; else ; do J=js-1,je ; do i=is,ie
     def_rat_v(i,J) = G%mask2dCv(i,J) * h_def_v(i,J) / &
-                      (max(CS%Hmix_min, h_norm_v(i,J)) + h_neglect)
+                      (max(Hmix_min, h_norm_v(i,J)) + h_neglect)
   enddo ; enddo ; endif
 
 end subroutine find_deficit_ratios
@@ -1026,13 +1021,13 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
                  default=.true.)
 
   CS%id_def_rat = register_diag_field('ocean_model', 'deficit_ratio', diag%axesT1, &
-      Time, 'Max face thickness deficit ratio', 'Nondim')
+      Time, 'Max face thickness deficit ratio', 'nondim')
 
 #ifdef DEBUG_CODE
   CS%id_def_rat_2 = register_diag_field('ocean_model', 'deficit_rat2', diag%axesT1, &
-      Time, 'Corrected thickness deficit ratio', 'Nondim')
+      Time, 'Corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_3 = register_diag_field('ocean_model', 'deficit_rat3', diag%axesT1, &
-      Time, 'Filtered thickness deficit ratio', 'Nondim')
+      Time, 'Filtered thickness deficit ratio', 'nondim')
   CS%id_e1 = register_diag_field('ocean_model', 'er_1', diag%axesTi, &
       Time, 'Intial interface depths before remapping', 'm')
   CS%id_e2 = register_diag_field('ocean_model', 'er_2', diag%axesTi, &
@@ -1041,30 +1036,30 @@ subroutine regularize_layers_init(Time, G, param_file, diag, CS)
       Time, 'Intial interface depths filtered', 'm')
 
   CS%id_def_rat_u = register_diag_field('ocean_model', 'defrat_u', diag%axesCu1, &
-      Time, 'U-point thickness deficit ratio', 'Nondim')
+      Time, 'U-point thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_1b = register_diag_field('ocean_model', 'defrat_u_1b', diag%axesCu1, &
-      Time, 'U-point 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_2 = register_diag_field('ocean_model', 'defrat_u_2', diag%axesCu1, &
-      Time, 'U-point corrected thickness deficit ratio', 'Nondim')
+      Time, 'U-point corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_2b = register_diag_field('ocean_model', 'defrat_u_2b', diag%axesCu1, &
-      Time, 'U-point corrected 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point corrected 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_3 = register_diag_field('ocean_model', 'defrat_u_3', diag%axesCu1, &
-      Time, 'U-point filtered thickness deficit ratio', 'Nondim')
+      Time, 'U-point filtered thickness deficit ratio', 'nondim')
   CS%id_def_rat_u_3b = register_diag_field('ocean_model', 'defrat_u_3b', diag%axesCu1, &
-      Time, 'U-point filtered 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'U-point filtered 2-layer thickness deficit ratio', 'nondim')
 
   CS%id_def_rat_v = register_diag_field('ocean_model', 'defrat_v', diag%axesCv1, &
-      Time, 'V-point thickness deficit ratio', 'Nondim')
+      Time, 'V-point thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_1b = register_diag_field('ocean_model', 'defrat_v_1b', diag%axesCv1, &
-      Time, 'V-point 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_2 = register_diag_field('ocean_model', 'defrat_v_2', diag%axesCv1, &
-      Time, 'V-point corrected thickness deficit ratio', 'Nondim')
+      Time, 'V-point corrected thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_2b = register_diag_field('ocean_model', 'defrat_v_2b', diag%axesCv1, &
-      Time, 'V-point corrected 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point corrected 2-layer thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_3 = register_diag_field('ocean_model', 'defrat_v_3', diag%axesCv1, &
-      Time, 'V-point filtered thickness deficit ratio', 'Nondim')
+      Time, 'V-point filtered thickness deficit ratio', 'nondim')
   CS%id_def_rat_v_3b = register_diag_field('ocean_model', 'defrat_v_3b', diag%axesCv1, &
-      Time, 'V-point filtered 2-layer thickness deficit ratio', 'Nondim')
+      Time, 'V-point filtered 2-layer thickness deficit ratio', 'nondim')
 #endif
 
   if(CS%allow_clocks_in_omp_loops) then

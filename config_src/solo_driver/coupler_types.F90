@@ -3106,9 +3106,9 @@ end subroutine CT_restore_state_3d
 
 !> This subroutine potentially overrides the values in a coupler_2d_bc_type
 subroutine CT_data_override_2d(gridname, var, Time)
-  character(len=3),         intent(in) :: gridname !< 3-character long model grid ID
-  type(coupler_2d_bc_type), intent(in) :: var  !< BC_type structure to override
-  type(time_type),          intent(in) :: time !< The current model time
+  character(len=3),         intent(in)    :: gridname !< 3-character long model grid ID
+  type(coupler_2d_bc_type), intent(inout) :: var  !< BC_type structure to override
+  type(time_type),          intent(in)    :: time !< The current model time
 
   integer :: m, n
 
@@ -3120,9 +3120,9 @@ end subroutine CT_data_override_2d
 
 !> This subroutine potentially overrides the values in a coupler_3d_bc_type
 subroutine CT_data_override_3d(gridname, var, Time)
-  character(len=3),         intent(in) :: gridname !< 3-character long model grid ID
-  type(coupler_3d_bc_type), intent(in) :: var  !< BC_type structure to override
-  type(time_type),          intent(in) :: time !< The current model time
+  character(len=3),         intent(in)    :: gridname !< 3-character long model grid ID
+  type(coupler_3d_bc_type), intent(inout) :: var  !< BC_type structure to override
+  type(time_type),          intent(in)    :: time !< The current model time
 
   integer :: m, n
 

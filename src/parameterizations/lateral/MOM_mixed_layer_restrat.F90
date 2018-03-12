@@ -111,17 +111,17 @@ end subroutine mixedlayer_restrat
 !> Calculates a restratifying flow in the mixed layer.
 subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix, G, GV, CS)
   ! Arguments
-  type(ocean_grid_type),                     intent(inout) :: G       !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV      !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h       !< Layer thickness (H units = m or kg/m2)
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr    !< Accumulated zonal mass flux (m3 or kg)
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr    !< Accumulated meridional mass flux (m3 or kg)
-  type(thermo_var_ptrs),                     intent(in)    :: tv      !< Thermodynamic variables structure
+  type(ocean_grid_type),                     intent(inout) :: G      !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV     !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h      !< Layer thickness (H units = m or kg/m2)
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr   !< Accumulated zonal mass flux (m3 or kg)
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr   !< Accumulated meridional mass flux (m3 or kg)
+  type(thermo_var_ptrs),                     intent(in)    :: tv     !< Thermodynamic variables structure
   type(mech_forcing),                        intent(in)    :: forces !< A structure with the driving mechanical forces
-  real,                                      intent(in)    :: dt      !< Time increment (sec)
-  real, dimension(:,:),                      pointer       :: MLD_in  !< Mixed layer depth provided by PBL scheme (H units)
-  type(VarMix_CS),                           pointer       :: VarMix  !< Container for derived fields
-  type(mixedlayer_restrat_CS),               pointer       :: CS      !< Module control structure
+  real,                                      intent(in)    :: dt     !< Time increment (sec)
+  real, dimension(:,:),                      pointer       :: MLD_in !< Mixed layer depth provided by PBL scheme, in m (not H)
+  type(VarMix_CS),                           pointer       :: VarMix !< Container for derived fields
+  type(mixedlayer_restrat_CS),               pointer       :: CS     !< Module control structure
   ! Local variables
   real :: uhml(SZIB_(G),SZJ_(G),SZK_(G)) ! zonal mixed layer transport (m3/s or kg/s)
   real :: vhml(SZI_(G),SZJB_(G),SZK_(G)) ! merid mixed layer transport (m3/s or kg/s)
@@ -164,7 +164,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
                                             ! arrays for diagnostic purposes.
   real :: uDml_diag(SZIB_(G),SZJ_(G)), vDml_diag(SZI_(G),SZJB_(G))
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK, dK, dKm1, pRef_MLD ! Used for MLD
+  real, dimension(SZI_(G)) :: rhoSurf, deltaRhoAtKm1, deltaRhoAtK
+  real, dimension(SZI_(G)) :: dK, dKm1 ! Depths of layer centers, in H.
+  real, dimension(SZI_(G)) :: pRef_MLD ! A reference pressure for calculating the mixed layer densities, in Pa.
   real, dimension(SZI_(G)) :: rhoAtK, rho1, d1, pRef_N2 ! Used for N2
   real :: aFac, bFac, ddRho
   real :: hAtVel, zpa, zpb, dh, res_scaling_fac, I_l_f
@@ -191,13 +193,13 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
     pRef_MLD(:) = 0.
     do j = js-1, je+1
-      dK(:) = 0.5 * h(:,j,1) * GV%H_to_m ! Depth of center of surface layer
+      dK(:) = 0.5 * h(:,j,1) ! Depth of center of surface layer
       call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, is-1, ie-is+3, tv%eqn_of_state)
       deltaRhoAtK(:) = 0.
       MLD_fast(:,j) = 0.
       do k = 2, nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
-        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) * GV%H_to_m ! Depth of center of layer K
+        dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Depth of center of layer K
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
         deltaRhoAtKm1(:) = deltaRhoAtK(:) ! Store value from previous iteration of K
         call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, is-1, ie-is+3, tv%eqn_of_state)
@@ -220,7 +222,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
     if (.not. associated(MLD_in)) call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
          "Argument MLD_in was not associated!")
     do j = js-1, je+1 ; do i = is-1, ie+1
-      MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_in(i,j)
+      MLD_fast(i,j) = (CS%MLE_MLD_stretch * GV%m_to_H) * MLD_in(i,j)
     enddo ; enddo
   else
     call MOM_error(FATAL, "MOM_mixedlayer_restrat: "// &
@@ -230,7 +232,7 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! Apply time filter (to remove diurnal cycle)
   if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1)
+      call hchksum(CS%MLD_filtered,'mixed_layer_restrat: MLD_filtered',G%HI,haloshift=1,scale=GV%H_to_m)
       call hchksum(MLD_in,'mixed_layer_restrat: MLD in',G%HI,haloshift=1)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
@@ -247,8 +249,8 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   ! Apply slower time filter (to remove seasonal cycle) on already filtered MLD_fast
   if (CS%MLE_MLD_decay_time2>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1)
-      call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1)
+      call hchksum(CS%MLD_filtered_slow,'mixed_layer_restrat: MLD_filtered_slow',G%HI,haloshift=1,scale=GV%H_to_m)
+      call hchksum(MLD_fast,'mixed_layer_restrat: MLD fast',G%HI,haloshift=1,scale=GV%H_to_m)
     endif
     aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
@@ -330,9 +332,9 @@ subroutine mixedlayer_restrat_general(h, uhtr, vhtr, tv, forces, dt, MLD_in, Var
   enddo
 
   if (CS%debug) then
-    call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1)
+    call hchksum(h,'mixed_layer_restrat: h',G%HI,haloshift=1,scale=GV%H_to_m)
     call hchksum(forces%ustar,'mixed_layer_restrat: u*',G%HI,haloshift=1)
-    call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1)
+    call hchksum(MLD_fast,'mixed_layer_restrat: MLD',G%HI,haloshift=1,scale=GV%H_to_m)
     call hchksum(Rml_av_fast,'mixed_layer_restrat: rml',G%HI,haloshift=1)
   endif
 
@@ -776,7 +778,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  character(len=48)  :: flux_units
+  real :: flux_to_kg_per_s
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -857,31 +859,31 @@ logical function mixedlayer_restrat_init(Time, G, GV, param_file, diag, CS)
 
   CS%diag => diag
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
+  else ; flux_to_kg_per_s = 1. ; endif
 
   CS%id_uhml = register_diag_field('ocean_model', 'uhml', diag%axesCuL, Time, &
-      'Zonal Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Zonal Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
       y_cell_method='sum', v_extensive=.true.)
   CS%id_vhml = register_diag_field('ocean_model', 'vhml', diag%axesCvL, Time, &
-      'Meridional Thickness Flux to Restratify Mixed Layer', flux_units, &
+      'Meridional Thickness Flux to Restratify Mixed Layer', 'kg s-1', conversion=flux_to_kg_per_s, &
       x_cell_method='sum', v_extensive=.true.)
   CS%id_urestrat_time = register_diag_field('ocean_model', 'MLu_restrat_time', diag%axesCu1, Time, &
-      'Mixed Layer Zonal Restratification Timescale', 'second')
+      'Mixed Layer Zonal Restratification Timescale', 's')
   CS%id_vrestrat_time = register_diag_field('ocean_model', 'MLv_restrat_time', diag%axesCv1, Time, &
-      'Mixed Layer Meridional Restratification Timescale', 'second')
+      'Mixed Layer Meridional Restratification Timescale', 's')
   CS%id_MLD = register_diag_field('ocean_model', 'MLD_restrat', diag%axesT1, Time, &
-      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'meter')
+      'Mixed Layer Depth as used in the mixed-layer restratification parameterization', 'm')
   CS%id_Rml = register_diag_field('ocean_model', 'ML_buoy_restrat', diag%axesT1, Time, &
-      'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', 'm/s^2')
+      'Mixed Layer Buoyancy as used in the mixed-layer restratification parameterization', 'm s2')
   CS%id_uDml = register_diag_field('ocean_model', 'udml_restrat', diag%axesCu1, Time, &
-      'Transport stream function amplitude for zonal restratification of mixed layer', 'm3/s')
+      'Transport stream function amplitude for zonal restratification of mixed layer', 'm3 s-1')
   CS%id_vDml = register_diag_field('ocean_model', 'vdml_restrat', diag%axesCv1, Time, &
-      'Transport stream function amplitude for meridional restratification of mixed layer', 'm3/s')
+      'Transport stream function amplitude for meridional restratification of mixed layer', 'm3 s-1')
   CS%id_uml = register_diag_field('ocean_model', 'uml_restrat', diag%axesCu1, Time, &
-      'Surface zonal velocity component of mixed layer restratification', 'm/s')
+      'Surface zonal velocity component of mixed layer restratification', 'm s-1')
   CS%id_vml = register_diag_field('ocean_model', 'vml_restrat', diag%axesCv1, Time, &
-      'Surface meridional velocity component of mixed layer restratification', 'm/s')
+      'Surface meridional velocity component of mixed layer restratification', 'm s-1')
 
   ! If MLD_filtered is being used, we need to update halo regions after a restart
   if (associated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)

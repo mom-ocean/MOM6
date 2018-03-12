@@ -35,7 +35,7 @@ use MOM_domains, only       : group_pass_type, start_group_pass, complete_group_
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_file_parser, only   : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only          : ocean_grid_type
-use MOM_io, only            : slasher, vardesc
+use MOM_io, only            : slasher, vardesc, MOM_read_data
 use MOM_restart, only       : register_restart_field, MOM_restart_CS, restart_init, save_restart
 use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager, only  : time_type, operator(+), operator(/), operator(-)
@@ -43,7 +43,6 @@ use MOM_time_manager, only  : get_time, get_date, set_time, set_date
 use MOM_time_manager, only  : time_type_to_real
 use MOM_variables, only     : surface, thermo_var_ptrs
 use MOM_verticalGrid, only  : verticalGrid_type
-use fms_mod, only           : read_data
 use MOM_wave_structure, only: wave_structure_init, wave_structure, wave_structure_CS
 
 !   Forcing is a structure containing pointers to the forcing fields
@@ -2495,7 +2494,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
           fail_if_missing=.true.)
   filename = trim(CS%inputdir) // trim(h2_file)
   call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
-  call read_data(filename, 'h2', h2, domain=G%domain%mpp_domain, timelevel=1)
+  call MOM_read_data(filename, 'h2', h2, G%domain, timelevel=1)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     ! Restrict rms topo to 10 percent of column depth.
     h2(i,j) = min(0.01*G%bathyT(i,j)**2, h2(i,j))
@@ -2513,8 +2512,8 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_angle_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_ANGLE_FILE", filename)
   allocate(CS%refl_angle(isd:ied,jsd:jed)) ; CS%refl_angle(:,:) = CS%nullangle
-  call read_data(filename, 'refl_angle', CS%refl_angle, &
-                 domain=G%domain%mpp_domain, timelevel=1)
+  call MOM_read_data(filename, 'refl_angle', CS%refl_angle, &
+                     G%domain, timelevel=1)
   ! replace NANs with null value
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if(is_NaN(CS%refl_angle(i,j))) CS%refl_angle(i,j) = CS%nullangle
@@ -2528,8 +2527,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_pref_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_PREF_FILE", filename)
   allocate(CS%refl_pref(isd:ied,jsd:jed)) ; CS%refl_pref(:,:) = 1.0
-  call read_data(filename, 'refl_pref', CS%refl_pref, &
-                 domain=G%domain%mpp_domain, timelevel=1)
+  call MOM_read_data(filename, 'refl_pref', CS%refl_pref, G%domain, timelevel=1)
   !CS%refl_pref = CS%refl_pref*1 ! adjust partial reflection if desired
   call pass_var(CS%refl_pref,G%domain)
 
@@ -2552,8 +2550,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   filename = trim(CS%inputdir) // trim(refl_dbl_file)
   call log_param(param_file, mdl, "INPUTDIR/REFL_DBL_FILE", filename)
   allocate(ridge_temp(isd:ied,jsd:jed)) ; ridge_temp(:,:) = 0.0
-  call read_data(filename, 'refl_dbl', ridge_temp, &
-                 domain=G%domain%mpp_domain, timelevel=1)
+  call MOM_read_data(filename, 'refl_dbl', ridge_temp, G%domain, timelevel=1)
   call pass_var(ridge_temp,G%domain)
   allocate(CS%refl_dbl(isd:ied,jsd:jed)) ; CS%refl_dbl(:,:) = .false.
   do i=isd,ied; do j=jsd,jed
@@ -2570,12 +2567,9 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(land_mask_file)
   !call log_param(param_file, mdl, "INPUTDIR/LAND_MASK_FILE", filename)
   !G%mask2dCu(:,:) = 1 ; G%mask2dCv(:,:) = 1 ; G%mask2dT(:,:)  = 1
-  !call read_data(filename, 'land_mask', G%mask2dCu, &
-  !               domain=G%domain%mpp_domain, timelevel=1)
-  !call read_data(filename, 'land_mask', G%mask2dCv, &
-  !               domain=G%domain%mpp_domain, timelevel=1)
-  !call read_data(filename, 'land_mask', G%mask2dT, &
-  !               domain=G%domain%mpp_domain, timelevel=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCu, G%domain, timelevel=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dCv, G%domain, timelevel=1)
+  !call MOM_read_data(filename, 'land_mask', G%mask2dT, G%domain, timelevel=1)
   !call pass_var(G%mask2dCu,G%domain)
   !call pass_var(G%mask2dCv,G%domain)
   !call pass_var(G%mask2dT,G%domain)
@@ -2587,8 +2581,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(dy_Cu_file)
   !call log_param(param_file, mdl, "INPUTDIR/dy_Cu_FILE", filename)
   !G%dy_Cu(:,:) = 0.0
-  !call read_data(filename, 'dy_Cu', G%dy_Cu, &
-  !               domain=G%domain%mpp_domain, timelevel=1)
+  !call MOM_read_data(filename, 'dy_Cu', G%dy_Cu, G%domain, timelevel=1)
   !call pass_var(G%dy_Cu,G%domain)
 
   ! Read in prescribed partial north face blockages from file (if overwriting -BDM)
@@ -2598,8 +2591,7 @@ subroutine internal_tides_init(Time, G, GV, param_file, diag, CS)
   !filename = trim(CS%inputdir) // trim(dx_Cv_file)
   !call log_param(param_file, mdl, "INPUTDIR/dx_Cv_FILE", filename)
   !G%dx_Cv(:,:) = 0.0
-  !call read_data(filename, 'dx_Cv', G%dx_Cv, &
-  !               domain=G%domain%mpp_domain, timelevel=1)
+  !call MOM_read_data(filename, 'dx_Cv', G%dx_Cv, G%domain, timelevel=1)
   !call pass_var(G%dx_Cv,G%domain)
 
   ! For debugging - delete later

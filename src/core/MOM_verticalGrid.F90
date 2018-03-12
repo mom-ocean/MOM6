@@ -72,7 +72,8 @@ subroutine verticalGridInit( param_file, GV )
   type(verticalGrid_type), pointer    :: GV         ! The container for vertical grid data
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: nk
+  integer :: nk, H_power
+  real    :: rescale_factor
   character(len=16) :: mdl = 'MOM_verticalGrid'
 
   if (associated(GV)) call MOM_error(FATAL, &
@@ -96,15 +97,25 @@ subroutine verticalGridInit( param_file, GV )
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_z, &
                  "The minumum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10)
+  call get_param(param_file, mdl, "H_RESCALE_POWER", H_power, &
+                 "An integer power of 2 that is used to rescale the model's \n"//&
+                 "intenal units of thickness.  Valid values range from -300 to 300.", &
+                 units="nondim", default=0, debuggingParam=.true.)
+  if (abs(H_power) > 300) call MOM_error(FATAL, "verticalGridInit: "//&
+                 "H_RESCALE_POWER is outside of the valid range of -300 to 300.")
+  rescale_factor = 1.0
+  if (H_power /= 0) rescale_factor = 2.0**H_power
   if (.not.GV%Boussinesq) then
     call get_param(param_file, mdl, "H_TO_KG_M2", GV%H_to_kg_m2,&
                  "A constant that translates thicknesses from the model's \n"//&
                  "internal units of thickness to kg m-2.", units="kg m-2 H-1", &
                  default=1.0)
+    GV%H_to_kg_m2 = GV%H_to_kg_m2 * rescale_factor
   else
     call get_param(param_file, mdl, "H_TO_M", GV%H_to_m, &
                  "A constant that translates the model's internal \n"//&
                  "units of thickness into m.", units="m H-1", default=1.0)
+    GV%H_to_m = GV%H_to_m * rescale_factor
   endif
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
@@ -135,7 +146,9 @@ subroutine verticalGridInit( param_file, GV )
   GV%H_to_Pa = GV%g_Earth * GV%H_to_kg_m2
 
 ! Log derivative values.
-  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H)
+  call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*rescale_factor)
+  call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H)
+  call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m)
 
   ALLOC_( GV%sInterface(nk+1) )
   ALLOC_( GV%sLayer(nk) )
@@ -157,9 +170,9 @@ function get_thickness_units(GV)
 !  (ret)     get_thickness_units - The model's vertical thickness units.
 
   if (GV%Boussinesq) then
-    get_thickness_units = "meter"
+    get_thickness_units = "m"
   else
-    get_thickness_units = "kilogram meter-2"
+    get_thickness_units = "kg m-2"
   endif
 end function get_thickness_units
 
@@ -175,9 +188,9 @@ function get_flux_units(GV)
 !  (ret)     get_flux_units - The model's thickness flux units.
 
   if (GV%Boussinesq) then
-    get_flux_units = "meter3 second-1"
+    get_flux_units = "m3 s-1"
   else
-    get_flux_units = "kilogram second-1"
+    get_flux_units = "kg s-1"
   endif
 end function get_flux_units
 
@@ -226,14 +239,14 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
     "tr_units, tr_vol_conc_units, and tr_mass_conc_units may be present.")
   if (present(tr_units)) then
     if (GV%Boussinesq) then
-      get_tr_flux_units = trim(tr_units)//" meter3 second-1"
+      get_tr_flux_units = trim(tr_units)//" m3 s-1"
     else
-      get_tr_flux_units = trim(tr_units)//" kilogram second-1"
+      get_tr_flux_units = trim(tr_units)//" kg s-1"
     endif
   endif
   if (present(tr_vol_conc_units)) then
     if (GV%Boussinesq) then
-      get_tr_flux_units = trim(tr_vol_conc_units)//" second-1"
+      get_tr_flux_units = trim(tr_vol_conc_units)//" s-1"
     else
       get_tr_flux_units = trim(tr_vol_conc_units)//" m-3 kg s-1"
     endif
@@ -242,7 +255,7 @@ function get_tr_flux_units(GV, tr_units, tr_vol_conc_units, tr_mass_conc_units)
     if (GV%Boussinesq) then
       get_tr_flux_units = trim(tr_mass_conc_units)//" kg-1 m3 s-1"
     else
-      get_tr_flux_units = trim(tr_mass_conc_units)//" second-1"
+      get_tr_flux_units = trim(tr_mass_conc_units)//" s-1"
     endif
   endif
 

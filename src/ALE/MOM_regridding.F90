@@ -373,6 +373,9 @@ subroutine initialize_regridding(CS, GV, max_depth, param_file, mod, coord_mode,
     call dz_function1( trim(string(6:)), dz )
     if (main_parameters) call log_param(param_file, mod, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
+  elseif (index(trim(string),'RFNC1:')==1) then
+    ! Function used for set target interface densities
+    ke = rho_function1( trim(string(7:)), rho_target )
   elseif (index(trim(string),'HYBRID:')==1) then
     ke = GV%ke; allocate(dz(ke))
     ! The following assumes the FILE: syntax of above but without "FILE:" in the string
@@ -1287,9 +1290,17 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
   integer :: i, j, k
   real    :: nominalDepth, totalThickness
   real, dimension(SZK_(GV)+1) :: zOld, zNew
+  real :: h_neglect, h_neglect_edge
 #ifdef __DO_SAFETY_CHECKS__
   real    :: dh
 #endif
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1309,8 +1320,9 @@ subroutine build_rho_grid( G, GV, h, tv, dzInterface, remapCS, CS )
       ! Local depth (G%bathyT is positive)
       nominalDepth = G%bathyT(i,j)*GV%m_to_H
 
-      call build_rho_column(CS%rho_CS, remapCS, nz, nominalDepth, h(i, j, :), &
-                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew)
+      call build_rho_column(CS%rho_CS, nz, nominalDepth, h(i, j, :), &
+                            tv%T(i, j, :), tv%S(i, j, :), tv%eqn_of_state, zNew, &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       if (CS%integrate_downward_for_e) then
         zOld(1) = 0.
@@ -1394,6 +1406,14 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   integer   :: i, j, k, nz
   real :: depth
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1414,7 +1434,9 @@ subroutine build_grid_HyCOM1( G, GV, h, tv, dzInterface, CS )
       enddo
 
       call build_hycom1_column(CS%hycom_CS, tv%eqn_of_state, nz, depth, &
-                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
+                               h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, &
+                               z_col, z_col_new, zScale=GV%m_to_H, &
+                               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1507,6 +1529,14 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
   real, dimension(SZK_(GV))   :: p_col   ! Layer pressure in Pa
   real :: depth
   integer :: i, j, k, nz
+  real :: h_neglect, h_neglect_edge
+
+  !### Try replacing both of these with GV%H_subroundoff
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
 
   nz = GV%ke
 
@@ -1526,8 +1556,9 @@ subroutine build_grid_SLight( G, GV, h, tv, dzInterface, CS )
       enddo
 
       call build_slight_column(CS%slight_CS, tv%eqn_of_state, GV%H_to_Pa, GV%m_to_H, &
-                          GV%H_subroundoff, nz, depth, &
-                          h(i, j, :), tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new)
+                          GV%H_subroundoff, nz, depth, h(i, j, :), &
+                          tv%T(i, j, :), tv%S(i, j, :), p_col, z_col, z_col_new, &
+                          h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
       call filtered_grid_motion( CS, nz, z_col, z_col_new, dz_col )
@@ -1898,6 +1929,10 @@ subroutine set_target_densities( CS, rho_int )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
   real, dimension(CS%nk+1), intent(in)    :: rho_int !< Interface densities
 
+  if (size(CS%target_density)/=size(rho_int)) then
+    call MOM_error(FATAL, "set_target_densities inconsistent args!")
+  endif
+
   CS%target_density(:) = rho_int(:)
   CS%target_density_set = .true.
 
@@ -2243,6 +2278,33 @@ subroutine dz_function1( string, dz )
   dz(:) = dz(:) + dz_min ! Finally add in the constant dz_min
 
 end subroutine dz_function1
+
+!> Parses a string and generates a rho_target(:) profile with refined resolution downward
+!! and returns the number of levels
+integer function rho_function1( string, rho_target )
+  character(len=*),   intent(in)    :: string !< String with list of parameters in form
+                                              !! dz_min, H_total, power, precision
+  real, dimension(:), allocatable, intent(inout) :: rho_target !< Profile of interface densities
+  ! Local variables
+  integer :: nki, k, nk
+  real    :: ddx, dx, rho_1, rho_2, rho_3, drho, rho_4, drho_min
+
+  read( string, *) nk, rho_1, rho_2, rho_3, drho, rho_4, drho_min
+  allocate(rho_target(nk+1))
+  nki = nk + 1 - 4 ! Number of interfaces minus 4 specified values
+  rho_target(1) = rho_1
+  rho_target(2) = rho_2
+  dx = 0.
+  do k = 0, nki
+    ddx = max( drho_min, real(nki-k)/real(nki*nki) )
+    dx = dx + ddx
+    rho_target(3+k) = rho_3 + (2. * drho) * dx
+  enddo
+  rho_target(nki+4) = rho_4
+
+  rho_function1 = nk
+
+end function rho_function1
 
 !> \namespace mom_regridding
 !!

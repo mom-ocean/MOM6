@@ -1740,7 +1740,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                             ! method might be used for the next iteration.
   logical, dimension(SZI_(G)) :: redo_i ! If true, more work is needed on this column.
   logical :: do_any
-  real, parameter :: LARGE_VAL = 1.0e30
+  real :: large_err         ! A large error measure, in H2.
   integer :: i, it
   integer, parameter :: MAXIT = 30
 
@@ -1749,6 +1749,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
                            "unless BULKMIXEDLAYER is defined.")
   endif
   tolerance = GV%m_to_H * CS%Tolerance_Ent
+  large_err = GV%m_to_H**2 * 1.0e30
 
   do i=is,ie ; redo_i(i) = do_i(i) ; enddo
 
@@ -1758,7 +1759,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
     !   These were previously calculated and provide good limits and estimates
     ! of the errors there. By construction the errors increase with R*ea_kbp1.
     E_min(i) = min_eakb(i) ; E_max(i) = max_eakb(i)
-    error_minE(i) = -LARGE_VAL ; error_maxE(i) = LARGE_VAL
+    error_minE(i) = -large_err ; error_maxE(i) = large_err
     false_position(i) = .true. ! Used to alternate between false_position and
                                ! bisection when Newton's method isn't working.
     if (present(err_min_eakb0)) error_minE(i) = err_min_eakb0(i) - E_min(i) * ea_kbp1(i)
@@ -1823,7 +1824,7 @@ subroutine determine_Ea_kb(h_bl, dtKd_kb, Sref, I_dSkbp1, Ent_bl, ea_kbp1, &
         ! remain bracketed between Rmin and Rmax.
         Ent(i) = Ent(i) - err(i) / derror_dE(i)
       elseif (false_position(i) .and. &
-              (error_maxE(i) - error_minE(i) < 0.9*LARGE_VAL)) then
+              (error_maxE(i) - error_minE(i) < 0.9*large_err)) then
         ! Use the false postion method if there are decent error estimates.
         Ent(i) = E_min(i) + (E_max(i)-E_min(i)) * &
                 (-error_minE(i)/(error_maxE(i) - error_minE(i)))
@@ -2241,7 +2242,7 @@ subroutine entrain_diffusive_init(Time, G, GV, param_file, diag, CS)
                  units="m", default=MAX(100.0*GV%Angstrom_Z,1.0e-4*sqrt(dt*Kd)))
 
   CS%id_Kd = register_diag_field('ocean_model', 'Kd_effective', diag%axesTL, Time, &
-      'Diapycnal diffusivity as applied', 'meter2 second-1')
+      'Diapycnal diffusivity as applied', 'm2 s-1')
   CS%id_diff_work = register_diag_field('ocean_model', 'diff_work', diag%axesTi, Time, &
       'Work actually done by diapycnal diffusion across each interface', 'W m-2')
 

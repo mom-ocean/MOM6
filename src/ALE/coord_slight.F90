@@ -150,7 +150,8 @@ end subroutine set_slight_params
 
 !> Build a SLight coordinate column
 subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff, &
-                                nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new)
+                               nz, depth, h_col, T_col, S_col, p_col, z_col, z_col_new, &
+                               h_neglect, h_neglect_edge)
   type(slight_CS),       intent(in)    :: CS !< Coordinate control structure
   type(EOS_type),        pointer       :: eqn_of_state !< Equation of state structure
   real,                  intent(in)    :: H_to_Pa !< GV%H_to_Pa
@@ -163,6 +164,12 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
   real, dimension(nz),   intent(in)    :: p_col !< Layer quantities
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface in H units (m or kg m-2)
   real, dimension(nz+1), intent(inout) :: z_col_new !< Absolute positions of interfaces
+  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h_col.
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h_col.
 
   ! Local variables
   real, dimension(nz) :: rho_col ! Layer quantities
@@ -214,7 +221,8 @@ subroutine build_slight_column(CS, eqn_of_state, H_to_Pa, m_to_H, H_subroundoff,
     ! Find the locations of the target potential densities, flagging
     ! locations in apparently unstable regions as not reliable.
     call rho_interfaces_col(rho_col, h_col, z_col, CS%target_density, nz, &
-                            z_col_new, CS, reliable, debug=.true.)
+                            z_col_new, CS, reliable, debug=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
     ! Ensure that the interfaces are at least CS%min_thickness apart.
     if (CS%min_thickness > 0.0) then
@@ -443,7 +451,7 @@ end subroutine build_slight_column
 !> Finds the new interface locations in a column of water that match the
 !! prescribed target densities.
 subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
-                              CS, reliable, debug)
+                              CS, reliable, debug, h_neglect, h_neglect_edge)
   integer,               intent(in)    :: nz      !< Number of layers
   real, dimension(nz),   intent(in)    :: rho_col !< Initial layer reference densities.
   real, dimension(nz),   intent(in)    :: h_col   !< Initial layer thicknesses.
@@ -453,7 +461,13 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
   type(slight_CS),       intent(in)    :: CS      !< Coordinate control structure
   logical, dimension(nz+1), intent(inout) :: reliable !< If true, the interface positions
                                                   !! are well defined from a stable region.
-  logical, optional,     intent(in) :: debug      !< If present and true, do debugging checks.
+  logical,   optional, intent(in)    :: debug     !< If present and true, do debugging checks.
+  real,      optional, intent(in)    :: h_neglect !< A negligibly small width for the
+                                             !! purpose of cell reconstructions
+                                             !! in the same units as h_col.
+  real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+                                             !! for the purpose of edge value calculations
+                                             !! in the same units as h_col.
 
   real, dimension(nz+1) :: ru_max_int ! The maximum and minimum densities in
   real, dimension(nz+1) :: ru_min_int ! an unstable region around an interface.
@@ -500,7 +514,7 @@ subroutine rho_interfaces_col(rho_col, h_col, z_col, rho_tgt, nz, z_col_new, &
 
   ! This sets up the piecewise polynomials based on the rho_col profile.
   call regridding_set_ppolys(CS%interp_CS, rho_col, nz, h_col, ppoly_i_E, ppoly_i_S, &
-       ppoly_i_coefficients, ppoly_degree)
+       ppoly_i_coefficients, ppoly_degree, h_neglect, h_neglect_edge)
 
   ! Determine the density ranges of unstably stratified segments.
   ! Interfaces that start out in an unstably stratified segment can

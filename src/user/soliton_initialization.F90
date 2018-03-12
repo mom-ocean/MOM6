@@ -30,9 +30,11 @@ public soliton_initialize_velocity
 contains
 
 !> Initialization of thicknesses in Equatorial Rossby soliton test
-subroutine soliton_initialize_thickness(h, G)
-  type(ocean_grid_type),   intent(in) :: G                 !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: h !< Thickness
+subroutine soliton_initialize_thickness(h, G, GV)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h    !< The thickness that is being initialized, in H.
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
@@ -54,8 +56,7 @@ subroutine soliton_initialize_thickness(h, G)
       y = G%geoLatT(i,j)-y0
       val3 = exp(-val1*x)
       val4 = val2*((2.0*val3/(1.0+(val3*val3)))**2)
-      h(i,j,k) = 0.25*val4*(6.0*y*y+3.0)*                 &
-                exp(-0.5*y*y)
+      h(i,j,k) = GV%m_to_H * (0.25*val4 * (6.0*y*y+3.0) * exp(-0.5*y*y))
     enddo
   end do ; end do
 

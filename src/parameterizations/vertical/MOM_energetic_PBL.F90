@@ -58,6 +58,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_wave_interface, only: wave_parameters_CS, Get_Langmuir_Number
+
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
@@ -185,8 +186,8 @@ type, public :: energetic_PBL_CS ; private
     diag_TKE_mixing,&  ! The work done by TKE to deepen
                        ! the mixed layer.
     ! Additional output parameters also 2d
-    ML_depth, &        ! The mixed layer depth in m.
-    ML_depth2, &       ! The mixed layer depth in m.
+    ML_depth, &        ! The mixed layer depth in m. (result after iteration step)
+    ML_depth2, &       ! The mixed layer depth in m. (guess for iteration step)
     Enhance_M, &       ! The enhancement to the turbulent velocity scale (non-dim)
     MSTAR_MIX, &       ! Mstar used in EPBL
     MSTAR_LT, &        ! Mstar for Langmuir turbulence
@@ -603,7 +604,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
 !!OMP end parallel
   endif
 
-
 !!OMP parallel do default(none) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,      &
 !!OMP                                  CS,G,GV,fluxes,IdtdR0,                    &
 !!OMP                                  TKE_forced,debug,H_neglect,dSV_dT,        &
@@ -641,9 +641,9 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       Kd(i,K) = 0.0
     enddo ; enddo
     do i=is,ie
-       CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
-       !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
-       sfc_connected(i) = .true.
+      CS%ML_depth(i,j) = h(i,1)*GV%H_to_m
+      !CS%ML_depth2(i,j) = h(i,1)*GV%H_to_m
+      sfc_connected(i) = .true.
     enddo
 
     if (debug) then
@@ -683,7 +683,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
       iL_Ekman   = absf(i)/U_star
       iL_Obukhov = buoy_flux(i,j)*vonkar/U_Star**3
 
-      if (CS%Mstar_Mode.eq.CS%CONST_MSTAR) then
+      if (CS%Mstar_Mode == CS%CONST_MSTAR) then
         mech_TKE(i) = (dt*CS%mstar*GV%Rho0)*((U_Star**3))
         conv_PErel(i) = 0.0
 
@@ -778,14 +778,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
         if (CS%Mstar_Mode.gt.0) then
         ! Note the value of mech_TKE(i) now must be iterated over, so it is moved here
         ! First solve for the TKE to PE length scale
-          if (CS%MSTAR_MODE.eq.CS%MLD_o_OBUKHOV) then
+          if (CS%MSTAR_MODE == CS%MLD_o_OBUKHOV) then
             MLD_over_Stab = MLD_guess / Stab_Scale - CS%MSTAR_XINT
-            if ((MLD_over_Stab) .le. 0.0) then
+            if ((MLD_over_Stab) <= 0.0) then
               !Asymptote to 0 as MLD_over_Stab -> -infinity (always)
               MSTAR_mix = (CS%MSTAR_B*(MLD_over_Stab)+CS%MSTAR_A)**(CS%MSTAR_N)
             else
               if (CS%MSTAR_CAP>=0.) then
-                if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab .le.CS%MSTAR_XINT_UP)) then
+                if (CS%MSTAR_FLATCAP .OR. (MLD_over_Stab  <= CS%MSTAR_XINT_UP)) then
                 !If using flat cap (or if using asymptotic cap
                 !   but within linear regime we can make use of same code)
                   MSTAR_mix = min(CS%MSTAR_CAP, &
@@ -801,10 +801,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
                 MSTAR_mix = CS%MSTAR_SLOPE*(MLD_over_Stab)+CS%MSTAR_AT_XINT
               endif
             endif
-          elseif (CS%MSTAR_MODE.eq.CS%EKMAN_o_OBUKHOV) then
+          elseif (CS%MSTAR_MODE == CS%EKMAN_o_OBUKHOV) then
+            !### Please refrain from using the construct A / B / C in place of A/(B*C).
             mstar_STAB = CS%MSTAR_COEF*sqrt(Bf_Stable/u_star**2/(absf(i)+1.e-10))
             mstar_ROT =  CS%C_EK*log(max(1.,u_star/(absf(i)+1.e-10)/mld_guess))
-            if ( CS%MSTAR_CAP.le.0.0) then !No cap.
+            if ( CS%MSTAR_CAP <= 0.0) then !No cap.
               MSTAR_MIX = max(mstar_STAB,& ! 1st term if balance of rotation and stabilizing
                                     ! the balance is f(L_Ekman,L_Obukhov)
                               min(& ! 2nd term for forced stratification limited
@@ -832,7 +833,6 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           if (CS%USE_LT) then
             call get_Langmuir_Number( LA, G, GV, abs(MLD_guess), u_star_mean, I, J, &
                                       H=H(i,:), U_H=U(i,:), V_H=V(i,:), WAVES=WAVES)
-            WAVES%LangNum(i,j) = LA
             ! 2. Get parameters for modified LA
             MLD_o_Ekman = abs(MLD_guess*iL_Ekman)
             MLD_o_Obukhov_stab = abs(max(0.,MLD_guess*iL_Obukhov))
@@ -913,7 +913,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           I_MLD = 1.0 / MLD_guess ; h_rsum = 0.0
           MixLen_shape(1) = 1.0
           do K=2,nz+1
-            h_rsum = h_rsum + h(i,k-1)
+            h_rsum = h_rsum + h(i,k-1)*GV%H_to_m
             if (CS%MixLenExponent==2.0)then
               MixLen_shape(K) = CS%transLay_scale + (1.0 - CS%transLay_scale) * &
                    (max(0.0, (MLD_guess - h_rsum)*I_MLD) )**2!CS%MixLenExponent
@@ -1424,7 +1424,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
           do k=2,nz
             if (FIRST_OBL) then !Breaks when OBL found
               if (Vstar_Used(k) > 1.e-10 .and. k < nz) then
-                MLD_FOUND = MLD_FOUND+h(i,k-1)*GV%H_to_m
+                MLD_FOUND = MLD_FOUND + h(i,k-1)*GV%H_to_m
               else
                 FIRST_OBL = .false.
                 if (MLD_FOUND-CS%MLD_tol > MLD_guess) then
@@ -1938,6 +1938,100 @@ subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   return
 end subroutine ust_2_u10_coare3p5
 
+subroutine get_LA_windsea(ustar, hbl, GV, LA)
+! Original description:
+! This function returns the enhancement factor, given the 10-meter
+! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
+! Update (Jan/25):
+! Converted from function to subroutine, now returns Langmuir number.
+! Computs 10m wind internally, so only ustar and hbl need passed to
+! subroutine.
+!
+! Qing Li, 160606
+! BGR port from CVMix to MOM6 Jan/25/2017
+! BGR change output to LA from Efactor
+! BGR remove u10 input
+
+! Input
+  real, intent(in) :: &
+       ! water-side surface friction velocity (m/s)
+       ustar, &
+       ! boundary layer depth (m)
+       hbl
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  real, intent(out) :: LA
+! Local variables
+  ! parameters
+  real, parameter :: &
+       ! ratio of U19.5 to U10 (Holthuijsen, 2007)
+       u19p5_to_u10 = 1.075, &
+       ! ratio of mean frequency to peak frequency for
+       ! Pierson-Moskowitz spectrum (Webb, 2011)
+       fm_to_fp = 1.296, &
+       ! ratio of surface Stokes drift to U10
+       us_to_u10 = 0.0162, &
+       ! loss ratio of Stokes transport
+       r_loss = 0.667
+  real :: us, hm0, fm, fp, vstokes, kphil, kstar
+  real :: z0, z0i, r1, r2, r3, r4, tmp, us_sl, lasl_sqr_i
+  real :: pi, u10
+  pi = 4.0*atan(1.0)
+  if (ustar .gt. 0.0) then
+    ! Computing u10 based on u_star and COARE 3.5 relationships
+    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
+    ! surface Stokes drift
+    us = us_to_u10*u10
+    !
+    ! significant wave height from Pierson-Moskowitz
+    ! spectrum (Bouws, 1998)
+    hm0 = 0.0246 *u10**2
+    !
+    ! peak frequency (PM, Bouws, 1998)
+    tmp = 2.0 * PI * u19p5_to_u10 * u10
+    fp = 0.877 * GV%g_Earth / tmp
+    !
+    ! mean frequency
+    fm = fm_to_fp * fp
+    !
+    ! total Stokes transport (a factor r_loss is applied to account
+    !  for the effect of directional spreading, multidirectional waves
+    !  and the use of PM peak frequency and PM significant wave height
+    !  on estimating the Stokes transport)
+    vstokes = 0.125 * PI * r_loss * fm * hm0**2
+    !
+    ! the general peak wavenumber for Phillips' spectrum
+    ! (Breivik et al., 2016) with correction of directional spreading
+    kphil = 0.176 * us / vstokes
+    !
+    ! surface layer averaged Stokes dirft with Stokes drift profile
+    ! estimated from Phillips' spectrum (Breivik et al., 2016)
+    ! the directional spreading effect from Webb and Fox-Kemper, 2015
+    ! is also included
+    kstar = kphil * 2.56
+    ! surface layer
+    !z0 = 0.2 * abs(hbl)
+    !BGR hbl now adjusted by averaging ratio before function call.
+    z0 = abs(hbl)
+    z0i = 1.0 / z0
+    ! term 1 to 4
+    r1 = ( 0.151 / kphil * z0i -0.84 ) &
+         * ( 1.0 - exp(-2.0 * kphil * z0) )
+    r2 = -( 0.84 + 0.0591 / kphil * z0i ) &
+         *sqrt( 2.0 * PI * kphil * z0 ) &
+         *erfc( sqrt( 2.0 * kphil * z0 ) )
+    r3 = ( 0.0632 / kstar * z0i + 0.125 ) &
+         * (1.0 - exp(-2.0 * kstar * z0) )
+    r4 = ( 0.125 + 0.0946 / kstar * z0i ) &
+         *sqrt( 2.0 * PI *kstar * z0) &
+         *erfc( sqrt( 2.0 * kstar * z0 ) )
+    us_sl = us * (0.715 + r1 + r2 + r3 + r4)
+    !
+    LA = sqrt(ustar / us_sl)
+  else
+    LA=1.e8
+  endif
+endsubroutine Get_LA_windsea
+
 subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   type(time_type), target, intent(in)    :: Time
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
@@ -2163,43 +2257,48 @@ subroutine energetic_PBL_init(Time, G, GV, param_file, diag, CS)
   CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
   call log_param(param_file, mdl, "EPBL_USTAR_MIN", CS%ustar_min, &
                  "The (tiny) minimum friction velocity used within the \n"//&
-                 "ePBL code, derived from OMEGA and ANGSTROM.", units="meter second-1")
+                 "ePBL code, derived from OMEGA and ANGSTROM.", units="m s-1")
 
   CS%id_ML_depth = register_diag_field('ocean_model', 'ePBL_h_ML', diag%axesT1, &
-      Time, 'Surface mixed layer depth', 'meter')
+      Time, 'Surface boundary layer depth', 'm',                            &
+      cmor_long_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
-      Time, 'Wind-stirring source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Wind-stirring source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
-      Time, 'Mean kinetic energy source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mean kinetic energy source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv = register_diag_field('ocean_model', 'ePBL_TKE_conv', diag%axesT1, &
-      Time, 'Convective source of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective source of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_forcing = register_diag_field('ocean_model', 'ePBL_TKE_forcing', diag%axesT1, &
       Time, 'TKE consumed by mixing surface forcing or penetrative shortwave radation'//&
-            ' through model layers', 'meter3 second-3')
+            ' through model layers', 'm3 s-3')
   CS%id_TKE_mixing = register_diag_field('ocean_model', 'ePBL_TKE_mixing', diag%axesT1, &
-      Time, 'TKE consumed by mixing that deepens the mixed layer', 'meter3 second-3')
+      Time, 'TKE consumed by mixing that deepens the mixed layer', 'm3 s-3')
   CS%id_TKE_mech_decay = register_diag_field('ocean_model', 'ePBL_TKE_mech_decay', diag%axesT1, &
-      Time, 'Mechanical energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Mechanical energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_TKE_conv_decay = register_diag_field('ocean_model', 'ePBL_TKE_conv_decay', diag%axesT1, &
-      Time, 'Convective energy decay sink of mixed layer TKE', 'meter3 second-3')
+      Time, 'Convective energy decay sink of mixed layer TKE', 'm3 s-3')
   CS%id_Hsfc_used = register_diag_field('ocean_model', 'ePBL_Hs_used', diag%axesT1, &
-      Time, 'Surface region thickness that is used', 'meter')
+      Time, 'Surface region thickness that is used', 'm')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
+      Time, 'Boundary layer depth from the iteration.', 'm')
   CS%id_Mixing_Length = register_diag_field('ocean_model', 'Mixing_Length', diag%axesTi, &
-      Time, 'Mixing Length that is used', 'meter')
+      Time, 'Mixing Length that is used', 'm')
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
-      Time, 'Velocity Scale that is used.', 'meter second-1')
+      Time, 'Velocity Scale that is used.', 'm s-1')
+  CS%id_LT_enhancement = register_diag_field('ocean_model', 'LT_Enhancement', diag%axesT1, &
+      Time, 'LT enhancement that is used.', 'nondim')
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
-      Time, 'MSTAR that is used.', 'non-dim')
+      Time, 'MSTAR that is used.', 'nondim')
   CS%id_OSBL = register_diag_field('ocean_model', 'ePBL_OSBL', diag%axesT1, &
-      Time, 'Boundary layer depth from the iteration.', 'meter')
+      Time, 'ePBL Surface Boundary layer depth.', 'm')
+  ! BGR (9/21/2017) Note that ePBL_OSBL is the guess for iteration step while ePBL_h_ML is
+  !                 result from iteration step.
   CS%id_mld_ekman = register_diag_field('ocean_model', 'MLD_EKMAN', diag%axesT1, &
-      Time, 'Boundary layer depth over Ekman length.', 'meter')
+      Time, 'Boundary layer depth over Ekman length.', 'm')
   CS%id_mld_obukhov = register_diag_field('ocean_model', 'MLD_OBUKHOV', diag%axesT1, &
-      Time, 'Boundary layer depth over Obukhov length.', 'meter')
+      Time, 'Boundary layer depth over Obukhov length.', 'm')
   CS%id_ekman_obukhov = register_diag_field('ocean_model', 'EKMAN_OBUKHOV', diag%axesT1, &
-      Time, 'Ekman length over Obukhov length.', 'meter')
+      Time, 'Ekman length over Obukhov length.', 'm')
   CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
       Time, 'Modified Langmuir number.', 'non-dim')
   CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
