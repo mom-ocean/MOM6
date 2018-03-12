@@ -472,8 +472,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   real :: h_harm        ! Harmonic mean layer thickness, in H.
   real :: c2_h_u(SZIB_(G), SZK_(G)+1) ! Wave speed squared divided by h at u-points, m s-2.
   real :: c2_h_v(SZI_(G), SZK_(G)+1)  ! Wave speed squared divided by h at v-points, m s-2.
-  real :: hN2_u(SZIB_(G), SZK_(G)+1) ! Thickness times N2 at interfaces above u-points, m s-2.
-  real :: hN2_v(SZI_(G), SZK_(G)+1)  ! Thickness times N2 at interfaces above v-points, m s-2.
+  real :: hN2_u(SZIB_(G), SZK_(G)+1) ! Thickness in m times N2 at interfaces above u-points, m s-2.
+  real :: hN2_v(SZI_(G), SZK_(G)+1)  ! Thickness in m times N2 at interfaces above v-points, m s-2.
   real :: Sfn_est       ! Two preliminary estimates (before limiting) of the
                         ! overturning streamfunction, both in m3 s-1.
   real :: Sfn_unlim_u(SZIB_(G), SZK_(G)+1) ! Streamfunction for u-points (m3 s-1)
@@ -659,7 +659,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               haB = 0.5*(h(i,j,k) + h(i+1,j,k)) + h_neglect
 
               ! hN2_u is used with the FGNV streamfunction formulation
-              hN2_u(I,K) = 0.5*( hg2A / haA + hg2B / haB ) * max(drdz*G_rho0 , N2_floor)
+              hN2_u(I,K) = (0.5 * H_to_m * ( hg2A / haA + hg2B / haB )) * &
+                           max(drdz*G_rho0 , N2_floor)
             endif
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
@@ -727,7 +728,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
-          hN2_u(I,K) = N2_floor * h_neglect
+          hN2_u(I,K) = N2_floor * dz_neglect
           Sfn_unlim_u(I,K) = 0.
         endif ! if (k > nk_linear)
         if (CS%id_sfn_unlim_x>0) diag_sfn_unlim_x(I,j,K) = Sfn_unlim_u(I,K)
@@ -904,7 +905,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
               haB = 0.5*(h(i,j,k) + h(i,j+1,k)) + h_neglect
 
               ! hN2_v is used with the FGNV streamfunction formulation
-              hN2_v(i,K) = 0.5*( hg2A / haA + hg2B / haB ) * max(drdz*G_rho0 , N2_floor)
+              hN2_v(i,K) = (0.5 * H_to_m * ( hg2A / haA + hg2B / haB )) * &
+                           max(drdz*G_rho0 , N2_floor)
             endif
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
@@ -972,7 +974,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             hN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
-          hN2_v(i,K) = N2_floor * h_neglect
+          hN2_v(i,K) = N2_floor * dz_neglect
           Sfn_unlim_v(i,K) = 0.
         endif ! if (k > nk_linear)
         if (CS%id_sfn_unlim_y>0) diag_sfn_unlim_y(i,J,K) = Sfn_unlim_v(i,K)
@@ -1074,9 +1076,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     do j=js,je ; do I=is-1,ie ; uhD(I,j,1) = -uhtot(I,j) ; enddo ; enddo
     do J=js-1,je ; do i=is,ie ; vhD(i,J,1) = -vhtot(i,J) ; enddo ; enddo
   else
-!$OMP parallel do default(none) shared(is,ie,js,je,pres,T,S,IsdB,tv,uhD,uhtot, &
-!$OMP                                  Work_u,G_scale,use_EOS,e)   &
-!$OMP                          private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
+    !$OMP parallel do default(shared) private(pres_u,T_u,S_u,drho_dT_u,drho_dS_u,drdiB)
     do j=js,je
       if (use_EOS) then
         do I=is-1,ie
@@ -1094,12 +1094,14 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdiB = drho_dT_u(I) * (T(i+1,j,1)-T(i,j,1)) + &
                   drho_dS_u(I) * (S(i+1,j,1)-S(i,j,1))
         endif
-        Work_u(I,j) = Work_u(I,j) + G_scale * ( (uhD(I,j,1) * drdiB) * 0.25 * &
-            ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
+        Work_u(I,j) = Work_u(I,j) + ( G_scale * H_to_m ) * &
+            ( (uhD(I,j,1) * drdiB) * 0.25 * &
+              ((e(i,j,1) + e(i,j,2)) + (e(i+1,j,1) + e(i+1,j,2))) )
 
       enddo
     enddo
 
+    !$OMP parallel do default(shared) private(pres_v,T_v,S_v,drho_dT_v,drho_dS_v,drdjB)
     do J=js-1,je
       if (use_EOS) then
         do i=is,ie
@@ -1117,8 +1119,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
           drdjB = drho_dT_v(i) * (T(i,j+1,1)-T(i,j,1)) + &
                   drho_dS_v(i) * (S(i,j+1,1)-S(i,j,1))
         endif
-        Work_v(i,J) = Work_v(i,J) - G_scale * ( (vhD(i,J,1) * drdjB) * 0.25 * &
-            ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
+        Work_v(i,J) = Work_v(i,J) - ( G_scale * H_to_m ) * &
+            ( (vhD(i,J,1) * drdjB) * 0.25 * &
+              ((e(i,j,1) + e(i,j,2)) + (e(i,j+1,1) + e(i,j+1,2))) )
       enddo
     enddo
   endif
@@ -1681,8 +1684,7 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_thickness_diffuse" ! This module's name.
-  character(len=48)  :: flux_units
-  real :: omega, strat_floor
+  real :: omega, strat_floor, flux_to_kg_per_s
 
   if (associated(CS)) then
     call MOM_error(WARNING, &
@@ -1760,43 +1762,42 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  "If true, write out verbose debugging data.", default=.false.)
 
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0
+  else ; flux_to_kg_per_s = 1. ; endif
 
   CS%id_uhGM = register_diag_field('ocean_model', 'uhGM', diag%axesCuL, Time, &
-           'Time Mean Diffusive Zonal Thickness Flux', flux_units, &
-           y_cell_method='sum', v_extensive=.true.)
+           'Time Mean Diffusive Zonal Thickness Flux', 'kg s-1', &
+           y_cell_method='sum', v_extensive=.true., conversion=flux_to_kg_per_s)
   if (CS%id_uhGM > 0) call safe_alloc_ptr(CDp%uhGM,G%IsdB,G%IedB,G%jsd,G%jed,G%ke)
   CS%id_vhGM = register_diag_field('ocean_model', 'vhGM', diag%axesCvL, Time, &
-           'Time Mean Diffusive Meridional Thickness Flux', flux_units, &
-           x_cell_method='sum', v_extensive=.true.)
+           'Time Mean Diffusive Meridional Thickness Flux', 'kg s-1', &
+           x_cell_method='sum', v_extensive=.true., conversion=flux_to_kg_per_s)
   if (CS%id_vhGM > 0) call safe_alloc_ptr(CDp%vhGM,G%isd,G%ied,G%JsdB,G%JedB,G%ke)
 
   CS%id_GMwork = register_diag_field('ocean_model', 'GMwork', diag%axesT1, Time,                     &
    'Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',               &
-   'Watt meter-2', cmor_field_name='tnkebto',                                                        &
+   'W m-2', cmor_field_name='tnkebto',                                                        &
    cmor_long_name='Integrated Tendency of Ocean Mesoscale Eddy KE from Parameterized Eddy Advection',&
-   cmor_units='W m-2',                                                                               &
    cmor_standard_name='tendency_of_ocean_eddy_kinetic_energy_content_due_to_parameterized_eddy_advection')
   if (CS%id_GMwork > 0) call safe_alloc_ptr(CS%GMwork,G%isd,G%ied,G%jsd,G%jed)
 
   CS%id_KH_u = register_diag_field('ocean_model', 'KHTH_u', diag%axesCui, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at U-point', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-point', 'm2 s-1')
   CS%id_KH_v = register_diag_field('ocean_model', 'KHTH_v', diag%axesCvi, Time, &
-           'Parameterized mesoscale eddy advection diffusivity at V-point', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-point', 'm2 s-1')
   CS%id_KH_t = register_diag_field('ocean_model', 'KHTH_t', diag%axesTL, Time,               &
-       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'meter second-2',&
+       'Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection', 'm2 s-1',&
    cmor_field_name='diftrblo',                                                               &
    cmor_long_name='Ocean Tracer Diffusivity due to Parameterized Mesoscale Advection',       &
    cmor_units='m2 s-1',                                                                      &
    cmor_standard_name='ocean_tracer_diffusivity_due_to_parameterized_mesoscale_advection')
 
   CS%id_KH_u1 = register_diag_field('ocean_model', 'KHTH_u1', diag%axesCu1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at U-points (2-D)', 'm2 s-1')
   CS%id_KH_v1 = register_diag_field('ocean_model', 'KHTH_v1', diag%axesCv1, Time,         &
-           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at V-points (2-D)', 'm2 s-1')
   CS%id_KH_t1 = register_diag_field('ocean_model', 'KHTH_t1', diag%axesT1, Time,&
-           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'meter second-2')
+           'Parameterized mesoscale eddy advection diffusivity at T-points (2-D)', 'm2 s-1')
 
   CS%id_slope_x =  register_diag_field('ocean_model', 'neutral_slope_x', diag%axesCui, Time, &
            'Zonal slope of neutral surface', 'nondim')
@@ -1805,13 +1806,13 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
            'Meridional slope of neutral surface', 'nondim')
   if (CS%id_slope_y > 0) call safe_alloc_ptr(CS%diagSlopeY,G%isd,G%ied,G%JsdB,G%JedB,G%ke+1)
   CS%id_sfn_x =  register_diag_field('ocean_model', 'GM_sfn_x', diag%axesCui, Time, &
-           'Parameterized Zonal Overturning Streamfunction', 'meter3 second-1')
+           'Parameterized Zonal Overturning Streamfunction', 'm3 s-1')
   CS%id_sfn_y =  register_diag_field('ocean_model', 'GM_sfn_y', diag%axesCvi, Time, &
-           'Parameterized Meridional Overturning Streamfunction', 'meter3 second-1')
+           'Parameterized Meridional Overturning Streamfunction', 'm3 s-1')
   CS%id_sfn_unlim_x =  register_diag_field('ocean_model', 'GM_sfn_unlim_x', diag%axesCui, Time, &
-           'Parameterized Zonal Overturning Streamfunction before limiting/smoothing', 'meter3 second-1')
+           'Parameterized Zonal Overturning Streamfunction before limiting/smoothing', 'm3 s-1')
   CS%id_sfn_unlim_y =  register_diag_field('ocean_model', 'GM_sfn_unlim_y', diag%axesCvi, Time, &
-           'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', 'meter3 second-1')
+           'Parameterized Meridional Overturning Streamfunction before limiting/smoothing', 'm3 s-1')
 
 end subroutine thickness_diffuse_init
 

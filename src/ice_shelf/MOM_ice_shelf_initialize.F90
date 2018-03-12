@@ -4,7 +4,7 @@ module MOM_ice_shelf_initialize
 
 use MOM_grid, only : ocean_grid_type
 use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_io, only: read_data, file_exists, slasher
+use MOM_io, only: MOM_read_data, file_exists, slasher
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use user_shelf_init, only: USER_init_ice_thickness
 
@@ -93,8 +93,8 @@ subroutine initialize_ice_thickness_from_file (h_shelf, area_shelf_h, hmask, G, 
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_topography_from_file: Unable to open "//trim(filename))
 
-  call read_data(filename,trim(thickness_varname),h_shelf,domain=G%Domain%mpp_domain)
-  call read_data(filename,trim(area_varname),area_shelf_h,domain=G%Domain%mpp_domain)
+  call MOM_read_data(filename,trim(thickness_varname),h_shelf,G%Domain)
+  call MOM_read_data(filename,trim(area_varname),area_shelf_h,G%Domain)
 
 !  call get_param(PF, mdl, "ICE_BOUNDARY_CONFIG", config, &
 !                 "This specifies how the ice domain boundary is specified", &

@@ -36,9 +36,9 @@ module MOM_OCMIP2_CFC
 !*     A small fragment of the horizontal grid is shown below:         *
 !*                                                                     *
 !*    j+1  x ^ x ^ x   At x:  q                                        *
-!*    j+1  > o > o >   At ^:  v, tr_ady, tr_dfy                        *
-!*    j    x ^ x ^ x   At >:  u, tr_adx, tr_dfx                        *
-!*    j    > o > o >   At o:  h, tr, CFC11, CFC12                      *
+!*    j+1  > o > o >   At ^:  v,                                       *
+!*    j    x ^ x ^ x   At >:  u                                        *
+!*    j    > o > o >   At o:  h, CFC11, CFC12                          *
 !*    j-1  x ^ x ^ x                                                   *
 !*        i-1  i  i+1  At x & ^:                                       *
 !*           i  i+1    At > & o:                                       *
@@ -47,21 +47,19 @@ module MOM_OCMIP2_CFC
 !*                                                                     *
 !********+*********+*********+*********+*********+*********+*********+**
 
-use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
-use MOM_diag_to_Z, only : register_Z_tracer, diag_to_Z_CS
+use MOM_diag_to_Z, only : diag_to_Z_CS
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary, only : ocean_OBC_type
-use MOM_restart, only : register_restart_field, query_initialized, MOM_restart_CS
+use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type, get_time
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
-use MOM_tracer_registry, only : add_tracer_diagnostics, add_tracer_OBC_values
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_variables, only : surface
@@ -83,10 +81,6 @@ public OCMIP2_CFC_stock, OCMIP2_CFC_end
 ! NTR is the number of tracers in this module.
 integer, parameter :: NTR = 2
 
-type p3d
-  real, dimension(:,:,:), pointer :: p => NULL()
-end type p3d
-
 type, public :: OCMIP2_CFC_CS ; private
   character(len=200) :: IC_file ! The file in which the CFC initial values can
                     ! be found, or an empty string for internal initilaization.
@@ -95,9 +89,7 @@ type, public :: OCMIP2_CFC_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL()
   real, pointer, dimension(:,:,:) :: &
     CFC11 => NULL(), &     ! The CFC11 concentration in mol m-3.
-    CFC12 => NULL(), &     ! The CFC12 concentration in mol m-3.
-    CFC11_aux => NULL(), & ! The CFC11 and CFC12 concentrations, in mol m-3,
-    CFC12_aux => NULL()    ! with values of thin layers masked out.
+    CFC12 => NULL()        ! The CFC12 concentration in mol m-3.
   ! In the following variables a suffix of _11 refers to CFC11 and _12 to CFC12.
   real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
   real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
@@ -108,16 +100,10 @@ type, public :: OCMIP2_CFC_CS ; private
   real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
   real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
                                        ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
-  type(p3d), dimension(NTR) :: &
-    tr_adx, &       ! Tracer zonal advective fluxes in mol s-1.
-    tr_ady, &       ! Tracer meridional advective fluxes in mol s-1.
-    tr_dfx, &       ! Tracer zonal diffusive fluxes in mol s-1.
-    tr_dfy          ! Tracer meridional diffusive fluxes in mol s-1.
   real :: CFC11_IC_val = 0.0    ! The initial value assigned to CFC11.
   real :: CFC12_IC_val = 0.0    ! The initial value assigned to CFC12.
   real :: CFC11_land_val = -1.0 ! The values of CFC11 and CFC12 used where
   real :: CFC12_land_val = -1.0 ! land is masked out.
-  logical :: mask_tracers  ! If true, tracers are masked out in massless layers.
   logical :: tracers_may_reinit  ! If true, tracers may go through the
                            ! initialization code if they are not found in the
                            ! restart files.
@@ -130,9 +116,6 @@ type, public :: OCMIP2_CFC_CS ; private
   type(diag_ctrl), pointer :: diag ! A structure that is used to regulate the
                              ! timing of diagnostic output.
   type(MOM_restart_CS), pointer :: restart_CSp => NULL()
-  integer :: id_CFC11, id_CFC12
-  integer, dimension(NTR) :: id_tr_adx = -1, id_tr_ady = -1
-  integer, dimension(NTR) :: id_tr_dfx = -1, id_tr_dfy = -1
 
   ! The following vardesc types contain a package of metadata about each tracer.
   type(vardesc) :: CFC11_desc, CFC12_desc
@@ -167,6 +150,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! In the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers.
+  character(len=48) :: flux_units ! The units for tracer fluxes.
   logical :: register_OCMIP2_CFC
   integer :: isd, ied, jsd, jed, nz, m
 
@@ -207,9 +191,6 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "CFC_IC_FILE_IS_Z", CS%Z_IC_file, &
                  "If true, CFC_IC_FILE is in depth space, not layer space", &
                  default=.false.)
-  call get_param(param_file, mdl, "MASK_MASSLESS_TRACERS", CS%mask_tracers, &
-                 "If true, the tracers are masked out in massless layer. \n"//&
-                 "This can be a problem with time-averages.", default=.false.)
   call get_param(param_file, mdl, "TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
                  "If true, tracers may go through the initialization code \n"//&
                  "if they are not found in the restart files.  Otherwise \n"//&
@@ -221,29 +202,26 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   CS%CFC11_name = "CFC11" ; CS%CFC12_name = "CFC12"
   CS%CFC11_desc = var_desc(CS%CFC11_name,"mol m-3","CFC-11 Concentration", caller=mdl)
   CS%CFC12_desc = var_desc(CS%CFC12_name,"mol m-3","CFC-12 Concentration", caller=mdl)
+  if (GV%Boussinesq) then ; flux_units = "mol s-1"
+  else ; flux_units = "mol m-3 kg s-1" ; endif
 
   allocate(CS%CFC11(isd:ied,jsd:jed,nz)) ; CS%CFC11(:,:,:) = 0.0
   allocate(CS%CFC12(isd:ied,jsd:jed,nz)) ; CS%CFC12(:,:,:) = 0.0
-  if (CS%mask_tracers) then
-    allocate(CS%CFC11_aux(isd:ied,jsd:jed,nz)) ; CS%CFC11_aux(:,:,:) = 0.0
-    allocate(CS%CFC12_aux(isd:ied,jsd:jed,nz)) ; CS%CFC12_aux(:,:,:) = 0.0
-  endif
 
   ! This pointer assignment is needed to force the compiler not to do a copy in
   ! the registration calls.  Curses on the designers and implementers of F90.
   tr_ptr => CS%CFC11
-  ! Register CFC11 for the restart file.
-  call register_restart_field(tr_ptr, CS%CFC11_desc, &
-                              .not.CS%tracers_may_reinit, restart_CS)
-  ! Register CFC11 for horizontal advection & diffusion.
-  call register_tracer(tr_ptr, CS%CFC11_desc, param_file, HI, GV, tr_Reg, &
-                       tr_desc_ptr=CS%CFC11_desc)
+  ! Register CFC11 for horizontal advection, diffusion, and restarts.
+  call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+                       tr_desc=CS%CFC11_desc, registry_diags=.true., &
+                       flux_units=flux_units, &
+                       restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
   ! Do the same for CFC12
   tr_ptr => CS%CFC12
-  call register_restart_field(tr_ptr, CS%CFC12_desc, &
-                              .not.CS%tracers_may_reinit, restart_CS)
-  call register_tracer(tr_ptr, CS%CFC12_desc, param_file, HI, GV, tr_Reg, &
-                       tr_desc_ptr=CS%CFC12_desc)
+  call register_tracer(tr_ptr, Tr_Reg, param_file, HI, GV, &
+                       tr_desc=CS%CFC12_desc, registry_diags=.true., &
+                       flux_units=flux_units, &
+                       restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
 
   ! Set and read the various empirical coefficients.
 
@@ -416,17 +394,8 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
 !  (in/out)  diag_to_Z_Csp - A pointer to the control structure for diagnostics
 !                            in depth space.
   logical :: from_file = .false.
-  character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes.
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%Time => day
   CS%diag => diag
@@ -442,66 +411,11 @@ subroutine initialize_OCMIP2_CFC(restart, day, G, GV, h, diag, OBC, CS, &
                          CS%CFC12_IC_val, G, CS)
 
   if (associated(OBC)) then
-  ! By default, all tracers have 0 concentration in their inflows. This may
-  ! make the following calls are unnecessary.
-  !  call add_tracer_OBC_values(trim(CS%CFC11_desc%name), CS%tr_Reg, 0.0)
-  !  call add_tracer_OBC_values(trim(CS%CFC12_desc%name), CS%tr_Reg, 0.0)
+  ! Steal from updated DOME in the fullness of time.
   endif
 
-
-  ! This needs to be changed if the units of tracer are changed above.
-  if (GV%Boussinesq) then ; flux_units = "mol s-1"
-  else ; flux_units = "mol m-3 kg s-1" ; endif
-
-  do m=1,NTR
-    ! Register the tracer advective and diffusive fluxes for potential
-    ! diagnostic output.
-    if (m==1) then
-      ! Register CFC11 for potential diagnostic output.
-      call query_vardesc(CS%CFC11_desc, name, units=units, longname=longname, &
-                         caller="initialize_OCMIP2_CFC")
-      CS%id_CFC11 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-          day, trim(longname) , trim(units))
-      call register_Z_tracer(CS%CFC11, trim(name), longname, units, &
-                             day, G, diag_to_Z_CSp)
-    elseif (m==2) then
-      ! Register CFC12 for potential diagnostic output.
-      call query_vardesc(CS%CFC12_desc, name, units=units, longname=longname, &
-                         caller="initialize_OCMIP2_CFC")
-      CS%id_CFC12 = register_diag_field("ocean_model", trim(name), CS%diag%axesTL, &
-          day, trim(longname) , trim(units))
-      call register_Z_tracer(CS%CFC12, trim(name), longname, units, &
-                             day, G, diag_to_Z_CSp)
-    else
-      call MOM_error(FATAL,"initialize_OCMIP2_CFC is only set up to work"//&
-                           "with NTR <= 2.")
-    endif
-
-    CS%id_tr_adx(m) = register_diag_field("ocean_model", trim(name)//"_adx", &
-        CS%diag%axesCuL, day, trim(longname)//" advective zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_ady(m) = register_diag_field("ocean_model", trim(name)//"_ady", &
-        CS%diag%axesCvL, day, trim(longname)//" advective meridional flux" , &
-        trim(flux_units))
-    CS%id_tr_dfx(m) = register_diag_field("ocean_model", trim(name)//"_dfx", &
-        CS%diag%axesCuL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    CS%id_tr_dfy(m) = register_diag_field("ocean_model", trim(name)//"_dfy", &
-        CS%diag%axesCvL, day, trim(longname)//" diffusive zonal flux" , &
-        trim(flux_units))
-    if (CS%id_tr_adx(m) > 0) call safe_alloc_ptr(CS%tr_adx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_ady(m) > 0) call safe_alloc_ptr(CS%tr_ady(m)%p,isd,ied,JsdB,JedB,nz)
-    if (CS%id_tr_dfx(m) > 0) call safe_alloc_ptr(CS%tr_dfx(m)%p,IsdB,IedB,jsd,jed,nz)
-    if (CS%id_tr_dfy(m) > 0) call safe_alloc_ptr(CS%tr_dfy(m)%p,isd,ied,JsdB,JedB,nz)
-
-!    Register the tracer for horizontal advection & diffusion.
-    if ((CS%id_tr_adx(m) > 0) .or. (CS%id_tr_ady(m) > 0) .or. &
-        (CS%id_tr_dfx(m) > 0) .or. (CS%id_tr_dfy(m) > 0)) &
-      call add_tracer_diagnostics(name, CS%tr_Reg, CS%tr_adx(m)%p, &
-                                  CS%tr_ady(m)%p,CS%tr_dfx(m)%p,CS%tr_dfy(m)%p)
-  enddo
-
 end subroutine initialize_OCMIP2_CFC
+
 !>This subroutine initializes a tracer array.
 subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
   type(ocean_grid_type),                    intent(in)  :: G    !< The ocean's grid structure
@@ -530,7 +444,7 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, CS)
                 trim(CS%IC_file)//".")
       endif
     else
-      call read_data(CS%IC_file, trim(name), tr, domain=G%Domain%mpp_domain)
+      call MOM_read_data(CS%IC_file, trim(name), tr, G%Domain)
     endif
   else
     do k=1,nz ; do j=js,je ; do i=is,ie
@@ -644,33 +558,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, CS
     call tracer_vertdiff(h_old, ea, eb, dt, CFC12, G, GV, sfc_flux=CFC12_flux)
   endif
 
-  ! Write out any desired diagnostics.
-  if (CS%mask_tracers) then
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      if (h_new(i,j,k) < 1.1*GV%Angstrom) then
-        CS%CFC11_aux(i,j,k) = CS%CFC11_land_val
-        CS%CFC12_aux(i,j,k) = CS%CFC12_land_val
-      else
-        CS%CFC11_aux(i,j,k) = CFC11(i,j,k)
-        CS%CFC12_aux(i,j,k) = CFC12(i,j,k)
-      endif
-    enddo ; enddo ; enddo
-    if (CS%id_CFC11>0) call post_data(CS%id_CFC11, CS%CFC11_aux, CS%diag)
-    if (CS%id_CFC12>0) call post_data(CS%id_CFC12, CS%CFC12_aux, CS%diag)
-  else
-    if (CS%id_CFC11>0) call post_data(CS%id_CFC11, CFC11, CS%diag)
-    if (CS%id_CFC12>0) call post_data(CS%id_CFC12, CFC12, CS%diag)
-  endif
-  do m=1,NTR
-    if (CS%id_tr_adx(m)>0) &
-      call post_data(CS%id_tr_adx(m),CS%tr_adx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_ady(m)>0) &
-      call post_data(CS%id_tr_ady(m),CS%tr_ady(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfx(m)>0) &
-      call post_data(CS%id_tr_dfx(m),CS%tr_dfx(m)%p(:,:,:),CS%diag)
-    if (CS%id_tr_dfy(m)>0) &
-      call post_data(CS%id_tr_dfy(m),CS%tr_dfy(m)%p(:,:,:),CS%diag)
-  enddo
+  ! Write out any desired diagnostics from tracer sources & sinks here.
 
 end subroutine OCMIP2_CFC_column_physics
 
@@ -822,14 +710,6 @@ subroutine OCMIP2_CFC_end(CS)
   if (associated(CS)) then
     if (associated(CS%CFC11)) deallocate(CS%CFC11)
     if (associated(CS%CFC12)) deallocate(CS%CFC12)
-    if (associated(CS%CFC11_aux)) deallocate(CS%CFC11_aux)
-    if (associated(CS%CFC12_aux)) deallocate(CS%CFC12_aux)
-    do m=1,NTR
-      if (associated(CS%tr_adx(m)%p)) deallocate(CS%tr_adx(m)%p)
-      if (associated(CS%tr_ady(m)%p)) deallocate(CS%tr_ady(m)%p)
-      if (associated(CS%tr_dfx(m)%p)) deallocate(CS%tr_dfx(m)%p)
-      if (associated(CS%tr_dfy(m)%p)) deallocate(CS%tr_dfy(m)%p)
-    enddo
 
     deallocate(CS)
   endif

@@ -1002,7 +1002,7 @@ subroutine register_Z_tracer_low(tr_ptr, name, long_name, units, standard_name, 
     CS%id_tr(m) = register_diag_field('ocean_model_zold', name, CS%axesTz, Time,           &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
-    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', name//'_xyave', CS%axesZ, Time,           &
+    CS%id_tr_xyave(m) = register_diag_field('ocean_model_zold', trim(name)//'_xyave', CS%axesZ, Time, &
                                       long_name, units, missing_value=CS%missing_tr(m), &
                                       standard_name=standard_name)
   else
@@ -1061,8 +1061,8 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
   endif
   allocate(CS)
 
-  if (GV%Boussinesq) then ; flux_units = "meter3 second-1"
-  else ; flux_units = "kilogram second-1" ; endif
+  if (GV%Boussinesq) then ; flux_units = "m3 s-1"
+  else ; flux_units = "kg s-1" ; endif
 
   CS%diag => diag
 
@@ -1103,13 +1103,13 @@ subroutine MOM_diag_to_Z_init(Time, G, GV, param_file, diag, CS)
     call define_axes_group(diag, (/ z_axis /),    CS%axesZ)
 
     CS%id_u_z = register_diag_field('ocean_model_zold', 'u', CS%axesCuz, Time,    &
-        'Zonal Velocity in Depth Space', 'meter second-1',                     &
+        'Zonal Velocity in Depth Space', 'm s-1',                     &
         missing_value=CS%missing_vel, cmor_field_name='uo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_x_velocity', cmor_long_name='Sea Water X Velocity')
     if (CS%id_u_z>0) call safe_alloc_ptr(CS%u_z,IsdB,IedB,jsd,jed,CS%nk_zspace)
 
     CS%id_v_z = register_diag_field('ocean_model_zold', 'v', CS%axesCvz, Time,    &
-        'Meridional Velocity in Depth Space', 'meter second-1',                &
+        'Meridional Velocity in Depth Space', 'm s-1',                &
         missing_value=CS%missing_vel, cmor_field_name='vo', cmor_units='m s-1',&
         cmor_standard_name='sea_water_y_velocity', cmor_long_name='Sea Water Y Velocity')
     if (CS%id_v_z>0) call safe_alloc_ptr(CS%v_z,isd,ied,JsdB,JedB,CS%nk_zspace)
@@ -1212,7 +1212,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
       trim(NF90_STRERROR(status))//" Reading variable "//&
       trim(int_depth_name)//" in "//trim(depth_file))
   status = NF90_GET_ATT(ncid, intvid, "units", units)
-  if (status /= NF90_NOERR) units = "meters"
+  if (status /= NF90_NOERR) units = "m"
   status = NF90_GET_ATT(ncid, intvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of edges"
   edge_index = diag_axis_init(int_depth_name, int_depth, units, 'z', &
@@ -1228,7 +1228,7 @@ subroutine get_Z_depths(depth_file, int_depth_name, int_depth, cell_depth_name, 
       trim(NF90_STRERROR(status))//" Reading variable "//&
       trim(cell_depth_name)//" in "//trim(depth_file))
   status = NF90_GET_ATT(ncid, layvid, "units", units)
-  if (status /= NF90_NOERR) units = "meters"
+  if (status /= NF90_NOERR) units = "m"
   status = NF90_GET_ATT(ncid, layvid, "long_name", long_name)
   if (status /= NF90_NOERR) long_name = "Depth of cell center"
 

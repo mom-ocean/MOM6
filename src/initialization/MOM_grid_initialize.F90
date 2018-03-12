@@ -60,7 +60,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : read_data, slasher, file_exists
+use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
 use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
 
 use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
@@ -122,7 +122,7 @@ subroutine set_grid_metrics(G, param_file)
                  "If true, write out verbose debugging data.", default=.false.)
 
   ! These are defaults that may be changed in the next select block.
-  G%x_axis_units = "degrees_E" ; G%y_axis_units = "degrees_N"
+  G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file)
     case ("cartesian"); call set_grid_metrics_cartesian(G, param_file)
@@ -298,7 +298,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read X from the supergrid
   tmpZ(:,:) = 999.
-  call read_data(filename, 'x', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
+  call MOM_read_data(filename, 'x', tmpZ, SGdom, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
@@ -319,7 +319,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read Y from the supergrid
   tmpZ(:,:) = 999.
-  call read_data(filename, 'y', tmpZ, domain=SGdom%mpp_domain, position=CORNER)
+  call MOM_read_data(filename, 'y', tmpZ, SGdom, position=CORNER)
 
   call pass_var(tmpZ, SGdom, position=CORNER)
   call extrapolate_metric(tmpZ, 2*(G%jsc-G%jsd)+2, missing=999.)
@@ -338,8 +338,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call read_data(filename,'dx',tmpV,domain=SGdom%mpp_domain,position=NORTH_FACE)
-  call read_data(filename,'dy',tmpU,domain=SGdom%mpp_domain,position=EAST_FACE)
+  call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
+  call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
@@ -366,7 +366,7 @@ subroutine set_grid_metrics_from_mosaic(G, param_file)
 
 ! Read AREA from the supergrid
   tmpT(:,:) = 0.
-  call read_data(filename, 'area', tmpT, domain=SGdom%mpp_domain)
+  call MOM_read_data(filename, 'area', tmpT, SGdom)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 

@@ -110,7 +110,7 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   type(ocean_grid_type),   intent(in) :: G                    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   real, intent(out), dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h !< The thickness that is being
-                                                              !! initialized.
+                                                              !! initialized, in H.
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
                                                               !! file to parse for model
                                                               !! parameter values.
@@ -141,8 +141,8 @@ subroutine Neverland_initialize_thickness(h, G, GV, param_file, eqn_of_state, P_
   do j=js,je ; do i=is,ie
     e_interface = -G%bathyT(i,j)
     do k=nz,1,-1
-      h(i,j,k) = max( GV%Angstrom_z, e0(k) - e_interface )
-      e_interface = max( e0(k), e_interface - h(i,j,k) )
+      h(i,j,k) = max( GV%Angstrom, GV%m_to_H * (e0(k) - e_interface) )
+      e_interface = max( e0(k), e_interface - GV%H_to_m * h(i,j,k) )
     enddo
 
   enddo ; enddo

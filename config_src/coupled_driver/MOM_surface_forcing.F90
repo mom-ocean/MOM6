@@ -22,7 +22,7 @@ use MOM_forcing_type,     only : allocate_forcing_type, deallocate_forcing_type
 use MOM_forcing_type,     only : allocate_mech_forcing, deallocate_mech_forcing
 use MOM_get_input,        only : Get_MOM_Input, directories
 use MOM_grid,             only : ocean_grid_type
-use MOM_io,               only : slasher, write_version_number
+use MOM_io,               only : slasher, write_version_number, MOM_read_data
 use MOM_restart,          only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,          only : restart_init_end, save_restart, restore_state
 use MOM_string_functions, only : uppercase
@@ -35,7 +35,7 @@ use coupler_types_mod,    only : coupler_2d_bc_type, coupler_type_write_chksums
 use coupler_types_mod,    only : coupler_type_initialized, coupler_type_spawn
 use coupler_types_mod,    only : coupler_type_copy_data
 use data_override_mod,    only : data_override_init, data_override
-use fms_mod,              only : read_data, stdout
+use fms_mod,              only : stdout
 use mpp_mod,              only : mpp_chksum
 use time_interp_external_mod, only : init_external_field, time_interp_external
 use time_interp_external_mod, only : time_interp_external_init
@@ -112,6 +112,7 @@ type, public :: surface_forcing_CS ; private
   logical :: adjust_net_srestore_to_zero    ! adjust srestore to zero (for both salt_flux or vprec)
   logical :: adjust_net_srestore_by_scaling ! adjust srestore w/o moving zero contour
   logical :: adjust_net_fresh_water_to_zero ! adjust net surface fresh-water (w/ restoring) to zero
+  logical :: use_net_FW_adjustment_sign_bug ! use the wrong sign when adjusting net FW
   logical :: adjust_net_fresh_water_by_scaling ! adjust net surface fresh-water  w/o moving zero contour
   logical :: mask_srestore_under_ice        ! If true, use an ice mask defined by frazil
                                             ! criteria for salinity restoring.
@@ -119,15 +120,22 @@ type, public :: surface_forcing_CS ; private
   logical :: mask_srestore_marginal_seas    ! if true, then mask SSS restoring in marginal seas
   real    :: max_delta_srestore             ! maximum delta salinity used for restoring
   real    :: max_delta_trestore             ! maximum delta sst used for restoring
-  real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring
+  real, pointer, dimension(:,:) :: basin_mask => NULL() ! mask for SSS restoring by basin
 
   type(diag_ctrl), pointer :: diag                  ! structure to regulate diagnostic output timing
   character(len=200)       :: inputdir              ! directory where NetCDF input files are
   character(len=200)       :: salt_restore_file     ! filename for salt restoring data
   character(len=30)        :: salt_restore_var_name ! name of surface salinity in salt_restore_file
+  logical                  :: mask_srestore         ! if true, apply a 2-dimensional mask to the surface
+                                                    ! salinity restoring fluxes. The masking file should be
+                                                    ! in inputdir/salt_restore_mask.nc and the field should be name 'mask'
+  real, pointer, dimension(:,:) :: srestore_mask => NULL() ! mask for SSS restoring
   character(len=200)       :: temp_restore_file     ! filename for sst restoring data
   character(len=30)        :: temp_restore_var_name ! name of surface temperature in temp_restore_file
-
+  logical                  :: mask_trestore         ! if true, apply a 2-dimensional mask to the surface
+                                                    ! temperature restoring fluxes. The masking file should be
+                                                    ! in inputdir/temp_restore_mask.nc and the field should be name 'mask'
+  real, pointer, dimension(:,:) :: trestore_mask => NULL() ! mask for SST restoring
   integer :: id_srestore = -1     ! id number for time_interp_external.
   integer :: id_trestore = -1     ! id number for time_interp_external.
 
@@ -261,6 +269,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
   real :: delta_sst           ! temporary storage for sst diff from restoring value
 
   real :: C_p                 ! heat capacity of seawater ( J/(K kg) )
+  real :: sign_for_net_FW_bug ! Should be +1. but an old bug can be recovered by using -1.
 
   call cpu_clock_begin(id_clock_forcing)
 
@@ -376,7 +385,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
         delta_sss = data_restore(i,j)- sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
         fluxes%salt_flux(i,j) = 1.e-3*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)* &
-                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
+                  (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) *delta_sss  ! kg Salt m-2 s-1
       enddo; enddo
       if (CS%adjust_net_srestore_to_zero) then
         if (CS%adjust_net_srestore_by_scaling) then
@@ -394,7 +403,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
         if (G%mask2dT(i,j) > 0.5) then
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss)*min(abs(delta_sss),CS%max_delta_srestore)
-          fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j))* &
+          fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
                       (CS%Rho0*CS%Flux_const) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
@@ -420,7 +429,7 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
     do j=js,je ; do i=is,ie
        delta_sst = data_restore(i,j)- sfc_state%SST(i,j)
        delta_sst = sign(1.0,delta_sst)*min(abs(delta_sst),CS%max_delta_trestore)
-       fluxes%heat_added(i,j) = G%mask2dT(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
+       fluxes%heat_added(i,j) = G%mask2dT(i,j) * CS%trestore_mask(i,j) * (CS%Rho0*fluxes%C_p) * delta_sst * CS%Flux_const   ! W m-2
     enddo; enddo
   endif
 
@@ -542,6 +551,8 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
 
   ! adjust the NET fresh-water flux to zero, if flagged
   if (CS%adjust_net_fresh_water_to_zero) then
+    sign_for_net_FW_bug = 1.
+    if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
       net_FW(i,j) = (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
@@ -553,15 +564,15 @@ subroutine convert_IOB_to_fluxes(IOB, forces, fluxes, index_bounds, Time, G, CS,
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (ASSOCIATED(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) - G%areaT(i,j) * &
+        net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
                      (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
-      net_FW2(i,j) = net_FW(i,j)
+      net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
     enddo ; enddo
 
     if (CS%adjust_net_fresh_water_by_scaling) then
       call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
       enddo; enddo
     else
       fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
@@ -862,6 +873,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_surface_forcing"  ! This module's name.
   character(len=48)  :: stagger
+  character(len=48)  :: flnam
   character(len=240) :: basin_file
   integer :: i, j, isd, ied, jsd, jed
 
@@ -922,6 +934,11 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
                  CS%adjust_net_fresh_water_to_zero, &
                  "If true, adjusts the net fresh-water forcing seen \n"//&
                  "by the ocean (including restoring) to zero.", default=.false.)
+  if (CS%adjust_net_fresh_water_to_zero) &
+    call get_param(param_file, mdl, "USE_NET_FW_ADJUSTMENT_SIGN_BUG", &
+                 CS%use_net_FW_adjustment_sign_bug, &
+                   "If true, use the wrong sign for the adjustment to\n"//&
+                   "the net fresh-water.", default=.true.)
   call get_param(param_file, mdl, "ADJUST_NET_FRESH_WATER_BY_SCALING", &
                  CS%adjust_net_fresh_water_by_scaling, &
                  "If true, adjustments to net fresh water to achieve zero net are\n"//&
@@ -994,12 +1011,15 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     basin_file = trim(CS%inputdir) // trim(basin_file)
     call safe_alloc_ptr(CS%basin_mask,isd,ied,jsd,jed) ; CS%basin_mask(:,:) = 1.0
     if (CS%mask_srestore_marginal_seas) then
-      call read_data(basin_file,'basin',CS%basin_mask,domain=G%domain%mpp_domain,timelevel=1)
+      call MOM_read_data(basin_file,'basin',CS%basin_mask,G%domain, timelevel=1)
       do j=jsd,jed ; do i=isd,ied
         if (CS%basin_mask(i,j) >= 6.0) then ; CS%basin_mask(i,j) = 0.0
         else ; CS%basin_mask(i,j) = 1.0 ; endif
       enddo ; enddo
     endif
+    call get_param(param_file, mdl, "MASK_SRESTORE", CS%mask_srestore, &
+                 "If true, read a file (salt_restore_mask) containing \n"//&
+                 "a mask for SSS restoring.", default=.false.)
   endif
 
   if (restore_temp) then
@@ -1021,6 +1041,9 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
     call get_param(param_file, mdl, "MAX_DELTA_TRESTORE", CS%max_delta_trestore, &
                  "The maximum sst difference used in restoring terms.", &
                  units="degC ", default=999.0)
+    call get_param(param_file, mdl, "MASK_TRESTORE", CS%mask_trestore, &
+                 "If true, read a file (temp_restore_mask) containing \n"//&
+                 "a mask for SST restoring.", default=.false.)
 
   endif
 
@@ -1051,7 +1074,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
-    call read_data(TideAmp_file,'tideamp',CS%TKE_tidal,domain=G%domain%mpp_domain,timelevel=1)
+    call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
@@ -1083,8 +1106,7 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
 
     call safe_alloc_ptr(CS%gust,isd,ied,jsd,jed)
     gust_file = trim(CS%inputdir) // trim(gust_file)
-    call read_data(gust_file,'gustiness',CS%gust,domain=G%domain%mpp_domain, &
-                   timelevel=1) ! units should be Pa
+    call MOM_read_data(gust_file,'gustiness',CS%gust,G%domain, timelevel=1) ! units should be Pa
   endif
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
@@ -1122,11 +1144,21 @@ subroutine surface_forcing_init(Time, G, param_file, diag, CS, restore_salt, res
   if (present(restore_salt)) then ; if (restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
     CS%id_srestore = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
+    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
+    if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
+      flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
+      call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
+    endif
   endif ; endif
 
   if (present(restore_temp)) then ; if (restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
     CS%id_trestore = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
+    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
+    if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
+      flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
+      call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
+    endif
   endif ; endif
 
   ! Set up any restart fields associated with the forcing.

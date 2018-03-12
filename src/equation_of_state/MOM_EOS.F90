@@ -1065,18 +1065,27 @@ end subroutine int_density_dz_generic_cell
 
 
 ! ==========================================================================
-! Compute pressure gradient force integrals for the case where T and S
-! are linear profiles.
+!> Compute pressure gradient force integrals by quadrature for the case where
+!! T and S are linear profiles.
 ! ==========================================================================
 subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
-                                       rho_0, G_e, H_subroundoff, bathyT, HII, HIO, EOS, dpa, &
+                                       rho_0, G_e, dz_subroundoff, bathyT, HII, HIO, EOS, dpa, &
                                        intz_dpa, intx_dpa, inty_dpa, &
                                        useMassWghtInterp)
   type(hor_index_type),   intent(in)  :: HII, HIO
   real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
-                          intent(in)  :: T_t, T_b, S_t, S_b, z_t, z_b
-  real,                   intent(in)  :: rho_ref, rho_0, G_e, H_subroundoff
-  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed),  intent(in)  :: bathyT
+                          intent(in)  :: T_t, T_b, S_t, S_b
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                          intent(in)  :: z_t !< The geometric height at the top
+                                             !! of the layer, usually in m
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                          intent(in)  :: z_b !< The geometric height at the bpttom
+                                             !! of the layer, usually in m
+  real,                   intent(in)  :: rho_ref, rho_0, G_e
+  real,                   intent(in)  :: dz_subroundoff !< A miniscule thickness
+                                             !! change in the same units as z_t
+  real, dimension(HII%isd:HII%ied,HII%jsd:HII%jed), &
+                          intent(in)  :: bathyT !< The depth of the bathymetry in m
   type(EOS_type),         pointer     :: EOS !< Equation of state structure
   real, dimension(HIO%isd:HIO%ied,HIO%jsd:HIO%jed), &
                           intent(out) :: dpa
@@ -1214,8 +1223,8 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
     hWght = massWeightingToggle * &
             max(0., -bathyT(iin,jin)-z_t(iin+1,jin), -bathyT(iin+1,jin)-z_t(iin,jin))
     if (hWght > 0.) then
-      hL = (z_t(iin,jin) - z_b(iin,jin)) + H_subroundoff
-      hR = (z_t(iin+1,jin) - z_b(iin+1,jin)) + H_subroundoff
+      hL = (z_t(iin,jin) - z_b(iin,jin)) + dz_subroundoff
+      hR = (z_t(iin+1,jin) - z_b(iin+1,jin)) + dz_subroundoff
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
       iDenom = 1./( hWght*(hR + hL) + hL*hR )
       Ttl = ( (hWght*hR)*T_t(iin+1,jin) + (hWght*hL + hR*hL)*T_t(iin,jin) ) * iDenom
@@ -1295,8 +1304,8 @@ subroutine int_density_dz_generic_plm (T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, &
       hWght = massWeightingToggle * &
               max(0., -bathyT(i,j)-z_t(iin,jin+1), -bathyT(i,j+1)-z_t(iin,jin))
       if (hWght > 0.) then
-        hL = (z_t(iin,jin) - z_b(iin,jin)) + H_subroundoff
-        hR = (z_t(iin,jin+1) - z_b(iin,jin+1)) + H_subroundoff
+        hL = (z_t(iin,jin) - z_b(iin,jin)) + dz_subroundoff
+        hR = (z_t(iin,jin+1) - z_b(iin,jin+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
         iDenom = 1./( hWght*(hR + hL) + hL*hR )
         Ttl = ( (hWght*hR)*T_t(iin,jin+1) + (hWght*hL + hR*hL)*T_t(iin,jin) ) * iDenom
@@ -1393,12 +1402,12 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
 
   P_b = P_t + dp ! Anomalous pressure at bottom of cell
 
-  if (P_tgt < P_t ) then
+  if (P_tgt <= P_t ) then
     z_out = z_t
     return
   endif
 
-  if (P_tgt > P_b) then
+  if (P_tgt >= P_b) then
     z_out = z_b
     return
   endif
@@ -1791,6 +1800,9 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
+  call MOM_error(FATAL, "I believe that int_density_dz_generic_plm_analytic "//&
+    "has serious bugs and should not be used in its current form. - R. Hallberg")
+
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
 
@@ -1828,6 +1840,10 @@ subroutine int_density_dz_generic_plm_analytic (T_t, T_b, S_t, S_b, z_t, &
     if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*dz**2 * &
           (rho_anom - C1_90*(16.0*(r5(4)-r5(2)) + 7.0*(r5(5)-r5(1))) )
 
+
+    !### The fact that this this expression does not use T and that
+    !### an optional variable is assigned, even if it is not present
+    !### strongly suggests that this code is wrong.
     intz_dpa(i,j) = ( 0.5 * (S_b(i,j)+1000.0-rho_ref) + &
                       (1.0/3.0) * dS ) * G_e * dz**2
 
