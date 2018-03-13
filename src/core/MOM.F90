@@ -2900,6 +2900,8 @@ subroutine MOM_end(CS)
   call tracer_registry_end(CS%tracer_Reg)
   call tracer_flow_control_end(CS%tracer_flow_CSp)
 
+  if (associated(CS%diabatic_CSp)) call diabatic_driver_end(CS%diabatic_CSp)
+
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
