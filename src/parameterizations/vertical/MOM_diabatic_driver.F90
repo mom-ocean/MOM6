@@ -9,7 +9,7 @@ use MOM_debugging,           only : hchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_CVMix_shear,         only : CVMix_shear_is_used
+use MOM_CVMix_shear,         only : cvmix_shear_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -522,7 +522,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
-  if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
+  if (CS%use_kappa_shear .or. CS%use_cvmix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
@@ -1920,7 +1920,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
-  CS%use_CVMix_shear = cvmix_shear_is_used(param_file)
+  CS%use_cvmix_shear = cvmix_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&

@@ -25,7 +25,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used
+public calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_is_used, cvmix_shear_end
 
 !> Control structure including parameters for CVMix interior shear schemes.
 type, public :: cvmix_shear_cs
@@ -38,7 +38,7 @@ type, public :: cvmix_shear_cs
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
 end type cvmix_shear_cs
 
-character(len=40)  :: mdl = "MOM_CVMix_shear"  !< This module's name.
+character(len=40)  :: mdl = "MOM_cvmix_shear"  !< This module's name.
 
 contains
 
@@ -212,5 +212,15 @@ logical function cvmix_shear_is_used(param_file)
        default=.false., do_not_log = .true.)
   cvmix_shear_is_used = (LMD94 .or. PP81)
 end function cvmix_shear_is_used
+
+!> Clear pointers and dealocate memory
+subroutine cvmix_shear_end(CS)
+  type(cvmix_shear_cs), pointer :: CS ! Control structure
+
+  deallocate(CS%N2, CS%diag)
+  deallocate(CS%S2, CS%diag)
+  deallocate(CS)
+
+end subroutine cvmix_shear_end
 
 end module MOM_cvmix_shear
