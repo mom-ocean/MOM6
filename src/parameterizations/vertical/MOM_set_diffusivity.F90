@@ -20,6 +20,7 @@ use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_cs
+use MOM_cvmix_shear,         only : cvmix_shear_end
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -3148,11 +3149,15 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
 
 end subroutine set_diffusivity_init
 
+!> Clear pointers and dealocate memory
 subroutine set_diffusivity_end(CS)
-  type(set_diffusivity_CS), pointer :: CS
+  type(set_diffusivity_CS), pointer :: CS !< Control structure for this module
 
   if (CS%user_change_diff) &
     call user_change_diff_end(CS%user_change_diff_CSp)
+
+  if (CS%use_cvmix_shear) &
+    call cvmix_shear_end(CS%cvmix_shear_csp)
 
   if (associated(CS)) deallocate(CS)
 
