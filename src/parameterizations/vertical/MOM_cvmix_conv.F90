@@ -236,9 +236,9 @@ end subroutine calculate_cvmix_conv
 subroutine cvmix_conv_end(CS)
   type(cvmix_conv_cs), pointer :: CS ! Control structure
 
-  deallocate(CS%N2, CS%diag)
-  deallocate(CS%kd_conv_3d, CS%diag)
-  deallocate(CS%kv_conv_3d, CS%diag)
+  deallocate(CS%N2)
+  deallocate(CS%kd_conv_3d)
+  deallocate(CS%kv_conv_3d)
   deallocate(CS)
 
 end subroutine cvmix_conv_end
