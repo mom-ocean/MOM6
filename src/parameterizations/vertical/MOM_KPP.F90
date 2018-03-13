@@ -32,6 +32,7 @@ public :: KPP_calculate
 public :: KPP_end
 public :: KPP_NonLocalTransport_temp
 public :: KPP_NonLocalTransport_saln
+public :: KPP_get_BLD
 
 ! Enumerated constants
 integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 !< Use the CVmix profile
@@ -936,7 +937,18 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 end subroutine KPP_calculate
 
-
+!> Copies KPP surface boundary layer depth into BLD
+subroutine KPP_get_BLD(CS, BLD, G)
+  type(KPP_CS),                     pointer     :: CS  !< Control structure for
+                                                       !! this module
+  type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BLD!< bnd. layer depth (m)
+  ! Local variables
+  integer :: i,j
+  do j = G%jsc, G%jec ; do i = G%isc, G%iec
+    BLD(i,j) = CS%OBLdepth(i,j)
+  enddo ; enddo
+end subroutine KPP_get_BLD
 
 !> Apply KPP non-local transport of surface fluxes for temperature.
 subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
