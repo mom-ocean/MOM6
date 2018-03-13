@@ -5,6 +5,8 @@ module MOM_cvmix_conv
 
 use MOM_diag_mediator,  only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,  only : post_data
+use MOM_EOS,            only : calculate_density
+use MOM_variables,      only : thermo_var_ptrs
 use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_debugging,      only : hchksum
@@ -13,6 +15,7 @@ use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use cvmix_convection,   only : cvmix_init_conv, cvmix_coeffs_conv
 use cvmix_kpp,          only : CVmix_kpp_compute_kOBL_depth
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -105,21 +108,19 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   ! set kv_conv based on kd_conv and Prandtl_turb
   CS%kv_conv = CS%kd_conv * Prandtl_turb
 
+  ! allocate arrays and set them to zero
+  allocate(CS%N2(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%N2(:,:,:) = 0.
+  allocate(CS%kd_conv_3d(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_conv_3d(:,:,:) = 0.
+  allocate(CS%kv_conv_3d(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_conv_3d(:,:,:) = 0.
+
   ! Register diagnostics
   CS%diag => diag
   CS%id_N2 = register_diag_field('ocean_model', 'conv_N2', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_cvmix_conv module', '1/s2')
-  if (CS%id_N2 > 0) allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_kd_conv = register_diag_field('ocean_model', 'conv_kd', diag%axesTi, Time, &
       'Additional diffusivity added by MOM_cvmix_conv module', 'm2/s')
-  if (CS%id_kd_conv > 0) allocate( CS%kd_conv_3d( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
   CS%id_kv_conv = register_diag_field('ocean_model', 'conv_kv', diag%axesTi, Time, &
       'Additional viscosity added by MOM_cvmix_conv module', 'm2/s')
-  if (CS%id_kv_conv > 0) allocate( CS%kv_conv_3d( SZI_(G), SZJ_(G), SZK_(G)+1 ) )
-
-  if (CS%id_N2 > 0) CS%N2(:,:,:) = 0.
-  if (CS%id_kd_conv > 0) CS%kd_conv_3d(:,:,:) = 0.
-  if (CS%id_kv_conv > 0) CS%kv_conv_3d(:,:,:) = 0.
 
   call cvmix_init_conv(convect_diff=CS%kd_conv, &
                        convect_visc=CS%kv_conv, &
@@ -136,8 +137,9 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G))            intent(in)  :: hbl!< Depth of ocean boundary layer (m)
-  type(cvmix_conv_cs),                    pointer(inout)  :: CS !< The control structure returned by a previous call to
+  real, dimension(SZI_(G),SZJ_(G)),           intent(in)  :: hbl!< Depth of ocean boundary layer (m)
+  !type(cvmix_conv_cs),                     intent(inout)  :: CS !< The control structure returned by a previous call to
+  type(cvmix_conv_cs),                            pointer :: CS !< The control structure returned by a previous call to
                                                                 !! CVMix_conv_init.
 
   ! local variables
@@ -148,8 +150,8 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
                                       !! a dummy variable, same reason as above.
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
-  real :: kOBL                        !< level (+fraction) of OBL extent
-  real :: pref, g_o_rho0, rhok, , rhokm1, dz, dh, hcorr
+  integer :: kOBL                        !< level of OBL extent
+  real :: pref, g_o_rho0, rhok, rhokm1, dz, dh, hcorr
   integer :: i, j, k
 
   g_o_rho0 = GV%g_Earth / GV%Rho0
@@ -162,10 +164,10 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
 
       ! set N2 to zero at the top- and bottom-most interfaces
       CS%N2(i,j,1) = 0.
-      CS%N2(i,j,G%ke+1) =0.
+      CS%N2(i,j,G%ke+1) = 0.
 
       ! skip calling at land points
-      if (G%mask2dT(i,j)==0.) cycle
+      !if (G%mask2dT(i,j) == 0.) cycle
 
       pRef = 0.
       ! Compute Brunt-Vaisala frequency (static stability) on interfaces
@@ -193,24 +195,24 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
-      kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl)
+      kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-      call cvmix_coeffs_conv(Mdiff_out = CS%kv_conv_3d(i,j,:), &
-                             Tdiff_out = CS%kd_conv_3d(i,j,:), &
-                             Nsqr = CS%N2(i,j,:), &
-                             dens = rho_1d(:), &
-                             dens_lwr = rho_lwr(:), &
-                             nlev = G%ke,    &
-                             max_nlev = G%ke, &
-                             OBL_ind = kOBL)
+      call cvmix_coeffs_conv(Mdiff_out=CS%kv_conv_3d(i,j,:), &
+                               Tdiff_out=CS%kd_conv_3d(i,j,:), &
+                               Nsqr=CS%N2(i,j,:), &
+                               dens=rho_1d(:), &
+                               dens_lwr=rho_lwr(:), &
+                               nlev=G%ke,    &
+                               max_nlev=G%ke, &
+                               OBL_ind=kOBL)
 
     enddo
   enddo
 
   if (CS%debug) then
-    call hchksum(CS%N2, "CVMix convection: N2",G%HI,haloshift=0)
-    call hchksum(CS%kd_conv_3d, "CVMix convection: kd_conv_3d",G%HI,haloshift=0)
-    call hchksum(CS%kv_conv_3d, "CVMix convection: kv_conv_3d",G%HI,haloshift=0)
+    call hchksum(CS%N2, "MOM_cvmix_conv: N2",G%HI,haloshift=0)
+    call hchksum(CS%kd_conv_3d, "MOM_cvmix_conv: kd_conv_3d",G%HI,haloshift=0)
+    call hchksum(CS%kv_conv_3d, "MOM_cvmix_conv: kv_conv_3d",G%HI,haloshift=0)
   endif
 
   ! send diagnostics to post_data
@@ -234,9 +236,9 @@ end subroutine calculate_cvmix_conv
 subroutine cvmix_conv_end(CS)
   type(cvmix_conv_cs), pointer :: CS ! Control structure
 
-  if (CS%id_N2 > 0) deallocate(CS%N2, CS%diag)
-  if (CS%id_kd_conv > 0) deallocate(CS%kd_conv_3d, CS%diag)
-  if (CS%id_kv_conv > 0) deallocate(CS%kv_conv_3d, CS%diag)
+  deallocate(CS%N2, CS%diag)
+  deallocate(CS%kd_conv_3d, CS%diag)
+  deallocate(CS%kv_conv_3d, CS%diag)
   deallocate(CS)
 
 end subroutine cvmix_conv_end
