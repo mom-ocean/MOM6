@@ -69,6 +69,9 @@ program MOM_main
   use MOM_ice_shelf, only : shelf_calc_flux, ice_shelf_save_restart
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
+  use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+  use MOM_wave_interface, only: Update_Surface_Waves
+
   implicit none
 
 #include <MOM_memory.h>
@@ -88,6 +91,9 @@ program MOM_main
 
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
+
+  ! If .true., use wave coupling
+  logical :: use_waves = .false.
 
   ! This is .true. if incremental restart files may be saved.
   logical :: permit_incr_restart = .true.
@@ -180,6 +186,7 @@ program MOM_main
   type(surface_forcing_CS),  pointer :: surface_forcing_CSp => NULL()
   type(write_cputime_CS),    pointer :: write_CPU_CSp => NULL()
   type(ice_shelf_CS),        pointer :: ice_shelf_CSp => NULL()
+  type(wave_parameters_cs),  pointer :: waves_CSp => NULL()
   type(MOM_restart_CS),      pointer :: &
     restart_CSp => NULL()     !< A pointer to the restart control structure
                               !! that will be used for MOM restart files.
@@ -322,6 +329,11 @@ program MOM_main
     ! when using an ice shelf
     call initialize_ice_shelf(param_file, grid, Time, ice_shelf_CSp, &
                               diag, forces, fluxes)
+  endif
+
+  use_waves=.false. ; call read_param(param_file,"USE_WAVES",Use_Waves)
+  if (use_waves) then
+     call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
   endif
 
   segment_start_time = Time
@@ -475,6 +487,10 @@ program MOM_main
     fluxes%fluxes_used = .false.
     fluxes%dt_buoy_accum = dt_forcing
 
+    if (use_waves) then
+       call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+    endif
+
     if (ns==1) then
       call finish_MOM_initialization(Time, dirs, MOM_CSp, fluxes, restart_CSp)
     endif
@@ -484,7 +500,7 @@ program MOM_main
     if (offline_tracer_mode) then
       call step_offline(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp)
     elseif (single_step_call) then
-      call step_MOM(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp)
+      call step_MOM(forces, fluxes, sfc_state, Time1, dt_forcing, MOM_CSp, Waves=Waves_CSP)
     else
       n_max = 1 ; if (dt_forcing > dt) n_max = ceiling(dt_forcing/dt - 0.001)
       dt_dyn = dt_forcing / real(n_max)

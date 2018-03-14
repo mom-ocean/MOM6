@@ -123,6 +123,8 @@ use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
 use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
+use MOM_wave_interface,        only : wave_parameters_CS, waves_end
+use MOM_wave_interface,        only : Update_Stokes_Drift
 
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
@@ -235,6 +237,7 @@ type, public :: MOM_control_struct ; private
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
+  logical :: useWaves                !< If true, update Stokes drift
   real :: dtbt_reset_period          !< The time interval in seconds between dynamic
                                      !! recalculation of the barotropic time step.  If
                                      !! this is negative, it is never calculated, and
@@ -300,8 +303,6 @@ type, public :: MOM_control_struct ; private
   type(surface_diag_IDs) :: sfc_IDs
   type(diag_grid_storage) :: diag_pre_sync, diag_pre_dyn
 
-  ! The remainder of this type provides pointers to child module control structures.
-
   ! These are used for the dynamics updates
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
@@ -366,7 +367,7 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
+subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Waves, &
                     do_dynamics, do_thermodynamics, start_cycle, end_cycle, cycle_length)
   type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
   type(forcing),      intent(inout)  :: fluxes        !< pointers to forcing fields
@@ -374,6 +375,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   type(time_type),    intent(in)     :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)     :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
+  type(Wave_parameters_CS), pointer, optional, intent(in) :: &
+       Waves                                          !< point CS with waves
   logical,  optional, intent(in)     :: do_dynamics   !< Present and false, do not do updates due
                                                       !! to the dynamics.
   logical,  optional, intent(in)     :: do_thermodynamics  !< Present and false, do not do updates due
@@ -563,6 +566,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
 
+    if (CS%UseWaves) then
+    ! Update wave information, which is presently kept static over each call to step_mom
+      call enable_averaging(dt, Time_local, CS%diag)
+      call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
+      call disable_averaging(CS%diag)
+    endif
+
     if (showCallTree) call callTree_enter("DT cycles (step_MOM) n=",n)
 
     !===========================================================================
@@ -593,7 +603,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true.)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true., WAVES=Waves)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -650,7 +660,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
-                             Time_local, CS%rel_time, n)
+                             Time_local, CS%rel_time, n, WAVES=Waves)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -685,7 +695,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
       if (dtdia > dt) CS%Time = CS%Time - set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.,  WAVES=waves)
       CS%t_dyn_rel_thermo = 0.0
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
@@ -795,7 +805,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
 end subroutine step_MOM
 
 subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
-                             bbl_time_int, CS, Time_local, rel_time, dyn_call)
+                             bbl_time_int, CS, Time_local, rel_time, dyn_call, WAVES)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
@@ -815,6 +825,9 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! time-stepping cycle, in s.
   integer,            intent(in)    :: dyn_call   !< A count of the calls to step_MOM_dynamics
                                                   !! within this forcing timestep.
+  type(wave_parameters_CS), pointer, intent(in), optional :: &
+       WAVES                                      !<Container for wave related parameters
+
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
                                       ! metrics and related information
@@ -905,12 +918,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     else
       call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-               CS%eta_av_bc, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE)
+               CS%eta_av_bc, G, GV, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, Waves=Waves)
     endif
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
   endif ! -------------------------------------------------- end SPLIT
-
 
   if (CS%thickness_diffuse .and. .not.CS%thickness_diffuse_first) then
     call cpu_clock_begin(id_clock_thick_diff)
@@ -1044,7 +1056,7 @@ end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL,waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1059,6 +1071,9 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
+  type(wave_parameters_CS), pointer, optional, intent(in) :: &
+       WAVES !<Container for wave related parameters
+
 
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
@@ -1102,7 +1117,7 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
 
     call cpu_clock_begin(id_clock_diabatic)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, &
-                  dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp)
+                  dtdia, Time_end_thermo, G, GV, CS%diabatic_CSp, Waves=Waves)
     fluxes%fluxes_used = .true.
     call cpu_clock_end(id_clock_diabatic)
 
@@ -1624,6 +1639,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "at velocity points.  Otherwise the effects of topography \n"//&
                  "are entirely determined from thickness points.", &
                  default=.false.)
+  call get_param(param_file, "MOM", "USE_WAVES", CS%UseWaves, default=.false., do_not_log=.true.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
@@ -2243,7 +2259,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call lock_tracer_registry(CS%tracer_Reg)
   call callTree_waypoint("tracer registry now locked (initialize_MOM)")
-
 
   ! now register some diagnostics since the tracer registry is now locked
   call register_surface_diags(Time, G, CS%sfc_IDs, CS%diag, CS%tv)
