@@ -20,7 +20,7 @@ use MOM_variables, only : thermo_var_ptrs, vertvisc_type
 use MOM_variables, only : cont_diag_ptrs, accel_diag_ptrs
 use MOM_variables, only : ocean_internal_state
 use MOM_verticalGrid, only : verticalGrid_type
-
+use MOM_wave_interface, only : wave_parameters_CS
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -119,6 +119,7 @@ type, public :: vertvisc_CS ; private
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
+  logical :: LagrangianMixing
 end type vertvisc_CS
 
 contains
@@ -138,7 +139,7 @@ contains
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
-                    taux_bot, tauy_bot)
+                    taux_bot, tauy_bot, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, intent(inout), &
@@ -159,6 +160,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   real, optional, intent(out), dimension(SZIB_(G),SZJ_(G)) :: taux_bot
   !> Meridional bottom stress from ocean to rock in Pa
   real, optional, intent(out), dimension(SZI_(G),SZJB_(G)) :: tauy_bot
+  type(wave_parameters_CS), pointer, optional :: Waves !< Container for wave/Stokes information
 
   ! Fields from fluxes used in this subroutine:
   !   taux: Zonal wind stress in Pa.
@@ -217,7 +219,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
-!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,forces,h, &
+  if (CS%LagrangianMixing) then
+     u = u + Waves%Us_x
+  endif
+!$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
 !$OMP                                  Idt,taux_bot,Rho0)                      &
 !$OMP                     firstprivate(Ray)                                    &
@@ -315,8 +320,15 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     endif
   enddo ! end u-component j loop
 
+  if (CS%LagrangianMixing) then
+     u = u - Waves%Us_x
+  endif
+
   ! Now work on the meridional velocity component.
-!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,forces,h, &
+  if (CS%LagrangianMixing) then
+     v = v + Waves%Us_y
+  endif
+!$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
 !$OMP                                  tauy_bot,is,ie)                         &
 !$OMP                     firstprivate(Ray)                                    &
@@ -387,6 +399,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
+
+  if (CS%LagrangianMixing) then
+     v = v - Waves%Us_y
+  endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
 
@@ -1612,6 +1628,10 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
+  call get_param(param_file, mdl, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
+       "Flag to use Lagrangian Mixing (with Stokes drift). \n"//&
+       "Still needs work and testing, so not recommended for use.", units="", &
+       Default=.false.)
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity \n"//&
                  "components are set to 0.  A reasonable value might be \n"//&
