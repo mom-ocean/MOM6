@@ -60,6 +60,7 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   ! Local variables
   real    :: prandtl_turb
+  logical :: useEPBL
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -82,6 +83,17 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
                  default=.false.)
 
   if (.not. cvmix_conv_init) return
+
+  call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, default=.false., &
+                do_not_log=.true.)
+
+  ! Warn user if EPBL is being used, since in this case mixing due to convection will
+  ! be aplied in the boundary layer
+  if (useEPBL) then
+     call MOM_error(WARNING, 'MOM_cvmix_conv_init: '// &
+           'CVMix convection may not be properly applied when ENERGETICS_SFC_PBL = True'//&
+           'as convective mixing might occur in the boundary layer.')
+  endif
 
   call get_param(param_file, mdl, "PRANDTL_TURB", Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear/conv. \n"//&
@@ -131,16 +143,15 @@ end function cvmix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
+subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G)),           intent(in)  :: hbl!< Depth of ocean boundary layer (m)
-  !type(cvmix_conv_cs),                     intent(inout)  :: CS !< The control structure returned by a previous call to
   type(cvmix_conv_cs),                            pointer :: CS !< The control structure returned by a previous call to
                                                                 !! CVMix_conv_init.
+  real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
 
   ! local variables
   real, dimension(SZK_(G)) :: rho_lwr !< Adiabatic Water Density, this is a dummy
@@ -158,6 +169,11 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0; rho_1d(:) = 0.0
+
+  if (.not. associated(hbl)) then
+    allocate(hbl(SZI_(G), SZJ_(G)));
+    hbl(:,:) = 0.0
+  endif
 
   do j = G%jsc, G%jec
     do i = G%isc, G%iec
@@ -205,6 +221,12 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, hbl, CS)
                                nlev=G%ke,    &
                                max_nlev=G%ke, &
                                OBL_ind=kOBL)
+
+    ! Do not apply mixing due to convection within the boundary layer
+    do k=1,NINT(hbl(i,j))
+      CS%kv_conv_3d(i,j,k) = 0.0
+      CS%kd_conv_3d(i,j,k) = 0.0
+    enddo
 
     enddo
   enddo
