@@ -6,13 +6,16 @@ module MOM_wave_interface
 !*                                                                     *
 !*  By Brandon Reichl, 2018.                                           *
 !*                                                                     *
+!*   This module should be moved as wave coupling progresses and       *
+!* likely will should mirror the iceberg or sea-ice model set-up.       *
+!*                                                                     *
 !*   This module is meant to contain the routines to read in and       *
 !* interpret surface wave data for MOM6. In its original form, the     *
 !* capabilities include setting the Stokes drift in the model (from a  *
 !* variety of sources including prescribed, empirical, and input       *
-!* files.  In short order, the plan is to also ammend the subroutine   *
+!* files).  In short order, the plan is to also ammend the subroutine  *
 !* to accept Stokes drift information from an external coupler.        *
-!* Eventually, it will be necessary to break this file appart so that  *
+!* Eventually, it will be necessary to break this file apart so that   *
 !* general wave information may be stored in the control structure     *
 !* and the Stokes drift effect can be isolated from processes such as  *
 !* sea-state dependent momentum fluxes, gas fluxes, and other wave     *
@@ -53,7 +56,7 @@ public Update_Stokes_Drift ! Public interface to update the Stokes drift profile
 public get_Langmuir_Number ! Public interface to compute Langmuir number called from
                            ! ePBL or KPP routines.
 public StokesMixing ! NOT READY - Public interface to add down-Stokes gradient
-                    ! momentum mixing (e.g. the approach of Reichl et al., 2016 KPP-LT
+                    ! momentum mixing (e.g. the approach of Harcourt 2013/2015)
 public CoriolisStokes ! NOT READY - Public interface to add Coriolis-Stokes acceleration
                       ! of the mean currents, needed for comparison with LES.  It is
                       ! presently advised against implementing in non-1d settings without
@@ -91,30 +94,30 @@ type, public:: wave_parameters_CS ; private
        Freq_Cen, &          ! Frequency bands for read/coupled
        PrescribedSurfStkX,& ! Surface Stokes drift if prescribed
        PrescribedSurfStkY   ! Surface Stokes drift if prescribed
-  real ALLOCABLE_, dimension( NIMEMB_, NJMEM_,NKMEM_), public :: &
+  real ALLOCABLE_, dimension( :, :, :), public :: &
        Us_x ! 3d Stokes drift profile (zonal)
             ! Horizontal -> U points
             ! Vertical -> Mid-points
-  real ALLOCABLE_, dimension( NIMEM_, NJMEMB_,NKMEM_), public :: &
+  real ALLOCABLE_, dimension( :, :,:), public :: &
        Us_y ! 3d Stokes drift profile (meridional)
             ! Horizontal -> V points
             ! Vertical -> Mid-points
-  real ALLOCABLE_, dimension( NIMEM_, NJMEM_), public ::         &
+  real ALLOCABLE_, dimension( :, :), public ::         &
        LangNum, & ! Langmuir number (directionality factored later)
                   ! Horizontal -> H points
        US0_x,   & ! Surface Stokes Drift (zonal)
                   ! Horizontal -> U points
        US0_y      ! Surface Stokes Drift (meridional)
                   ! Horizontal -> V points
-  real ALLOCABLE_, dimension( NIMEMB_, NJMEM_,NKMEM_), public :: &
+  real ALLOCABLE_, dimension( :, :,:), public :: &
        STKx0 ! Stokes Drift spectrum (zonal)
              ! Horizontal -> U points
              ! 3rd dimension -> Freq/Wavenumber (Why NKMEM_?)
-  real ALLOCABLE_, dimension( NIMEM_, NJMEMB_,NKMEM_), public :: &
+  real ALLOCABLE_, dimension( :, :,:), public :: &
        STKy0 ! Stokes Drift spectrum (meridional)
              ! Horizontal -> V points
              ! 3rd dimension -> Freq/Wavenumber (Why NKMEM_?)
-  real ALLOCABLE_, dimension( NIMEM_, NJMEM_,NKMEM_), public :: &
+  real ALLOCABLE_, dimension( :, :,:), public :: &
        KvS !< Viscosity for Stokes Drift shear
 
   ! Pointers to auxiliary fields
@@ -174,7 +177,7 @@ integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
 Real    :: TP_STKX0, TP_STKY0, TP_WVL
 logical :: WaveAgePeakFreq  !> Flag to use W
 real    :: WaveAge, WaveWind
-real, parameter :: PI=4*atan(1)
+real, parameter :: PI=3.14159265358979
 
 CONTAINS
 
@@ -1203,6 +1206,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
 end subroutine CoriolisStokes
 
 !> Computes wind speed from ustar_air based on COARE 3.5 Cd relationship
+!> Probably doesn't belong in this module, but it is used here.
 subroutine ust_2_u10_coare3p5(USTair,U10,GV)
   real, intent(in)  :: USTair
   type(verticalGrid_type), intent(in) :: GV
