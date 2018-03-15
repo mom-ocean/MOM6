@@ -261,6 +261,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
   call get_param(paramFile, mdl, 'CORRECT_SURFACE_LAYER_AVERAGE', CS%correctSurfLayerAvg,   &
                  'If true, applies a correction step to the averaging of surface layer\n'// &
                  'properties. This option is obsolete.', default=.False.)
+  if (CS%correctSurfLayerAvg) &
+    MOM_ERROR(FATAL,'Correct surface layer average disabled in code.  To recover this\n'// &
+                       ' feature will require code intervention.')
   call get_param(paramFile, mdl, 'FIRST_GUESS_SURFACE_LAYER_DEPTH', CS%surfLayerDepth,              &
                  'The first guess at the depth of the surface layer used for averaging\n'//         &
                  'the surface layer properties. If =0, the top model level properties\n'//          &
@@ -828,7 +831,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
           enddo
         else
            !This shouldn't be reached.
-           print*,'Why are you here?'
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in Vt2")
            LangEnhVT2(:) = 1.0
         endif
       else
@@ -882,74 +885,77 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 ! Following "correction" step has been found to be unnecessary.
 ! Code should be removed after further testing.
-      ! if (CS%correctSurfLayerAvg) then
-      !   SLdepth_0d = CS%surf_layer_ext * OBLdepth_0d
-      !   hTot      = h(i,j,1)
-      !   surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
-      !   surfSalt  = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
-      !   surfU     = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
-      !   surfV     = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
-      !   pRef      = 0.0
+! BGR: 03/15/2018-> Restructured code (Vt2 changed to compute from call in MOM_KPP now)
+!      I have not taken this restructuring into account here.
+!      Do we ever run with correctSurfLayerAvg?
+!      smg's suggested testing and removal is advised, in the meantime
+!      I have added warning if correctSurfLayerAvg is attempted.
+       ! if (CS%correctSurfLayerAvg) then
+       !   SLdepth_0d = CS%surf_layer_ext * OBLdepth_0d
+       !   hTot      = h(i,j,1)
+       !   surfTemp  = Temp(i,j,1) ; surfHtemp = surfTemp * hTot
+       !   surfSalt  = Salt(i,j,1) ; surfHsalt = surfSalt * hTot
+       !   surfU     = 0.5*(u(i,j,1)+u(i-1,j,1)) ; surfHu = surfU * hTot
+       !   surfV     = 0.5*(v(i,j,1)+v(i,j-1,1)) ; surfHv = surfV * hTot
+       !   pRef      = 0.0
 
-      !   do k = 2, G%ke
+       !   do k = 2, G%ke
 
-      !     ! Recalculate differences with surface layer
-      !     Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
-      !     Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
-      !     deltaU2(k) = Uk**2 + Vk**2
-      !     pRef = pRef + GV%H_to_Pa * h(i,j,k)
-      !     call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
-      !     call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
-      !     deltaRho(k) = rhoK - rho1
+       !     ! Recalculate differences with surface layer
+       !     Uk = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
+       !     Vk = 0.5*(v(i,j,k)+v(i,j-1,k)) - surfV
+       !     deltaU2(k) = Uk**2 + Vk**2
+       !     pRef = pRef + GV%H_to_Pa * h(i,j,k)
+       !     call calculate_density(surfTemp, surfSalt, pRef, rho1, EOS)
+       !     call calculate_density(Temp(i,j,k), Salt(i,j,k), pRef, rhoK, EOS)
+       !     deltaRho(k) = rhoK - rho1
 
-      !     ! Surface layer averaging (needed for next k+1 iteration of this loop)
-      !     if (hTot < SLdepth_0d) then
-      !       delH = min( max(0., SLdepth_0d - hTot), h(i,j,k)*GV%H_to_m )
-      !       hTot = hTot + delH
-      !       surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
-      !       surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
-      !       surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
-      !       surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
-      !     endif
+       !     ! Surface layer averaging (needed for next k+1 iteration of this loop)
+       !     if (hTot < SLdepth_0d) then
+       !       delH = min( max(0., SLdepth_0d - hTot), h(i,j,k)*GV%H_to_m )
+       !       hTot = hTot + delH
+       !       surfHtemp = surfHtemp + Temp(i,j,k) * delH ; surfTemp = surfHtemp / hTot
+       !       surfHsalt = surfHsalt + Salt(i,j,k) * delH ; surfSalt = surfHsalt / hTot
+       !       surfHu = surfHu + 0.5*(u(i,j,k)+u(i-1,j,k)) * delH ; surfU = surfHu / hTot
+       !       surfHv = surfHv + 0.5*(v(i,j,k)+v(i,j-1,k)) * delH ; surfV = surfHv / hTot
+       !     endif
 
-      !   enddo
+       !   enddo
 
-      !   BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
-      !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
-      !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
-      !               deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
-      !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
-      !               N_iface=N_1d )                       ! Buoyancy frequency (1/s)
+       !   BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+       !               cellHeight(1:G%ke),                & ! Depth of cell center (m)
+       !               GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
+       !               deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
+       !               ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile (m/s)
+       !               N_iface=N_1d )                       ! Buoyancy frequency (1/s)
 
-      !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
-      !                                  ! h to Monin-Obukov (default is false, ie. not used)
+       !   surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
+       !                                  ! h to Monin-Obukov (default is false, ie. not used)
 
-      !   call CVmix_kpp_compute_OBL_depth( &
-      !     BulkRi_1d,              & ! (in) Bulk Richardson number
-      !     iFaceHeight,            & ! (in) Height of interfaces (m)
-      !     OBLdepth_0d,            & ! (out) OBL depth (m)
-      !     kOBL,                   & ! (out) level (+fraction) of OBL extent
-      !     zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
-      !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
-      !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
-      !     Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-      !     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+       !   call CVmix_kpp_compute_OBL_depth( &
+       !     BulkRi_1d,              & ! (in) Bulk Richardson number
+       !     iFaceHeight,            & ! (in) Height of interfaces (m)
+       !     OBLdepth_0d,            & ! (out) OBL depth (m)
+       !     kOBL,                   & ! (out) level (+fraction) of OBL extent
+       !     zt_cntr=cellHeight,     & ! (in) Height of cell centers (m)
+       !     surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
+       !     surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
+       !     Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
+       !     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
-      !   if (CS%deepOBLoffset>0.) then
-      !     zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
-      !     OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
-      !     kOBL = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
-      !   endif
+       !   if (CS%deepOBLoffset>0.) then
+       !     zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
+       !     OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
+       !     kOBL = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+       !   endif
 
-      !   ! apply some constraints on OBLdepth
-      !   if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
-      !   OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
-      !   OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
-      !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+       !   ! apply some constraints on OBLdepth
+       !   if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
+       !   OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
+       !   OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
+       !   kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
-      ! endif   ! endif for "correction" step
-! BGR: Above code either needs modified or removed (as Steve suggests).
-!      Do not uncomment as is if using Langmuir options
+       ! endif   ! endif for "correction" step
 ! smg: remove code above
 ! **********************************************************************
 
@@ -1005,7 +1011,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
            LangEnhK = min(2.25, 1. + 1./WAVES%LangNum(i,j))
         else
            !This shouldn't be reached.
-           print*,'Why are you here?'
+           !call MOM_error(WARNING,"Unexpected behavior in MOM_KPP, see error in LT_K_ENHANCEMENT")
            LangEnhK = 1.0
         endif
         do k=1,G%ke
