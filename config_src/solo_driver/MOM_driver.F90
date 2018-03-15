@@ -92,7 +92,7 @@ program MOM_main
   ! If .true., use the ice shelf model for part of the domain.
   logical :: use_ice_shelf
 
-  ! If .true., use wave coupling
+  ! If .true., use surface wave coupling
   logical :: use_waves = .false.
 
   ! This is .true. if incremental restart files may be saved.
@@ -331,7 +331,8 @@ program MOM_main
                               diag, forces, fluxes)
   endif
 
-  use_waves=.false. ; call read_param(param_file,"USE_WAVES",Use_Waves)
+  call get_param(param_file,mdl,"USE_WAVES",Use_Waves,&
+       "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
      call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
   endif

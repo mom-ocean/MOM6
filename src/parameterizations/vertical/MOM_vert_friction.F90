@@ -219,6 +219,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
+  ! When mixing down Eulerian current + Stokes drift add before calling solver
   if (CS%LagrangianMixing) then
      u = u + Waves%Us_x
   endif
@@ -320,11 +321,13 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
     endif
   enddo ! end u-component j loop
 
+  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
   if (CS%LagrangianMixing) then
      u = u - Waves%Us_x
   endif
 
   ! Now work on the meridional velocity component.
+  ! When mixing down Eulerian current + Stokes drift add before calling solver
   if (CS%LagrangianMixing) then
      v = v + Waves%Us_y
   endif
@@ -399,7 +402,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
-
+  ! When mixing down Eulerian current + Stokes drift subtract after calling solver
   if (CS%LagrangianMixing) then
      v = v - Waves%Us_y
   endif
