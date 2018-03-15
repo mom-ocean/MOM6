@@ -635,13 +635,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 
-    ! If visc%MLD exists, copy the KPP BLD into it
-    if (associated(visc%MLD)) then
-      call KPP_get_BLD(CS%KPP_CSp, visc%MLD(:,:), G)
-      call pass_var(visc%MLD, G%domain, halo=1)
-      Hml(:,:) = visc%MLD(:,:)
+    if (associated(Hml)) then
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
+      call pass_var(Hml, G%domain, halo=1)
     endif
-
 
     if (.not. CS%KPPisPassive) then
 !$OMP do
@@ -676,12 +673,16 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   ! Add diffusivity due to convection (computed via CVMix)
   if (CS%use_cvmix_conv) then
-    call calculate_cvmix_conv(h, tv, G, GV, Hml, CS%cvmix_conv_csp)
+    call calculate_cvmix_conv(h, tv, G, GV, CS%cvmix_conv_csp, Hml)
 
+      !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       do k=1,nz ; do j=js,je ; do i=is,ie
-        visc%Kd_turb(i,j,k) = visc%Kd_turb(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
+        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
+        ! GMM, I am not sure if Kv_turb is the right place to add kv_conv_3d
         visc%Kv_turb(i,j,k) = visc%Kv_turb(i,j,k) + CS%cvmix_conv_csp%kv_conv_3d(i,j,k)
+        visc%Kd_turb(i,j,k) = visc%Kd_turb(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
       enddo ; enddo ; enddo
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   endif
 
