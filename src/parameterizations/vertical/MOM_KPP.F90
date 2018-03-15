@@ -262,7 +262,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive, Waves)
                  'If true, applies a correction step to the averaging of surface layer\n'// &
                  'properties. This option is obsolete.', default=.False.)
   if (CS%correctSurfLayerAvg) &
-    MOM_ERROR(FATAL,'Correct surface layer average disabled in code.  To recover this\n'// &
+    call MOM_error(FATAL,'Correct surface layer average disabled in code.  To recover \n'// &
                        ' feature will require code intervention.')
   call get_param(paramFile, mdl, 'FIRST_GUESS_SURFACE_LAYER_DEPTH', CS%surfLayerDepth,              &
                  'The first guess at the depth of the surface layer used for averaging\n'//         &
