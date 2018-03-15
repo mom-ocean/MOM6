@@ -44,7 +44,8 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
-use MOM_CVMix_shear, only : CVMix_shear_is_used
+use MOM_cvmix_shear, only : cvmix_shear_is_used
+use MOM_cvmix_conv,  only : cvmix_conv_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
@@ -1783,18 +1784,19 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
-  logical :: use_CVMix, MLE_use_PBL_MLD
+  logical :: use_cvmix_shear, MLE_use_PBL_MLD, use_cvmix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix = .false. ;
-  useKPP = .false. ; useEPBL = .false.
+  use_kappa_shear = .false. ; use_cvmix_shear = .false. ;
+  useKPP = .false. ; useEPBL = .false. ; use_cvmix_conv = .false. ;
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
-    use_CVMix = CVMix_shear_is_used(param_file)
+    use_cvmix_shear = cvmix_shear_is_used(param_file)
+    use_cvmix_conv = cvmix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
                  "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
@@ -1805,7 +1807,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
-  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix) then
+  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_cvmix_shear .or. use_cvmix_conv) then
     allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
