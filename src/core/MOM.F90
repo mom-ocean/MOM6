@@ -303,7 +303,7 @@ type, public :: MOM_control_struct ; private
   type(surface_diag_IDs) :: sfc_IDs
   type(diag_grid_storage) :: diag_pre_sync, diag_pre_dyn
 
-  ! The remainder of this type provides pointers to childe module control structures.
+  ! The remainder of this type provides pointers to child module control structures.
 
   ! These are used for the dynamics updates
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
