@@ -20,7 +20,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public cvmix_conv_init, calculate_cvmix_conv, cvmix_conv_end
+public cvmix_conv_init, calculate_cvmix_conv, cvmix_conv_end, cvmix_conv_is_used
 
 !> Control structure including parameters for CVMix convection.
 type, public :: cvmix_conv_cs
@@ -244,15 +244,15 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
 
 end subroutine calculate_cvmix_conv
 
-! GMM, not sure if we need the code below - DELETE????
-!!logical function cvmix_conv_is_used(param_file)
-! Reads the parameter "USE_CVMIX_CONVECTION" and returns state.
-!   This function allows other modules to know whether this parameterization will
-! be used without needing to duplicate the log entry.
-!!  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-!!  call get_param(param_file, mdl, "USE_CVMIX_CONVECTION", kappa_shear_is_used, &
-!!                 default=.false., do_not_log = .true.)
-!!end function cvmix_conv_is_used
+!> Reads the parameter "USE_CVMIX_CONVECTION" and returns state.
+!! This function allows other modules to know whether this parameterization will
+!! be used without needing to duplicate the log entry.
+logical function cvmix_conv_is_used(param_file)
+  type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
+  call get_param(param_file, mdl, "USE_CVMIX_CONVECTION", cvmix_conv_is_used, &
+                 default=.false., do_not_log = .true.)
+
+end function cvmix_conv_is_used
 
 !> Clear pointers and dealocate memory
 subroutine cvmix_conv_end(CS)
