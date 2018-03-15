@@ -303,6 +303,8 @@ type, public :: MOM_control_struct ; private
   type(surface_diag_IDs) :: sfc_IDs
   type(diag_grid_storage) :: diag_pre_sync, diag_pre_dyn
 
+  ! The remainder of this type provides pointers to childe module control structures.
+
   ! These are used for the dynamics updates
   type(MOM_dyn_unsplit_CS),      pointer :: dyn_unsplit_CSp      => NULL()
   type(MOM_dyn_unsplit_RK2_CS),  pointer :: dyn_unsplit_RK2_CSp  => NULL()
@@ -568,6 +570,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
     if (CS%UseWaves) then
     ! Update wave information, which is presently kept static over each call to step_mom
+      !bgr 3/15/18: Need to enable_averaging here to enable output of Stokes drift from the
+      ! update_stokes_drift routine.  Other options?
       call enable_averaging(dt, Time_local, CS%diag)
       call Update_Stokes_Drift(G, GV, Waves, h, forces%ustar)
       call disable_averaging(CS%diag)
@@ -1073,7 +1077,6 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
   type(wave_parameters_CS), pointer, optional, intent(in) :: &
        WAVES !<Container for wave related parameters
-
 
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
@@ -1639,7 +1642,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "at velocity points.  Otherwise the effects of topography \n"//&
                  "are entirely determined from thickness points.", &
                  default=.false.)
-  call get_param(param_file, "MOM", "USE_WAVES", CS%UseWaves, default=.false., do_not_log=.true.)
+  call get_param(param_file, "MOM", "USE_WAVES", CS%UseWaves, default=.false., &
+                 do_not_log=.true.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", default=.false.)
