@@ -2332,7 +2332,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     allocate(CS%frazil_heat_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_heat_diag(:,:,:) = 0.
   endif
 
-  ! CS%use_tidal_mixing is set to True tidal mixing will be activated, otherwise false.
+  ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme
+  ! is to be used to drive diapycnal mixing.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, param_file, diag, CS%tidal_mixing_CSp)
 
   ! CS%useConvection is set to True IF convection will be used, otherwise False.
