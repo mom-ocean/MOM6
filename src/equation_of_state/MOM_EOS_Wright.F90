@@ -100,28 +100,27 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
 
   ! Original coded by R. Hallberg, 7/00, anomaly coded in 3/18.
   real :: al0, p0, lambda
-  real :: al_TS, p_TSp, lam_TS
+  real :: al_TS, p_TSp, lam_TS, pa_000
   integer :: j
 
-  do j=start,start+npts-1
-    if (present(rho_ref)) then
-      al_TS = a1*T(j) +a2*S(j)
-      al0 = a0 + al_TS
-      p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
-      lam_TS = c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j)))
+  if (present(rho_ref)) pa_000 = (b0*(1.0 - a0*rho_ref) - rho_ref*c0)
+  if (present(rho_ref)) then ; do j=start,start+npts-1
+    al_TS = a1*T(j) +a2*S(j)
+    al0 = a0 + al_TS
+    p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
+    lam_TS = c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j)))
 
-      ! The following two expressions are mathematically equivalent.
-      ! rho(j) = (b0 + p0_TSp) / ((c0 + lam_TS) + al0*(b0 + p0_TSp)) - rho_ref
-      rho(j) = ( (b0*(1.0 - a0*rho_ref) - rho_ref*c0) + &
-                 (p_TSp - rho_ref * (p_TSp*al0 + (b0*al_TS + lam_TS))) ) / &
-               ( (c0 + lam_TS) + al0*(b0 + p_TSp) )
-    else
-      al0 = (a0 + a1*T(j)) +a2*S(j)
-      p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-      lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
-      rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
-    endif
-  enddo
+    ! The following two expressions are mathematically equivalent.
+    ! rho(j) = (b0 + p0_TSp) / ((c0 + lam_TS) + al0*(b0 + p0_TSp)) - rho_ref
+    rho(j) = (pa_000 + (p_TSp - rho_ref*(p_TSp*al0 + (b0*al_TS + lam_TS)))) / &
+             ( (c0 + lam_TS) + al0*(b0 + p_TSp) )
+  enddo ; else ; do j=start,start+npts-1
+    al0 = (a0 + a1*T(j)) +a2*S(j)
+    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
+    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
+  enddo ; endif
+
 end subroutine calculate_density_array_wright
 
 !> This subroutine computes the in situ specific volume of sea water (specvol in
