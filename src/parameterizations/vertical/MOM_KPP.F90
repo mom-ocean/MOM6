@@ -824,9 +824,9 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         elseif (CS%LT_VT2_METHOD==LT_VT2_MODE_LF17) then
           CS%CS=cvmix_get_kpp_real('c_s',CS%KPP_params)
           do k=1,G%ke
-            WST = (max(0.,-buoyflux(i,j,1))*-cellHeight(k))**(1./3.)
+            WST = (max(0.,-buoyflux(i,j,1))*(-cellHeight(k)))**(1./3.)
             LangEnhVT2(k) = sqrt((0.15*WST**3. + 0.17*surfFricVel**3.* &
-                 (1.+0.49*WAVES%LangNum(i,j)**-2.))  / &
+                 (1.+0.49*WAVES%LangNum(i,j)**(-2.)))  / &
                  (0.2*ws_1d(k)**3/(CS%cs*CS%surf_layer_ext*CS%vonKarman**4.)))
           enddo
         else

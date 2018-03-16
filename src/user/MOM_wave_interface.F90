@@ -1173,6 +1173,8 @@ end subroutine StokesMixing
 
 !>
 subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
+  ! Work towards an explicit Coriolis Stokes method.
+  !  perhaps not the best way forward, not accessed in the code.
   ! Arguments
   type(ocean_grid_type),                  intent(in)    :: G              !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV             !< Ocean vertical grid
@@ -1190,7 +1192,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
      do j = G%jscB, G%jecB
         do i = G%iscB, G%iecB
            DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) +  0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
-           u(i,j,k) = u(i,j,k)+DVEL
+           u(i,j,k) = u(i,j,k)+DVEL*DT
         enddo
      enddo
   enddo
@@ -1199,7 +1201,7 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
      do j = G%jscB, G%jecB
         do i = G%iscB, G%iecB
            DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) +  0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
-           v(i,j,k) = v(i,j,k)-DVEL
+           v(i,j,k) = v(i,j,k)-DVEL*DT
         enddo
      enddo
   enddo
