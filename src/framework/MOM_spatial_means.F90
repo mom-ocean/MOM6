@@ -316,7 +316,7 @@ end subroutine global_j_mean
 
 !> Adjust 2d array such that area mean is zero without moving the zero contour
 subroutine adjust_area_mean_to_zero(array, G, scaling)
-  type(ocean_grid_type),            intent(inout) :: G       !< Grid structure
+  type(ocean_grid_type),            intent(in)    :: G       !< Grid structure
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: array   !< 2D array to be adjusted
   real, optional,                   intent(out)   :: scaling !< The scaling factor used
   ! Local variables
