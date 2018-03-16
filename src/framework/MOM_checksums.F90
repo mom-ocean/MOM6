@@ -13,6 +13,7 @@ implicit none ; private
 
 public :: hchksum, Bchksum, uchksum, vchksum, qchksum, is_NaN, chksum
 public :: hchksum_pair, uvchksum, Bchksum_pair
+public :: chksum_general
 public :: MOM_checksums_init
 
 interface hchksum_pair
@@ -58,6 +59,10 @@ end interface
 
 interface is_NaN
   module procedure is_NaN_0d, is_NaN_1d, is_NaN_2d, is_NaN_3d
+end interface
+
+interface chksum_general
+  module procedure chksum_general_1d, chksum_general_2d, chksum_general_3d
 end interface
 
 integer, parameter :: default_shift=0
@@ -1147,6 +1152,78 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
   end subroutine subStats
 
 end subroutine chksum_u_3d
+
+!---chksum_general interface routines
+!> Return the bitcount of an arbitrarily sized 3d array
+integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, jend, kstart, kend ) result(subchk)
+  real, dimension(:,:,:) :: array    !< Array to be checksummed
+  real,    optional :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional :: istart        !< Starting index in the i-direction
+  integer, optional :: iend          !< Ending index in the i-direction
+  integer, optional :: jstart        !< Starting index in the j-direction
+  integer, optional :: jend          !< Ending index in the j-direction
+  integer, optional :: kstart        !< Starting index in the k-direction
+  integer, optional :: kend          !< Ending index in the k-direction
+  integer :: bitcount, i, j, k, bc, is, ie, js, je, ks, ke
+  real :: scale
+
+  ! By default do not scale
+  scale = 1.
+  if (present(scale_factor)) scale = scale_factor
+
+  ! Set the loop indices based on full array
+  is = LBOUND(array,1) ; ie = UBOUND(array,1)
+  js = LBOUND(array,2) ; je = UBOUND(array,2)
+  ks = LBOUND(array,3) ; ke = UBOUND(array,3)
+
+  ! Override indices if subdomain requested
+  if (present(istart)) is = istart ; if (present(iend)) ie = iend
+  if (present(jstart)) js = jstart ; if (present(jend)) je = jend
+  if (present(kstart)) ks = kstart ; if (present(kend)) ke = kend
+
+  subchk = 0
+  do k=ks,ke ; do j=js,je ; do i=is,ie
+    bc = bitcount(abs(scale*array(i,j,k)))
+    subchk = subchk + bc
+  enddo ; enddo ; enddo
+  call sum_across_PEs(subchk)
+  subchk=mod(subchk,1000000000)
+end function chksum_general_3d
+
+!> Return the bitcount of an arbitrarily sized 2d array by promotion to a 3d array
+integer function chksum_general_2d( array_2d, scale_factor, istart, iend, jstart, jend )
+  real, dimension(:,:) :: array_2d   !< Array to be checksummed
+  real,    optional :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional :: istart        !< Starting index in the i-direction
+  integer, optional :: iend          !< Ending index in the i-direction
+  integer, optional :: jstart        !< Starting index in the j-direction
+  integer, optional :: jend          !< Ending index in the j-direction
+  integer :: is, ie, js, je
+  real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
+
+  is = LBOUND(array_2d,1) ; ie = UBOUND(array_2d,1)
+  js = LBOUND(array_2d,2) ; je = UBOUND(array_2d,2)
+  allocate(array_3d(is:ie, js:je,1))
+  array_3d(:,:,1) = array_2d(:,:)
+  chksum_general_2d = chksum_general_3d( array_3d, scale_factor, istart, iend, jstart, jend )
+  deallocate(array_3d)
+end function chksum_general_2d
+
+!> Return the bitcount of an arbitrarily sized 1d array by promotion to a 3d array
+integer function chksum_general_1d( array_1d, scale_factor, istart, iend )
+  real, dimension(:) :: array_1d      !< Array to be checksummed
+  real,    optional  :: scale_factor  !< Factor to scale array by before checksum
+  integer, optional  :: istart        !< Starting index in the i-direction
+  integer, optional  :: iend          !< Ending index in the i-direction
+  integer :: is, ie, js, je
+  real, dimension(:,:,:), allocatable :: array_3d !< Promotion from 2d to 3d array
+
+  is = LBOUND(array_1d,1) ; ie = UBOUND(array_1d,1)
+  allocate(array_3d(is:ie, 1,1))
+  array_3d(:,1,1) = array_1d(:)
+  chksum_general_1d = chksum_general_3d( array_3d, scale_factor, istart, iend )
+  deallocate(array_3d)
+end function chksum_general_1d
 
 ! =====================================================================
 
