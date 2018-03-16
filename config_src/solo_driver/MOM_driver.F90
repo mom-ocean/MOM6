@@ -331,7 +331,7 @@ program MOM_main
                               diag, forces, fluxes)
   endif
 
-  call get_param(param_file,mdl,"USE_WAVES",Use_Waves,&
+  call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
      call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
