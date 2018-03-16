@@ -26,8 +26,8 @@ use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
 use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
-use MOM_cvmix_tidal,         only : cvmix_tidal_init, cvmix_tidal_cs
-use MOM_cvmix_tidal,         only : calculate_cvmix_tidal, cvmix_tidal_end
+use MOM_tidal_mixing,        only : tidal_mixing_init, tidal_mixing_cs
+use MOM_tidal_mixing,        only : calculate_cvmix_tidal, tidal_mixing_end
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
 use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
@@ -92,8 +92,7 @@ type, public:: diabatic_CS ; private
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
-  logical :: use_cvmix_tidal         !< If true, use the CVMix module to compute the
-                                     !! tidal mixing diffusivity.
+  logical :: use_tidal_mixing        !< If true, activate tidal mixing diffusivity.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
@@ -224,7 +223,7 @@ type, public:: diabatic_CS ; private
   type(optics_type),            pointer :: optics                => NULL()
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
-  type(cvmix_tidal_cs),         pointer :: cvmix_tidal_csp       => NULL()
+  type(tidal_mixing_cs),        pointer :: tidal_mixing_csp      => NULL()
   type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
@@ -671,8 +670,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   endif  ! endif for KPP
 
-  ! Add diffusivity due to tidal mixing (computed via CVMix)
-  if (CS%use_cvmix_tidal) then
+  ! Add diffusivity due to tidal mixing
+  if (CS%use_tidal_mixing) then
     continue !TODO
   end if
 
@@ -2333,8 +2332,8 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     allocate(CS%frazil_heat_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_heat_diag(:,:,:) = 0.
   endif
 
-  ! CS%use_cvmix_tidal is set to True if CVMix tidal mixing will be used, otherwise false.
-  CS%use_cvmix_tidal = cvmix_tidal_init(Time, G, GV, param_file, diag, CS%cvmix_tidal_csp)
+  ! CS%use_tidal_mixing is set to True tidal mixing will be activated, otherwise false.
+  CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, param_file, diag, CS%tidal_mixing_CSp)
 
   ! CS%useConvection is set to True IF convection will be used, otherwise False.
   ! CS%Conv_CSp is allocated by diffConvection_init()
@@ -2427,7 +2426,7 @@ subroutine diabatic_driver_end(CS)
     call KPP_end(CS%KPP_CSp)
   endif
 
-  if (CS%use_cvmix_tidal) call cvmix_tidal_end(CS%cvmix_tidal_csp)
+  if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
 
   if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
   if (CS%use_energetic_PBL) &

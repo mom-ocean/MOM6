@@ -1,5 +1,5 @@
-!> Interface to CVMix tidal mixing scheme.
-module MOM_cvmix_tidal
+!> Interface to vertical tidal mixing schemes including CVMix tidal mixing.
+module MOM_tidal_mixing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -19,12 +19,12 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public cvmix_tidal_init
+public tidal_mixing_init
 public calculate_cvmix_tidal
-public cvmix_tidal_end
+public tidal_mixing_end
 
-!> Control structure including parameters for CVMix tidal mixing.
-type, public :: cvmix_tidal_cs
+!> Control structure including parameters for tidal mixing.
+type, public :: tidal_mixing_cs
   logical :: debug = .true.
 
   ! Parameters
@@ -34,21 +34,20 @@ type, public :: cvmix_tidal_cs
   real :: vert_decay_scale  !< zeta in the Simmons paper (to compute the vertical deposition function). [m]
   real :: tidal_max_coef    !< maximum allowable tidel diffusivity. [m^2/s]
 
-end type cvmix_tidal_cs
+end type tidal_mixing_cs
 
-character(len=40)  :: mdl = "MOM_cvmix_tidal"     !< This module's name.
+character(len=40)  :: mdl = "MOM_tidal_mixing"     !< This module's name.
 
 contains
 
-!> Initialize the cvmix tidal mixing routine.
-logical function cvmix_tidal_init(Time, G, GV, param_file, diag, CS)
+logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
 
   type(time_type),          intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),    intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
-  type(cvmix_tidal_cs),     pointer       :: CS         !< This module's control structure.
+  type(tidal_mixing_cs),     pointer       :: CS         !< This module's control structure.
 
   ! Local variables
 
@@ -56,7 +55,7 @@ logical function cvmix_tidal_init(Time, G, GV, param_file, diag, CS)
 #include "version_variable.h"
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "cvmix_tidal_init called when control structure "// &
+    call MOM_error(WARNING, "tidal_mixing_init called when control structure "// &
                             "is already associated.")
     return
   endif
@@ -66,11 +65,18 @@ logical function cvmix_tidal_init(Time, G, GV, param_file, diag, CS)
 
   ! Read parameters
   call log_version(param_file, mdl, version, &
-    "Parameterization of tidal mixing via CVMix")
-  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", cvmix_tidal_init, &
+    "Vertical Tidal Mixing Parameterization")
+  !call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%Int_tide_dissipation, &
+  !               "If true, use an internal tidal dissipation scheme to \n"//&
+  !               "drive diapycnal mixing, along the lines of St. Laurent \n"//&
+  !               "et al. (2002) and Simmons et al. (2004).", default=.false.)
+  if (.not. tidal_mixing_init) return
+
+
+  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", tidal_mixing_init, &
                  "If true, turns on tidal mixing scheme via CVMix", &
                  default=.false.)
-  call openParameterBlock(param_file,'CVMIX_TIDAL')
+  !call openParameterBlock(param_file,'CVMIX_TIDAL')
   call get_param(param_file, mdl, "LOCAL_MIXING_FRAC", CS%local_mixing_frac, &
                  "Fraction of wave energy dissipated locally.", &
                  units="nondim", default=0.33)
@@ -85,11 +91,10 @@ logical function cvmix_tidal_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
                  "largest acceptable value for tidal diffusivity", &
                  units="m^2/s", default=100e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
-  call closeParameterBlock(param_file)
+  !call closeParameterBlock(param_file)
 
-  if (.not. cvmix_tidal_init) return
 
-  if (CS%debug) print *, __FILE__, __LINE__, cvmix_tidal_init
+  if (CS%debug) print *, __FILE__, __LINE__, tidal_mixing_init
 
   ! Set up CVMix
   call cvmix_init_tidal(mix_scheme            = 'Simmons',            &
@@ -99,10 +104,11 @@ logical function cvmix_tidal_init(Time, G, GV, param_file, diag, CS)
                         local_mixing_frac     = cs%local_mixing_frac, &
                         depth_cutoff          = 0.0)
                         
+  ! TODO: read in energy
 
 
 
-end function cvmix_tidal_init
+end function tidal_mixing_init
 
 
 !> ....
@@ -112,12 +118,12 @@ end subroutine calculate_cvmix_tidal
 
 
 !> Clear pointers and deallocate memory
-subroutine cvmix_tidal_end(CS)
-  type(cvmix_tidal_cs), pointer :: CS ! This module's control structure
+subroutine tidal_mixing_end(CS)
+  type(tidal_mixing_cs), pointer :: CS ! This module's control structure
 
   !TODO deallocate all the dynamically allocated members here ...
   deallocate(CS)
-end subroutine cvmix_tidal_end
+end subroutine tidal_mixing_end
 
 
-end module MOM_cvmix_tidal
+end module MOM_tidal_mixing
