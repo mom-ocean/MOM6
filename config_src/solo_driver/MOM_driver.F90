@@ -334,7 +334,7 @@ program MOM_main
   call get_param(param_file,mod_name,"USE_WAVES",Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
-     call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+    call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
   endif
 
   segment_start_time = Time
@@ -489,7 +489,7 @@ program MOM_main
     fluxes%dt_buoy_accum = dt_forcing
 
     if (use_waves) then
-       call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
+      call Update_Surface_Waves(grid,GV,time,time_step_ocean,waves_csp)
     endif
 
     if (ns==1) then
