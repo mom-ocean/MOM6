@@ -81,12 +81,7 @@ type, public :: tidal_mixing_cs
   real :: kappa_h2_factor     ! factor for the product of wavenumber * rms sgs height
   character(len=200) :: inputdir
 
-
-  !real :: local_mixing_frac !< fraction of wave energy dissipated locally.
-  !real :: mixing_efficiency !< The efficiency that mechanical energy dissipation translates into mixing
-  !                          !! that can be parameterized by a diffusivity acting on vertical stratification.
-  !real :: vert_decay_scale  !< zeta in the Simmons paper (to compute the vertical deposition function). [m]
-  !real :: tidal_max_coef    !< maximum allowable tidel diffusivity. [m^2/s]
+  real :: tidal_max_coef    !< maximum allowable tidal diffusivity. [m^2/s]
 
   real, pointer, dimension(:,:) :: TKE_Niku    => NULL()
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
@@ -254,7 +249,8 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
     call get_param(param_file, mdl, "INT_TIDE_DECAY_SCALE", CS%Int_tide_decay_scale, &
                  "The decay scale away from the bottom for tidal TKE with \n"//&
                  "the new coding when INT_TIDE_DISSIPATION is used.", &
-                 units="m", default=0.0)
+                 !units="m", default=0.0)
+                 units="m", default=500.0)  ! TODO: confirm this new default
     call get_param(param_file, mdl, "MU_ITIDES", CS%Mu_itides, &
                  "A dimensionless turbulent mixing efficiency used with \n"//&
                  "INT_TIDE_DISSIPATION, often 0.2.", units="nondim", default=0.2)
@@ -357,38 +353,30 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   else
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
-  !call get_param(param_file, mdl, "USE_CVMIX_TIDAL", tidal_mixing_init, &
-  !               "If true, turns on tidal mixing scheme via CVMix", &
-  !               default=.false.)
-  !!call openParameterBlock(param_file,'CVMIX_TIDAL')
-  !call get_param(param_file, mdl, "LOCAL_MIXING_FRAC", CS%local_mixing_frac, &
-  !               "Fraction of wave energy dissipated locally.", &
-  !               units="nondim", default=0.33)
-  !call get_param(param_file, mdl, "MIXING_EFFICIENCY", CS%mixing_efficiency, &
-  !               "Gamma in Simmons, 2004", &
-  !               units="nondim", default=0.20)
-  !!TODO: make sure GAMMA_ITIDES (same as LOCAL_MIXING_FRAC
-  !call get_param(param_file, mdl, "VERTICAL_DECAY_SCALE", CS%vert_decay_scale, &
-  !               "zeta in Simmons, 2004. Used to compute the vertical deposition function", &
-  !               units="m", default=500.0)
-  !!TODO: make sure int_tide_decay scale (same as VERTICAL_DECAY_SCALE is removed from code).
-  !call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
-  !               "largest acceptable value for tidal diffusivity", &
-  !               units="m^2/s", default=100e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
-  !!call closeParameterBlock(param_file)
+
+  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", tidal_mixing_init, &
+                 "If true, turns on tidal mixing scheme via CVMix", &
+                 default=.false.)
+
+  if (tidal_mixing_init) then 
+
+    ! Read in CVMix params
+    call openParameterBlock(param_file,'CVMIX_TIDAL')
+    call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
+                   "largest acceptable value for tidal diffusivity", &
+                   units="m^2/s", default=100e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
+    call closeParameterBlock(param_file)
 
 
-  !if (CS%debug) print *, __FILE__, __LINE__, tidal_mixing_init
-
-  !! Set up CVMix
-  !call cvmix_init_tidal(mix_scheme            = 'Simmons',            &
-  !                      efficiency            = cs%mixing_efficiency, &
-  !                      vertical_decay_scale  = cs%vert_decay_scale,  &
-  !                      max_coefficient       = cs%tidal_max_coef,    &
-  !                      local_mixing_frac     = cs%local_mixing_frac, &
-  !                      depth_cutoff          = 0.0)
-  !                      
-  !! TODO: read in energy
+    ! Set up CVMix
+    call cvmix_init_tidal(mix_scheme            = 'Simmons',                &
+                          efficiency            = CS%Mu_itides,             &
+                          vertical_decay_scale  = cs%int_tide_decay_scale,  &
+                          max_coefficient       = cs%tidal_max_coef,        &
+                          local_mixing_frac     = cs%Gamma_itides,          &
+                          depth_cutoff          = 0.0)
+                          
+  endif ! cvmix on  
 
 end function tidal_mixing_init
 
@@ -789,7 +777,8 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
 end subroutine add_int_tide_diffusivity
 
-!> ....
+
+!TODO:
 subroutine calculate_cvmix_tidal()
   continue
 end subroutine calculate_cvmix_tidal
