@@ -302,8 +302,8 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
          " STOKES_Y, there are no safety checks in the code.",              &
          units='', default=1)
       ALLOC_ ( CS%WaveNum_Cen(1:NumBands) ) ; CS%WaveNum_Cen(:)=0.0
-      ALLOC_ ( CS%PrescribedSurfStkX(1:NumBands)) ; CS%PrescribedSurfStkX = 0.0
-      ALLOC_ ( CS%PrescribedSurfStkY(1:NumBands)) ; CS%PrescribedSurfStkY = 0.0
+      ALLOC_ ( CS%PrescribedSurfStkX(1:NumBands)) ; CS%PrescribedSurfStkX(:) = 0.0
+      ALLOC_ ( CS%PrescribedSurfStkY(1:NumBands)) ; CS%PrescribedSurfStkY(:) = 0.0
       ALLOC_ ( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:NumBands)) ; CS%STKx0(:,:,:) = 0.0
       ALLOC_ ( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:NumBands)) ; CS%STKy0(:,:,:) = 0.0
       partitionmode=0
@@ -487,8 +487,8 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
         do b=1,NumBands
           if (PartitionMode==0) then
             !In wavenumber we are averaging over (small) level
-            CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
-                 (2*CS%WaveNum_Cen(b))
+            CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / &
+                 (0.01 * 2. * CS%WaveNum_Cen(b))
           elseif (PartitionMode==1) then
              !In frequency we are not averaging over level and taking top
             CMN_FAC = 1.0
@@ -506,8 +506,8 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             if (PartitionMode==0) then
               !In wavenumber we are averaging over level
               CMN_FAC =  (EXP(TOP*2.*CS%WaveNum_Cen(b))- &
-                         EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
-                         (2.*CS%WaveNum_Cen(b))
+                         EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / ( (Top-Bottom) &
+                         * (2.*CS%WaveNum_Cen(b)) )
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 !! Take the value at the midpoint
@@ -517,12 +517,12 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
                  !! Use a numerical integration and then
                  !! divide by layer thickness
                 WN=(2.*PI*CS%Freq_Cen(b))**2
-                CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) &
-                     /(2.*WN)/(Top-Bottom)
+                CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / &
+                          (2.*WN * (Top-Bottom) )
               endif
             endif
             CS%US_x(ii,jj,kk)=CS%US_x(ii,jj,kk) + CS%STKx0(ii,jj,b) *&
-                 CMN_FAC
+                              CMN_FAC
           enddo
         enddo
       enddo
@@ -534,8 +534,8 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
         do b=1,NumBands
           if (PartitionMode==0) then
             !In wavenumber we are averaging over (small) level
-            CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / (0.01)/&
-                      (2*CS%WaveNum_Cen(b))
+            CMN_FAC = (1.0 - EXP(-0.01*2*CS%WaveNum_Cen(b))) / &
+                      (0.01 * 2. *CS%WaveNum_Cen(b))
           elseif (PartitionMode==1) then
             !In frequency we are not averaging over level and taking top
             CMN_FAC = 1.0
@@ -553,8 +553,8 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
             if (PartitionMode==0) then
               !In wavenumber we are averaging over level
               CMN_FAC =  (EXP(TOP*2.*CS%WaveNum_Cen(b))- &
-                          EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / (Top-Bottom)/&
-                          (2.*CS%WaveNum_Cen(b))
+                          EXP(BOTTOM*2.*CS%WaveNum_Cen(b))) / ( (Top-Bottom) * &
+                          (2.*CS%WaveNum_Cen(b)) )
             elseif (PartitionMode==1) then
               if (CS%StkLevelMode==0) then
                 !! Take the value at the midpoint
@@ -565,7 +565,7 @@ subroutine Update_Stokes_Drift(G,GV,CS,h,ustar)
                 !! divide by layer thickness
                 WN=(2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) &
-                          /(2.*WN)/(Top-Bottom)
+                          /( 2.*WN *(Top-Bottom))
               endif
             endif
             CS%US_y(ii,jj,kk)=CS%US_y(ii,jj,kk) + CS%STKy0(ii,jj,b) *&
@@ -662,7 +662,7 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     varread2 = 'frequency'  !New method gives frequency
     rcode_wn = NF90_OPEN(trim(SurfBandFileName), NF90_NOWRITE, ncid)
     if (rcode_wn .ne. 0) then
-       call MOM_error(FATAL,"error opening file "//trim(SurfBandFileName)//&
+      call MOM_error(FATAL,"error opening file "//trim(SurfBandFileName)//&
             " in MOM_wave_interface.")
     endif
 
@@ -670,54 +670,54 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     rcode_fr = NF90_INQ_VARID(ncid, varread2, varid_fr)
 
     if (rcode_wn .ne. 0 .and. rcode_fr .ne. 0) then
-       call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
+      call MOM_error(FATAL,"error finding variable "//trim(varread1)//&
          " or "//trim(varread2)//" in file "//trim(SurfBandFileName)//" in MOM_wave_interface.")
 
     elseif (rcode_wn.eq.0) then
-       ! wavenumbers found:
-       PartitionMode=0
-       rcode_wn = NF90_INQUIRE_VARIABLE(ncid, varid_wn, ndims=ndims, &
-            dimids=dims)
-       if (rcode_wn .ne. 0) then
-          call MOM_error(FATAL, &
-               'error inquiring dimensions MOM_wave_interface.')
-       endif
-       rcode_wn = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-       if (rcode_wn .ne. 0) then
-          call MOM_error(FATAL,"error reading dimension 1 data for "// &
-               trim(varread1)//" in file "// trim(SurfBandFileName)//          &
-               " in MOM_wave_interface.")
-       endif
-       rcode_wn = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-       if (rcode_wn .ne. 0) then
-          call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
-            " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
-       endif
-       ! Allocating size of wavenumber bins
-       ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+      ! wavenumbers found:
+      PartitionMode=0
+      rcode_wn = NF90_INQUIRE_VARIABLE(ncid, varid_wn, ndims=ndims, &
+           dimids=dims)
+      if (rcode_wn .ne. 0) then
+        call MOM_error(FATAL, &
+             'error inquiring dimensions MOM_wave_interface.')
+      endif
+      rcode_wn = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
+      if (rcode_wn .ne. 0) then
+        call MOM_error(FATAL,"error reading dimension 1 data for "// &
+             trim(varread1)//" in file "// trim(SurfBandFileName)//          &
+             " in MOM_wave_interface.")
+      endif
+      rcode_wn = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+      if (rcode_wn .ne. 0) then
+        call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+          " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
+      endif
+      ! Allocating size of wavenumber bins
+      ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
     elseif (rcode_fr.eq.0) then
-       ! frequencies found:
-       PartitionMode=1
-       rcode_fr = NF90_INQUIRE_VARIABLE(ncid, varid_fr, ndims=ndims, &
-            dimids=dims)
-       if (rcode_fr .ne. 0) then
-          call MOM_error(FATAL,&
-               'error inquiring dimensions MOM_wave_interface.')
-       endif
-       rcode_fr = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
-       if (rcode_fr .ne. 0) then
-          call MOM_error(FATAL,"error reading dimension 1 data for "// &
-               trim(varread2)//" in file "// trim(SurfBandFileName)// &
-               " in MOM_wave_interface.")
-       endif
-       rcode_fr = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
-       if (rcode_fr .ne. 0) then
-          call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
-               " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
-       endif
-       ! Allocating size of frequency bins
-       ALLOC_ ( CS%Freq_Cen(1:id) ) ; CS%Freq_Cen(:)=0.0
-       ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
+      ! frequencies found:
+      PartitionMode=1
+      rcode_fr = NF90_INQUIRE_VARIABLE(ncid, varid_fr, ndims=ndims, &
+           dimids=dims)
+      if (rcode_fr .ne. 0) then
+        call MOM_error(FATAL,&
+             'error inquiring dimensions MOM_wave_interface.')
+      endif
+      rcode_fr = NF90_INQUIRE_DIMENSION(ncid, dims(1), dim_name(1), len=id)
+      if (rcode_fr .ne. 0) then
+        call MOM_error(FATAL,"error reading dimension 1 data for "// &
+             trim(varread2)//" in file "// trim(SurfBandFileName)// &
+             " in MOM_wave_interface.")
+      endif
+      rcode_fr = NF90_INQ_VARID(ncid, dim_name(1), dim_id(1))
+      if (rcode_fr .ne. 0) then
+        call MOM_error(FATAL,"error finding variable "//trim(dim_name(1))//&
+             " in file "//trim(SurfBandFileName)//" in MOM_wave_interace.")
+      endif
+      ! Allocating size of frequency bins
+      ALLOC_ ( CS%Freq_Cen(1:id) ) ; CS%Freq_Cen(:)=0.0
+      ALLOC_ ( CS%WaveNum_Cen(1:id) ) ; CS%WaveNum_Cen(:)=0.0
     endif
 
 
@@ -730,26 +730,26 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     ! Reading wavenumber bins/Frequencies
     start = 1; count = 1; count(1) = id
     if (PartitionMode==0) then
-       rcode_wn = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
-       if (rcode_wn .ne. 0) then
-          call MOM_error(FATAL,&
-               "error reading dimension 1 values for var_name "// &
-               trim(varread1)//",dim_name "//trim(dim_name(1))//  &
-               " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
-       endif
-       NUMBANDS = ID
+      rcode_wn = NF90_GET_VAR(ncid, dim_id(1), CS%WaveNum_Cen, start, count)
+      if (rcode_wn .ne. 0) then
+        call MOM_error(FATAL,&
+             "error reading dimension 1 values for var_name "// &
+             trim(varread1)//",dim_name "//trim(dim_name(1))//  &
+             " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
+      endif
+      NUMBANDS = ID
     elseif (PartitionMode==1) then
-       rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, count)
-       if (rcode_fr .ne. 0) then
-          call MOM_error(FATAL,&
-               "error reading dimension 1 values for var_name "// &
-               trim(varread2)//",dim_name "//trim(dim_name(1))//  &
-               " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
-       endif
-       NUMBANDS = ID
-       do B = 1, NumBands
-         CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth
-       enddo
+      rcode_fr = NF90_GET_VAR(ncid, dim_id(1), CS%Freq_Cen, start, count)
+      if (rcode_fr .ne. 0) then
+        call MOM_error(FATAL,&
+             "error reading dimension 1 values for var_name "// &
+             trim(varread2)//",dim_name "//trim(dim_name(1))//  &
+             " in file "// trim(SurfBandFileName)//" in MOM_wave_interface")
+      endif
+      NUMBANDS = ID
+      do B = 1, NumBands
+        CS%WaveNum_Cen(b) = (2.*PI*CS%Freq_Cen(b))**2/GV%g_Earth
+      enddo
     endif
 
   endif
@@ -766,18 +766,18 @@ subroutine Surface_Bands_by_data_override(day_center,G,GV,CS)
     call pass_vector(temp_x, temp_y, G%Domain, To_All, AGRID)
     !Filter land values
     do j = G%jsd,G%jed ; do I = G%Isd,G%Ied
-       if (abs(temp_x(i,j)).gt.10. .or. abs(temp_y(i,j)).gt.10. ) then
-          ! Assume land-mask and zero out
-          temp_x(i,j)=0.0
-          temp_y(i,j)=0.0
-       endif
+      if (abs(temp_x(i,j)).gt.10. .or. abs(temp_y(i,j)).gt.10. ) then
+         ! Assume land-mask and zero out
+         temp_x(i,j)=0.0
+         temp_y(i,j)=0.0
+      endif
     enddo; enddo
     ! Interpolate to u/v grids
     do j = G%jsc,G%jec ; do I = G%IscB,G%IecB
-       CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
+      CS%STKx0(I,j,b) = 0.5 * (temp_x(i,j) + temp_x(i+1,j))
     enddo; enddo
     do j = G%JscB,G%JecB ; do i = G%isc,G%iec
-       CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
+      CS%STKy0(i,J,b) = 0.5 * (temp_y(i,j) + temp_y(i,j+1))
     enddo; enddo
     ! Disperse into halo on u/v grids
     call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain, To_ALL)
@@ -821,9 +821,9 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
   Dpt_LASL = min(-0.1, -LA_FracHBL*HBL)
 
   if (WaveMethod==NULL_WaveMethod) then
-     ! Wave not initialized.  Check for WaveMethod.  Only allow LF17.
-     WaveMethod=LF17
-   endif
+    ! Wave not initialized.  Check for WaveMethod.  Only allow LF17.
+    WaveMethod=LF17
+  endif
 
   !/ If requesting to use misalignment in the Langmuir number compute the Shear Direction
   if (LA_Misalignment .and. (.not.(present(H).and.present(U_H).and.present(V_H)))) then
@@ -1115,58 +1115,57 @@ subroutine StokesMixing(G, GV, DT, h, u, v, WAVES )
 !  This is really just a temporary attempt, DO NOT USE...
 
   do k = 1, G%ke
-     do j = G%jscB, G%jecB
-        do i = G%iscB, G%iecB
-           if (k.eq.1) then
-              dTauUp = 0.
-              dTauDn =  0.5*(WAVES%Kvs(i,j,k+1)+WAVES%Kvs(i+1,j,k+1))*&
-                   (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
-                   /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-           elseif (k.lt.G%ke-1) then
-              dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
-                   (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
-                   /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
-              dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i+1,j,k+1))*&
-                   (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
-                   /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-           elseif (k.eq.G%ke) then
-              dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
-                   (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
-                   /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
-              dTauDn = 0.0
-           endif
-           DVel = (dTauUp-dTauDn) / (GV%H_to_m *h(i,j,k)) * DT
-           u(i,j,k) = u(i,j,k)+DVel
-        enddo
-     enddo
+    do j = G%jscB, G%jecB
+      do i = G%iscB, G%iecB
+        if (k.eq.1) then
+          dTauUp = 0.
+          dTauDn =  0.5*(WAVES%Kvs(i,j,k+1)+WAVES%Kvs(i+1,j,k+1))*&
+               (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
+               /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
+        elseif (k.lt.G%ke-1) then
+          dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
+               (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
+               /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
+          dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i+1,j,k+1))*&
+               (waves%us_x(i,j,k)-waves%us_x(i,j,k+1))&
+               /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
+        elseif (k.eq.G%ke) then
+          dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i+1,j,k))*&
+               (waves%us_x(i,j,k-1)-waves%us_x(i,j,k))&
+               /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
+          dTauDn = 0.0
+        endif
+        DVel = (dTauUp-dTauDn) / (GV%H_to_m *h(i,j,k)) * DT
+        u(i,j,k) = u(i,j,k)+DVel
+      enddo
+    enddo
   enddo
 
-
   do k = 1, G%ke
-     do j = G%jscB, G%jecB
-        do i = G%iscB, G%iecB
-           if (k.eq.1) then
-              dTauUp = 0.
-              dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))&
-                   *(waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
-                   /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-           elseif (k.lt.G%ke-1) then
-              dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
-                   (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
-                   /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
-              dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))*&
-                   (waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
-                   /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
-           elseif (k.eq.G%ke) then
-              dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
-                   (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
-                   /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
-              dTauDn = 0.0
-           endif
-           DVel = (dTauUp-dTauDn) / (GV%H_to_m *h(i,j,k)) * DT
-           v(i,j,k) = v(i,j,k)+DVel
-        enddo
-     enddo
+    do j = G%jscB, G%jecB
+      do i = G%iscB, G%iecB
+        if (k.eq.1) then
+          dTauUp = 0.
+          dTauDn = 0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))&
+               *(waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
+               /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
+        elseif (k.lt.G%ke-1) then
+          dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
+               (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
+               /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
+          dTauDn =  0.5*(waves%Kvs(i,j,k+1)+waves%Kvs(i,j+1,k+1))*&
+               (waves%us_y(i,j,k)-waves%us_y(i,j,k+1))&
+               /(GV%H_to_m *0.5*(h(i,j,k)+h(i,j,k+1)) )
+        elseif (k.eq.G%ke) then
+          dTauUp =   0.5*(waves%Kvs(i,j,k)+waves%Kvs(i,j+1,k))*&
+               (waves%us_y(i,j,k-1)-waves%us_y(i,j,k))&
+               /(GV%H_to_m *0.5*(h(i,j,k-1)+h(i,j,k)) )
+          dTauDn = 0.0
+        endif
+        DVel = (dTauUp-dTauDn) / (GV%H_to_m *h(i,j,k)) * DT
+        v(i,j,k) = v(i,j,k)+DVel
+      enddo
+    enddo
   enddo
 
 end subroutine StokesMixing
@@ -1189,21 +1188,21 @@ subroutine CoriolisStokes(G, GV, DT, h, u, v, WAVES)
   INTEGER :: i,j,k
 
   do k = 1, G%ke
-     do j = G%jscB, G%jecB
-        do i = G%iscB, G%iecB
-           DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) +  0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
-           u(i,j,k) = u(i,j,k)+DVEL*DT
-        enddo
-     enddo
+    do j = G%jscB, G%jecB
+      do i = G%iscB, G%iecB
+        DVel = 0.25*(WAVES%us_y(i,j+1,k)+WAVES%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) +  0.25*(WAVES%us_y(i,j,k)+WAVES%us_y(i-1,j,k))*G%CoriolisBu(i,j)
+        u(i,j,k) = u(i,j,k)+DVEL*DT
+      enddo
+    enddo
   enddo
 
   do k = 1, G%ke
-     do j = G%jscB, G%jecB
-        do i = G%iscB, G%iecB
-           DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) +  0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
-           v(i,j,k) = v(i,j,k)-DVEL*DT
-        enddo
-     enddo
+    do j = G%jscB, G%jecB
+      do i = G%iscB, G%iecB
+        DVel = 0.25*(WAVES%us_x(i+1,j,k)+WAVES%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) +  0.25*(WAVES%us_x(i,j,k)+WAVES%us_x(i,j-1,k))*G%CoriolisBu(i,j)
+        v(i,j,k) = v(i,j,k)-DVEL*DT
+      enddo
+    enddo
   enddo
 end subroutine CoriolisStokes
 

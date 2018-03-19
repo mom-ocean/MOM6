@@ -397,7 +397,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
   call get_param(param_file,mdl,"USE_WAVES",OS%Use_Waves,&
        "If true, enables surface wave modules.",default=.false.)
   if (OS%use_waves) then
-     call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
+    call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
   endif
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
@@ -579,7 +579,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%use_waves) then
-     call Update_Surface_Waves(OS%grid,OS%GV,OS%time,ocean_coupling_time_step,OS%waves)
+    call Update_Surface_Waves(OS%grid,OS%GV,OS%time,ocean_coupling_time_step,OS%waves)
   endif
 
   if (OS%nstep==0) then
