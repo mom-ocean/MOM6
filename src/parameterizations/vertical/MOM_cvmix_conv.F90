@@ -149,8 +149,8 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  type(cvmix_conv_cs),                            pointer :: CS !< The control structure returned by a previous call to
-                                                                !! CVMix_conv_init.
+  type(cvmix_conv_cs),                            pointer :: CS !< The control structure returned
+                                                                !! by a previous call to CVMix_conv_init.
   real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
 
   ! local variables
