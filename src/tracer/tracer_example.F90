@@ -194,11 +194,6 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
 
 ! Local variables
   real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
   character(len=32) :: name     ! A variable's name in a NetCDF file.
   character(len=72) :: longname ! The long name of that variable.
   character(len=48) :: units    ! The dimensions of the variable.
@@ -283,11 +278,6 @@ subroutine USER_initialize_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   if (associated(OBC)) then
     call query_vardesc(CS%tr_desc(1), name, caller="USER_initialize_tracer")
     if (OBC%specified_v_BCs_exist_globally) then
-      allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if (k < nz/2) then ; OBC_tr1_v(i,j,k) = 0.0
-        else ; OBC_tr1_v(i,j,k) = 1.0 ; endif
-      enddo ; enddo ; enddo
       ! Steal from updated DOME in the fullness of time.
     else
       ! Steal from updated DOME in the fullness of time.
