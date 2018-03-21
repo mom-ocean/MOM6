@@ -527,8 +527,8 @@ subroutine initialize_segment_data(G, OBC, PF)
       if (num_fields < 3) call MOM_error(FATAL, &
            "MOM_open_boundary, initialize_segment_data: "//&
            "Need at least three inputs for Flather")
-      segment%num_fields = num_fields  ! these are at least three input fields required for the Flather option
     endif
+    segment%num_fields = num_fields  ! these are at least three input fields required for the Flather option
 
     segment%temp_segment_data_exists=.false.
     segment%salt_segment_data_exists=.false.
@@ -1204,12 +1204,14 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
   if (.not.associated(OBC)) return
 
-  if (.not.(OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
+  if (.not.(OBC%specified_u_BCs_exist_globally .or. OBC%specified_v_BCs_exist_globally .or. &
+              OBC%open_u_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally)) &
     return
 
   do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
-    if (.not. segment%on_pe .or. segment%specified) cycle
+!   if (.not. segment%on_pe .or. segment%specified) cycle
+    if (.not. segment%on_pe) cycle
     if (segment%direction == OBC_DIRECTION_E) then
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
@@ -2268,17 +2270,33 @@ subroutine update_OBC_segment_data(G, GV, OBC, tv, h, Time)
 
       if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
         if (segment%field(m)%fid>0) then ! calculate external BT velocity and transport if needed
-          if((trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) .or.  &
-             (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S)) then
+          if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
             do j=js_obc2,je_obc
               do i=is_obc2,ie_obc
                 segment%normal_trans_bt(i,j) = 0.0
                 do k=1,G%ke
                   segment%normal_vel(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-                  segment%normal_trans(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k)
+                  segment%normal_trans(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k) * &
+                            G%dyCu(I,j)
                   segment%normal_trans_bt(i,j)= segment%normal_trans_bt(i,j)+segment%normal_trans(i,j,k)
                 enddo
-                segment%normal_vel_bt(i,j) = segment%normal_trans_bt(i,j)/max(segment%Htot(i,j),1.e-12)
+                segment%normal_vel_bt(i,j) = segment%normal_trans_bt(i,j)/(max(segment%Htot(i,j),1.e-12) * &
+                            G%dyCu(I,j))
+                if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,j,:) = segment%normal_vel(i,j,:)
+              enddo
+            enddo
+          elseif (trim(segment%field(m)%name) == 'V' .and. segment%is_N_or_S) then
+            do j=js_obc2,je_obc
+              do i=is_obc2,ie_obc
+                segment%normal_trans_bt(i,j) = 0.0
+                do k=1,G%ke
+                  segment%normal_vel(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
+                  segment%normal_trans(i,j,k) = segment%field(m)%buffer_dst(i,j,k)*segment%h(i,j,k) * &
+                            G%dxCv(i,J)
+                  segment%normal_trans_bt(i,j)= segment%normal_trans_bt(i,j)+segment%normal_trans(i,j,k)
+                enddo
+                segment%normal_vel_bt(i,j) = segment%normal_trans_bt(i,j)/(max(segment%Htot(i,j),1.e-12) * &
+                            G%dxCv(i,J))
                 if (associated(segment%nudged_normal_vel)) segment%nudged_normal_vel(i,j,:) = segment%normal_vel(i,j,:)
               enddo
             enddo
