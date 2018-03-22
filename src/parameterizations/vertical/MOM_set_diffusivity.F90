@@ -21,6 +21,8 @@ use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
 use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_cs
 use MOM_cvmix_shear,         only : cvmix_shear_end
+use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
+use MOM_bkgnd_mixing,        only : bkgnd_mixing_end
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -48,44 +50,6 @@ type, public :: set_diffusivity_CS ; private
                              ! large enough that N2 > omega2.  The full expression for
                              ! the Flux Richardson number is usually
                              ! FLUX_RI_MAX*N2/(N2+OMEGA2). The default is 0.2.
-  logical :: Henyey_IGW_background  ! If true, use a simplified variant of the
-                             ! Henyey et al, JGR (1986) latitudinal scaling for
-                             ! the background diapycnal diffusivity, which gives
-                             ! a marked decrease in the diffusivity near the
-                             ! equator.  The simplification here is to assume
-                             ! that the in-situ stratification is the same as
-                             ! the reference stratificaiton.
-  logical :: Henyey_IGW_background_new ! same as Henyey_IGW_background
-                             ! but incorporate the effect of
-                             ! stratification on TKE dissipation,
-                             !
-                             ! e = f/f_0 * acosh(N/f) / acosh(N_0/f_0) * e_0
-                             !
-                             ! where e is the TKE dissipation, and N_0 and f_0 are the
-                             ! reference buoyancy frequency and inertial frequencies respectively.
-                             ! e_0 is the reference dissipation at (N_0,f_0). In the
-                             ! previous version, N=N_0.
-                             !
-                             ! Additionally, the squared inverse relationship between
-                             ! diapycnal diffusivities and stratification is included
-                             !
-                             ! kd = e/N^2
-                             !
-                             ! where kd is the diapycnal diffusivity.
-                             ! This approach assumes that work done
-                             ! against gravity is uniformly distributed
-                             ! throughout the column. Whereas, kd=kd_0*e,
-                             ! as in the original version, concentrates buoyancy
-                             ! work in regions of strong stratification.
-
-  logical :: Kd_tanh_lat_fn  ! If true, use the tanh dependence of Kd_sfc on
-                             ! latitude, like GFDL CM2.1/CM2M.  There is no physical
-                             ! justification for this form, and it can not be
-                             ! used with Henyey_IGW_background.
-  real :: Kd_tanh_lat_scale  ! A nondimensional scaling for the range of
-                             ! diffusivities with Kd_tanh_lat_fn. Valid values
-                             ! are in the range of -2 to 2; 0.4 reproduces CM2M.
-
   logical :: bottomdraglaw   ! If true, the  bottom stress is calculated with a
                              ! drag law c_drag*|u|*u.
   logical :: BBL_mixing_as_max !  If true, take the maximum of the diffusivity
@@ -111,21 +75,6 @@ type, public :: set_diffusivity_CS ; private
                              ! when bulkmixedlayer==.false.
   real    :: Hmix            ! mixed layer thickness (meter) when
                              ! bulkmixedlayer==.false.
-
-  logical :: Bryan_Lewis_diffusivity ! If true, background vertical diffusivity
-                                     ! uses Bryan-Lewis (1979) like tanh profile.
-  real    :: Kd_Bryan_Lewis_deep     ! abyssal value of Bryan-Lewis profile (m2/s)
-  real    :: Kd_Bryan_Lewis_surface  ! surface value of Bryan-Lewis profile (m2/s)
-  real    :: Bryan_Lewis_depth_cent  ! center of transition depth in Bryan-Lewis (meter)
-  real    :: Bryan_Lewis_width_trans ! width of transition for Bryan-Lewis (meter)
-
-  real    :: N0_2Omega       ! ratio of the typical Buoyancy frequency to
-                             ! twice the Earth's rotation period, used with the
-                             ! Henyey scaling from the mixing
-  real    :: N2_FLOOR_IOMEGA2 ! floor applied to N2(k) scaled by Omega^2
-                              ! If =0., N2(k) is positive definite
-                              ! If =1., N2(k) > Omega^2 everywhere
-
   type(diag_ctrl), pointer :: diag ! structure to regulate diagn output timing
 
   real :: Int_tide_decay_scale ! decay scale for internal wave TKE (meter)
@@ -243,6 +192,7 @@ type, public :: set_diffusivity_CS ; private
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
   type(cvmix_shear_cs),      pointer :: cvmix_shear_csp      => NULL()
+  type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp      => NULL()
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
 
   integer :: id_TKE_itidal  = -1
@@ -358,10 +308,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   ! local variables
   real, dimension(SZI_(G)) :: &
-    depth, &      ! distance from surface of an interface (meter)
     N2_bot        ! bottom squared buoyancy frequency (1/s2)
-  real, dimension(SZI_(G), SZJ_(G)) :: &
-    Kd_sfc        ! surface value of the diffusivity (m2/s)
 
   type(diffusivity_diags) :: dd ! structure w/ arrays of pointers to avail diags
 
@@ -382,22 +329,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     KT_extra, &   ! double difusion diffusivity on temperature (m2/sec)
     KS_extra      ! double difusion diffusivity on salinity (m2/sec)
 
-  real :: I_trans       ! inverse of the transitional for Bryan-Lewis (1/m)
-  real :: depth_c       ! depth of the center of a layer (meter)
-  real :: I_Hmix        ! inverse of fixed mixed layer thickness (1/m)
   real :: I_Rho0        ! inverse of Boussinesq density (m3/kg)
-  real :: I_x30         ! 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
-  real :: abs_sin       ! absolute value of sine of latitude (nondim)
-  real :: atan_fn_sfc   ! surface value of Bryan-Lewis profile (nondim)
-  real :: atan_fn_lay   ! value of Bryan-Lewis profile in layer middle (nondim)
-  real :: I_atan_fn     ! inverse of change in Bryan-Lewis profile from surface to infinite depth (nondim)
-  real :: deg_to_rad    ! factor converting degrees to radians, pi/180.
   real :: dissip        ! local variable for dissipation calculations (W/m3)
   real :: Omega2        ! squared absolute rotation rate (1/s2)
-  real :: I_2Omega      ! 1/(2 Omega) (sec)
-  real :: N_2Omega
-  real :: N02_N2
-  real :: epsilon
 
   logical   :: use_EOS      ! If true, compute density from T/S using equation of state.
   type(p3d) :: z_ptrs(6)    ! pointers to diagns to be interpolated into depth space
@@ -424,10 +358,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   I_Rho0     = 1.0/GV%Rho0
   kappa_fill = 1.e-3 ! m2 s-1
   dt_fill    = 7200.
-  deg_to_rad = atan(1.0)/45.0 ! = PI/180
   Omega2     = CS%Omega*CS%Omega
-  I_2Omega   = 0.5/CS%Omega
-  epsilon    = 1.e-10
 
   use_EOS = associated(tv%eqn_of_state)
 
@@ -548,42 +479,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
 
-!   Calculate the diffusivity, Kd, for each layer.  This would be
-! the appropriate place to add a depth-dependent parameterization or
-! another explicit parameterization of Kd.
+  !   Calculate the diffusivity, Kd, for each layer.  This would be
+  ! the appropriate place to add a depth-dependent parameterization or
+  ! another explicit parameterization of Kd.
 
-  if (CS%Bryan_Lewis_diffusivity) then
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
-    do j=js,je ; do i=is,ie
-      Kd_sfc(i,j) = CS%Kd_Bryan_Lewis_surface
-    enddo ; enddo
-  else
-!$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
-    do j=js,je ; do i=is,ie
-      Kd_sfc(i,j) = CS%Kd
-    enddo ; enddo
-  endif
-  if (CS%Henyey_IGW_background) then
-    I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G,deg_to_rad,epsilon,I_x30) &
-!$OMP                          private(abs_sin)
-    do j=js,je ; do i=is,ie
-      abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
-      Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * &
-           ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
-    enddo ; enddo
-  elseif (CS%Kd_tanh_lat_fn) then
-!$OMP parallel do default(none) shared(is,ie,js,je,Kd_sfc,CS,G)
-    do j=js,je ; do i=is,ie
-      !   The transition latitude and latitude range are hard-scaled here, since
-      ! this is not really intended for wide-spread use, but rather for
-      ! comparison with CM2M / CM2.1 settings.
-      Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * (1.0 + &
-          CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
-    enddo ; enddo
-  endif
+  ! GMM, call MOM_bkgnd_mixing_calc here
+  call calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS%bkgnd_mixing_csp)
 
-  if (CS%debug) call hchksum(Kd_sfc,"Kd_sfc",G%HI,haloshift=0)
+! GMM, fix OMP calls below
+
 !$OMP parallel do default(none) shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
 !$OMP                                  Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
 !$OMP                                  Kd_int,dt,u,v,Omega2)   &
@@ -592,59 +496,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 !$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
 !$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
   do j=js,je
-    ! Set up variables related to the stratification.
-    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, N2_lay, N2_int, N2_bot)
-    if (associated(dd%N2_3d)) then
-      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
-    endif
+    ! Add vertical background diffusivities and viscosities
+    do k=1,nz ; do i=is,ie
+      ! diffusivities
+      Kd(i,j,k) = Kd(i,j,k) + 0.5*(CS%bkgnd_mixing_csp%kd_bkgnd(i,j,K) + CS%bkgnd_mixing_csp%kd_bkgnd(i,j,K+1))
+      ! viscosities
+      ! GMM, will this be done here?
+    enddo ; enddo
 
-    ! Set up the background diffusivity.
-    if (CS%Bryan_Lewis_diffusivity) then
-      I_trans = 1.0 / CS%Bryan_Lewis_width_trans
-      atan_fn_sfc = atan(CS%Bryan_Lewis_depth_cent*I_trans)
-      I_atan_fn = 1.0 / (2.0*atan(1.0) + atan_fn_sfc)
-      do i=is,ie ; depth(i) = 0.0 ; enddo
-      do k=1,nz ; do i=is,ie
-        atan_fn_lay = atan((CS%Bryan_Lewis_depth_cent - &
-                            (depth(i)+0.5*GV%H_to_m*h(i,j,k)))*I_trans)
-        Kd(i,j,k) = Kd_sfc(i,j) + (CS%Kd_Bryan_Lewis_deep - Kd_sfc(i,j)) * &
-                                  (atan_fn_sfc - atan_fn_lay) * I_atan_fn
-        depth(i) = depth(i) + GV%H_to_m*h(i,j,k)
-      enddo ; enddo
-    elseif ((.not.CS%bulkmixedlayer) .and. (CS%Kd /= CS%Kdml)) then
-      I_Hmix = 1.0 / CS%Hmix
-      do i=is,ie ; depth(i) = 0.0 ; enddo
-      do k=1,nz ; do i=is,ie
-        depth_c = depth(i) + 0.5*GV%H_to_m*h(i,j,k)
-
-        if (depth_c <= CS%Hmix) then ; Kd(i,j,k) = CS%Kdml
-        elseif (depth_c >= 2.0*CS%Hmix) then ; Kd(i,j,k) = Kd_sfc(i,j)
-        else
-          Kd(i,j,k) = ((Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
-                      (2.0*CS%Kdml - Kd_sfc(i,j))
-        endif
-
-        depth(i) = depth(i) + GV%H_to_m*h(i,j,k)
-      enddo ; enddo
-    elseif (CS%Henyey_IGW_background_new) then
-      I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-      do k=1,nz ; do i=is,ie
-        abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-        N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
-        N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-        Kd(i,j,k) = max(CS%Kd_min, Kd_sfc(i,j) * &
-             ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
-      enddo ; enddo
-   ! GMM, CVMix "internal" bg mixing can go here
-   !elseif (CS%use_cvmix_internal??) then
-
-
-    else
-      do k=1,nz ; do i=is,ie
-        Kd(i,j,k) = Kd_sfc(i,j)
-      enddo ; enddo
-    endif
-
+    ! GMM, the following will go into the MOM_cvmix_double_diffusion module
     if (CS%double_diffusion) then
       call double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, KT_extra, KS_extra)
       do K=2,nz ; do i=is,ie
@@ -1105,159 +965,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
 
 end subroutine find_TKE_to_Kd
 
-subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
-                   N2_lay, N2_int, N2_bot)
-  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)   :: tv
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
-  type(forcing),                            intent(in)   :: fluxes
-  integer,                                  intent(in)   :: j
-  type(set_diffusivity_CS),                 pointer      :: CS
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)  :: dRho_int, N2_int
-  real, dimension(SZI_(G),SZK_(G)),         intent(out)  :: N2_lay
-  real, dimension(SZI_(G)),                 intent(out)  :: N2_bot
-
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dRho_int_unfilt, & ! unfiltered density differences across interfaces
-    dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
-    dRho_dS            ! partial derivative of density wrt saln (kg m-3 PPT-1)
-
-  real, dimension(SZI_(G)) :: &
-    pres,      &  ! pressure at each interface (Pa)
-    Temp_int,  &  ! temperature at each interface (degC)
-    Salin_int, &  ! salinity at each interface (PPT)
-    drho_bot,  &
-    h_amp,     &
-    hb,        &
-    z_from_bot
-
-  real :: Rml_base  ! density of the deepest variable density layer
-  real :: dz_int    ! thickness associated with an interface (meter)
-  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density (m4 s-2 kg-1)
-  real :: H_neglect ! negligibly small thickness, in the same units as h.
-
-  logical :: do_i(SZI_(G)), do_any
-  integer :: i, k, is, ie, nz
-
-  is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = GV%g_Earth / GV%Rho0
-  H_neglect = GV%H_subroundoff
-
-  ! Find the (limited) density jump across each interface.
-  do i=is,ie
-    dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
-    dRho_int_unfilt(i,1) = 0.0 ; dRho_int_unfilt(i,nz+1) = 0.0
-  enddo
-  if (associated(tv%eqn_of_state)) then
-    if (associated(fluxes%p_surf)) then
-      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
-    else
-      do i=is,ie ; pres(i) = 0.0 ; enddo
-    endif
-    do K=2,nz
-      do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
-        Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
-        Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
-      enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-               dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state)
-      do i=is,ie
-        dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
-                            dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
-        dRho_int_unfilt(i,K) = max(dRho_dT(i,K)*(tv%T(i,j,k) - tv%T(i,j,k-1)) + &
-                            dRho_dS(i,K)*(tv%S(i,j,k) - tv%S(i,j,k-1)), 0.0)
-      enddo
-    enddo
-  else
-    do K=2,nz ; do i=is,ie
-      dRho_int(i,K) = GV%Rlay(k) - GV%Rlay(k-1)
-    enddo ; enddo
-  endif
-
-  ! Set the buoyancy frequencies.
-  do k=1,nz ; do i=is,ie
-    N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
-                  (GV%H_to_m*(h(i,j,k) + H_neglect))
-  enddo ; enddo
-  do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
-  do K=2,nz ; do i=is,ie
-    N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
-                  (0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
-  enddo ; enddo
-
-  ! Find the bottom boundary layer stratification, and use this in the deepest layers.
-  do i=is,ie
-    hb(i) = 0.0 ; dRho_bot(i) = 0.0
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
-
-    if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
-      h_amp(i) = sqrt(CS%h2(i,j)) ! for computing Nb
-    else
-      h_amp(i) = 0.0
-    endif
-  enddo
-
-  do k=nz,2,-1
-    do_any = .false.
-    do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
-      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
-
-      hb(i) = hb(i) + dz_int
-      dRho_bot(i) = dRho_bot(i) + dRho_int(i,K)
-
-      if (z_from_bot(i) > h_amp(i)) then
-        if (k>2) then
-          ! Always include at least one full layer.
-          hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
-          dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
-        endif
-        do_i(i) = .false.
-      else
-        do_any = .true.
-      endif
-    endif ; enddo
-    if (.not.do_any) exit
-  enddo
-
-  do i=is,ie
-    if (hb(i) > 0.0) then
-      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
-    else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
-  enddo
-
-  do k=nz,2,-1
-    do_any = .false.
-    do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
-      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
-
-      N2_int(i,K) = N2_bot(i)
-      if (k>2) N2_lay(i,k-1) = N2_bot(i)
-
-      if (z_from_bot(i) > h_amp(i)) then
-        if (k>2) N2_int(i,K-1) = N2_bot(i)
-        do_i(i) = .false.
-      else
-        do_any = .true.
-      endif
-    endif ; enddo
-    if (.not.do_any) exit
-  enddo
-
-  if (associated(tv%eqn_of_state)) then
-    do K=1,nz+1 ; do i=is,ie
-      dRho_int(i,K) = dRho_int_unfilt(i,K)
-    enddo ; enddo
-  endif
-
-end subroutine find_N2
+! GMM, the following will be moved to a new module
 
 !> This subroutine sets the additional diffusivities of temperature and
 !! salinity due to double diffusion, using the same functional form as is
@@ -2248,6 +1956,7 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   endif ! Polzin
 
 end subroutine add_int_tide_diffusivity
+
 !> This subroutine calculates several properties related to bottom
 !! boundary layer turbulence.
 subroutine set_BBL_TKE(u, v, h, fluxes, visc, G, GV, CS)
@@ -2666,79 +2375,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "for an isopycnal layer-formulation.", &
                  default=.false.)
 
-  call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", &
-                                CS%Bryan_Lewis_diffusivity, &
-                 "If true, use a Bryan & Lewis (JGR 1979) like tanh \n"//&
-                 "profile of background diapycnal diffusivity with depth.", &
-                 default=.false.)
-  if (CS%Bryan_Lewis_diffusivity) then
-    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_DEEP", &
-                                  CS%Kd_Bryan_Lewis_deep, &
-                 "The abyssal value of a Bryan-Lewis diffusivity profile. \n"//&
-                 "KD_BRYAN_LEWIS_DEEP is only used if \n"//&
-                 "BRYAN_LEWIS_DIFFUSIVITY is true.", units="m2 s-1", &
-                 fail_if_missing=.true.)
-    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_SURFACE", &
-                                  CS%Kd_Bryan_Lewis_surface, &
-                 "The surface value of a Bryan-Lewis diffusivity profile. \n"//&
-                 "KD_BRYAN_LEWIS_SURFACE is only used if \n"//&
-                 "BRYAN_LEWIS_DIFFUSIVITY is true.", units="m2 s-1", &
-                 fail_if_missing=.true.)
-    call get_param(param_file, mdl, "BRYAN_LEWIS_DEPTH_CENT", &
-                                  CS%Bryan_Lewis_depth_cent, &
-                 "The depth about which the transition in the Bryan-Lewis \n"//&
-                 "profile is centered. BRYAN_LEWIS_DEPTH_CENT is only \n"//&
-                 "used if BRYAN_LEWIS_DIFFUSIVITY is true.", units="m", &
-                 fail_if_missing=.true.)
-    call get_param(param_file, mdl, "BRYAN_LEWIS_WIDTH_TRANS", &
-                                  CS%Bryan_Lewis_width_trans, &
-                 "The width of the transition in the Bryan-Lewis \n"//&
-                 "profile. BRYAN_LEWIS_WIDTH_TRANS is only \n"//&
-                 "used if BRYAN_LEWIS_DIFFUSIVITY is true.", units="m", &
-                 fail_if_missing=.true.)
-  endif
-
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND", &
-                                CS%Henyey_IGW_background, &
-                 "If true, use a latitude-dependent scaling for the near \n"//&
-                 "surface background diffusivity, as described in \n"//&
-                 "Harrison & Hallberg, JPO 2008.", default=.false.)
-  call get_param(param_file, mdl, "HENYEY_IGW_BACKGROUND_NEW", &
-                                CS%Henyey_IGW_background_new, &
-                 "If true, use a better latitude-dependent scaling for the\n"//&
-                 "background diffusivity, as described in \n"//&
-                 "Harrison & Hallberg, JPO 2008.", default=.false.)
-  if (CS%Henyey_IGW_background .and. CS%Henyey_IGW_background_new) call MOM_error(FATAL, &
-                 "set_diffusivity_init: HENYEY_IGW_BACKGROUND and HENYEY_IGW_BACKGROUND_NEW "// &
-                 "are mutually exclusive. Set only one or none.")
-  if (CS%Henyey_IGW_background) &
-    call get_param(param_file, mdl, "HENYEY_N0_2OMEGA", CS%N0_2Omega, &
-                  "The ratio of the typical Buoyancy frequency to twice \n"//&
-                  "the Earth's rotation period, used with the Henyey \n"//&
-                  "scaling from the mixing.", units="nondim", default=20.0)
-  call get_param(param_file, mdl, "N2_FLOOR_IOMEGA2", CS%N2_FLOOR_IOMEGA2, &
-                  "The floor applied to N2(k) scaled by Omega^2:\n"//&
-                  "\tIf =0., N2(k) is simply positive definite.\n"//&
-                  "\tIf =1., N2(k) > Omega^2 everywhere.", units="nondim", &
-                  default=1.0)
-
-  call get_param(param_file, mdl, "KD_TANH_LAT_FN", &
-                                  CS%Kd_tanh_lat_fn, &
-                 "If true, use a tanh dependence of Kd_sfc on latitude, \n"//&
-                 "like CM2.1/CM2M.  There is no physical justification \n"//&
-                 "for this form, and it can not be used with \n"//&
-                 "HENYEY_IGW_BACKGROUND.", default=.false.)
-  if (CS%Kd_tanh_lat_fn) &
-    call get_param(param_file, mdl, "KD_TANH_LAT_SCALE", &
-                                  CS%Kd_tanh_lat_scale, &
-                 "A nondimensional scaling for the range ofdiffusivities \n"//&
-                 "with KD_TANH_LAT_FN. Valid values are in the range of \n"//&
-                 "-2 to 2; 0.4 reproduces CM2M.", units="nondim", default=0.0)
-
-  call get_param(param_file, mdl, "KV", CS%Kv, &
-                 "The background kinematic viscosity in the interior. \n"//&
-                 "The molecular value, ~1e-6 m2 s-1, may be used.", &
-                 units="m2 s-1", fail_if_missing=.true.)
+  ! set params releted to the background mixing
+  call bkgnd_mixing_init(Time, G, GV, param_file, CS%diag, CS%bkgnd_mixing_csp)
 
   call get_param(param_file, mdl, "KD", CS%Kd, &
                  "The background diapycnal diffusivity of density in the \n"//&
@@ -3130,12 +2768,6 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     endif
   endif
 
-  if (CS%Int_tide_dissipation .and. CS%Bryan_Lewis_diffusivity) &
-    call MOM_error(FATAL,"MOM_Set_Diffusivity: "// &
-         "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
-  if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &
-    "Set_diffusivity: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
-
   if (CS%user_change_diff) then
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
@@ -3152,6 +2784,8 @@ end subroutine set_diffusivity_init
 !> Clear pointers and dealocate memory
 subroutine set_diffusivity_end(CS)
   type(set_diffusivity_CS), pointer :: CS !< Control structure for this module
+
+  call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
   if (CS%user_change_diff) &
     call user_change_diff_end(CS%user_change_diff_CSp)
