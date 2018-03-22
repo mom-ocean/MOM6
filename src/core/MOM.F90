@@ -124,6 +124,9 @@ use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 
+! ODA modules
+use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
+use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, get_posterior_tracer
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
 use MOM_offline_main,          only : insert_offline_main, extract_offline_main, post_offline_convergence_diags
@@ -331,6 +334,12 @@ type, public :: MOM_control_struct ; private
   type(diag_to_Z_CS),            pointer :: diag_to_Z_CSp          => NULL()
   type(offline_transport_CS),    pointer :: offline_CSp            => NULL()
 
+  logical                                :: ensemble_ocean !< if true, this run is part of a
+                                               !! larger ensemble for the purpose of data assimilation
+                                               !! or statistical analysis.
+  type(ODA_CS), pointer                  :: odaCS => NULL() !< a pointer to the control structure for handling
+                                                 !! ensemble model state vectors and data assimilation
+                                                 !! increments and priors
 end type MOM_control_struct
 
 public initialize_MOM, finish_MOM_initialization, MOM_end
@@ -763,6 +772,13 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
   if (do_dyn .and. CS%interp_p_surf) then ; do j=jsd,jed ; do i=isd,ied
     CS%p_surf_prev(i,j) = forces%p_surf(i,j)
   enddo ; enddo ; endif
+
+  if (CS%ensemble_ocean) then
+      call set_analysis_time(Time,CS%odaCS)
+      call set_prior_tracer(G, GV, CS%h, CS%tv, CS%odaCS)
+      call oda(Time,CS%odaCS)
+      call get_posterior_tracer(CS%odaCS,G, GV, h, tv,increment=.true.)
+  endif
 
   if (showCallTree) call callTree_waypoint("calling extract_surface_state (step_MOM)")
   call extract_surface_state(CS, sfc_state)
@@ -1452,6 +1468,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
+  logical :: ensemble_ocean    ! If true, perform an ensemble gather at the end of step_MOM
   logical :: new_sim
   logical :: use_geothermal    ! If true, apply geothermal heating.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -1814,6 +1831,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                     fail_if_missing=.true.)
   endif
 
+
+  CS%ensemble_ocean=.false.
+  call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
+                 "If False, The model is being run in serial mode as a single realization.\n"//&
+                 "If True, The current model realization is part of a larger ensemble \n"//&
+                 "and at the end of step MOM, we will perform a gather of the ensemble\n"//&
+                 "members for statistical evaluation and/or data assimilation.", default=.false.)
 
   call callTree_waypoint("MOM parameters read (initialize_MOM)")
 
@@ -2325,6 +2349,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   CS%write_IC = save_IC .and. &
                 .not.((dirs%input_filename(1:1) == 'r') .and. &
                       (LEN_TRIM(dirs%input_filename) == 1))
+
+
+  if (CS%ensemble_ocean) then
+      call init_oda(Time, G, GV, CS%odaCS)
+  endif
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init)
