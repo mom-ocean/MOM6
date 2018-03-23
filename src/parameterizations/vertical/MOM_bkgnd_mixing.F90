@@ -11,6 +11,7 @@ use MOM_EOS,             only : calculate_density, calculate_density_derivs
 use MOM_variables,       only : thermo_var_ptrs
 use MOM_forcing_type,    only : forcing
 use MOM_error_handler,   only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_error_handler,   only : is_root_pe
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock
 use MOM_debugging,       only : hchksum
 use MOM_grid,            only : ocean_grid_type
@@ -29,13 +30,14 @@ public bkgnd_mixing_init, bkgnd_mixing_end, calculate_bkgnd_mixing
 type, public :: bkgnd_mixing_cs
 
   ! Parameters
-  real    :: Kd_Bryan_Lewis_deep    !< The abyssal value of a Bryan-Lewis diffusivity profile
-                                    !! (m2/s)
-  real    :: Kd_Bryan_Lewis_surface !< "The surface value of a Bryan-Lewis diffusivity profile
-                                    !! (m2/s)
-  real    :: Bryan_Lewis_depth_cent !<  The depth about which the transition in the Bryan-Lewis
-                                    !! is centered (m)
-  real    :: Bryan_Lewis_width_trans!< The width of the transition in the Bryan-Lewis profile (m)
+  real    :: Bryan_Lewis_c1         !< The vertical diffusivity values for  Bryan-Lewis profile
+                                    !! at |z|=D (m2/s)
+  real    :: Bryan_Lewis_c2         !< The amplitude of variation in diffusivity for the
+                                    !! Bryan-Lewis diffusivity profile (m2/s)
+  real    :: Bryan_Lewis_c3         !< The inverse length scale for transition region in the
+                                    !! Bryan-Lewis diffusivity profile (1/m)
+  real    :: Bryan_Lewis_c4         !< The depth where diffusivity is Bryan_Lewis_bl1 in the
+                                    !! Bryan-Lewis profile (m)
   real    :: Kd_min                 !< minimum diapycnal diffusivity (m2/s)
   real    :: Kd                     !< interior diapycnal diffusivity (m2/s)
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
@@ -153,7 +155,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%prandtl_turb, &
                  units="nondim", default=1.0, do_not_log=.true.)
 
-  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
+!  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
 
   call get_param(param_file, mdl, "BRYAN_LEWIS_DIFFUSIVITY", &
                                 CS%Bryan_Lewis_diffusivity, &
@@ -163,24 +165,24 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   if (CS%Bryan_Lewis_diffusivity) then
 
-    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_DEEP", &
-                   CS%Kd_Bryan_Lewis_deep, &
-                   "The abyssal value of a Bryan-Lewis diffusivity profile.", &
+    call get_param(param_file, mdl, "BRYAN_LEWIS_C1", &
+                   CS%Bryan_Lewis_c1, &
+                   "The vertical diffusivity values for Bryan-Lewis profile at |z|=D.", &
                    units="m2 s-1", fail_if_missing=.true.)
 
-    call get_param(param_file, mdl, "KD_BRYAN_LEWIS_SURFACE", &
-                   CS%Kd_Bryan_Lewis_surface, &
-                   "The surface value of a Bryan-Lewis diffusivity profile.", &
+    call get_param(param_file, mdl, "BRYAN_LEWIS_C2", &
+                   CS%Bryan_Lewis_c2, &
+                   "The amplitude of variation in diffusivity for the Bryan-Lewis profile", &
                    units="m2 s-1", fail_if_missing=.true.)
 
-    call get_param(param_file, mdl, "BRYAN_LEWIS_DEPTH_CENT", &
-                   CS%Bryan_Lewis_depth_cent, &
-                   "The depth about which the transition in the Bryan-Lewis.", &
-                   units="m", fail_if_missing=.true.)
+    call get_param(param_file, mdl, "BRYAN_LEWIS_C3", &
+                   CS%Bryan_Lewis_c3, &
+                   "The inverse length scale for transition region in the Bryan-Lewis profile", &
+                   units="m-1", fail_if_missing=.true.)
 
-    call get_param(param_file, mdl, "BRYAN_LEWIS_WIDTH_TRANS", &
-                   CS%Bryan_Lewis_width_trans, &
-                   "The width of the transition in the Bryan-Lewis.",&
+    call get_param(param_file, mdl, "BRYAN_LEWIS_C4", &
+                   CS%Bryan_Lewis_c4, &
+                   "The depth where diffusivity is BRYAN_LEWIS_C1 in the Bryan-Lewis profile",&
                    units="m", fail_if_missing=.true.)
 
   endif ! CS%Bryan_Lewis_diffusivity
@@ -224,7 +226,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &
     "MOM_bkgnd_mixing: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
 
-  call closeParameterBlock(param_file)
+!  call closeParameterBlock(param_file)
 
   ! allocate arrays and set them to zero
   allocate(CS%kd_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_bkgnd(:,:,:) = 0.
@@ -232,9 +234,9 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   ! Register diagnostics
   CS%diag => diag
-  CS%id_kd_bkgnd = register_diag_field('ocean_model', 'bkgnd_kd', diag%axesTi, Time, &
+  CS%id_kd_bkgnd = register_diag_field('ocean_model', 'Kd_bkgnd', diag%axesTi, Time, &
       'Background diffusivity added by MOM_bkgnd_mixing module', 'm2/s')
-  CS%id_kv_bkgnd = register_diag_field('ocean_model', 'bkgnd_kv', diag%axesTi, Time, &
+  CS%id_kv_bkgnd = register_diag_field('ocean_model', 'Kv_bkgnd', diag%axesTi, Time, &
       'Background viscosity added by MOM_bkgnd_mixing module', 'm2/s')
 
 end subroutine bkgnd_mixing_init
@@ -256,6 +258,7 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
                                                                 !! a previous call to bkgnd_mixing_init.
 
   ! local variables
+  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) ::  depth_3d !< distance from surface of an interface (m)
   real, dimension(SZI_(G), SZJ_(G)) ::  Kd_sfc !< surface value of the diffusivity (m2/s)
   real, dimension(SZI_(G)) :: &
     depth_i, &   !< distance from surface of an interface (meter)
@@ -284,32 +287,7 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
   epsilon = 1.e-10
 
-  if (CS%Bryan_Lewis_diffusivity) then
-!$OMP parallel do default(none) shared(is,ie,js,je,nz, CS)
-!$OMP                          private(cvmix_init_bkgnd,cvmix_coeffs_bkgnd)
-
-    ! Bryan & Lewis is computed via CVMix
-    do j=js,je; do i=is,ie
-
-      depth_k(:) = 0.0
-      do k=1,nz
-        depth_k(k) = depth_k(k) + GV%H_to_m*h(i,j,k)
-      enddo
-
-        call cvmix_init_bkgnd(max_nlev=nz, &
-                              zw = depth_k(:), &  !< interface depth, must be positive.
-                              bl1 = CS%Kd_Bryan_Lewis_deep, &
-                              bl2 = CS%Kd_Bryan_Lewis_surface, &
-                              bl3 = 1.0/CS%Bryan_Lewis_depth_cent , &
-                              bl4 = CS%Bryan_Lewis_width_trans, &
-                              prandtl = CS%prandtl_turb)
-
-        call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
-                                Tdiff_out=CS%kd_bkgnd(i,j,:), &
-                                nlev=nz, &
-                                max_nlev=nz)
-    enddo; enddo
-  else
+  if (.not. CS%Bryan_Lewis_diffusivity) then
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
       Kd_sfc(i,j) = CS%Kd
@@ -349,6 +327,8 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
 !$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra,
 !KS_extra,   &
 !$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
+
+  depth_3d(:,:,:) = 0.0
   do j=js,je
     ! Set up variables related to the stratification.
     call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, dRho_int, N2_lay, N2_int, N2_bot)
@@ -357,7 +337,29 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
     !endif
 
     ! Set up the background diffusivity.
-    if ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
+    if (CS%Bryan_Lewis_diffusivity) then
+
+      do i=is,ie
+        !depth_k(:) = 0.0
+        do k=2,nz+1
+          depth_3d(i,j,k) = depth_3d(i,j,k-1) + GV%H_to_m*h(i,j,k-1)
+        enddo
+       ! if (is_root_pe()) write(*,*)'depth_3d(i,j,:)',depth_3d(i,j,:)
+
+        call cvmix_init_bkgnd(max_nlev=nz, &
+                              zw = depth_3d(i,j,:), &  !< interface depth, must bepositive.
+                              bl1 = CS%Bryan_Lewis_c1, &
+                              bl2 = CS%Bryan_Lewis_c2, &
+                              bl3 = CS%Bryan_Lewis_c3, &
+                              bl4 = CS%Bryan_Lewis_c4, &
+                              prandtl = CS%prandtl_turb)
+
+        call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
+                                Tdiff_out=CS%kd_bkgnd(i,j,:), &
+                                nlev=nz, &
+                                max_nlev=nz)
+      enddo
+    elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
        (CS%Kd/= CS%Kdml)) then
 
       I_Hmix = 1.0 / CS%Hmix
