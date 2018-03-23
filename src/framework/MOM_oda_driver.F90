@@ -34,7 +34,7 @@ module MOM_oda_driver_mod
   use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
   use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size, get_ensemble_pelist
   use time_manager_mod, only : time_type, decrement_time, increment_time
-  use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<=)
+  use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<)
   use constants_mod, only : radius, epsln
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
@@ -196,7 +196,7 @@ contains
     npes_pm=ens_info(2)
     CS%ensemble_id = get_ensemble_id()
     !! Switch to global pelist
-    call set_currrent_pelist()
+    call set_current_pelist()
     allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
     call get_ensemble_pelist(CS%ensemble_pelist)
     allocate(CS%domains(CS%ensemble_size))
@@ -334,7 +334,7 @@ contains
     if (.not. ASSOCIATED(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
 
     !! switch to global pelist
-    call set_currrent_pelist()
+    call set_current_pelist()
     call set_root_pe(CS%ensemble_pelist(1,1))
 
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
@@ -393,7 +393,7 @@ contains
 
 
     !! switch to global pelist
-    call set_currrent_pelist()
+    call set_current_pelist()
     call set_root_pe(CS%ensemble_pelist(1,1))
 
      get_inc = .true.
@@ -455,7 +455,7 @@ contains
      if ( Time == CS%Time ) then
 
        !! switch to global pelist
-       call set_currrent_pelist()
+       call set_current_pelist()
        call set_root_pe(CS%ensemble_pelist(1,1))
 
        call get_profiles(Time, CS%Profiles, CS%CProfiles, numprof)
@@ -510,10 +510,10 @@ contains
     type(time_type), intent(in) :: Time
     type(ODA_CS), pointer, intent(inout) :: CS
 
-    if (CS%Time<=Time) then
+    if (CS%Time < Time) then
       CS%Time=increment_time(Time,CS%assim_frequency*3600)
     endif
-    if (CS%Time<=Time) then
+    if (CS%Time < Time) then
         call MOM_error(FATAL, " set_analysis_time: " // &
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
@@ -533,7 +533,7 @@ contains
     Prof=>CS%Cprofiles
 
     !! switch to global pelist
-    call set_currrent_pelist()
+    call set_current_pelist()
     call set_root_pe(CS%ensemble_pelist(1,1))
 
     do while (associated(Prof))
