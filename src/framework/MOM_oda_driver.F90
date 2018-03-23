@@ -195,6 +195,8 @@ contains
     CS%ensemble_size = ens_info(1)
     npes_pm=ens_info(2)
     CS%ensemble_id = get_ensemble_id()
+    !! Switch to global pelist
+    call set_currrent_pelist()
     allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
     call get_ensemble_pelist(CS%ensemble_pelist)
     allocate(CS%domains(CS%ensemble_size))
@@ -303,7 +305,9 @@ contains
    call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
 
    CS%Time=Time
-
+   !! switch back to ensemble member pelist
+   call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+   call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
   end subroutine init_oda
 
   subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
@@ -329,6 +333,10 @@ contains
     if (.not. ASSOCIATED(CS%Grid)) call MOM_ERROR(FATAL,'ODA_CS ensemble horizontal grid not associated')
     if (.not. ASSOCIATED(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
 
+    !! switch to global pelist
+    call set_currrent_pelist()
+    call set_root_pe(CS%ensemble_pelist(1,1))
+
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
     call mpp_get_data_domain(CS%domains(CS%ensemble_id)%mpp_domain,isd,ied,jsd,jed)
@@ -351,6 +359,11 @@ contains
       if (CS%Ocean_prior%id_s(m)>0) used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
     enddo
     deallocate(T,S)
+
+    !! switch back to ensemble member pelist
+    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+    call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
+
     return
 
   end subroutine set_prior_tracer
@@ -377,6 +390,11 @@ contains
 
      ! return if not analysis time (retain pointers for h and tv)
      if (Time/=CS%Time) return
+
+
+    !! switch to global pelist
+    call set_currrent_pelist()
+    call set_root_pe(CS%ensemble_pelist(1,1))
 
      get_inc = .true.
      if(present(increment)) get_inc = increment
@@ -419,6 +437,9 @@ contains
 
      tv => CS%tv
      h => CS%h
+     !! switch back to ensemble member pelist
+     call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+     call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
 
    end subroutine get_posterior_tracer
 
@@ -432,6 +453,11 @@ contains
      integer :: m
 
      if ( Time == CS%Time ) then
+
+       !! switch to global pelist
+       call set_currrent_pelist()
+       call set_root_pe(CS%ensemble_pelist(1,1))
+
        call get_profiles(Time, CS%Profiles, CS%CProfiles, numprof)
        allocate(Profiles(numprof))
        call copy_profiles(CS%CProfiles, Profiles)
@@ -439,6 +465,11 @@ contains
        call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, Profiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
        deallocate(Profiles)
+
+       !! switch back to ensemble member pelist
+       call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+       call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
+
      end if
 
      return
@@ -501,11 +532,19 @@ contains
     fid = open_profile_file(trim(filename), nvar=2, thread=MPP_SINGLE, fset=MPP_SINGLE)
     Prof=>CS%Cprofiles
 
+    !! switch to global pelist
+    call set_currrent_pelist()
+    call set_root_pe(CS%ensemble_pelist(1,1))
+
     do while (associated(Prof))
       call write_profile(fid,Prof)
       Prof=>Prof%cnext
     enddo
     call close_profile_file(fid)
+
+    !! switch back to ensemble member pelist
+    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+    call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
 
     return
   end subroutine save_obs_diff
