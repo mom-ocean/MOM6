@@ -2772,6 +2772,10 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     call user_change_diff_init(Time, G, param_file, diag, CS%user_change_diff_CSp)
   endif
 
+  if (CS%Int_tide_dissipation .and. CS%bkgnd_mixing_csp%Bryan_Lewis_diffusivity) &
+    call MOM_error(FATAL,"MOM_Set_Diffusivity: "// &
+         "Bryan-Lewis and internal tidal dissipation are both enabled. Choose one.")
+
   CS%useKappaShear = kappa_shear_init(Time, G, GV, param_file, CS%diag, CS%kappaShear_CSp)
   if (CS%useKappaShear) &
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
