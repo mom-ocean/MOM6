@@ -34,7 +34,7 @@ module MOM_oda_driver_mod
   use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
   use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size, get_ensemble_pelist
   use time_manager_mod, only : time_type, decrement_time, increment_time
-  use time_manager_mod, only : get_date, get_time, operator(>=)
+  use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<=)
   use constants_mod, only : radius, epsln
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
@@ -302,9 +302,12 @@ contains
 
    call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
 
+   CS%Time=Time
+
   end subroutine init_oda
 
-  subroutine set_prior_tracer(G, GV, h, tv, CS)
+  subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
+    type(time_type), intent(in)    :: Time !< The current model time
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -320,16 +323,12 @@ contains
     integer :: id
     logical :: used
 
-    !Estimated stack sizes required for message passing of ensemble states
+    ! return if not time for analysis
+    if (Time/=CS%Time) return
 
     if (.not. ASSOCIATED(CS%Grid)) call MOM_ERROR(FATAL,'ODA_CS ensemble horizontal grid not associated')
     if (.not. ASSOCIATED(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
 
-    ss=(CS%Grid%ied-CS%Grid%isd)*(CS%Grid%jed-CS%Grid%jsd)*CS%GV%ke*CS%ensemble_size
-    call io_set_stack_size(ss)
-    ss=(CS%Grid%ied-CS%Grid%isd)*(CS%Grid%jed-CS%Grid%jsd)*CS%GV%ke*CS%ensemble_size
-    call set_stack_size(ss)
-    call set_domains_stack_size(ss*2)
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
     call mpp_get_data_domain(CS%domains(CS%ensemble_id)%mpp_domain,isd,ied,jsd,jed)
@@ -358,7 +357,8 @@ contains
 
   !> Returns posterior adjustments or full state
   !!Note that only those PEs associated with an ensemble member receive data
-   subroutine get_posterior_tracer(CS, G, GV, h, tv, increment)
+  subroutine get_posterior_tracer(Time, CS, G, GV, h, tv, increment)
+     type(time_type), intent(in) :: Time !< the current model time
      type(ODA_CS), pointer :: CS !< ocean DA control structure
      type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
      type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -374,6 +374,9 @@ contains
      integer :: isc, iec, jsc, jec
      integer :: i, j, m
      logical :: used, get_inc
+
+     ! return if not analysis time (retain pointers for h and tv)
+     if (Time/=CS%Time) return
 
      get_inc = .true.
      if(present(increment)) get_inc = increment
@@ -428,7 +431,7 @@ contains
      integer :: numprof
      integer :: m
 
-     if ( Time >= CS%Time ) then
+     if ( Time == CS%Time ) then
        call get_profiles(Time, CS%Profiles, CS%CProfiles, numprof)
        allocate(Profiles(numprof))
        call copy_profiles(CS%CProfiles, Profiles)
@@ -472,20 +475,17 @@ contains
     return
   end subroutine init_ocean_ensemble
 
-  subroutine set_analysis_time(Time,odaCS,increment)
+  subroutine set_analysis_time(Time,CS)
     type(time_type), intent(in) :: Time
-    type(ODA_CS), pointer, intent(inout) :: odaCS
-    logical, intent(in), optional :: increment
+    type(ODA_CS), pointer, intent(inout) :: CS
 
-    if (.not.present(increment)) then
-      odaCS%Time=Time
-      return
-    else
-      if (increment) then
-        odaCS%Time=increment_time(Time,odaCS%assim_frequency*3600)
-      else
-        odaCS%Time=Time
-      endif
+    if (CS%Time<=Time) then
+      CS%Time=increment_time(Time,CS%assim_frequency*3600)
+    endif
+    if (CS%Time<=Time) then
+        call MOM_error(FATAL, " set_analysis_time: " // &
+             "assimilation interval appears to be shorter than " // &
+             "the model timestep")
     endif
     return
 
