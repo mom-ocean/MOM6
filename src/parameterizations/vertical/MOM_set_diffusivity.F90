@@ -22,7 +22,7 @@ use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kap
 use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_cs
 use MOM_cvmix_shear,         only : cvmix_shear_end
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
-use MOM_bkgnd_mixing,        only : bkgnd_mixing_end
+use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
 use MOM_string_functions,    only : uppercase
 use MOM_thickness_diffuse,   only : vert_fill_TS
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, p3d
@@ -483,8 +483,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   ! the appropriate place to add a depth-dependent parameterization or
   ! another explicit parameterization of Kd.
 
-  ! GMM, call MOM_bkgnd_mixing_calc here
-  call calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS%bkgnd_mixing_csp)
+  ! set surface diffusivities (CS%bkgnd_mixing_csp%Kd_sfc)
+  call sfc_bkgnd_mixing(G, CS%bkgnd_mixing_csp)
 
 ! GMM, fix OMP calls below
 
@@ -496,13 +496,16 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 !$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra, KS_extra,   &
 !$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
   do j=js,je
-    ! Add vertical background diffusivities and viscosities
-    do k=1,nz ; do i=is,ie
-      ! diffusivities
-      Kd(i,j,k) = Kd(i,j,k) + 0.5*(CS%bkgnd_mixing_csp%kd_bkgnd(i,j,K) + CS%bkgnd_mixing_csp%kd_bkgnd(i,j,K+1))
-      ! viscosities
-      ! GMM, will this be done here?
-    enddo ; enddo
+
+    ! Set up variables related to the stratification.
+    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, N2_lay, N2_int, N2_bot)
+
+    if (associated(dd%N2_3d)) then
+      do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
+    endif
+
+    ! add background mixing
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS%bkgnd_mixing_csp)
 
     ! GMM, the following will go into the MOM_cvmix_double_diffusion module
     if (CS%double_diffusion) then
@@ -624,20 +627,37 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
   enddo ! j-loop
 
   if (CS%debug) then
-    call hchksum(Kd,"BBL Kd",G%HI,haloshift=0)
+    call hchksum(Kd ,"Kd",G%HI,haloshift=0)
+
+    !!if (associated(CS%bkgnd_mixing_csp%kd_bkgnd)) &
+    !1  call hchksum(CS%bkgnd_mixing_csp%kd_bkgnd, "kd_bkgnd",G%HI,haloshift=0)
+
+    !!if (associated(CS%bkgnd_mixing_csp%kv_bkgnd)) &
+    !!  call hchksum(CS%bkgnd_mixing_csp%kv_bkgnd, "kv_bkgnd",G%HI,haloshift=0)
+
     if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
+
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &
                     G%HI, 0, symmetric=.true.)
     endif
+
     if (associated(visc%bbl_thick_u) .and. associated(visc%bbl_thick_v)) then
       call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, &
                     visc%bbl_thick_v, G%HI, 0, symmetric=.true.)
     endif
+
     if (associated(visc%Ray_u) .and. associated(visc%Ray_v)) then
       call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true.)
     endif
+
   endif
+
+  ! send bkgnd_mixing diagnostics to post_data
+  if (CS%bkgnd_mixing_csp%id_kd_bkgnd > 0) &
+    call post_data(CS%bkgnd_mixing_csp%id_kd_bkgnd, CS%bkgnd_mixing_csp%kd_bkgnd, CS%bkgnd_mixing_csp%diag)
+  if (CS%bkgnd_mixing_csp%id_kv_bkgnd > 0) &
+    call post_data(CS%bkgnd_mixing_csp%id_kv_bkgnd, CS%bkgnd_mixing_csp%kv_bkgnd, CS%bkgnd_mixing_csp%diag)
 
   if (CS%Kd_add > 0.0) then
     if (present(Kd_int)) then
@@ -964,6 +984,160 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, CS, &
   enddo ; enddo
 
 end subroutine find_TKE_to_Kd
+
+subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
+                   N2_lay, N2_int, N2_bot)
+  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  type(thermo_var_ptrs),                    intent(in)   :: tv
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
+  type(forcing),                            intent(in)   :: fluxes
+  integer,                                  intent(in)   :: j
+  type(set_diffusivity_CS),                 pointer      :: CS
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)  :: dRho_int, N2_int
+  real, dimension(SZI_(G),SZK_(G)),         intent(out)  :: N2_lay
+  real, dimension(SZI_(G)),                 intent(out)  :: N2_bot
+
+  real, dimension(SZI_(G),SZK_(G)+1) :: &
+    dRho_int_unfilt, & ! unfiltered density differences across interfaces
+    dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
+    dRho_dS            ! partial derivative of density wrt saln (kg m-3 PPT-1)
+
+  real, dimension(SZI_(G)) :: &
+    pres,      &  ! pressure at each interface (Pa)
+    Temp_int,  &  ! temperature at each interface (degC)
+    Salin_int, &  ! salinity at each interface (PPT)
+    drho_bot,  &
+    h_amp,     &
+    hb,        &
+    z_from_bot
+
+  real :: Rml_base  ! density of the deepest variable density layer
+  real :: dz_int    ! thickness associated with an interface (meter)
+  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density (m4 s-2 kg-1)
+  real :: H_neglect ! negligibly small thickness, in the same units as h.
+
+  logical :: do_i(SZI_(G)), do_any
+  integer :: i, k, is, ie, nz
+
+  is = G%isc ; ie = G%iec ; nz = G%ke
+  G_Rho0    = GV%g_Earth / GV%Rho0
+  H_neglect = GV%H_subroundoff
+
+  ! Find the (limited) density jump across each interface.
+  do i=is,ie
+    dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
+    dRho_int_unfilt(i,1) = 0.0 ; dRho_int_unfilt(i,nz+1) = 0.0
+  enddo
+  if (associated(tv%eqn_of_state)) then
+    if (associated(fluxes%p_surf)) then
+      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
+    else
+      do i=is,ie ; pres(i) = 0.0 ; enddo
+    endif
+    do K=2,nz
+      do i=is,ie
+        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
+        Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
+        Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
+      enddo
+      call calculate_density_derivs(Temp_int, Salin_int, pres, &
+               dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state)
+      do i=is,ie
+        dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
+                            dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
+        dRho_int_unfilt(i,K) = max(dRho_dT(i,K)*(tv%T(i,j,k) - tv%T(i,j,k-1)) + &
+                            dRho_dS(i,K)*(tv%S(i,j,k) - tv%S(i,j,k-1)), 0.0)
+      enddo
+    enddo
+  else
+    do K=2,nz ; do i=is,ie
+      dRho_int(i,K) = GV%Rlay(k) - GV%Rlay(k-1)
+    enddo ; enddo
+  endif
+
+  ! Set the buoyancy frequencies.
+  do k=1,nz ; do i=is,ie
+    N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
+                  (GV%H_to_m*(h(i,j,k) + H_neglect))
+  enddo ; enddo
+  do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
+  do K=2,nz ; do i=is,ie
+    N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
+                  (0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
+  enddo ; enddo
+
+  ! Find the bottom boundary layer stratification, and use this in the deepest layers.
+  do i=is,ie
+    hb(i) = 0.0 ; dRho_bot(i) = 0.0
+    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
+
+    if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) then
+      h_amp(i) = sqrt(CS%h2(i,j)) ! for computing Nb
+    else
+      h_amp(i) = 0.0
+    endif
+  enddo
+
+  do k=nz,2,-1
+    do_any = .false.
+    do i=is,ie ; if (do_i(i)) then
+      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
+
+      hb(i) = hb(i) + dz_int
+      dRho_bot(i) = dRho_bot(i) + dRho_int(i,K)
+
+      if (z_from_bot(i) > h_amp(i)) then
+        if (k>2) then
+          ! Always include at least one full layer.
+          hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
+          dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
+        endif
+        do_i(i) = .false.
+      else
+        do_any = .true.
+      endif
+    endif ; enddo
+    if (.not.do_any) exit
+  enddo
+
+  do i=is,ie
+    if (hb(i) > 0.0) then
+      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
+    else ;  N2_bot(i) = 0.0 ; endif
+    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
+    do_i(i) = (G%mask2dT(i,j) > 0.5)
+  enddo
+
+  do k=nz,2,-1
+    do_any = .false.
+    do i=is,ie ; if (do_i(i)) then
+      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
+      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
+
+      N2_int(i,K) = N2_bot(i)
+      if (k>2) N2_lay(i,k-1) = N2_bot(i)
+
+      if (z_from_bot(i) > h_amp(i)) then
+        if (k>2) N2_int(i,K-1) = N2_bot(i)
+        do_i(i) = .false.
+      else
+        do_any = .true.
+      endif
+    endif ; enddo
+    if (.not.do_any) exit
+  enddo
+
+  if (associated(tv%eqn_of_state)) then
+    do K=1,nz+1 ; do i=is,ie
+      dRho_int(i,K) = dRho_int_unfilt(i,K)
+    enddo ; enddo
+  endif
+
+end subroutine find_N2
 
 ! GMM, the following will be moved to a new module
 
