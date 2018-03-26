@@ -38,7 +38,7 @@ module MOM_oda_driver_mod
   use constants_mod, only : radius, epsln
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
-  use oda_core_mod, only : oda_core_init, get_profiles, copy_profiles
+  use oda_core_mod, only : oda_core_init, get_profiles
 !  use eakf_oda_mod, only : ensemble_filter
   use write_ocean_data_mod, only : open_profile_file
   use write_ocean_data_mod, only : write_profile,close_profile_file
@@ -448,8 +448,6 @@ contains
      type(oda_CS), intent(inout) :: CS
 
      integer :: i, j
-     type(ocean_profile_type), pointer, dimension(:) :: Profiles
-     integer :: numprof
      integer :: m
 
      if ( Time == CS%Time ) then
@@ -458,13 +456,10 @@ contains
        call set_current_pelist()
        call set_root_pe(CS%ensemble_pelist(1,1))
 
-       call get_profiles(Time, CS%Profiles, CS%CProfiles, numprof)
-       allocate(Profiles(numprof))
-       call copy_profiles(CS%CProfiles, Profiles)
+       call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
-       call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, Profiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
+       call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
-       deallocate(Profiles)
 
        !! switch back to ensemble member pelist
        call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
