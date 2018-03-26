@@ -31,57 +31,69 @@ type, public :: tidal_mixing_cs
   logical :: debug = .true.
 
   ! Parameters
-  logical :: int_tide_dissipation  ! Internal tide conversion (from barotropic) with
-                                   ! the schemes of St Laurent et al (2002)/
-                                   ! Simmons et al (2004)
+  logical :: int_tide_dissipation ! Internal tide conversion (from barotropic) with
+                              ! the schemes of St Laurent et al (2002)/
+                              ! Simmons et al (2004)
+
   integer :: Int_tide_profile ! A coded integer indicating the vertical profile
                               ! for dissipation of the internal waves.  Schemes that
                               ! are currently encoded are St Laurent et al (2002) and
                               ! Polzin (2009).
   logical :: Lee_wave_dissipation ! Enable lee-wave driven mixing, following
-                                  ! Nikurashin (2010), with a vertical energy
-                                  ! deposition profile specified by Lee_wave_profile.
-                                  ! St Laurent et al (2002) or
-                                  ! Simmons et al (2004) scheme
+                              ! Nikurashin (2010), with a vertical energy
+                              ! deposition profile specified by Lee_wave_profile.
+                              ! St Laurent et al (2002) or
+                              ! Simmons et al (2004) scheme
+
   integer :: Lee_wave_profile ! A coded integer indicating the vertical profile
                               ! for dissipation of the lee waves.  Schemes that are
                               ! currently encoded are St Laurent et al (2002) and
                               ! Polzin (2009).
   real :: Int_tide_decay_scale ! decay scale for internal wave TKE (meter)
-  real :: Mu_itides          ! efficiency for conversion of dissipation
-                             ! to potential energy (nondimensional)
-  real :: Gamma_itides       ! fraction of local dissipation (nondimensional)
-  real :: Gamma_lee          ! fraction of local dissipation for lee waves
-                             ! (Nikurashin's energy input) (nondimensional)
+
+  real :: Mu_itides           ! efficiency for conversion of dissipation
+                              ! to potential energy (nondimensional)
+
+  real :: Gamma_itides        ! fraction of local dissipation (nondimensional)
+
+  real :: Gamma_lee           ! fraction of local dissipation for lee waves
+                              ! (Nikurashin's energy input) (nondimensional)
   real :: Decay_scale_factor_lee ! Scaling factor for the decay scale of lee
-                             ! wave energy dissipation (nondimensional)
-  real :: min_zbot_itides    ! minimum depth for internal tide conversion (meter)
+                              ! wave energy dissipation (nondimensional)
+
+  real :: min_zbot_itides     ! minimum depth for internal tide conversion (meter)
   logical :: Lowmode_itidal_dissipation ! Internal tide conversion (from low modes) with
-                                        ! the schemes of St Laurent et al (2002)/
-                                        ! Simmons et al (2004) !BDM
-  real :: Nu_Polzin      ! The non-dimensional constant used in Polzin form of
-                         ! the vertical scale of decay of tidal dissipation
-  real :: Nbotref_Polzin ! Reference value for the buoyancy frequency at the
-                         ! ocean bottom used in Polzin formulation of the
-                         ! vertical scale of decay of tidal dissipation (1/s)
+                              ! the schemes of St Laurent et al (2002)/
+                              ! Simmons et al (2004) !BDM
+
+  real :: Nu_Polzin           ! The non-dimensional constant used in Polzin form of
+                              ! the vertical scale of decay of tidal dissipation
+
+  real :: Nbotref_Polzin      ! Reference value for the buoyancy frequency at the
+                              ! ocean bottom used in Polzin formulation of the
+                              ! vertical scale of decay of tidal dissipation (1/s)
   real :: Polzin_decay_scale_factor ! Scaling factor for the decay length scale
-                                    ! of the tidal dissipation profile in Polzin
-                                    ! (nondimensional)
+                              ! of the tidal dissipation profile in Polzin
+                              ! (nondimensional)
   real :: Polzin_decay_scale_max_factor  ! The decay length scale of tidal
-                         ! dissipation profile in Polzin formulation should not
-                         ! exceed Polzin_decay_scale_max_factor * depth of the
-                         ! ocean (nondimensional).
+                              ! dissipation profile in Polzin formulation should not
+                              ! exceed Polzin_decay_scale_max_factor * depth of the
+                              ! ocean (nondimensional).
   real :: Polzin_min_decay_scale ! minimum decay scale of the tidal dissipation
-                                 ! profile in Polzin formulation (meter)
+                              ! profile in Polzin formulation (meter)
+
   real :: TKE_itide_max       ! maximum internal tide conversion (W m-2)
                               ! available to mix above the BBL
+
   real :: utide               ! constant tidal amplitude (m s-1) used if
-                              ! tidal amplitude file is not present
   real :: kappa_itides        ! topographic wavenumber and non-dimensional scaling
   real :: kappa_h2_factor     ! factor for the product of wavenumber * rms sgs height
   character(len=200) :: inputdir
 
-  real :: tidal_max_coef    !< maximum allowable tidal diffusivity. [m^2/s]
+  logical :: use_cvmix_tidal  ! true if cvmix is to be used for determining diffusivity
+                              ! due to tidal mixing
+
+  real :: tidal_max_coef      ! maximum allowable tidal diffusivity. [m^2/s]
 
   real, pointer, dimension(:,:) :: TKE_Niku    => NULL()
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
@@ -89,6 +101,7 @@ type, public :: tidal_mixing_cs
   real, pointer, dimension(:,:) :: mask_itidal => NULL()
   real, pointer, dimension(:,:) :: h2          => NULL()
   real, pointer, dimension(:,:) :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
+  real, pointer, dimension(:,:) :: tidal_energy_flux_2d => NULL()
 
 end type tidal_mixing_cs
 
@@ -117,8 +130,12 @@ end type
 character(len=40)         :: mdl = "MOM_tidal_mixing"     !< This module's name.
 character*(20), parameter :: STLAURENT_PROFILE_STRING = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
+character*(20), parameter :: SIMMONS_PROFILE_STRING = "Simmons"
+character*(20), parameter :: SCHMITTNER_PROFILE_STRING = "Schmittner"
 integer,        parameter :: STLAURENT_02 = 1
 integer,        parameter :: POLZIN_09    = 2
+integer,        parameter :: SIMMONS_04   = 3
+integer,        parameter :: SCHMITTNER   = 4
 
 contains
 
@@ -133,7 +150,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
 
   ! Local variables
   logical :: read_tideamp
-  character(len=20)  :: tmpstr
+  character(len=20)  :: tmpstr, int_tide_profile_str
   character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
   real :: utide, zbot, hamp
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
@@ -158,6 +175,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   ! Read parameters
   call log_version(param_file, mdl, version, &
     "Vertical Tidal Mixing Parameterization")
+  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", CS%use_cvmix_tidal, &
+                 "If true, turns on tidal mixing scheme via CVMix", &
+                 default=.false.)
+
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
   CS%inputdir = slasher(CS%inputdir)
   call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
@@ -165,7 +186,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=.false.)
   if (CS%int_tide_dissipation) then
-    call get_param(param_file, mdl, "INT_TIDE_PROFILE", tmpstr, &
+    call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
                  "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
                  "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
@@ -173,13 +194,16 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
                  "\t                decay profile.", &
                  default=STLAURENT_PROFILE_STRING)
-    tmpstr = uppercase(tmpstr)
-    select case (tmpstr)
-      case (STLAURENT_PROFILE_STRING) ; CS%int_tide_profile = STLAURENT_02
-      case (POLZIN_PROFILE_STRING) ; CS%int_tide_profile = POLZIN_09
+                 ! TODO: list the newly available profile selections
+    int_tide_profile_str = uppercase(int_tide_profile_str)
+    select case (int_tide_profile_str)
+      case (STLAURENT_PROFILE_STRING)   ; CS%int_tide_profile = STLAURENT_02
+      case (POLZIN_PROFILE_STRING)      ; CS%int_tide_profile = POLZIN_09
+      case (SIMMONS_PROFILE_STRING)     ; CS%int_tide_profile = SIMMONS_04
+      case (SCHMITTNER_PROFILE_STRING)  ; CS%int_tide_profile = SCHMITTNER
       case default
-        call MOM_error(FATAL, "set_diffusivity_init: Unrecognized setting "// &
-            "#define INT_TIDE_PROFILE "//trim(tmpstr)//" found in input file.")
+        call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
+            "#define INT_TIDE_PROFILE "//trim(int_tide_profile_str)//" found in input file.")
     end select
   endif
 
@@ -202,7 +226,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
       case (STLAURENT_PROFILE_STRING) ; CS%lee_wave_profile = STLAURENT_02
       case (POLZIN_PROFILE_STRING) ; CS%lee_wave_profile = POLZIN_09
       case default
-        call MOM_error(FATAL, "set_diffusivity_init: Unrecognized setting "// &
+        call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
             "#define LEE_WAVE_PROFILE "//trim(tmpstr)//" found in input file.")
     end select
   endif
@@ -301,7 +325,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
                  "The path to the file containing the sub-grid-scale \n"//&
                  "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
-                 fail_if_missing=.true.)
+                 fail_if_missing=(.not.CS%use_cvmix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
     call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
@@ -354,31 +378,81 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
 
-  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", tidal_mixing_init, &
-                 "If true, turns on tidal mixing scheme via CVMix", &
-                 default=.false.)
-
-  if (tidal_mixing_init) then 
+  if (CS%use_cvmix_tidal) then
 
     ! Read in CVMix params
     call openParameterBlock(param_file,'CVMIX_TIDAL')
     call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
                    "largest acceptable value for tidal diffusivity", &
-                   units="m^2/s", default=100e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
-    call closeParameterBlock(param_file)
+                   units="m^2/s", default=100e-4, & ! the default is 50e-4 in CVMIX, 100e-4 in POP.
+                   fail_if_missing=.true.)
 
+    ! Check if the chosen tidal mixing scheme is available in CVMix
+    select case (int_tide_profile_str)
+      case (SIMMONS_PROFILE_STRING)     ; continue
+      case (SCHMITTNER_PROFILE_STRING)  ; continue
+      case default
+        call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing scheme"// &
+            " "//trim(int_tide_profile_str)//" unavailable in CVMix")
+    end select
+
+    ! TODO: check parameter consistency. (see POP::tidal_mixing.F90::tidal_check)
 
     ! Set up CVMix
-    call cvmix_init_tidal(mix_scheme            = 'Simmons',                &
+    call cvmix_init_tidal(mix_scheme            = int_tide_profile_str,  &
                           efficiency            = CS%Mu_itides,             &
-                          vertical_decay_scale  = cs%int_tide_decay_scale,  &
-                          max_coefficient       = cs%tidal_max_coef,        &
-                          local_mixing_frac     = cs%Gamma_itides,          &
-                          depth_cutoff          = 0.0)
-                          
-  endif ! cvmix on  
+                          vertical_decay_scale  = CS%int_tide_decay_scale,  &
+                          max_coefficient       = CS%tidal_max_coef,        &
+                          local_mixing_frac     = CS%Gamma_itides,          &
+                          depth_cutoff          = CS%min_zbot_itides)
+                          ! TODO: provide ltidal_Schmittner_socn as paramater to
+                          ! cvmix_init_tidal
+
+
+    call read_tidal_energy(G,param_file,CS)
+
+    call closeParameterBlock(param_file)
+
+  endif ! cvmix on
 
 end function tidal_mixing_init
+
+
+! TODO: move this subroutine to MOM_internal_tide_input module (?)
+subroutine read_tidal_energy(G, param_file, CS)
+  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
+  type(param_file_type),  intent(in)  :: param_file !< Run-time parameter file handle
+  type(tidal_mixing_cs),  pointer     :: CS
+  ! local
+  character(len=20)   :: tidal_energy_type
+  character(len=200)  :: tidal_energy_file
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+  call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
+                 "The path to the file containing tidal energy \n"//&
+                 "dissipation. Used with CVMix tidal mixing schemes.", &
+                 fail_if_missing=.true.)
+  call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
+                 "The type of input tidal energy flux dataset.",&
+                 fail_if_missing=.true.)
+                  ! TODO: list all available tidal energy types here
+
+
+  call safe_alloc_ptr(CS%tidal_energy_flux_2d,isd,ied,jsd,jed)
+
+  select case (uppercase(tidal_energy_type(1:4)))
+  case ('JAYN') ! Jayne 2009 input tidal energy flux
+    call MOM_read_data(tidal_energy_file,'wave_dissipation',CS%tidal_energy_flux_2d, G%domain)
+  case default
+    call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
+  ! TODO: add more tidal energy file types, e.g., Arbic, ER03, GN13, LGM0, etc.
+  ! see POP::tidal_mixing.F90 
+  end select
+  
+end subroutine read_tidal_energy
+
 
   !> This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
   !! The mechanisms considered are (1) local dissipation of internal waves generated by the
@@ -790,6 +864,9 @@ subroutine tidal_mixing_end(CS)
 
   !TODO deallocate all the dynamically allocated members here ...
   deallocate(CS)
+  deallocate(CS%tidal_energy_flux_2d)
+
+  ! TODO: check why ptrs allocated with MOM_safe_alloc are not deallocated?
 end subroutine tidal_mixing_end
 
 
