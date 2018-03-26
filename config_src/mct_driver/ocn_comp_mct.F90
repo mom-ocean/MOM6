@@ -602,7 +602,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_domain_mct"
   call ocn_domain_mct(lsize, MOM_MCT_gsmap, MOM_MCT_dom)
-  call ocn_domain_mct(lsize*km, MOM_MCT_gsmap3d, MOM_MCT_dom3d) !TODO: this is not used
+!  call ocn_domain_mct(lsize*km, MOM_MCT_gsmap3d, MOM_MCT_dom3d) !TODO: this is not used
 
   ! Inialize mct attribute vectors
 

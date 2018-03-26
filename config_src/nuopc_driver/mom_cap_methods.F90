@@ -20,6 +20,7 @@ public :: ocn_export
 public :: ocn_import
 
 integer :: rc,dbrc
+integer :: import_cnt = 0
 character(len=1024) :: tmpstr
 
 !---------------------------
@@ -35,7 +36,7 @@ subroutine ocn_export(ocean_public, grid, exportState)
   type(ESMF_State),        intent(inout) :: exportState !< outgoing data
   ! Local variables
   real, dimension(grid%isd:grid%ied,grid%jsd:grid%jed) :: ssh !< Local copy of sea_lev with updated halo
-  integer :: i, j, i1, j1, isc, iec, jsc, jec  !< Grid indices
+  integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec  !< Grid indices
   integer :: lbnd1, lbnd2, ubnd1, ubnd2
   real :: slp_L, slp_R, slp_C, slope, u_min, u_max
   real(ESMF_KIND_R8), pointer :: dataPtr_omask(:,:)
@@ -60,11 +61,13 @@ subroutine ocn_export(ocean_public, grid, exportState)
     line=__LINE__, &
     file=__FILE__)) &
     return  ! bail out
+
   call State_getFldPtr(exportState,"So_t", dataPtr_t, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &
     return  ! bail out
+
   call State_getFldPtr(exportState,"So_s", dataPtr_s, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -126,6 +129,7 @@ subroutine ocn_export(ocean_public, grid, exportState)
 !    file=__FILE__)) &
 !    return  ! bail out
 
+
   lbnd1 = lbound(dataPtr_t,1)
   ubnd1 = ubound(dataPtr_t,1)
   lbnd2 = lbound(dataPtr_t,2)
@@ -134,37 +138,52 @@ subroutine ocn_export(ocean_public, grid, exportState)
   call mpp_get_compute_domain(ocean_public%domain, isc, iec, jsc, jec)
 
 !tcx
-  write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
-  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-  write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
-  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-  write(tmpstr,'(a,6i8)') subname//'tcx3',lbound(ssh,1),ubound(ssh,1),lbound(ssh,2),ubound(ssh,2)
-  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-  write(tmpstr,'(a,6i8)') subname//'tcx4',lbound(ocean_public%sea_lev,1),ubound(ocean_public%sea_lev,1),lbound(ocean_public%sea_lev,2),ubound(ocean_public%sea_lev,2)
-  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-  write(tmpstr,'(a,6i8)') subname//'tcx5',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1),lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
-  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx1',lbnd1,ubnd1,lbnd2,ubnd2
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx2',isc,iec,jsc,jec
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx3',lbound(ssh,1),ubound(ssh,1),lbound(ssh,2),ubound(ssh,2)
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx4',lbound(ocean_public%sea_lev,1),ubound(ocean_public%sea_lev,1),lbound(ocean_public%sea_lev,2),ubound(ocean_public%sea_lev,2)
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx5',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1),lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx6',grid%isd,grid%ied,grid%jsd,grid%jed
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx7',grid%isc,grid%iec,grid%jsc,grid%jec
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx8',grid%idg_offset, grid%jdg_offset
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!  write(tmpstr,'(a,6i8)') subname//'tcx9',lbound(dataPtr_omask,1),ubound(dataPtr_omask,1),lbound(dataPtr_omask,2),ubound(dataPtr_omask,2)
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
   ! Copy from ocean_public to exportstate. ocean_public uses global indexing with no halos.
   ! The mask comes from "grid" that uses the usual MOM domain that has halos
   ! and does not use global indexing.
   do j = jsc, jec
     j1 = j + lbnd2 - jsc
+    jg = j + grid%jsc - jsc
     do i = isc, iec
       i1 = i + lbnd1 - isc
+      ig = i + grid%jsc - isc
       ! surface temperature in Kelvin
-      dataPtr_t(i1,j1) = ocean_public%t_surf(i,j)  * grid%mask2dT(i,j)
-      dataPtr_s(i1,j1) = ocean_public%s_surf(i,j) * grid%mask2dT(i,j)
-      dataPtr_u(i1,j1) = (grid%cos_rot(i,j) * ocean_public%u_surf(i,j) &
-                        - grid%sin_rot(i,j) * ocean_public%v_surf(i,j)) * grid%mask2dT(i,j)
-      dataPtr_v(i1,j1) = (grid%cos_rot(i,j) * ocean_public%v_surf(i,j) &
-                        + grid%sin_rot(i,j) * ocean_public%u_surf(i,j)) * grid%mask2dT(i,j)
+      dataPtr_omask(i1,j1) = grid%mask2dT(ig,jg)
+      dataPtr_t(i1,j1) = ocean_public%t_surf(i,j) * grid%mask2dT(ig,jg)
+      dataPtr_s(i1,j1) = ocean_public%s_surf(i,j) * grid%mask2dT(ig,jg)
+      dataPtr_u(i1,j1) = ocean_public%u_surf(i,j) * grid%mask2dT(ig,jg)
+      dataPtr_v(i1,j1) = ocean_public%v_surf(i,j) * grid%mask2dT(ig,jg)
+!      dataPtr_u(i1,j1) = (grid%cos_rot(ig,jg) * ocean_public%u_surf(i,j) &
+!                        - grid%sin_rot(ig,jg) * ocean_public%v_surf(i,j)) * grid%mask2dT(ig,jg)
+!      dataPtr_v(i1,j1) = (grid%cos_rot(ig,jg) * ocean_public%v_surf(i,j) &
+!                        + grid%sin_rot(ig,jg) * ocean_public%u_surf(i,j)) * grid%mask2dT(ig,jg)
       ! Make a copy of ssh in order to do a halo update. We use the usual MOM domain
       ! in order to update halos. i.e. does not use global indexing.
-      ssh(i,j) = ocean_public%sea_lev(i,j)
+!      ssh(i,j) = ocean_public%sea_lev(i,j)
+      ssh = 0.
     end do
   end do
 
+#if (1 == 0)
   ! Update halo of ssh so we can calculate gradients
   call pass_var(ssh, grid%domain)
 
@@ -174,7 +193,7 @@ subroutine ocn_export(ocean_public, grid, exportState)
     do i=isc,iec
       i1 = i + lbnd1 - isc
       ! This is a simple second-order difference
-      !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(i,j)
+      !dataPtr_dhdx(i1,j1) = 0.5 * (ssh(i+1,j) - ssh(i-1,j)) * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
       ! This is a PLM slope which might be less prone to the A-grid null mode
       slp_L = (ssh(I,j) - ssh(I-1,j)) * grid%mask2dCu(I-1,j)
       if (grid%mask2dCu(I-1,j)==0.) slp_L = 0.
@@ -192,8 +211,8 @@ subroutine ocn_export(ocean_public, grid, exportState)
         ! larger extreme values.
         slope = 0.0
       end if
-      dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(i,j)
-      if (grid%mask2dT(i,j)==0.) dataPtr_dhdx(i1,j1) = 0.0
+      dataPtr_dhdx(i1,j1) = slope * grid%IdxT(i,j) * grid%mask2dT(ig,jg)
+      if (grid%mask2dT(ig,jg)==0.) dataPtr_dhdx(i1,j1) = 0.0
     end do
   end do
 
@@ -203,7 +222,7 @@ subroutine ocn_export(ocean_public, grid, exportState)
     do i=isc,iec
       i1 = i + lbnd1 - isc
       ! This is a simple second-order difference
-      !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(i,j)
+      !dataPtr_dhdy(i1,j1) = 0.5 * (ssh(i,j+1) - ssh(i,j-1)) * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
       ! This is a PLM slope which might be less prone to the A-grid null mode
       slp_L = ssh(i,J) - ssh(i,J-1) * grid%mask2dCv(i,J-1)
       if (grid%mask2dCv(i,J-1)==0.) slp_L = 0.
@@ -222,10 +241,11 @@ subroutine ocn_export(ocean_public, grid, exportState)
         ! larger extreme values.
         slope = 0.0
       end if
-      dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(i,j)
-      if (grid%mask2dT(i,j)==0.) dataPtr_dhdy(i1,j1) = 0.0
+      dataPtr_dhdy(i1,j1) = slope * grid%IdyT(i,j) * grid%mask2dT(ig,jg)
+      if (grid%mask2dT(ig,jg)==0.) dataPtr_dhdy(i1,j1) = 0.0
     end do
   end do
+#endif
 
 end subroutine ocn_export
 
@@ -242,7 +262,7 @@ subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary)
   type(ESMF_State),        intent(inout) :: importState !< incoming data
   type(ice_ocean_boundary_type), intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
 
-  integer :: i, j, i1, j1, isc, iec, jsc, jec  !< Grid indices
+  integer :: i, j, i1, j1, ig, jg, isc, iec, jsc, jec  !< Grid indices
   real(ESMF_KIND_R8) :: c1,c2,c3,c4
   integer :: lbnd1, lbnd2, ubnd1, ubnd2
 
@@ -262,6 +282,10 @@ subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary)
   real(ESMF_KIND_R8), pointer :: dataPtr_osalt(:,:)
   real(ESMF_KIND_R8), pointer :: dataPtr_lwdn(:,:)
   real(ESMF_KIND_R8), pointer :: dataPtr_lwup(:,:)
+  real(ESMF_KIND_R8), pointer :: dataPtr_swvdr(:,:)
+  real(ESMF_KIND_R8), pointer :: dataPtr_swvdf(:,:)
+  real(ESMF_KIND_R8), pointer :: dataPtr_swndr(:,:)
+  real(ESMF_KIND_R8), pointer :: dataPtr_swndf(:,:)
   real(ESMF_KIND_R8), pointer :: dataPtr_swnet(:,:)
   real(ESMF_KIND_R8), pointer :: dataPtr_rofl(:,:)
   real(ESMF_KIND_R8), pointer :: dataPtr_rofi(:,:)
@@ -274,11 +298,14 @@ subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary)
 
   character(len=*),parameter :: subname = '(ocn_import)'
 
+  import_cnt = import_cnt + 1
+
   call State_getFldPtr(importState,'Sa_pslv', dataPtr_p,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &
     return  ! bail out
+
   call State_getFldPtr(importState,'Si_ifrac', dataPtr_ifrac,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -314,7 +341,27 @@ subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary)
     line=__LINE__, &
     file=__FILE__)) &
     return  ! bail out
-   call State_getFldPtr(importState,"Foxx_taux" , dataPtr_taux, rc=rc)
+  call State_getFldPtr(importState,"Foxx_swndr" , dataPtr_swndr, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+  call State_getFldPtr(importState,"Foxx_swndf" , dataPtr_swndf, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+  call State_getFldPtr(importState,"Foxx_swvdr" , dataPtr_swvdr, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+  call State_getFldPtr(importState,"Foxx_swvdf" , dataPtr_swvdf, rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    line=__LINE__, &
+    file=__FILE__)) &
+    return  ! bail out
+  call State_getFldPtr(importState,"Foxx_taux" , dataPtr_taux, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &
@@ -419,49 +466,79 @@ subroutine ocn_import(ocean_public, grid, importState, ice_ocean_boundary)
 !  write(tmpstr,'(a,6i8)') subname//'tcx5',lbound(grid%mask2dT,1),ubound(grid%mask2dT,1),lbound(grid%mask2dT,2),ubound(grid%mask2dT,2)
 !  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
-  do j = jsc,jec
-    do i = isc,iec
+!  write(tmpstr,'(a,i8)') subname//' tcx import_cnt ',import_cnt
+!  call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+
+  do j = jsc, jec
+    j1 = j + lbnd2 - jsc
+    jg = j + grid%jsc - jsc
+    do i = isc, iec
       i1 = i + lbnd1 - isc
-      j1 = j + lbnd2 - jsc
+      ig = i + grid%jsc - isc
 
-      ice_ocean_boundary%p(i,j) = GRID%mask2dT(i,j) * dataPtr_p(i1,j1)
+!      ice_ocean_boundary%p(i,j) =  0.0_ESMF_KIND_R8
 
-      ice_ocean_boundary%u_flux(i,j) = (GRID%cos_rot(i1,j1)*dataPtr_taux(i1,j1) + &
-                                        GRID%sin_rot(i1,j1)*dataPtr_tauy(i1,j1))
-      ice_ocean_boundary%v_flux(i,j) = (GRID%cos_rot(i1,j1)*dataPtr_tauy(i1,j1) + &
-                                        GRID%sin_rot(i1,j1)*dataPtr_taux(i1,j1))
+!      ice_ocean_boundary%u_flux(i,j) = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%v_flux(i,j) = 0.0_ESMF_KIND_R8
 
-      ice_ocean_boundary%t_flux(i,j)  = dataPtr_sen(i1,j1) * GRID%mask2dT(i,j)
-      ice_ocean_boundary%q_flux(i,j)  = dataPtr_evap(i1,j1) * GRID%mask2dT(i,j)
-!     ice_ocean_boundary%latent(i,j)  = dataPtr_lat(i1,j1) * GRID%mask2dT(i,j)
-      ice_ocean_boundary%lw_flux(i,j) = (dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)) * GRID%mask2dT(i,j)
+!      ice_ocean_boundary%t_flux(i,j)  = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%q_flux(i,j)  = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%lw_flux(i,j) = 0.0_ESMF_KIND_R8
+
+!      ice_ocean_boundary%sw_flux_vis_dir(i,j) = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%sw_flux_vis_dif(i,j) = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%sw_flux_nir_dir(i,j) = 0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%sw_flux_nir_dif(i,j) = 0.0_ESMF_KIND_R8
+
+!      ice_ocean_boundary%lprec(i,j) =  0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%fprec(i,j) =  0.0_ESMF_KIND_R8
+!      ice_ocean_boundary%runoff(i,j) =  0.0_ESMF_KIND_R8
+
+!      ice_ocean_boundary%runoff_hflx(i,j)  = 0.0 * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%calving(i,j)      = 0.0 * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%calving_hflx(i,j) = 0.0 * GRID%mask2dT(ig,jg)
+
+!      ice_ocean_boundary%ustar_berg(i,j) = 0.0 * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%area_berg(i,j)  = 0.0 * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%mass_berg(i,j)  = 0.0 * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%mi(i,j)         = 0.0 * GRID%mask2dT(ig,jg)
+
+if (import_cnt > 2) then
+
+!      ice_ocean_boundary%p(i,j) = GRID%mask2dT(ig,jg) * dataPtr_p(i1,j1)
+      ice_ocean_boundary%u_flux(i,j) = dataPtr_taux(i1,j1) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%v_flux(i,j) = dataPtr_tauy(i1,j1) * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%u_flux(i,j) = (GRID%cos_rot(ig,jg)*dataPtr_taux(i1,j1) + &
+!                                        GRID%sin_rot(ig,jg)*dataPtr_tauy(i1,j1))
+!      ice_ocean_boundary%v_flux(i,j) = (GRID%cos_rot(ig,jg)*dataPtr_tauy(i1,j1) + &
+!                                        GRID%sin_rot(ig,jg)*dataPtr_taux(i1,j1))
+
+      ice_ocean_boundary%t_flux(i,j)  = -dataPtr_sen(i1,j1) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%q_flux(i,j)  = -dataPtr_evap(i1,j1) * GRID%mask2dT(ig,jg)
+!!     ice_ocean_boundary%latent(i,j)  = dataPtr_lat(i1,j1) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%lw_flux(i,j) = (dataPtr_lwup(i1,j1) + dataPtr_lwdn(i1,j1)) * GRID%mask2dT(ig,jg)
 
 ! tcx TO DO c1-c4
-      c1 = 0.25_ESMF_KIND_R8
-      c2 = 0.25_ESMF_KIND_R8
-      c3 = 0.25_ESMF_KIND_R8
-      c4 = 0.25_ESMF_KIND_R8
-      ice_ocean_boundary%sw_flux_vis_dir(i,j) = GRID%mask2dT(i,j) * dataPtr_swnet(i1,j1)*c1
-      ice_ocean_boundary%sw_flux_vis_dif(i,j) = GRID%mask2dT(i,j) * dataPtr_swnet(i1,j1)*c2
-      ice_ocean_boundary%sw_flux_nir_dir(i,j) = GRID%mask2dT(i,j) * dataPtr_swnet(i1,j1)*c3
-      ice_ocean_boundary%sw_flux_nir_dif(i,j) = GRID%mask2dT(i,j) * dataPtr_swnet(i1,j1)*c4
+!      c1 = 0.25_ESMF_KIND_R8
+!      c2 = 0.25_ESMF_KIND_R8
+!      c3 = 0.25_ESMF_KIND_R8
+!      c4 = 0.25_ESMF_KIND_R8
+      ice_ocean_boundary%sw_flux_vis_dir(i,j) = GRID%mask2dT(ig,jg) * dataPtr_swvdr(i1,j1)
+      ice_ocean_boundary%sw_flux_vis_dif(i,j) = GRID%mask2dT(ig,jg) * dataPtr_swvdf(i1,j1)
+      ice_ocean_boundary%sw_flux_nir_dir(i,j) = GRID%mask2dT(ig,jg) * dataPtr_swndf(i1,j1)
+      ice_ocean_boundary%sw_flux_nir_dif(i,j) = GRID%mask2dT(ig,jg) * dataPtr_swndf(i1,j1)
 
 !      ice_ocean_boundary%sw(i,j) = ice_ocean_boundary%sw_flux_vis_dir(i,j) + ice_ocean_boundary%sw_flux_vis_dif(i,j) + &
 !                       ice_ocean_boundary%sw_flux_nir_dir(i,j) + ice_ocean_boundary%sw_flux_nir_dif(i,j)
 
-      ice_ocean_boundary%lprec(i,j) = dataPtr_rain(i1,j1) * GRID%mask2dT(i,j)
-      ice_ocean_boundary%fprec(i,j) = dataPtr_snow(i1,j1) * GRID%mask2dT(i,j)
-      ice_ocean_boundary%runoff(i,j) = (dataPtr_rofl(i1,j1)+dataPtr_rofi(i1,j1)) * GRID%mask2dT(i,j)
-      ice_ocean_boundary%runoff_hflx(i,j)  = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%calving(i,j)      = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%calving_hflx(i,j) = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%salt_flux(i,j) = GRID%mask2dT(i,j)*dataPtr_iosalt(i1,j1)
-      ice_ocean_boundary%salt_flux(i,j) = GRID%mask2dT(i,j)*(dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j))
+      ice_ocean_boundary%lprec(i,j) = dataPtr_rain(i1,j1) * GRID%mask2dT(ig,jg)
+      ice_ocean_boundary%fprec(i,j) = dataPtr_snow(i1,j1) * GRID%mask2dT(ig,jg)
+!      ice_ocean_boundary%runoff(i,j) = (dataPtr_rofl(i1,j1)+dataPtr_rofi(i1,j1)) * GRID%mask2dT(ig,jg)
 
-      ice_ocean_boundary%ustar_berg(i,j) = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%area_berg(i,j)  = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%mass_berg(i,j)  = 0.0 * GRID%mask2dT(i,j)
-      ice_ocean_boundary%mi(i,j)         = 0.0 * GRID%mask2dT(i,j)
+!      ice_ocean_boundary%salt_flux(i,j) = GRID%mask2dT(ig,jg)*dataPtr_iosalt(i1,j1)
+!      ice_ocean_boundary%salt_flux(i,j) = GRID%mask2dT(ig,jg)*(dataPtr_osalt(i1,j1) + ice_ocean_boundary%salt_flux(i,j))
+
+endif
 
     enddo
   enddo
