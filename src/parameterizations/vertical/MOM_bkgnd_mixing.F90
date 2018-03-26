@@ -24,7 +24,10 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public bkgnd_mixing_init, bkgnd_mixing_end, calculate_bkgnd_mixing
+public bkgnd_mixing_init
+public bkgnd_mixing_end
+public calculate_bkgnd_mixing
+public sfc_bkgnd_mixing
 
 !> Control structure including parameters for this module.
 type, public :: bkgnd_mixing_cs
@@ -81,6 +84,7 @@ type, public :: bkgnd_mixing_cs
   type(diag_ctrl), pointer :: diag => NULL()
   integer :: id_kd_bkgnd = -1, id_kv_bkgnd = -1
 
+  real, allocatable, dimension(:,:)   ::  Kd_sfc !< surface value of the diffusivity (m2/s)
   ! Diagnostics arrays
   real, allocatable, dimension(:,:,:) :: kd_bkgnd !< Background diffusivity (m2/s)
   real, allocatable, dimension(:,:,:) :: kv_bkgnd !< Background viscosity  (m2/s)
@@ -148,7 +152,6 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  "viscosity and diffusivity are elevated when the bulk \n"//&
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   endif
-
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
@@ -231,6 +234,7 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
   ! allocate arrays and set them to zero
   allocate(CS%kd_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_bkgnd(:,:,:) = 0.
   allocate(CS%kv_bkgnd(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_bkgnd(:,:,:) = 0.
+  allocate(CS%Kd_sfc(SZI_(G), SZJ_(G))); CS%Kd_sfc(:,:) = 0.
 
   ! Register diagnostics
   CS%diag => diag
@@ -241,56 +245,30 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
 end subroutine bkgnd_mixing_init
 
-!> Subroutine for calculating vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
+!> Get surface vertical background diffusivities/viscosities.
+subroutine sfc_bkgnd_mixing(G, CS)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
-  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: T_f!< temperature (deg C), after massless
-                                                                !! layers filled vertically by diffusion.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: S_f!< salinity, after massless
-                                                                !! layers filled vertically by diffusion.
-  type(forcing),                        intent(in)    :: fluxes !< Structure of surface fluxes that may be
-                                                                !! used.
-  type(bkgnd_mixing_cs),                          pointer :: CS !< The control structure returned by
+  type(bkgnd_mixing_cs),           pointer, intent(inout) :: CS !< The control structure returned by
                                                                 !! a previous call to bkgnd_mixing_init.
-
   ! local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(G)+1) ::  depth_3d !< distance from surface of an interface (m)
-  real, dimension(SZI_(G), SZJ_(G)) ::  Kd_sfc !< surface value of the diffusivity (m2/s)
-  real, dimension(SZI_(G)) :: &
-    depth_i, &   !< distance from surface of an interface (meter)
-    N2_bot       !< bottom squared buoyancy frequency (1/s2)
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
-    N2_int,   &  !< squared buoyancy frequency associated at interfaces (1/s2)
-    dRho_int     !< locally ref potential density difference across interfaces (in s-2) smg: or kg/m3?
-  real, dimension(SZI_(G),SZK_(G)) :: &
-    N2_lay       !< squared buoyancy frequency associated with layers (1/s2)
-
-  real, dimension(SZK_(G)) :: depth_k !< distance from surface of an interface (meter)
   real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
   real :: deg_to_rad !< factor converting degrees to radians, pi/180.
   real :: abs_sin    !< absolute value of sine of latitude (nondim)
-  real :: depth_c    !< depth of the center of a layer (meter)
-  real :: I_Hmix     !< inverse of fixed mixed layer thickness (1/m)
   real :: epsilon
-  real :: I_2Omega   !< 1/(2 Omega) (sec)
-  real :: N_2Omega
-  real :: N02_N2
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: i, j, k, is, ie, js, je
 
-  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
 
   ! set some parameters
   deg_to_rad = atan(1.0)/45.0 ! = PI/180
   epsilon = 1.e-10
 
+
   if (.not. CS%Bryan_Lewis_diffusivity) then
 !$OMP parallel do default(none) shared(is,ie,js,je,CS,Kd_sfc)
     do j=js,je ; do i=is,ie
-      Kd_sfc(i,j) = CS%Kd
+      CS%Kd_sfc(i,j) = CS%Kd
     enddo ; enddo
   endif
 
@@ -301,7 +279,7 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
 !$OMP                          private(abs_sin)
     do j=js,je ; do i=is,ie
       abs_sin = abs(sin(G%geoLatT(i,j)*deg_to_rad))
-      Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * &
+      CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(CS%N0_2Omega/max(epsilon,abs_sin))) * I_x30) )
     enddo ; enddo
   elseif (CS%Kd_tanh_lat_fn) then
@@ -310,276 +288,132 @@ subroutine calculate_bkgnd_mixing(h, tv, T_f, S_f, fluxes, G, GV, CS)
       !   The transition latitude and latitude range are hard-scaled here, since
       ! this is not really intended for wide-spread use, but rather for
       ! comparison with CM2M / CM2.1 settings.
-      Kd_sfc(i,j) = max(CS%Kd_min, Kd_sfc(i,j) * (1.0 + &
+      CS%Kd_sfc(i,j) = max(CS%Kd_min, CS%Kd_sfc(i,j) * (1.0 + &
           CS%Kd_tanh_lat_scale * 0.5*tanh((abs(G%geoLatT(i,j)) - 35.0)/5.0) ))
     enddo ; enddo
   endif
 
-!$OMP parallel do default(none)
-!shared(is,ie,js,je,nz,G,GV,CS,h,tv,T_f,S_f,fluxes,dd, &
-!$OMP
-!Kd,Kd_sfc,epsilon,deg_to_rad,I_2Omega,visc,    &
-!$OMP                                  Kd_int,dt,u,v,Omega2)   &
-!$OMP
-!private(dRho_int,I_trans,atan_fn_sfc,I_atan_fn,atan_fn_lay, &
-!$OMP                                  I_Hmix,depth_c,depth,N2_lay, N2_int,
-!N2_bot,        &
-!$OMP                                  I_x30,abs_sin,N_2Omega,N02_N2,KT_extra,
-!KS_extra,   &
-!$OMP                                  TKE_to_Kd,maxTKE,dissip,kb)
+  if (CS%debug) call hchksum(CS%Kd_sfc,"After sfc_bkgnd_mixing: Kd_sfc",G%HI,haloshift=0)
 
-  depth_3d(:,:,:) = 0.0
-  do j=js,je
-    ! Set up variables related to the stratification.
-    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, dRho_int, N2_lay, N2_int, N2_bot)
-    !if (associated(dd%N2_3d)) then
-    !  do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
-    !endif
-
-    ! Set up the background diffusivity.
-    if (CS%Bryan_Lewis_diffusivity) then
-
-      do i=is,ie
-        !depth_k(:) = 0.0
-        do k=2,nz+1
-          depth_3d(i,j,k) = depth_3d(i,j,k-1) + GV%H_to_m*h(i,j,k-1)
-        enddo
-       ! if (is_root_pe()) write(*,*)'depth_3d(i,j,:)',depth_3d(i,j,:)
-
-        call cvmix_init_bkgnd(max_nlev=nz, &
-                              zw = depth_3d(i,j,:), &  !< interface depth, must bepositive.
-                              bl1 = CS%Bryan_Lewis_c1, &
-                              bl2 = CS%Bryan_Lewis_c2, &
-                              bl3 = CS%Bryan_Lewis_c3, &
-                              bl4 = CS%Bryan_Lewis_c4, &
-                              prandtl = CS%prandtl_turb)
-
-        call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
-                                Tdiff_out=CS%kd_bkgnd(i,j,:), &
-                                nlev=nz, &
-                                max_nlev=nz)
-      enddo
-    elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
-       (CS%Kd/= CS%Kdml)) then
-
-      I_Hmix = 1.0 / CS%Hmix
-      do i=is,ie ; depth_i(i) = 0.0 ; enddo
-      do k=1,nz ; do i=is,ie
-        depth_c = depth_i(i) + 0.5*GV%H_to_m*h(i,j,k)
-
-        if (depth_c <= CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kdml
-        elseif (depth_c >= 2.0*CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = Kd_sfc(i,j)
-        else
-          CS%kd_bkgnd(i,j,k) = ((Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
-                      (2.0*CS%Kdml - Kd_sfc(i,j))
-        endif
-
-        depth_i(i) = depth_i(i) + GV%H_to_m*h(i,j,k)
-      enddo ; enddo
-    elseif (CS%Henyey_IGW_background_new) then
-      I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
-      do k=1,nz ; do i=is,ie
-        abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
-        N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
-        N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-        CS%kd_bkgnd(i,j,k) = max(CS%Kd_min, Kd_sfc(i,j) * &
-             ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
-      enddo ; enddo
-
-    else
-      do k=1,nz ; do i=is,ie
-        CS%kd_bkgnd(i,j,k) = Kd_sfc(i,j)
-      enddo ; enddo
-    endif
-  enddo ! j-loop
-
-  if (CS%debug) then
-    call hchksum(Kd_sfc,"Kd_sfc",G%HI,haloshift=0)
-    call hchksum(CS%kd_bkgnd, "MOM_bkgnd_mixing: kd_bkgnd",G%HI,haloshift=0)
-    call hchksum(CS%kv_bkgnd, "MOM_bkgnd_mixing: kv_bkgnd",G%HI,haloshift=0)
-  endif
-
-  ! send diagnostics to post_data
-  if (CS%id_kd_bkgnd > 0) call post_data(CS%id_kd_bkgnd, CS%kd_bkgnd, CS%diag)
-  if (CS%id_kv_bkgnd > 0) call post_data(CS%id_kv_bkgnd, CS%kv_bkgnd, CS%diag)
-
-end subroutine calculate_bkgnd_mixing
+end subroutine sfc_bkgnd_mixing
 
 
-!> Computes N2
-subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, dRho_int, &
-                   N2_lay, N2_int, N2_bot)
-  type(ocean_grid_type),                    intent(in)   :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)   :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  type(thermo_var_ptrs),                    intent(in)   :: tv
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)   :: T_f, S_f
-  type(forcing),                            intent(in)   :: fluxes
+!> Calculates the vertical background diffusivities/viscosities
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS)
+
+  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
+  real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay!< squared buoyancy frequency associated
+                                                                !! with layers (1/s2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd !< Diapycnal diffusivity of each layer (m2/sec).
   integer,                                  intent(in)   :: j
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(out)  :: dRho_int, N2_int
-  real, dimension(SZI_(G),SZK_(G)),         intent(out)  :: N2_lay
-  real, dimension(SZI_(G)),                 intent(out)  :: N2_bot
+  type(bkgnd_mixing_cs),                          pointer :: CS !< The control structure returned by
+                                                                !! a previous call to bkgnd_mixing_init.
 
-  real, dimension(SZI_(G),SZK_(G)+1) :: &
-    dRho_int_unfilt, & ! unfiltered density differences across interfaces
-    dRho_dT,         & ! partial derivative of density wrt temp (kg m-3 degC-1)
-    dRho_dS            ! partial derivative of density wrt saln (kg m-3 PPT-1)
-
+  ! local variables
+  real, dimension(SZI_(G), SZK_(G)+1) ::  depth_2d !< distance from surface of an interface (m)
   real, dimension(SZI_(G)) :: &
-    pres,      &  ! pressure at each interface (Pa)
-    Temp_int,  &  ! temperature at each interface (degC)
-    Salin_int, &  ! salinity at each interface (PPT)
-    drho_bot,  &
-    h_amp,     &
-    hb,        &
-    z_from_bot
+    depth    !< distance from surface of an interface (meter)
+  real :: depth_c    !< depth of the center of a layer (meter)
+  real :: I_Hmix     !< inverse of fixed mixed layer thickness (1/m)
+  real :: I_2Omega   !< 1/(2 Omega) (sec)
+  real :: N_2Omega
+  real :: N02_N2
+  real :: I_x30  !< 2/acos(2) = 1/(sin(30 deg) * acosh(1/sin(30 deg)))
+  real :: deg_to_rad !< factor converting degrees to radians, pi/180.
+  real :: abs_sin    !< absolute value of sine of latitude (nondim)
+  real :: epsilon
+  integer :: i, k, is, ie, js, je, nz
 
-  real :: Rml_base  ! density of the deepest variable density layer
-  real :: dz_int    ! thickness associated with an interface (meter)
-  real :: G_Rho0    ! gravitation acceleration divided by Bouss reference density (m4 s-2 kg-1)
-  real :: H_neglect ! negligibly small thickness, in the same units as h.
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = G%ke
 
-  logical :: do_i(SZI_(G)), do_any
-  integer :: i, k, is, ie, nz
+  ! set some parameters
+  deg_to_rad = atan(1.0)/45.0 ! = PI/180
+  epsilon = 1.e-10
 
-  is = G%isc ; ie = G%iec ; nz = G%ke
-  G_Rho0    = GV%g_Earth / GV%Rho0
-  H_neglect = GV%H_subroundoff
+  depth_2d(:,:) = 0.0
+  ! Set up the background diffusivity.
+  if (CS%Bryan_Lewis_diffusivity) then
 
-  ! Find the (limited) density jump across each interface.
-  do i=is,ie
-    dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
-    dRho_int_unfilt(i,1) = 0.0 ; dRho_int_unfilt(i,nz+1) = 0.0
-  enddo
-  if (associated(tv%eqn_of_state)) then
-    if (associated(fluxes%p_surf)) then
-      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
-    else
-      do i=is,ie ; pres(i) = 0.0 ; enddo
-    endif
-    do K=2,nz
-      do i=is,ie
-        pres(i) = pres(i) + GV%H_to_Pa*h(i,j,k-1)
-        Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
-        Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
+    do i=is,ie
+      do k=2,nz+1
+        depth_2d(i,k) = depth_2d(i,k-1) + GV%H_to_m*h(i,j,k-1)
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, &
-               dRho_dT(:,K), dRho_dS(:,K), is, ie-is+1, tv%eqn_of_state)
-      do i=is,ie
-        dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
-                            dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
-        dRho_int_unfilt(i,K) = max(dRho_dT(i,K)*(tv%T(i,j,k) - tv%T(i,j,k-1)) + &
-                            dRho_dS(i,K)*(tv%S(i,j,k) - tv%S(i,j,k-1)), 0.0)
+      ! if (is_root_pe()) write(*,*)'depth_3d(i,j,:)',depth_3d(i,j,:)
+
+      call cvmix_init_bkgnd(max_nlev=nz, &
+                            zw = depth_2d(i,:), &  !< interface depth, must bepositive.
+                            bl1 = CS%Bryan_Lewis_c1, &
+                            bl2 = CS%Bryan_Lewis_c2, &
+                            bl3 = CS%Bryan_Lewis_c3, &
+                            bl4 = CS%Bryan_Lewis_c4, &
+                            prandtl = CS%prandtl_turb)
+
+      call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
+                              Tdiff_out=CS%kd_bkgnd(i,j,:), &
+                              nlev=nz, &
+                              max_nlev=nz)
+
+      do k=1,nz
+      ! Update Kd
+        Kd(i,j,k) = Kd(i,j,k) + 0.5*(CS%kd_bkgnd(i,j,K) + CS%kd_bkgnd(i,j,K+1))
+      ! ######## CHECK ###############
+      ! GMM, we could update Kv here?????
+      ! Kv(i,j,k) = Kv(i,j,k) + 0.5*(CS%bkgnd_mixing_csp%kv_bkgnd(i,j,K) + &
+      !              CS%bkgnd_mixing_csp%kv_bkgnd(i,j,K+1))
       enddo
     enddo
+
+  elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
+     (CS%Kd/= CS%Kdml)) then
+    I_Hmix = 1.0 / CS%Hmix
+    do i=is,ie ; depth(i) = 0.0 ; enddo
+    do k=1,nz ; do i=is,ie
+      depth_c = depth(i) + 0.5*GV%H_to_m*h(i,j,k)
+      if (depth_c <= CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kdml
+      elseif (depth_c >= 2.0*CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kd_sfc(i,j)
+      else
+        Kd(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
+                    (2.0*CS%Kdml - CS%Kd_sfc(i,j))
+      endif
+
+      depth(i) = depth(i) + GV%H_to_m*h(i,j,k)
+    enddo ; enddo
+
+  elseif (CS%Henyey_IGW_background_new) then
+    I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
+    do k=1,nz ; do i=is,ie
+      abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
+      N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
+      N02_N2 = (CS%N0_2Omega/N_2Omega)**2
+      Kd(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
+           ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
+    enddo ; enddo
+
   else
-    do K=2,nz ; do i=is,ie
-      dRho_int(i,K) = GV%Rlay(k) - GV%Rlay(k-1)
+    do k=1,nz ; do i=is,ie
+      Kd(i,j,k) = CS%Kd_sfc(i,j)
     enddo ; enddo
   endif
 
-  ! Set the buoyancy frequencies.
-  do k=1,nz ; do i=is,ie
-    N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
-                  (GV%H_to_m*(h(i,j,k) + H_neglect))
-  enddo ; enddo
-  do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
-  do K=2,nz ; do i=is,ie
-    N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
-                  (0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k) + H_neglect))
-  enddo ; enddo
-
-  ! Find the bottom boundary layer stratification, and use this in the deepest layers.
-  do i=is,ie
-    hb(i) = 0.0 ; dRho_bot(i) = 0.0
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
-    h_amp(i) = 0.0
-  enddo
-
-  do k=nz,2,-1
-    do_any = .false.
-    do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
-      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
-
-      hb(i) = hb(i) + dz_int
-      dRho_bot(i) = dRho_bot(i) + dRho_int(i,K)
-
-      if (z_from_bot(i) > h_amp(i)) then
-        if (k>2) then
-          ! Always include at least one full layer.
-          hb(i) = hb(i) + 0.5*GV%H_to_m*(h(i,j,k-1) + h(i,j,k-2))
-          dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
-        endif
-        do_i(i) = .false.
-      else
-        do_any = .true.
-      endif
-    endif ; enddo
-    if (.not.do_any) exit
-  enddo
-
-  do i=is,ie
-    if (hb(i) > 0.0) then
-      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
-    else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
-  enddo
-
-  do k=nz,2,-1
-    do_any = .false.
-    do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
-      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
-
-      N2_int(i,K) = N2_bot(i)
-      if (k>2) N2_lay(i,k-1) = N2_bot(i)
-
-      if (z_from_bot(i) > h_amp(i)) then
-        if (k>2) N2_int(i,K-1) = N2_bot(i)
-        do_i(i) = .false.
-      else
-        do_any = .true.
-      endif
-    endif ; enddo
-    if (.not.do_any) exit
-  enddo
-  do i=is,ie
-    if (hb(i) > 0.0) then
-      N2_bot(i) = (G_Rho0 * dRho_bot(i)) / hb(i)
-    else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
-    do_i(i) = (G%mask2dT(i,j) > 0.5)
-  enddo
-
-  do k=nz,2,-1
-    do_any = .false.
-    do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_m*(h(i,j,k) + h(i,j,k-1))
-      z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
-
-      N2_int(i,K) = N2_bot(i)
-      if (k>2) N2_lay(i,k-1) = N2_bot(i)
-
-      if (z_from_bot(i) > h_amp(i)) then
-        if (k>2) N2_int(i,K-1) = N2_bot(i)
-        do_i(i) = .false.
-      else
-        do_any = .true.
-      endif
-    endif ; enddo
-    if (.not.do_any) exit
-  enddo
-
-  if (associated(tv%eqn_of_state)) then
-    do K=1,nz+1 ; do i=is,ie
-      dRho_int(i,K) = dRho_int_unfilt(i,K)
-    enddo ; enddo
+  ! Update CS%kd_bkgnd
+  ! GMM, we could update CS%kv_bkgnd here?????
+  if (.not. CS%Bryan_Lewis_diffusivity) then
+    do i=is,ie
+      CS%kd_bkgnd(i,j,1) = 0.0
+      CS%kd_bkgnd(i,j,nz+1) = 0.0
+      do k=2,nz
+        ! Update CS%kd_bkgnd
+        CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(Kd(i,j,K-1) + Kd(i,j,K))
+      ! ######## CHECK ###############
+      ! GMM, we could update CS%kv_bkgnd here?????
+      enddo
+    enddo
   endif
 
-end subroutine find_N2
+end subroutine calculate_bkgnd_mixing
 
 !> Reads the parameter "USE_CVMIX_BACKGROUND" and returns state.
 !! This function allows other modules to know whether this parameterization will
