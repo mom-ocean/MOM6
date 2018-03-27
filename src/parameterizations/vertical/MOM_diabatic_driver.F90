@@ -585,6 +585,12 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
+
+  ! Add tidal diffusivity
+  if (CS%use_tidal_mixing) then
+    call calculate_cvmix_tidal(h,G,GV,CS%tidal_mixing_CSp)
+  end if
+
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   ! Also changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
   ! And sets visc%Kv_turb
@@ -669,11 +675,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
     endif
 
   endif  ! endif for KPP
-
-  ! Add diffusivity due to tidal mixing
-  if (CS%use_tidal_mixing) then
-    continue !TODO
-  end if
 
   ! Check for static instabilities and increase Kd_int where unstable
   if (CS%useConvection) call diffConvection_calculate(CS%Conv_CSp, &
