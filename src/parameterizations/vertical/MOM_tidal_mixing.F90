@@ -15,7 +15,8 @@ use MOM_file_parser,         only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase
 use MOM_io,                  only : slasher, MOM_read_data
-use cvmix_tidal,             only : cvmix_init_tidal
+use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
+use cvmix_tidal,             only : cvmix_compute_socn_tidal_invariant
 
 implicit none ; private
 
@@ -94,6 +95,7 @@ type, public :: tidal_mixing_cs
                               ! due to tidal mixing
 
   real :: tidal_max_coef      ! maximum allowable tidal diffusivity. [m^2/s]
+  real :: min_thickness       ! Minimum thickness allowed [m]
 
   real, pointer, dimension(:,:) :: TKE_Niku    => NULL()
   real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
@@ -101,7 +103,11 @@ type, public :: tidal_mixing_cs
   real, pointer, dimension(:,:) :: mask_itidal => NULL()
   real, pointer, dimension(:,:) :: h2          => NULL()
   real, pointer, dimension(:,:) :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
-  real, pointer, dimension(:,:) :: tidal_energy_flux_2d => NULL()
+
+  real, allocatable, dimension(:,:)   :: tidal_qe_2d   ! q*E(x,y)
+  real, allocatable, dimension(:,:)   :: Simmons_coeff
+  real, allocatable, dimension(:,:,:) :: vert_dep      !< vertical deposition needed for Simmons
+                                                       !! tidal mixing.
 
 end type tidal_mixing_cs
 
@@ -146,7 +152,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
-  type(tidal_mixing_cs),     pointer       :: CS         !< This module's control structure.
+  type(tidal_mixing_cs),     pointer      :: CS         !< This module's control structure.
 
   ! Local variables
   logical :: read_tideamp
@@ -386,6 +392,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                    "largest acceptable value for tidal diffusivity", &
                    units="m^2/s", default=100e-4, & ! the default is 50e-4 in CVMIX, 100e-4 in POP.
                    fail_if_missing=.true.)
+    call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, do_not_log=.True.)
 
     ! Check if the chosen tidal mixing scheme is available in CVMix
     select case (int_tide_profile_str)
@@ -408,7 +415,6 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                           ! TODO: provide ltidal_Schmittner_socn as paramater to
                           ! cvmix_init_tidal
 
-
     call read_tidal_energy(G,param_file,CS)
 
     call closeParameterBlock(param_file)
@@ -416,6 +422,75 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   endif ! cvmix on
 
 end function tidal_mixing_init
+
+
+subroutine calculate_cvmix_tidal(h, G, GV, CS)
+  type(ocean_grid_type),    intent(in)                  :: G     !< Grid structure.
+  type(verticalGrid_type),  intent(in)                  :: GV    !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thicknesses, in H (usually m or kg m-2).
+  type(tidal_mixing_cs),    pointer                     :: CS    !< This module's control structure.
+
+  ! local
+  logical, parameter :: init_every_tstep = .true.
+  real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
+  integer :: i, j, k, is, ie, js, je
+  integer :: isd, ied, jsd, jed
+  real :: dh, hcorr
+  real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
+
+  ! TODO: check if this initialization block is necessary at every timestep. if not,
+  ! run this during model initialization only.
+  if (init_every_tstep) then
+
+    select case (CS%int_tide_profile)
+    case (SIMMONS_04)
+      if (.not.allocated(CS%Simmons_coeff)) allocate(CS%Simmons_coeff(isd:ied,jsd:jed))
+      if (.not.allocated(CS%vert_dep))      allocate(CS%vert_dep(isd:ied,jsd:jed,SZK_(G)+1))
+      ! TODO: no need to declare the above arrays as 2d and 3d, if they are to be computed at every timestep.
+      ! Instead, compute them and pass them to cvmix_coeffs_tidal_low when needed as a scalar
+      ! (Simmons_coeff), and as a 1d array (vert_dep).
+
+      do j=js,je ; do i=is,ie
+        iFaceHeight = 0.0 ! BBL is all relative to the surface
+        hcorr = 0.0
+        do k=1,G%ke
+          ! cell center and cell bottom in meters (negative values in the ocean)
+          dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+          iFaceHeight(k+1) = iFaceHeight(k) - dh
+        enddo
+        ! Note: CVMix zw_iface (height of interfaces in column) and zt_cntr
+        ! (height of cell centers in column) variables are negative in the ocean.
+
+        if (G%mask2dT(i,j)<1) return
+
+        call cvmix_compute_Simmons_invariant( nlev          = G%ke,                   &
+                                              energy_flux   = CS%tidal_qe_2d(i,j),    &
+                                              rho           = rho_fw,                 &
+                                              SimmonsCoeff  = CS%Simmons_coeff(i,j),  &
+                                              VertDep       = CS%vert_dep(i,j,:),     &
+                                              zw            = iFaceHeight,            &
+                                              zt            = cellHeight )
+
+        ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
+        ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
+        CS%Simmons_coeff = CS%Simmons_coeff / CS%Gamma_itides
+
+        ! TODO: check if cvmix_compute_socn_tidal_invariant call is necessary here for Simmons.
+
+      enddo ; enddo
+    ! TODO: case (SCHMITTNER)
+    case default
+      call MOM_error(FATAL, "tidal_mixing_init: The selected"// &
+          " INT_TIDE_PROFILE is unavailable in CVMix")
+    end select
+  endif
+
+end subroutine calculate_cvmix_tidal
 
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
@@ -427,6 +502,7 @@ subroutine read_tidal_energy(G, param_file, CS)
   character(len=20)   :: tidal_energy_type
   character(len=200)  :: tidal_energy_file
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -439,19 +515,30 @@ subroutine read_tidal_energy(G, param_file, CS)
                  fail_if_missing=.true.)
                   ! TODO: list all available tidal energy types here
 
-
-  call safe_alloc_ptr(CS%tidal_energy_flux_2d,isd,ied,jsd,jed)
+  if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
+  allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
 
   select case (uppercase(tidal_energy_type(1:4)))
   case ('JAYN') ! Jayne 2009 input tidal energy flux
-    call MOM_read_data(tidal_energy_file,'wave_dissipation',CS%tidal_energy_flux_2d, G%domain)
+    call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
+    CS%tidal_qe_2d = (CS%Gamma_itides) * tidal_energy_flux_2d
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
   ! TODO: add more tidal energy file types, e.g., Arbic, ER03, GN13, LGM0, etc.
-  ! see POP::tidal_mixing.F90 
+  ! see POP::tidal_mixing.F90
   end select
-  
+
+  deallocate(tidal_energy_flux_2d)
+
 end subroutine read_tidal_energy
+
+
+!subroutine prep_CVMix_data(G,GV,CVMix_vars,CVMix_params)
+!  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
+!  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
+!
+!end subroutine prep_CVMix_Data
+
 
 
   !> This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
@@ -852,19 +939,13 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 end subroutine add_int_tide_diffusivity
 
 
-!TODO:
-subroutine calculate_cvmix_tidal()
-  continue
-end subroutine calculate_cvmix_tidal
-
-
 !> Clear pointers and deallocate memory
 subroutine tidal_mixing_end(CS)
   type(tidal_mixing_cs), pointer :: CS ! This module's control structure
 
   !TODO deallocate all the dynamically allocated members here ...
+  deallocate(CS%tidal_qe_2d)
   deallocate(CS)
-  deallocate(CS%tidal_energy_flux_2d)
 
   ! TODO: check why ptrs allocated with MOM_safe_alloc are not deallocated?
 end subroutine tidal_mixing_end
