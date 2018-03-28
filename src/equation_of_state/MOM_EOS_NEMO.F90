@@ -167,19 +167,16 @@ end interface calculate_density_derivs_nemo
 
 contains
 
-subroutine calculate_density_scalar_nemo(T, S, pressure, rho)
-real,    intent(in)  :: T, S, pressure
-real,    intent(out) :: rho
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absoulte salinity in g/Kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from absolute salinity (S in g/Kg), conservative *
-! *  temperature (T in deg C), and pressure in Pa.                     *
-! *====================================================================*
+!> This subroutine computes the in situ density of sea water (rho in
+!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
+!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! with NEMO.
+subroutine calculate_density_scalar_nemo(T, S, pressure, rho, rho_ref)
+  real,           intent(in)  :: T        !< Conservative temperature in C.
+  real,           intent(in)  :: S        !< Absolute salinity in g/kg.
+  real,           intent(in)  :: pressure !< Pressure in Pa.
+  real,           intent(out) :: rho      !< In situ density in kg m-3.
+  real, optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
   real :: al0, p0, lambda
   integer :: j
@@ -190,39 +187,31 @@ real,    intent(out) :: rho
   S0(1) = S
   pressure0(1) = pressure
 
-  call calculate_density_array_nemo(T0, S0, pressure0, rho0, 1, 1)
+  call calculate_density_array_nemo(T0, S0, pressure0, rho0, 1, 1, rho_ref)
   rho = rho0(1)
+
 end subroutine calculate_density_scalar_nemo
+
 !> This subroutine computes the in situ density of sea water (rho in
-!! units of kg/m^3) from absolute salinity (S in g/Kg),
-!! conservative temperature (T in deg C), and pressure in Pa.
-subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
-  real,    intent(in),  dimension(:) :: T     !< Conservative temperature in C.
-  real,    intent(in),  dimension(:) :: S     !< Absoulte salinity in g/Kg.
-  real,    intent(in),  dimension(:) :: pressure !< Pressure in Pa.
-  real,    intent(out), dimension(:) :: rho   !< In situ density in kg m-3.
-  integer, intent(in)                :: start !< The starting point in the arrays.
-  integer, intent(in)                :: npts  !< The number of values to calculate.
+!! units of kg/m^3) from absolute salinity (S in g/kg), conservative temperature
+!! (T in deg C), and pressure in Pa.  It uses the expressions derived for use
+!! with NEMO.
+subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts, rho_ref)
+  real, dimension(:), intent(in)  :: T        !< Conservative temperature in C.
+  real, dimension(:), intent(in)  :: S        !< Absolute salinity in g/kg
+  real, dimension(:), intent(in)  :: pressure !< pressure in Pa.
+  real, dimension(:), intent(out) :: rho      !< in situ density in kg m-3.
+  integer,            intent(in)  :: start    !< the starting point in the arrays.
+  integer,            intent(in)  :: npts     !< the number of values to calculate.
+  real,     optional, intent(in)  :: rho_ref  !< A reference density in kg m-3.
 
-! * Arguments: T - conservative temperature in C.                      *
-! *  (in)      S - absoulte salinity in g/Kg.                          *
-! *  (in)      pressure - pressure in Pa.                              *
-! *  (out)     rho - in situ density in kg m-3.                        *
-! *  (in)      start - the starting point in the arrays.               *
-! *  (in)      npts - the number of values to calculate.               *
-
-! *====================================================================*
-! *  This subroutine computes the in situ density of sea water (rho in *
-! *  units of kg/m^3) from absolute salinity (S in g/Kg),              *
-! *  conservative temperature (T in deg C), and pressure in Pa.        *
-! *====================================================================*
-  real :: zp,zt , zh , zs , zr0, zn , zn0, zn1, zn2, zn3
+  real :: zp, zt, zh, zs, zr0, zn, zn0, zn1, zn2, zn3, zs0
   integer :: j
 
   do j=start,start+npts-1
     !Conversions
     zs = S(j) !gsw_sr_from_sp(S(j))       !Convert practical salinity to absolute salinity
-    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potantial temp to conservative temp
+    zt = T(j) !gsw_ct_from_pt(S(j),T(j))  !Convert potential temp to conservative temp
     zp = pressure(j)* Pa2db         !Convert pressure from Pascal to decibar
 
     !The following algorithm was provided by Roquet in a private communication.
@@ -230,33 +219,38 @@ subroutine calculate_density_array_nemo(T, S, pressure, rho, start, npts)
     zp  = zp * r1_P0 !pressure
     zt  = zt * r1_T0 !temperature
     zs  = SQRT( ABS( zs + rdeltaS ) * r1_S0 )   ! square root salinity
-    !
+
     zn3 = EOS013*zt   &
        &   + EOS103*zs+EOS003
-       !
+
     zn2 = (EOS022*zt   &
        &   + EOS112*zs+EOS012)*zt   &
        &   + (EOS202*zs+EOS102)*zs+EOS002
-       !
+
     zn1 = (((EOS041*zt   &
        &   + EOS131*zs+EOS031)*zt   &
        &   + (EOS221*zs+EOS121)*zs+EOS021)*zt   &
        &   + ((EOS311*zs+EOS211)*zs+EOS111)*zs+EOS011)*zt   &
        &   + (((EOS401*zs+EOS301)*zs+EOS201)*zs+EOS101)*zs+EOS001
-       !
+
     zn0 = (((((EOS060*zt   &
        &   + EOS150*zs+EOS050)*zt   &
        &   + (EOS240*zs+EOS140)*zs+EOS040)*zt   &
        &   + ((EOS330*zs+EOS230)*zs+EOS130)*zs+EOS030)*zt   &
        &   + (((EOS420*zs+EOS320)*zs+EOS220)*zs+EOS120)*zs+EOS020)*zt   &
-       &   + ((((EOS510*zs+EOS410)*zs+EOS310)*zs+EOS210)*zs+EOS110)*zs+EOS010)*zt   &
-       &   + (((((EOS600*zs+EOS500)*zs+EOS400)*zs+EOS300)*zs+EOS200)*zs+EOS100)*zs+EOS000
-       !
-    zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + zn0
-    !
+       &   + ((((EOS510*zs+EOS410)*zs+EOS310)*zs+EOS210)*zs+EOS110)*zs+EOS010)*zt
+
+    zs0 = (((((EOS600*zs+EOS500)*zs+EOS400)*zs+EOS300)*zs+EOS200)*zs+EOS100)*zs + EOS000
+
     zr0 = (((((R05 * zp+R04) * zp+R03 ) * zp+R02 ) * zp+R01) * zp+R00) * zp
-    !
-    rho(j) =  ( zn + zr0 ) ! density
+
+    if (present(rho_ref)) then
+      zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + (zn0 + (zs0 - rho_ref))
+      rho(j) =  ( zn + zr0 ) ! density
+    else
+      zn  = ( ( zn3 * zp + zn2 ) * zp + zn1 ) * zp + (zn0 + zs0)
+      rho(j) =  ( zn + zr0 ) ! density
+    endif
 
  enddo
 end subroutine calculate_density_array_nemo

@@ -6,8 +6,7 @@ module MOM_regridding
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
-use MOM_io,            only : vardesc, var_desc, fieldtype, SINGLE_FILE
-use MOM_io,            only : create_file, write_field, close_file, slasher
+use MOM_io,            only : slasher
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : EOS_type, calculate_density
@@ -864,7 +863,7 @@ subroutine calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
   nki = min(CS%nk, GV%ke)
 
-!$OMP parallel do default(none) shared(G,GV,h,dzInterface,h_new,nki)
+  !$OMP parallel do default(shared)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) then
@@ -896,7 +895,7 @@ subroutine check_remapping_grid( G, GV, h, dzInterface, msg )
   ! Local variables
   integer :: i, j
 
-!$OMP parallel do default(none) shared(G,GV,h,dzInterface,msg)
+  !$OMP parallel do default(shared)
   do j = G%jsc-1,G%jec+1
     do i = G%isc-1,G%iec+1
       if (G%mask2dT(i,j)>0.) call check_grid_column( GV%ke, G%bathyT(i,j), h(i,j,:), dzInterface(i,j,:), msg )
