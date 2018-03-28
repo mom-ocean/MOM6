@@ -17,10 +17,9 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta
-use MOM_io, only : close_file, fieldtype, file_exists
-use MOM_io, only : open_file, MOM_read_data, MOM_read_vector, read_axis_data
-use MOM_io, only : slasher, vardesc, write_field
-use MOM_io, only : EAST_FACE, NORTH_FACE , SINGLE_FILE, MULTIPLE
+use MOM_io, only : file_exists
+use MOM_io, only : MOM_read_data, MOM_read_vector
+use MOM_io, only : slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init
 use MOM_open_boundary, only : OBC_NONE, OBC_SIMPLE
 use MOM_open_boundary, only : open_boundary_query
@@ -1163,11 +1162,7 @@ subroutine trim_for_ice(PF, G, GV, ALE_CSp, tv, h, just_read_params)
 
   ! Find edge values of T and S used in reconstructions
   if ( associated(ALE_CSp) ) then ! This should only be associated if we are in ALE mode
-!   if ( PRScheme == PRESSURE_RECONSTRUCTION_PLM ) then
-      call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
-!   elseif ( PRScheme == PRESSURE_RECONSTRUCTION_PPM ) then
-!     call pressure_gradient_ppm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h)
-!   endif
+    call pressure_gradient_plm(ALE_CSp, S_t, S_b, T_t, T_b, G, GV, tv, h, .true.)
   else
 !    call MOM_error(FATAL, "trim_for_ice: Does not work without ALE mode")
     do k=1,G%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
