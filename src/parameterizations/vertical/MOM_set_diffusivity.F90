@@ -38,7 +38,7 @@ use MOM_file_parser,         only : get_param, log_param, log_version, param_fil
 use MOM_forcing_type,        only : forcing, optics_type
 use MOM_grid,                only : ocean_grid_type
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
-use MOM_tidal_mixing,        only : tidal_mixing_CS, add_int_tide_diffusivity
+use MOM_tidal_mixing,        only : tidal_mixing_CS, calculate_tidal_mixing
 use MOM_tidal_mixing,        only : tidal_mixing_diags
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
@@ -677,9 +677,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call add_MLrad_diffusivity(h, fluxes, j, G, GV, CS, Kd, TKE_to_Kd, Kd_int)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
-    if (tm_csp%Int_tide_dissipation .or. tm_csp%Lee_wave_dissipation .or. tm_csp%Lowmode_itidal_dissipation) &
-      call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, CS%tm_csp, &
-                                    tm_dd, N2_lay, Kd, Kd_int, CS%Kd_max)
+    call calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, maxTKE, G, GV, CS%tm_csp, &
+                                tm_dd, N2_lay, N2_int, Kd, Kd_int, CS%Kd_max)
 
     ! This adds the diffusion sustained by the energy extracted from the flow
     ! by the bottom drag.
