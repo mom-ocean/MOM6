@@ -27,7 +27,7 @@ use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_tidal_mixing,        only : tidal_mixing_init, tidal_mixing_cs
-use MOM_tidal_mixing,        only : calculate_cvmix_tidal, tidal_mixing_end
+use MOM_tidal_mixing,        only : tidal_mixing_end
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
 use MOM_energetic_PBL,       only : energetic_PBL_end, energetic_PBL_CS
 use MOM_energetic_PBL,       only : energetic_PBL_get_MLD
@@ -585,11 +585,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-
-  ! Add tidal diffusivity
-  if (CS%use_tidal_mixing) then
-    call calculate_cvmix_tidal(h,G,GV,CS%tidal_mixing_CSp)
-  end if
 
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   ! Also changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
