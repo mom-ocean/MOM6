@@ -447,7 +447,7 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_cvmix_tidal) then
-      call calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd_int)
+      call calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
     else
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,dd, &
                                     N2_lay, Kd, Kd_int, Kd_max)
@@ -456,14 +456,14 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
 end subroutine
 
 
-subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd_int)
-  integer,                                  intent(in)  :: j
-  type(ocean_grid_type),                    intent(in)  :: G     !< Grid structure.
-  type(verticalGrid_type),                  intent(in)  :: GV    !< ocean vertical grid structure
-  type(tidal_mixing_cs),                    pointer     :: CS    !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(G)+1),       intent(in)  :: N2_int
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)  :: h     !< Layer thicknesses, in H (usually m or kg m-2).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
+subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
+  integer,                                  intent(in)    :: j
+  type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
+  type(verticalGrid_type),                  intent(in)    :: GV    !< ocean vertical grid structure
+  type(tidal_mixing_cs),                    pointer       :: CS    !< This module's control structure.
+  real, dimension(SZI_(G),SZK_(G)+1),       intent(in)    :: N2_int
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h     !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
 
   ! local
   logical, parameter :: init_every_tstep = .true.
@@ -496,13 +496,13 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd_int)
 
         if (G%mask2dT(i,j)<1) return
 
-        call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                   &
-                                              energy_flux             = CS%tidal_qe_2d(i,j),    &
-                                              rho                     = rho_fw,                 &
-                                              SimmonsCoeff            = Simmons_coeff,          &
-                                              VertDep                 = vert_dep,               &
-                                              zw                      = iFaceHeight,            &
-                                              zt                      = cellHeight,             &
+        call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                &
+                                              energy_flux             = CS%tidal_qe_2d(i,j), &
+                                              rho                     = rho_fw,              &
+                                              SimmonsCoeff            = Simmons_coeff,       &
+                                              VertDep                 = vert_dep,            &
+                                              zw                      = iFaceHeight,         &
+                                              zt                      = cellHeight,          &
                                               CVmix_tidal_params_user = CS%cvmix_tidal_params)
 
         ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
@@ -521,6 +521,10 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd_int)
                                  CVmix_params            = CS%cvmix_glb_params, &
                                  CVmix_tidal_params_user = CS%cvmix_tidal_params)
 
+        do k=1,G%ke
+          Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
+          !TODO: Kv(i,j,k) = ????????????
+        enddo
       enddo
     ! TODO: case (SCHMITTNER)
     case default
@@ -540,18 +544,18 @@ end subroutine calculate_cvmix_tidal
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     dd, N2_lay, Kd, Kd_int, Kd_max)
-  type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-  real, dimension(SZI_(G)),                 intent(in)    :: N2_bot
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: N2_lay
-  integer,                                  intent(in)    :: j
-  real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: TKE_to_Kd, max_TKE
-  type(tidal_mixing_cs),                    pointer       :: CS
-  type(tidal_mixing_diags),                 intent(inout) :: dd
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
+  type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+  real, dimension(SZI_(G)),                   intent(in)    :: N2_bot
+  real, dimension(SZI_(G),SZK_(G)),           intent(in)    :: N2_lay
+  integer,                                    intent(in)    :: j
+  real, dimension(SZI_(G),SZK_(G)),           intent(in)    :: TKE_to_Kd, max_TKE
+  type(tidal_mixing_cs),                      pointer       :: CS
+  type(tidal_mixing_diags),                   intent(inout) :: dd
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Kd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
-  real,                                     intent(inout) :: Kd_max
+  real,                                       intent(inout) :: Kd_max
 
 
   ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
@@ -975,7 +979,7 @@ subroutine tidal_mixing_end(CS)
   type(tidal_mixing_cs), pointer :: CS ! This module's control structure
 
   !TODO deallocate all the dynamically allocated members here ...
-  deallocate(CS%tidal_qe_2d)
+  if (allocated(CS%tidal_qe_2d)) deallocate(CS%tidal_qe_2d)
   deallocate(CS)
 
   ! TODO: check why ptrs allocated with MOM_safe_alloc are not deallocated?
