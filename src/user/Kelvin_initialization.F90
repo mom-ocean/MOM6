@@ -225,11 +225,21 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         else
           segment%eta(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
-          do k=1,nz
-            segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
                    exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(CS%omega * time_sec)
-          enddo
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(I,j,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
+                   cos(CS%omega * time_sec)
+              segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * &
+                   h(i+1,j,k) * G%dyCu(I,j)
+            enddo
+          endif
         endif
       enddo ; enddo
     else
@@ -249,10 +259,19 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, h, Time)
         else
           segment%eta(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
-          do k=1,nz
-            segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
+          if (segment%nudged) then
+            do k=1,nz
+              segment%nudged_normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
                    exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
-          enddo
+            enddo
+          elseif (segment%specified) then
+            do k=1,nz
+              segment%normal_vel(i,J,k) = fac * CS%lambda / CS%F_0 * &
+                   exp(- CS%lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
+              segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * &
+                   h(i,j+1,k) * G%dxCv(i,J)
+            enddo
+          endif
         endif
       enddo ; enddo
     endif
