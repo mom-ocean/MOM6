@@ -1448,7 +1448,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   real, dimension(:,:), pointer :: shelf_area
   type(MOM_restart_CS),  pointer      :: restart_CSp_tmp => NULL()
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
-  type(group_pass_type) :: tmp_pass_Kv_turb
+  ! GMM, the following *is not* used. Should we delete it?
+  type(group_pass_type) :: tmp_pass_Kv_shear
 
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
@@ -2288,8 +2289,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
 
   call do_group_pass(pass_uv_T_S_h, G%Domain)
 
-  if (associated(CS%visc%Kv_turb)) &
-    call pass_var(CS%visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+  if (associated(CS%visc%Kv_shear)) &
+    call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
 
   call cpu_clock_end(id_clock_pass_init)
 
