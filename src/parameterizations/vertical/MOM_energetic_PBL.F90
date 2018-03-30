@@ -1939,7 +1939,7 @@ subroutine get_LA_windsea(ustar, hbl, GV, LA)
 ! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
 ! Update (Jan/25):
 ! Converted from function to subroutine, now returns Langmuir number.
-! Computs 10m wind internally, so only ustar and hbl need passed to
+! Computes 10m wind internally, so only ustar and hbl need passed to
 ! subroutine.
 !
 ! Qing Li, 160606

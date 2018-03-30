@@ -121,8 +121,8 @@ type, public :: OBC_segment_type
   integer :: Ie_obc         !< i-indices of boundary segment.
   integer :: Js_obc         !< j-indices of boundary segment.
   integer :: Je_obc         !< j-indices of boundary segment.
-  real :: Velocity_nudging_timescale_in  !< Inverse nudging timescale on inflow (1/s).
-  real :: Velocity_nudging_timescale_out !< Inverse nudging timescale on outflow (1/s).
+  real :: Velocity_nudging_timescale_in  !< Nudging timescale on inflow (s).
+  real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow (s).
   logical :: on_pe          !< true if segment is located in the computational domain
   logical :: temp_segment_data_exists !< true if temperature data arrays are present
   logical :: salt_segment_data_exists !< true if salinity data arrays are present
@@ -729,10 +729,11 @@ subroutine setup_u_point_obc(OBC, G, segment_str, l_seg, PF)
       allocate(tnudge(2))
       call get_param(PF, mdl, segment_param_str(1:43), tnudge, &
            "Timescales in days for nudging along a segment,\n"//&
-           "for inflow, then outflow.", &
+           "for inflow, then outflow. Setting both to zero should\n"//&
+           "behave like SIMPLE obcs for the baroclinic velocities.", &
                 fail_if_missing=.true.,default=0.,units="days")
-      OBC%segment(l_seg)%Velocity_nudging_timescale_in = 1.0/(tnudge(1)*86400.)
-      OBC%segment(l_seg)%Velocity_nudging_timescale_out = 1.0/(tnudge(2)*86400.)
+      OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)*86400.
+      OBC%segment(l_seg)%Velocity_nudging_timescale_out = tnudge(2)*86400.
       deallocate(tnudge)
       OBC%nudged_u_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
@@ -832,8 +833,8 @@ subroutine setup_v_point_obc(OBC, G, segment_str, l_seg, PF)
            "Timescales in days for nudging along a segment,\n"//&
            "for inflow, then outflow.", &
                 fail_if_missing=.true.,default=0.,units="days")
-      OBC%segment(l_seg)%Velocity_nudging_timescale_in = 1.0/(tnudge(1)*86400.)
-      OBC%segment(l_seg)%Velocity_nudging_timescale_out = 1.0/(tnudge(2)*86400.)
+      OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)*86400.
+      OBC%segment(l_seg)%Velocity_nudging_timescale_out = tnudge(2)*86400.
       deallocate(tnudge)
       OBC%nudged_v_BCs_exist_globally = .true.
     elseif (trim(action_str(a_loop)) == 'GRADIENT') then
@@ -1360,7 +1361,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v_old !< Original unadjusted v
   real,                                      intent(in)    :: dt    !< Appropriate timestep
   ! Local variables
-  real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v
+  real :: dhdt, dhdx, dhdy, gamma_u, gamma_h, gamma_v, gamma_2
   real :: cff, Cx, Cy, tau
   real :: rx_max, ry_max ! coefficients for radiation
   real :: rx_new, rx_avg ! coefficients for radiation
@@ -1425,7 +1426,6 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
          elseif (segment%oblique) then
            dhdt = u_old(I-1,j,k)-u_new(I-1,j,k) !old-new
            dhdx = u_new(I-1,j,k)-u_new(I-2,j,k) !in new time backward sasha for I-1
-!          if (segment%oblique) then
              if (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) > 0.0) then
                dhdy = segment%grad_normal(J-1,1,k)
              elseif (dhdt*(segment%grad_normal(J,1,k) + segment%grad_normal(J-1,1,k)) == 0.0) then
@@ -1433,15 +1433,10 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
              else
                dhdy = segment%grad_normal(J,1,k)
              endif
-!          endif
            if (dhdt*dhdx < 0.0) dhdt = 0.0
            Cx = min(dhdt*dhdx,rx_max) ! default to normal radiation
-!          Cy = 0.0
-           cff = max(dhdx*dhdx,eps)
-!          if (segment%oblique) then
-             cff = max(dhdx*dhdx + dhdy*dhdy, eps)
-             Cy = min(cff,max(dhdt*dhdy,-cff))
-!          endif
+           cff = max(dhdx*dhdx + dhdy*dhdy, eps)
+           Cy = min(cff,max(dhdt*dhdy,-cff))
            segment%normal_vel(I,j,k) = ((cff*u_new(I,j,k) + Cx*u_new(I-1,j,k)) - &
               (max(Cy,0.0)*segment%grad_normal(J-1,2,k) + min(Cy,0.0)*segment%grad_normal(J,2,k))) / (cff + Cx)
          elseif (segment%gradient) then
@@ -1453,7 +1448,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Velocity_nudging_timescale_out
            endif
-           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_new(I,j,k))
+           gamma_2 = dt / (tau + dt)
+           segment%normal_vel(I,j,k) = (1 - gamma_2) * u_new(I,j,k) + &
+                                 gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
        enddo; enddo
      endif
@@ -1507,7 +1504,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Velocity_nudging_timescale_out
            endif
-           segment%normal_vel(I,j,k) = u_new(I,j,k) + dt*tau*(segment%nudged_normal_vel(I,j,k) - u_new(I,j,k))
+           gamma_2 = dt / (tau + dt)
+           segment%normal_vel(I,j,k) = (1 - gamma_2) * u_new(I,j,k) + &
+                                 gamma_2 * segment%nudged_normal_vel(I,j,k)
          endif
        enddo; enddo
      endif
@@ -1561,7 +1560,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Velocity_nudging_timescale_out
            endif
-           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_new(i,J,k))
+           gamma_2 = dt / (tau + dt)
+           segment%normal_vel(i,J,k) = (1 - gamma_2) * v_new(i,J,k) + &
+                                 gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
        enddo; enddo
      endif
@@ -1616,7 +1617,9 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, dt)
            else
              tau = segment%Velocity_nudging_timescale_out
            endif
-           segment%normal_vel(i,J,k) = v_new(i,J,k) + dt*tau*(segment%nudged_normal_vel(i,J,k) - v_new(i,J,k))
+           gamma_2 = dt / (tau + dt)
+           segment%normal_vel(i,J,k) = (1 - gamma_2) * v_new(i,J,k) + &
+                                 gamma_2 * segment%nudged_normal_vel(i,J,k)
          endif
        enddo; enddo
      end if
