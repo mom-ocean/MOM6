@@ -1808,20 +1808,20 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
   endif
 
   if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_cvmix_shear .or. use_cvmix_conv) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
+    allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
-    allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
+    allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
 
-    vd = var_desc("Kd_turb","m2 s-1","Turbulent diffusivity at interfaces", &
+    vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kd_shear, vd, .false., restart_CS)
 
     vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
+    vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
   endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
@@ -2092,9 +2092,9 @@ subroutine set_visc_end(visc, CS)
   if (CS%dynamic_viscous_ML) then
     deallocate(visc%nkml_visc_u) ; deallocate(visc%nkml_visc_v)
   endif
-  if (associated(visc%Kd_turb)) deallocate(visc%Kd_turb)
+  if (associated(visc%Kd_shear)) deallocate(visc%Kd_shear)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
-  if (associated(visc%Kv_turb)) deallocate(visc%Kv_turb)
+  if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
