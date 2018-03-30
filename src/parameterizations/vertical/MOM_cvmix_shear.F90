@@ -36,12 +36,12 @@ type, public :: cvmix_shear_cs
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
-  real, allocatable, dimension(:,:,:) :: km !< vertical viscosity at interface (m2/s)
-  real, allocatable, dimension(:,:,:) :: kh !< vertical diffusivity at interface (m2/s)
+!  real, allocatable, dimension(:,:,:) :: kv !< vertical viscosity at interface (m2/s)
+!  real, allocatable, dimension(:,:,:) :: kd !< vertical diffusivity at interface (m2/s)
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
-  integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_km = -1, id_kh = -1
+  integer :: id_N2 = -1, id_S2 = -1, id_ri_grad = -1, id_kv = -1, id_kd = -1
 
 end type cvmix_shear_cs
 
@@ -50,17 +50,17 @@ character(len=40)  :: mdl = "MOM_cvmix_shear"  !< This module's name.
 contains
 
 !> Subroutine for calculating (internal) vertical diffusivities/viscosities
-subroutine calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
-                                 KM, G, GV, CS )
+subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
+                                 kv, G, GV, CS )
   type(ocean_grid_type),                      intent(in)  :: G !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: u_H !< Initial zonal velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: v_H !< Initial meridional velocity on T points, in m s-1.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: KH !< The vertical diffusivity at each interface
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kd !< The vertical diffusivity at each interface
                                                                 !! (not layer!) in m2 s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: KM !< The vertical viscosity at each interface
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv !< The vertical viscosity at each interface
                                                                 !! (not layer!) in m2 s-1.
   type(cvmix_shear_cs),                       pointer     :: CS !< The control structure returned by a previous call to
                                                                 !! CVMix_shear_init.
@@ -116,16 +116,29 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, KH,  &
         N2 = DRHO/DZ
         S2 = (DU*DU+DV*DV)/(DZ*DZ)
         Ri_Grad(k) = max(0.,N2)/max(S2,1.e-16)
+
+        ! fill 3d arrays, if user asks for diagsnostics
+        if (CS%id_N2 > 0) CS%N2(i,j,k) = N2
+        if (CS%id_S2 > 0) CS%S2(i,j,k) = S2
+        if (CS%id_ri_grad > 0) CS%ri_grad(i,j,k) = Ri_Grad(k)
+
       enddo
 
       ! Call to CVMix wrapper for computing interior mixing coefficients.
-      call  cvmix_coeffs_shear(Mdiff_out=KM(i,j,:), &
-                                   Tdiff_out=KH(i,j,:), &
+      call  cvmix_coeffs_shear(Mdiff_out=kv(i,j,:), &
+                                   Tdiff_out=kd(i,j,:), &
                                    RICH=Ri_Grad, &
                                    nlev=G%ke,    &
                                    max_nlev=G%ke)
     enddo
   enddo
+
+  ! write diagnostics
+  if (CS%id_kd > 0) call post_data(CS%id_kd,kd, CS%diag)
+  if (CS%id_kv > 0) call post_data(CS%id_kv,kv, CS%diag)
+  if (CS%id_N2 > 0) call post_data(CS%id_N2,CS%N2, CS%diag)
+  if (CS%id_S2 > 0) call post_data(CS%id_S2,CS%S2, CS%diag)
+  if (CS%id_ri_grad > 0) call post_data(CS%id_ri_grad,CS%ri_grad, CS%diag)
 
 end subroutine calculate_cvmix_shear
 
@@ -200,26 +213,29 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
                         KPP_nu_zero=CS%Nu_Zero,   &
                         KPP_Ri_zero=CS%Ri_zero,   &
                         KPP_exp=CS%KPP_exp)
-  ! Allocation and initialization
-  allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%N2(:,:,:) = 0.
-  allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
-  !Initialize w/ large Richardson value
-  allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%ri_grad(:,:,:) = 1.e8
 
-  ! Register diagnostics
+  ! Register diagnostics; allocation and initialization
   CS%diag => diag
-  CS%id_N2 = register_diag_field('ocean_model', 'shear_N2', diag%axesTi, Time, &
+
+  CS%id_N2 = register_diag_field('ocean_model', 'N2_shear', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_cvmix_shear module', '1/s2')
-  CS%id_S2 = register_diag_field('ocean_model', 'shear_S2', diag%axesTi, Time, &
+  if (CS%id_N2 > 0) &
+    allocate( CS%N2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%N2(:,:,:) = 0.
+
+  CS%id_S2 = register_diag_field('ocean_model', 'S2_shear', diag%axesTi, Time, &
       'Square of vertical shear used by MOM_cvmix_shear module','1/s2')
-  CS%id_ri_grad = register_diag_field('ocean_model', 'shear_ri_grad', diag%axesTi, Time, &
+  if (CS%id_S2 > 0) &
+    allocate( CS%S2( SZI_(G), SZJ_(G), SZK_(G)+1 ) );CS%S2(:,:,:) = 0.
+
+  CS%id_ri_grad = register_diag_field('ocean_model', 'ri_grad_shear', diag%axesTi, Time, &
       'Gradient Richarson number used by MOM_cvmix_shear module','nondim')
-  CS%id_kh = register_diag_field('ocean_model', 'shear_KH', diag%axesTi, Time, &
+  if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
+     allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
+
+  CS%id_kd = register_diag_field('ocean_model', 'kd_shear', diag%axesTi, Time, &
       'Vertical diffusivity added by MOM_cvmix_shear module', 'm2/s')
-  if (CS%id_kh > 0) allocate(CS%kh(SZI_(G), SZJ_(G), SZK_(G)+1))
-  CS%id_km = register_diag_field('ocean_model', 'shear_KM', diag%axesTi, Time, &
+  CS%id_kv = register_diag_field('ocean_model', 'kv_shear', diag%axesTi, Time, &
       'Vertical viscosity added by MOM_cvmix_shear module', 'm2/s')
-  if (CS%id_km > 0) allocate(CS%km(SZI_(G), SZJ_(G), SZK_(G)+1))
 
 end function cvmix_shear_init
 
@@ -241,11 +257,9 @@ end function cvmix_shear_is_used
 subroutine cvmix_shear_end(CS)
   type(cvmix_shear_cs), pointer :: CS ! Control structure
 
-  deallocate(CS%N2)
-  deallocate(CS%S2)
-  deallocate(CS%ri_grad)
-  if (CS%id_kh > 0) deallocate(CS%kh, CS%diag)
-  if (CS%id_km > 0) deallocate(CS%km, CS%diag)
+  if (CS%id_N2 > 0) deallocate(CS%N2)
+  if (CS%id_S2 > 0) deallocate(CS%S2)
+  if (CS%id_ri_grad > 0) deallocate(CS%ri_grad)
   deallocate(CS)
 
 end subroutine cvmix_shear_end
