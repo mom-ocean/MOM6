@@ -461,22 +461,22 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(v_h, "before calc_KS v_h",G%HI)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
-    ! Changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-    ! Sets visc%Kv_turb
-    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_turb, visc%TKE_turb, &
-                               visc%Kv_turb, dt, G, GV, CS%kappaShear_CSp)
+    ! Changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????)
+    ! Sets visc%Kv_shear
+    call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
+                               visc%Kv_shear, dt, G, GV, CS%kappaShear_CSp)
     call cpu_clock_end(id_clock_kappaShear)
     if (CS%debug) then
-      call hchksum(visc%Kd_turb, "after calc_KS visc%Kd_turb",G%HI)
-      call hchksum(visc%Kv_turb, "after calc_KS visc%Kv_turb",G%HI)
+      call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear",G%HI)
+      call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear",G%HI)
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
   elseif (CS%use_cvmix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
-    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_turb, visc%Kv_turb,G,GV,CS%cvmix_shear_csp)
-  elseif (associated(visc%Kv_turb)) then
-    visc%Kv_turb(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
+    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%cvmix_shear_csp)
+  elseif (associated(visc%Kv_shear)) then
+    visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
 
   !   Calculate the diffusivity, Kd, for each layer.  This would be
@@ -539,15 +539,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     if (CS%useKappaShear .or. CS%use_cvmix_shear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
-          Kd_int(i,j,K) = visc%Kd_turb(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
+          Kd_int(i,j,K) = visc%Kd_shear(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
         enddo ; enddo
         do i=is,ie
-          Kd_int(i,j,1) = visc%Kd_turb(i,j,1) ! This isn't actually used. It could be 0.
+          Kd_int(i,j,1) = visc%Kd_shear(i,j,1) ! This isn't actually used. It could be 0.
           Kd_int(i,j,nz+1) = 0.0
         enddo
       endif
       do k=1,nz ; do i=is,ie
-        Kd(i,j,k) = Kd(i,j,k) + 0.5*(visc%Kd_turb(i,j,K) + visc%Kd_turb(i,j,K+1))
+        Kd(i,j,k) = Kd(i,j,k) + 0.5*(visc%Kd_shear(i,j,K) + visc%Kd_shear(i,j,K+1))
       enddo ; enddo
     else
       if (present(Kd_int)) then
@@ -635,7 +635,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     !!if (associated(CS%bkgnd_mixing_csp%kv_bkgnd)) &
     !!  call hchksum(CS%bkgnd_mixing_csp%kv_bkgnd, "kv_bkgnd",G%HI,haloshift=0)
 
-    if (CS%useKappaShear) call hchksum(visc%Kd_turb,"Turbulent Kd",G%HI,haloshift=0)
+    if (CS%useKappaShear) call hchksum(visc%Kd_shear,"Turbulent Kd",G%HI,haloshift=0)
 
     if (associated(visc%kv_bbl_u) .and. associated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, &

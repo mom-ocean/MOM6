@@ -582,8 +582,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  ! Also changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-  ! And sets visc%Kv_turb
+  ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
+  ! And sets visc%Kv_shear
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
@@ -632,7 +632,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 !$OMP end parallel
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
+      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 
     if (associated(Hml)) then
@@ -678,9 +678,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
       !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       do k=1,nz ; do j=js,je ; do i=is,ie
         Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
-        ! GMM, I am not sure if Kv_turb is the right place to add kv_conv_3d
-        visc%Kv_turb(i,j,k) = visc%Kv_turb(i,j,k) + CS%cvmix_conv_csp%kv_conv_3d(i,j,k)
-        visc%Kd_turb(i,j,k) = visc%Kd_turb(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
+        ! GMM, I am not sure if Kv_shear is the right place to add kv_conv_3d
+        visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + CS%cvmix_conv_csp%kv_conv_3d(i,j,k)
+        visc%Kd_shear(i,j,k) = visc%Kd_shear(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
       enddo ; enddo ; enddo
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -829,10 +829,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
         if (CS%ePBL_is_additive) then
           Kd_add_here = Kd_ePBL(i,j,K)
-          visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
         else
-          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_turb(i,j,K), 0.0)
-          visc%Kv_turb(i,j,K) = max(visc%Kv_turb(i,j,K), Kd_ePBL(i,j,K))
+          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
@@ -1365,9 +1365,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   call create_group_pass(CS%pass_hold_eb_ea, eb, G%Domain, dir_flag, halo=1)
   call create_group_pass(CS%pass_hold_eb_ea, ea, G%Domain, dir_flag, halo=1)
   call do_group_pass(CS%pass_hold_eb_ea, G%Domain)
-  ! visc%Kv_turb is not in the group pass because it has larger vertical extent.
-  if (associated(visc%Kv_turb)) &
-    call pass_var(visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+  ! visc%Kv_shear is not in the group pass because it has larger vertical extent.
+  if (associated(visc%Kv_shear)) &
+    call pass_var(visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
