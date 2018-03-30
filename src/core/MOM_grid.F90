@@ -90,10 +90,8 @@ type, public :: ocean_grid_type
     dyCu, &      !< dyCu is delta y at u points, in m.
     IdyCu, &     !< 1/dyCu in m-1.
     dy_Cu, &     !< The unblocked lengths of the u-faces of the h-cell in m.
-    dy_Cu_obc, & !< The unblocked lengths of the u-faces of the h-cell in m for OBC.
     IareaCu, &   !< The masked inverse areas of u-grid cells in m2.
     areaCu       !< The areas of the u-grid cells in m2.
-  !> \todo dy_Cu_obc is not used?
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_) :: &
     mask2dCv, &  !< 0 for boundary points and 1 for ocean points on the v grid.  Nondim.
@@ -104,7 +102,6 @@ type, public :: ocean_grid_type
     dyCv, &      !< dyCv is delta y at v points, in m.
     IdyCv, &     !< 1/dyCv in m-1.
     dx_Cv, &     !< The unblocked lengths of the v-faces of the h-cell in m.
-    dx_Cv_obc, & !< The unblocked lengths of the v-faces of the h-cell in m for OBC.
     IareaCv, &   !< The masked inverse areas of v-grid cells in m2.
     areaCv       !< The areas of the v-grid cells in m2.
 
@@ -504,8 +501,6 @@ subroutine allocate_metrics(G)
 
   ALLOC_(G%dx_Cv(isd:ied,JsdB:JedB))     ; G%dx_Cv(:,:) = 0.0
   ALLOC_(G%dy_Cu(IsdB:IedB,jsd:jed))     ; G%dy_Cu(:,:) = 0.0
-  ALLOC_(G%dx_Cv_obc(isd:ied,JsdB:JedB)) ; G%dx_Cv_obc(:,:) = 0.0
-  ALLOC_(G%dy_Cu_obc(IsdB:IedB,jsd:jed)) ; G%dy_Cu_obc(:,:) = 0.0
 
   ALLOC_(G%areaCu(IsdB:IedB,jsd:jed))  ; G%areaCu(:,:) = 0.0
   ALLOC_(G%areaCv(isd:ied,JsdB:JedB))  ; G%areaCv(:,:) = 0.0
@@ -551,7 +546,6 @@ subroutine MOM_grid_end(G)
   DEALLOC_(G%geoLonCv) ; DEALLOC_(G%geoLonBu)
 
   DEALLOC_(G%dx_Cv) ; DEALLOC_(G%dy_Cu)
-  DEALLOC_(G%dx_Cv_obc) ; DEALLOC_(G%dy_Cu_obc)
 
   DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
   DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
