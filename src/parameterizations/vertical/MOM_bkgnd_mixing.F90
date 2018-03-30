@@ -46,7 +46,8 @@ type, public :: bkgnd_mixing_cs
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing
-  real    :: prandtl_turb           !< Turbulent Prandtl number
+  real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
+                                    !! vertical background diffusivity into viscosity
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
                                     !! diffusivities with Kd_tanh_lat_fn. Valid values
                                     !! are in the range of -2 to 2; 0.4 reproduces CM2M.
@@ -155,8 +156,10 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
-  call get_param(param_file, mdl, "PRANDTL_TURB", CS%prandtl_turb, &
-                 units="nondim", default=1.0, do_not_log=.true.)
+  call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
+                 "Turbulent Prandtl number used to convert vertical \n"//&
+                 "background diffusivities into viscosities.", &
+                 units="nondim", default=1.0)
 
 !  call openParameterBlock(param_file,'MOM_BACKGROUND_MIXING')
 
@@ -349,7 +352,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS)
                             bl2 = CS%Bryan_Lewis_c2, &
                             bl3 = CS%Bryan_Lewis_c3, &
                             bl4 = CS%Bryan_Lewis_c4, &
-                            prandtl = CS%prandtl_turb)
+                            prandtl = CS%prandtl_bkgnd)
 
       call cvmix_coeffs_bkgnd(Mdiff_out=CS%kv_bkgnd(i,j,:), &
                               Tdiff_out=CS%kd_bkgnd(i,j,:), &

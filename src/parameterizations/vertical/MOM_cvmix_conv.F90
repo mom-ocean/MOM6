@@ -59,8 +59,8 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   type(cvmix_conv_cs),    pointer        :: CS         !< This module's control structure.
 
   ! Local variables
-  real    :: prandtl_turb
-  logical :: useEPBL
+  real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
+  logical :: useEPBL      !< If True, use the ePBL boundary layer scheme.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -95,15 +95,16 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
            'as convective mixing might occur in the boundary layer.')
   endif
 
-  call get_param(param_file, mdl, "PRANDTL_TURB", Prandtl_turb, &
-                 "The turbulent Prandtl number applied to shear/conv. \n"//&
-                 "instabilities.", units="nondim", default=1.0, do_not_log=.true.)
-
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
   call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, do_not_log=.True.)
 
   call openParameterBlock(param_file,'CVMIX_CONVECTION')
+
+  call get_param(param_file, mdl, "PRANDTL_CONV", prandtl_conv, &
+                 "The turbulent Prandtl number applied to convective \n"//&
+                 "instabilities (i.e., used to convert KD_CONV into KV_CONV)", &
+                 units="nondim", default=1.0)
 
   call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv, &
                  "Diffusivity used in convective regime. Corresponding viscosity \n" // &
@@ -117,8 +118,8 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   call closeParameterBlock(param_file)
 
-  ! set kv_conv based on kd_conv and Prandtl_turb
-  CS%kv_conv = CS%kd_conv * Prandtl_turb
+  ! set kv_conv based on kd_conv and prandtl_conv
+  CS%kv_conv = CS%kd_conv * prandtl_conv
 
   ! allocate arrays and set them to zero
   allocate(CS%N2(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%N2(:,:,:) = 0.
