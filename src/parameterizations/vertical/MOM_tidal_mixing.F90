@@ -13,7 +13,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_file_parser,         only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
-use MOM_string_functions,    only : uppercase
+use MOM_string_functions,    only : uppercase, lowercase
 use MOM_io,                  only : slasher, MOM_read_data
 use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,             only : cvmix_coeffs_tidal, cvmix_tidal_params_type
@@ -137,8 +137,8 @@ end type
 character(len=40)         :: mdl = "MOM_tidal_mixing"     !< This module's name.
 character*(20), parameter :: STLAURENT_PROFILE_STRING = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
-character*(20), parameter :: SIMMONS_PROFILE_STRING = "Simmons"
-character*(20), parameter :: SCHMITTNER_PROFILE_STRING = "Schmittner"
+character*(20), parameter :: SIMMONS_PROFILE_STRING = "SIMMONS"
+character*(20), parameter :: SCHMITTNER_PROFILE_STRING = "SCHMITTNER"
 integer,        parameter :: STLAURENT_02 = 1
 integer,        parameter :: POLZIN_09    = 2
 integer,        parameter :: SIMMONS_04   = 3
@@ -158,7 +158,9 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   ! Local variables
   logical :: read_tideamp
   character(len=20)  :: tmpstr, int_tide_profile_str
-  character(len=200) :: filename, tideamp_file, h2_file, Niku_TKE_input_file
+  character(len=20)  :: default_profile_string, tidal_energy_type
+  character(len=200) :: filename, h2_file, Niku_TKE_input_file
+  character(len=200) :: tidal_energy_file, tideamp_file
   real :: utide, zbot, hamp, prandtl
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
@@ -183,7 +185,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   call log_version(param_file, mdl, version, &
     "Vertical Tidal Mixing Parameterization")
   call get_param(param_file, mdl, "USE_CVMIX_TIDAL", CS%use_cvmix_tidal, &
-                 "If true, turns on tidal mixing scheme via CVMix", &
+                 "If true, turns on tidal mixing via CVMix", &
                  default=.false.)
 
   call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".",do_not_log=.true.)
@@ -191,8 +193,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
                  "If true, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
-                 "et al. (2002) and Simmons et al. (2004).", default=.false.)
+                 "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
   if (CS%int_tide_dissipation) then
+    default_profile_string = STLAURENT_PROFILE_STRING
+    if (CS%use_cvmix_tidal) default_profile_string = SIMMONS_PROFILE_STRING
     call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
                  "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
@@ -200,7 +204,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "\t                decay profile.\n"//&
                  "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
                  "\t                decay profile.", &
-                 default=STLAURENT_PROFILE_STRING)
+                 default=default_profile_string)
                  ! TODO: list the newly available profile selections
     int_tide_profile_str = uppercase(int_tide_profile_str)
     select case (int_tide_profile_str)
@@ -212,6 +216,24 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
         call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
             "#define INT_TIDE_PROFILE "//trim(int_tide_profile_str)//" found in input file.")
     end select
+
+    ! Check profile consistency
+    if (CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.STLAURENT_02 .or. &
+                                  CS%int_tide_profile.eq.POLZIN_09)) then
+      call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profile"// &
+        " "//trim(int_tide_profile_str)//" unavailable in CVMix. Available "//&
+        "profiles in CVMix are "//trim(SIMMONS_PROFILE_STRING)//" and "//&
+        trim(SCHMITTNER_PROFILE_STRING)//".")
+    else if (.not.CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.SIMMONS_04.or. &
+                                            CS%int_tide_profile.eq.SCHMITTNER)) then
+      call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profiles "// &
+        trim(SIMMONS_PROFILE_STRING)//" and "//trim(SCHMITTNER_PROFILE_STRING)//&
+        " are available only when USE_CVMIX_TIDAL is True.")
+    endif
+
+  else if (CS%use_cvmix_tidal) then
+        call MOM_error(FATAL, "tidal_mixing_init: Cannot set INT_TIDE_DISSIPATION to False "// &
+            "when USE_CVMIX_TIDAL is set to True.")
   endif
 
   call get_param(param_file, mdl, "LEE_WAVE_DISSIPATION", CS%Lee_wave_dissipation, &
@@ -220,6 +242,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "(2010) and using the St. Laurent et al. (2002) \n"//&
                  "and Simmons et al. (2004) vertical profile", default=.false.)
   if (CS%lee_wave_dissipation) then
+    if (CS%use_cvmix_tidal) then
+        call MOM_error(FATAL, "tidal_mixing_init: Lee wave driven dissipation scheme cannot "// &
+            "be used when CVMix tidal mixing scheme is active.")
+    end if
     call get_param(param_file, mdl, "LEE_WAVE_PROFILE", tmpstr, &
                  "LEE_WAVE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with LEE_WAVE_DISSIPATION. Valid values are:\n"//&
@@ -247,6 +273,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
       (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09))) then
+    if (CS%use_cvmix_tidal) then
+        call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
+            "be used when CVMix tidal mixing scheme is active.")
+    end if
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
@@ -321,6 +351,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
     if (read_tideamp) then
+      if (CS%use_cvmix_tidal) then
+          call MOM_error(FATAL, "tidal_mixing_init: Tidal amplitude files are "// &
+              "not compatible with CVMix tidal mixing. ")
+      end if
       call get_param(param_file, mdl, "TIDEAMP_FILE", tideamp_file, &
                  "The path to the file containing the spatially varying \n"//&
                  "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
@@ -388,26 +422,26 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   if (CS%use_cvmix_tidal) then
 
     ! Read in CVMix params
-    call openParameterBlock(param_file,'CVMIX_TIDAL')
+    !call openParameterBlock(param_file,'CVMIX_TIDAL')
     call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
                    "largest acceptable value for tidal diffusivity", &
-                   units="m^2/s", default=100e-4, & ! the default is 50e-4 in CVMIX, 100e-4 in POP.
-                   fail_if_missing=.true.)
+                   units="m^2/s", default=50e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
+    call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
+                 "The path to the file containing tidal energy \n"//&
+                 "dissipation. Used with CVMix tidal mixing schemes.", &
+                 fail_if_missing=.true.)
+    call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
+                 "The type of input tidal energy flux dataset.",&
+                 fail_if_missing=.true.)
+                  ! TODO: list all available tidal energy types here
     call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, &
                    do_not_log=.True.)
     call get_param(param_file, mdl, "PRANDTL_TURB", prandtl,units="nondim", default=1.0, &
                    do_not_log=.true.)
     call cvmix_put(CS%cvmix_glb_params,'Prandtl',prandtl)
 
+    int_tide_profile_str = lowercase(int_tide_profile_str)
 
-    ! Check if the chosen tidal mixing scheme is available in CVMix
-    select case (int_tide_profile_str)
-      case (SIMMONS_PROFILE_STRING)     ; continue
-      case (SCHMITTNER_PROFILE_STRING)  ; continue
-      case default
-        call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing scheme"// &
-            " "//trim(int_tide_profile_str)//" unavailable in CVMix")
-    end select
 
     ! TODO: check parameter consistency. (see POP::tidal_mixing.F90::tidal_check)
 
@@ -420,9 +454,9 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                           local_mixing_frac       = CS%Gamma_itides,          &
                           depth_cutoff            = CS%min_zbot_itides)
 
-    call read_tidal_energy(G,param_file,CS)
+    call read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
 
-    call closeParameterBlock(param_file)
+    !call closeParameterBlock(param_file)
 
   endif ! cvmix on
 
@@ -935,26 +969,17 @@ end subroutine add_int_tide_diffusivity
 
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
-subroutine read_tidal_energy(G, param_file, CS)
+subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
   type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
-  type(param_file_type),  intent(in)  :: param_file !< Run-time parameter file handle
+  character(len=20),      intent(in)  :: tidal_energy_type
+  character(len=200),     intent(in)  :: tidal_energy_file
   type(tidal_mixing_cs),  pointer     :: CS
   ! local
-  character(len=20)   :: tidal_energy_type
-  character(len=200)  :: tidal_energy_file
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
-                 "The path to the file containing tidal energy \n"//&
-                 "dissipation. Used with CVMix tidal mixing schemes.", &
-                 fail_if_missing=.true.)
-  call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
-                 "The type of input tidal energy flux dataset.",&
-                 fail_if_missing=.true.)
-                  ! TODO: list all available tidal energy types here
 
   if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
   allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
