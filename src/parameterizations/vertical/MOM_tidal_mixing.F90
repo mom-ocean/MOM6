@@ -430,6 +430,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
                  "The path to the file containing tidal energy \n"//&
                  "dissipation. Used with CVMix tidal mixing schemes.", &
                  fail_if_missing=.true.)
+    tidal_energy_file = trim(CS%inputdir) // trim(tidal_energy_file)
     call get_param(param_file, mdl, "TIDAL_ENERGY_TYPE",tidal_energy_type, &
                  "The type of input tidal energy flux dataset.",&
                  fail_if_missing=.true.)
