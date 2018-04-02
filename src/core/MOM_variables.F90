@@ -228,6 +228,9 @@ type, public :: vertvisc_type
                          !! at the interfaces between each layer, in m2 s-1.
     Kv_shear => NULL(), &!< The shear-driven turbulent vertical viscosity
                          !! at the interfaces between each layer, in m2 s-1.
+    Kv_slow  => NULL(), &!< The turbulent vertical viscosity component due to
+                         !! "slow" processes (e.g., tidal, background,
+                         !! convection etc).
     TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
                         !! at the interfaces between each layer, in m2 s-2.
 end type vertvisc_type

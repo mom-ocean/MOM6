@@ -1811,6 +1811,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
+    ! GMM, allocate visc%Kv_slow here?
 
     vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
