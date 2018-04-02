@@ -5,8 +5,10 @@ module MOM_tidal_mixing
 
 use MOM_diag_mediator,       only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,       only : safe_alloc_ptr, post_data
+use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag
+use MOM_diag_to_Z,           only : calc_Zint_diags
 use MOM_EOS,                 only : calculate_density
-use MOM_variables,           only : thermo_var_ptrs
+use MOM_variables,           only : thermo_var_ptrs, p3d
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_debugging,           only : hchksum
 use MOM_grid,                only : ocean_grid_type
@@ -14,7 +16,7 @@ use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_file_parser,         only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase, lowercase
-use MOM_io,                  only : slasher, MOM_read_data
+use MOM_io,                  only : slasher, MOM_read_data, vardesc, var_desc
 use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,             only : cvmix_coeffs_tidal, cvmix_tidal_params_type
 use cvmix_kinds_and_types,   only : cvmix_global_params_type
@@ -25,10 +27,34 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public tidal_mixing_init
+public setup_tidal_diagnostics
 public calculate_tidal_mixing
+public post_tidal_diagnostics
 public tidal_mixing_end
 
-!> Control structure including parameters for tidal mixing.
+!> Control structure for tidal mixing diagnostics
+type, public :: tidal_mixing_diags
+  real, pointer, dimension(:,:,:) :: &
+    Kd_itidal      => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
+    Fl_itidal      => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
+    Kd_lowmode     => NULL(),& ! internal tide diffusivity at interfaces
+                               ! due to propagating low modes (m2/s) (BDM)
+    Fl_lowmode     => NULL(),& ! vertical flux of tidal turbulent dissipation
+                               ! due to propagating low modes (m3/s3) (BDM)
+    Kd_Niku        => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
+    Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
+    Kd_Itidal_Work => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
+    Kd_Lowmode_Work=> NULL()   ! layer integrated work by low mode driven mixing (W/m2) BDM
+
+  real, pointer, dimension(:,:) :: &
+    TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
+    N2_bot                    => NULL(),& ! bottom squared buoyancy frequency (1/s2)
+    N2_meanz                  => NULL(),& ! vertically averaged buoyancy frequency (1/s2)
+    Polzin_decay_scale_scaled => NULL(),& ! vertical scale of decay for tidal dissipation
+    Polzin_decay_scale        => NULL()   ! vertical decay scale for tidal diss with Polzin (meter)
+end type
+
+!> Control structure for tidal mixing module.
 type, public :: tidal_mixing_cs
   logical :: debug = .true.
 
@@ -95,50 +121,54 @@ type, public :: tidal_mixing_cs
   logical :: use_cvmix_tidal  ! true if cvmix is to be used for determining diffusivity
                               ! due to tidal mixing
 
-  real :: tidal_max_coef      ! maximum allowable tidal diffusivity. [m^2/s]
   real :: min_thickness       ! Minimum thickness allowed [m]
 
-  real, pointer, dimension(:,:) :: TKE_Niku    => NULL()
-  real, pointer, dimension(:,:) :: TKE_itidal  => NULL()
-  real, pointer, dimension(:,:) :: Nb          => NULL()
-  real, pointer, dimension(:,:) :: mask_itidal => NULL()
-  real, pointer, dimension(:,:) :: h2          => NULL()
-  real, pointer, dimension(:,:) :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
-
-  real, allocatable, dimension(:,:)   :: tidal_qe_2d   ! q*E(x,y)
-
+  ! CVMix-specific parameters
   type(cvmix_tidal_params_type)   :: cvmix_tidal_params
-  type(cvmix_global_params_type)  :: cvmix_glb_params ! to pass Prandtl number only
+  type(cvmix_global_params_type)  :: cvmix_glb_params ! for Prandtl number only
+  real                            :: tidal_max_coef   ! maximum allowable tidal diffusivity. [m^2/s]
+
+  ! Data containers
+  real, pointer, dimension(:,:)     :: TKE_Niku    => NULL()
+  real, pointer, dimension(:,:)     :: TKE_itidal  => NULL()
+  real, pointer, dimension(:,:)     :: Nb          => NULL()
+  real, pointer, dimension(:,:)     :: mask_itidal => NULL()
+  real, pointer, dimension(:,:)     :: h2          => NULL()
+  real, pointer, dimension(:,:)     :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
+  real, allocatable,dimension(:,:)  :: tidal_qe_2d   ! q*E(x,y)
+
+  ! Diagnostics
+  type(diag_ctrl),          pointer :: diag => NULL() ! structure to regulate diagn output timing
+  type(diag_to_Z_CS),       pointer :: diag_to_Z_CSp => NULL()
+  type(tidal_mixing_diags), pointer :: dd => NULL()
+
+  ! Diagnostic identifiers
+  integer :: id_TKE_itidal                = -1
+  integer :: id_TKE_leewave               = -1
+  integer :: id_Kd_itidal                 = -1
+  integer :: id_Kd_Niku                   = -1
+  integer :: id_Kd_lowmode                = -1
+  integer :: id_Kd_itidal_z               = -1
+  integer :: id_Kd_Niku_z                 = -1
+  integer :: id_Kd_lowmode_z              = -1
+  integer :: id_Kd_Itidal_Work            = -1
+  integer :: id_Kd_Niku_Work              = -1
+  integer :: id_Kd_Lowmode_Work           = -1
+  integer :: id_Nb                        = -1
+  integer :: id_N2_bot                    = -1
+  integer :: id_N2_meanz                  = -1
+  integer :: id_Fl_itidal                 = -1
+  integer :: id_Fl_lowmode                = -1
+  integer :: id_Polzin_decay_scale        = -1
+  integer :: id_Polzin_decay_scale_scaled = -1
 
 end type tidal_mixing_cs
 
-type, public :: tidal_mixing_diags
-  real, pointer, dimension(:,:,:) :: &
-    Kd_itidal      => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
-    Fl_itidal      => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
-    Kd_lowmode     => NULL(),& ! internal tide diffusivity at interfaces
-                               ! due to propagating low modes (m2/s) (BDM)
-    Fl_lowmode     => NULL(),& ! vertical flux of tidal turbulent dissipation
-                               ! due to propagating low modes (m3/s3) (BDM)
-    Kd_Niku        => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
-    Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
-    Kd_Itidal_Work => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
-    Kd_Lowmode_Work=> NULL()   ! layer integrated work by low mode driven mixing (W/m2) BDM
-
-  real, pointer, dimension(:,:) :: &
-    TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
-    N2_bot                    => NULL(),& ! bottom squared buoyancy frequency (1/s2)
-    N2_meanz                  => NULL(),& ! vertically averaged buoyancy frequency (1/s2)
-    Polzin_decay_scale_scaled => NULL(),& ! vertical scale of decay for tidal dissipation
-    Polzin_decay_scale        => NULL()   ! vertical decay scale for tidal diss with Polzin (meter)
-
-end type
-
 character(len=40)         :: mdl = "MOM_tidal_mixing"     !< This module's name.
-character*(20), parameter :: STLAURENT_PROFILE_STRING = "STLAURENT_02"
-character*(20), parameter :: POLZIN_PROFILE_STRING = "POLZIN_09"
-character*(20), parameter :: SIMMONS_PROFILE_STRING = "SIMMONS"
-character*(20), parameter :: SCHMITTNER_PROFILE_STRING = "SCHMITTNER"
+character*(20), parameter :: STLAURENT_PROFILE_STRING   = "STLAURENT_02"
+character*(20), parameter :: POLZIN_PROFILE_STRING      = "POLZIN_09"
+character*(20), parameter :: SIMMONS_PROFILE_STRING     = "SIMMONS"
+character*(20), parameter :: SCHMITTNER_PROFILE_STRING  = "SCHMITTNER"
 integer,        parameter :: STLAURENT_02 = 1
 integer,        parameter :: POLZIN_09    = 2
 integer,        parameter :: SIMMONS_04   = 3
@@ -146,13 +176,15 @@ integer,        parameter :: SCHMITTNER   = 4
 
 contains
 
-logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
+!> Initializes internal tidal dissipation scheme for diapycnal mixing
+logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp, CS)
 
   type(time_type),          intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),    intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
+  type(diag_to_Z_CS),       pointer       :: diag_to_Z_CSp !< pointer to the Z-diagnostics control
   type(tidal_mixing_cs),     pointer      :: CS         !< This module's control structure.
 
   ! Local variables
@@ -161,6 +193,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
   character(len=20)  :: default_profile_string, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
+  type(vardesc) :: vd
   real :: utide, zbot, hamp, prandtl
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
@@ -175,11 +208,15 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
     return
   endif
   allocate(CS)
+  allocate(CS%dd)
 
   CS%debug = CS%debug.and.is_root_pe()
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+  CS%diag => diag
+  if (associated(diag_to_Z_CSp)) CS%diag_to_Z_CSp => diag_to_Z_CSp
 
   ! Read parameters
   call log_version(param_file, mdl, version, &
@@ -419,6 +456,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
     CS%Decay_scale_factor_lee = -9.e99 ! This should never be used if CS%Lee_wave_dissipation = False
   endif
 
+  ! Configure CVMix
   if (CS%use_cvmix_tidal) then
 
     ! Read in CVMix params
@@ -461,11 +499,82 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, CS)
 
   endif ! cvmix on
 
+  ! Register Diagnostics fields
+
+  if (CS%Lee_wave_dissipation) then
+    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
+        'Lee wave Driven Turbulent Kinetic Energy', 'W m-2')
+    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
+         'Lee Wave Driven Diffusivity', 'm2 s-1')
+  endif
+
+  if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. &
+      CS%Lowmode_itidal_dissipation) then
+
+    CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
+        'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
+    CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
+         'Bottom Buoyancy Frequency', 's-1')
+
+    CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
+         'Internal Tide Driven Diffusivity', 'm2 s-1')
+
+    CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
+         'Internal Tide Driven Diffusivity (from propagating low modes)', 'm2 s-1')
+
+    CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
+        'Vertical flux of tidal turbulent dissipation', 'm3 s-3')
+
+    CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
+         'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'm3 s-3')
+
+    CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
+
+    CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
+         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
+
+    CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
+         'Bottom Buoyancy frequency squared', 's-2')
+
+    CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
+         'Buoyancy frequency squared averaged over the water column', 's-2')
+
+    CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
+         'Work done by Internal Tide Diapycnal Mixing', 'W m-2')
+
+    CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
+         'Work done by Nikurashin Lee Wave Drag Scheme', 'W m-2')
+
+    CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
+         'Work done by Internal Tide Diapycnal Mixing (low modes)', 'W m-2')
+
+    if (associated(CS%diag_to_Z_CSp)) then
+      vd = var_desc("Kd_itides","m2 s-1", &
+                    "Internal Tide Driven Diffusivity, interpolated to z", z_grid='z')
+      CS%id_Kd_itidal_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      if (CS%Lee_wave_dissipation) then
+         vd = var_desc("Kd_Nikurashin", "m2 s-1", &
+                       "Lee Wave Driven Diffusivity, interpolated to z", z_grid='z')
+         CS%id_Kd_Niku_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      endif
+      if (CS%Lowmode_itidal_dissipation) then
+        vd = var_desc("Kd_lowmode","m2 s-1", &
+                  "Internal Tide Driven Diffusivity (from low modes), interpolated to z",&
+                  z_grid='z')
+        CS%id_Kd_lowmode_z = register_Zint_diag(vd, CS%diag_to_Z_CSp, Time)
+      endif
+    endif
+
+  endif
 end function tidal_mixing_init
 
 
+!> Depending on whether or not CVMix is active, calls the associated subroutine to compute internal
+!! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
+!! diffusivities.
 subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    dd, N2_lay, N2_int, Kd, Kd_int, Kd_max)
+                                    N2_lay, N2_int, Kd, Kd_int, Kd_max)
   type(ocean_grid_type),                    intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -475,7 +584,6 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
   integer,                                  intent(in)    :: j
   real, dimension(SZI_(G),SZK_(G)),         intent(in)    :: TKE_to_Kd, max_TKE
   type(tidal_mixing_cs),                    pointer       :: CS
-  type(tidal_mixing_diags),                 intent(inout) :: dd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
   real,                                     intent(inout) :: Kd_max
@@ -484,13 +592,15 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
     if (CS%use_cvmix_tidal) then
       call calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
     else
-      call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,dd, &
+      call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd, Kd_int, Kd_max)
     endif
   endif
 end subroutine
 
 
+!> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
+!! mixing to the interface diffusivities.
 subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   integer,                                  intent(in)    :: j
   type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
@@ -578,7 +688,7 @@ end subroutine calculate_cvmix_tidal
 !! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
-                                    dd, N2_lay, Kd, Kd_int, Kd_max)
+                                    N2_lay, Kd, Kd_int, Kd_max)
   type(ocean_grid_type),                      intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                    intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2)
@@ -587,11 +697,9 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   integer,                                    intent(in)    :: j
   real, dimension(SZI_(G),SZK_(G)),           intent(in)    :: TKE_to_Kd, max_TKE
   type(tidal_mixing_cs),                      pointer       :: CS
-  type(tidal_mixing_diags),                   intent(inout) :: dd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(inout) :: Kd
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int
   real,                                       intent(inout) :: Kd_max
-
 
   ! This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
   ! The mechanisms considered are (1) local dissipation of internal waves generated by the
@@ -640,7 +748,10 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
   logical :: use_Polzin, use_Simmons
   integer :: i, k, is, ie, nz
   integer :: a, fr, m
+  type(tidal_mixing_diags), pointer :: dd
+
   is = G%isc ; ie = G%iec ; nz = G%ke
+  dd => CS%dd
 
   if (.not.(CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation)) return
 
@@ -968,6 +1079,144 @@ subroutine add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS,
 
 end subroutine add_int_tide_diffusivity
 
+!> Sets up diagnostics arrays for tidal mixing.
+subroutine setup_tidal_diagnostics(G,CS)
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(tidal_mixing_cs),    pointer       :: CS
+
+  ! local
+  integer :: isd, ied, jsd, jed, nz
+  type(tidal_mixing_diags), pointer :: dd
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed; nz = G%ke
+  dd => CS%dd
+
+  if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_itidal_z > 0) .or. &
+      (CS%id_Kd_Itidal_work > 0)) then
+    allocate(dd%Kd_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Kd_itidal(:,:,:) = 0.0
+  endif
+  if ((CS%id_Kd_lowmode > 0) .or. (CS%id_Kd_lowmode_z > 0) .or. &
+      (CS%id_Kd_lowmode_work > 0)) then
+    allocate(dd%Kd_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Kd_lowmode(:,:,:) = 0.0
+  endif
+  if ( (CS%id_Fl_itidal > 0) ) then
+    allocate(dd%Fl_itidal(isd:ied,jsd:jed,nz+1)) ; dd%Fl_itidal(:,:,:) = 0.0
+  endif
+  if ( (CS%id_Fl_lowmode > 0) ) then
+    allocate(dd%Fl_lowmode(isd:ied,jsd:jed,nz+1)) ; dd%Fl_lowmode(:,:,:) = 0.0
+  endif
+  if ( (CS%id_Polzin_decay_scale > 0) ) then
+    allocate(dd%Polzin_decay_scale(isd:ied,jsd:jed))
+    dd%Polzin_decay_scale(:,:) = 0.0
+  endif
+  if ( (CS%id_N2_bot > 0) ) then
+    allocate(dd%N2_bot(isd:ied,jsd:jed)) ; dd%N2_bot(:,:) = 0.0
+  endif
+  if ( (CS%id_N2_meanz > 0) ) then
+    allocate(dd%N2_meanz(isd:ied,jsd:jed)) ; dd%N2_meanz(:,:) = 0.0
+  endif
+  if ( (CS%id_Polzin_decay_scale_scaled > 0) ) then
+    allocate(dd%Polzin_decay_scale_scaled(isd:ied,jsd:jed))
+    dd%Polzin_decay_scale_scaled(:,:) = 0.0
+  endif
+  if ((CS%id_Kd_Niku > 0) .or. (CS%id_Kd_Niku_z > 0) .or. &
+      (CS%id_Kd_Niku_work > 0)) then
+    allocate(dd%Kd_Niku(isd:ied,jsd:jed,nz+1)) ; dd%Kd_Niku(:,:,:) = 0.0
+  endif
+  if (CS%id_Kd_Niku_work > 0) then
+    allocate(dd%Kd_Niku_work(isd:ied,jsd:jed,nz)) ; dd%Kd_Niku_work(:,:,:) = 0.0
+  endif
+  if (CS%id_Kd_Itidal_work > 0) then
+    allocate(dd%Kd_Itidal_work(isd:ied,jsd:jed,nz))
+    dd%Kd_Itidal_work(:,:,:) = 0.0
+  endif
+  if (CS%id_Kd_Lowmode_Work > 0) then
+    allocate(dd%Kd_Lowmode_Work(isd:ied,jsd:jed,nz))
+    dd%Kd_Lowmode_Work(:,:,:) = 0.0
+  endif
+  if (CS%id_TKE_itidal > 0) then
+    allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
+  endif
+end subroutine setup_tidal_diagnostics
+
+subroutine post_tidal_diagnostics(G,GV,h,CS)
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),   intent(in)   :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                             intent(in)   :: h   !< Layer thicknesses, in H (usually m or kg m-2).
+  type(tidal_mixing_cs),    pointer       :: CS
+
+  ! local
+  integer :: num_z_diags
+  integer   :: z_ids(6)     ! id numbers of diagns to be interpolated to depth space
+  type(p3d) :: z_ptrs(6)    ! pointers to diagns to be interpolated into depth space
+  type(tidal_mixing_diags), pointer :: dd
+
+  num_z_diags = 0
+  dd => CS%dd
+
+  if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
+    if (CS%id_TKE_itidal  > 0) call post_data(CS%id_TKE_itidal,  dd%TKE_itidal_used, CS%diag)
+    if (CS%id_TKE_leewave > 0) call post_data(CS%id_TKE_leewave, CS%TKE_Niku,        CS%diag)
+    if (CS%id_Nb          > 0) call post_data(CS%id_Nb,      CS%Nb,      CS%diag)
+    if (CS%id_N2_bot      > 0) call post_data(CS%id_N2_bot,  dd%N2_bot,  CS%diag)
+    if (CS%id_N2_meanz    > 0) call post_data(CS%id_N2_meanz,dd%N2_meanz,CS%diag)
+
+    if (CS%id_Fl_itidal > 0) call post_data(CS%id_Fl_itidal, dd%Fl_itidal, CS%diag)
+    if (CS%id_Kd_itidal > 0) call post_data(CS%id_Kd_itidal, dd%Kd_itidal, CS%diag)
+    if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
+    if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag)
+    if (CS%id_Fl_lowmode> 0) call post_data(CS%id_Fl_lowmode, dd%Fl_lowmode, CS%diag)
+
+    if (CS%id_Kd_Itidal_Work > 0) &
+      call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
+    if (CS%id_Kd_Niku_Work > 0) call post_data(CS%id_Kd_Niku_Work, dd%Kd_Niku_Work, CS%diag)
+    if (CS%id_Kd_Lowmode_Work > 0) &
+      call post_data(CS%id_Kd_Lowmode_Work, dd%Kd_Lowmode_Work, CS%diag)
+
+    if (CS%id_Polzin_decay_scale > 0 ) &
+      call post_data(CS%id_Polzin_decay_scale, dd%Polzin_decay_scale, CS%diag)
+    if (CS%id_Polzin_decay_scale_scaled > 0 ) &
+      call post_data(CS%id_Polzin_decay_scale_scaled, dd%Polzin_decay_scale_scaled, CS%diag)
+
+    if (CS%id_Kd_itidal_z > 0) then
+      num_z_diags        = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_Kd_itidal_z
+      z_ptrs(num_z_diags)%p => dd%Kd_itidal
+    endif
+
+    if (CS%id_Kd_Niku_z > 0) then
+      num_z_diags        = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_Kd_Niku_z
+      z_ptrs(num_z_diags)%p => dd%Kd_Niku
+    endif
+
+    if (CS%id_Kd_lowmode_z > 0) then
+      num_z_diags        = num_z_diags + 1
+      z_ids(num_z_diags) = CS%id_Kd_lowmode_z
+      z_ptrs(num_z_diags)%p => dd%Kd_lowmode
+    endif
+
+  endif
+
+  if (num_z_diags > 0) &
+    call calc_Zint_diags(h, z_ptrs, z_ids, num_z_diags, G, GV, CS%diag_to_Z_CSp)
+
+  if (associated(dd%Kd_itidal)) deallocate(dd%Kd_itidal)
+  if (associated(dd%Kd_lowmode)) deallocate(dd%Kd_lowmode)
+  if (associated(dd%Fl_itidal)) deallocate(dd%Fl_itidal)
+  if (associated(dd%Fl_lowmode)) deallocate(dd%Fl_lowmode)
+  if (associated(dd%Polzin_decay_scale)) deallocate(dd%Polzin_decay_scale)
+  if (associated(dd%Polzin_decay_scale_scaled)) deallocate(dd%Polzin_decay_scale_scaled)
+  if (associated(dd%N2_bot)) deallocate(dd%N2_bot)
+  if (associated(dd%N2_meanz)) deallocate(dd%N2_meanz)
+  if (associated(dd%Kd_Niku)) deallocate(dd%Kd_Niku)
+  if (associated(dd%Kd_Niku_work)) deallocate(dd%Kd_Niku_work)
+  if (associated(dd%Kd_Itidal_Work))  deallocate(dd%Kd_Itidal_Work)
+  if (associated(dd%Kd_Lowmode_Work)) deallocate(dd%Kd_Lowmode_Work)
+  if (associated(dd%TKE_itidal_used)) deallocate(dd%TKE_itidal_used)
+
+end subroutine post_tidal_diagnostics
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
@@ -1006,6 +1255,7 @@ subroutine tidal_mixing_end(CS)
 
   !TODO deallocate all the dynamically allocated members here ...
   if (allocated(CS%tidal_qe_2d)) deallocate(CS%tidal_qe_2d)
+  deallocate(CS%dd)
   deallocate(CS)
 
   ! TODO: check why ptrs allocated with MOM_safe_alloc are not deallocated?
