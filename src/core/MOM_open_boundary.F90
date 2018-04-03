@@ -1211,7 +1211,6 @@ subroutine open_boundary_impose_normal_slope(OBC, G, depth)
 
   do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
-!   if (.not. segment%on_pe .or. segment%specified) cycle
     if (.not. segment%on_pe) cycle
     if (segment%direction == OBC_DIRECTION_E) then
       I=segment%HI%IsdB
@@ -1254,7 +1253,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv)
 
   do n=1,OBC%number_of_segments
     segment=>OBC%segment(n)
-    if (.not. segment%on_pe .or. segment%specified) cycle
+    if (.not. segment%on_pe) cycle
     if (segment%is_E_or_W) then
       ! Sweep along u-segments and delete the OBC for blocked points.
       I=segment%HI%IsdB
