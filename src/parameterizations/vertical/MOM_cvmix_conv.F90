@@ -39,8 +39,8 @@ type, public :: cvmix_conv_cs
 
   ! Diagnostics arrays
   real, allocatable, dimension(:,:,:) :: N2         !< Squared Brunt-Vaisala frequency (1/s2)
-  real, allocatable, dimension(:,:,:) :: kd_conv_3d !< Diffusivity added by convection (m2/s)
-  real, allocatable, dimension(:,:,:) :: kv_conv_3d !< Viscosity added by convection (m2/s)
+  real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection (m2/s)
+  real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection (m2/s)
 
 end type cvmix_conv_cs
 
@@ -123,8 +123,8 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   ! allocate arrays and set them to zero
   allocate(CS%N2(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%N2(:,:,:) = 0.
-  allocate(CS%kd_conv_3d(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_conv_3d(:,:,:) = 0.
-  allocate(CS%kv_conv_3d(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_conv_3d(:,:,:) = 0.
+  allocate(CS%kd_conv(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kd_conv(:,:,:) = 0.
+  allocate(CS%kv_conv(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%kv_conv(:,:,:) = 0.
 
   ! Register diagnostics
   CS%diag => diag
@@ -214,8 +214,8 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
 
       kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-      call cvmix_coeffs_conv(Mdiff_out=CS%kv_conv_3d(i,j,:), &
-                               Tdiff_out=CS%kd_conv_3d(i,j,:), &
+      call cvmix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
+                               Tdiff_out=CS%kd_conv(i,j,:), &
                                Nsqr=CS%N2(i,j,:), &
                                dens=rho_1d(:), &
                                dens_lwr=rho_lwr(:), &
@@ -225,8 +225,8 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
 
     ! Do not apply mixing due to convection within the boundary layer
     do k=1,NINT(hbl(i,j))
-      CS%kv_conv_3d(i,j,k) = 0.0
-      CS%kd_conv_3d(i,j,k) = 0.0
+      CS%kv_conv(i,j,k) = 0.0
+      CS%kd_conv(i,j,k) = 0.0
     enddo
 
     enddo
@@ -234,14 +234,14 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
 
   if (CS%debug) then
     call hchksum(CS%N2, "MOM_cvmix_conv: N2",G%HI,haloshift=0)
-    call hchksum(CS%kd_conv_3d, "MOM_cvmix_conv: kd_conv_3d",G%HI,haloshift=0)
-    call hchksum(CS%kv_conv_3d, "MOM_cvmix_conv: kv_conv_3d",G%HI,haloshift=0)
+    call hchksum(CS%kd_conv, "MOM_cvmix_conv: kd_conv",G%HI,haloshift=0)
+    call hchksum(CS%kv_conv, "MOM_cvmix_conv: kv_conv",G%HI,haloshift=0)
   endif
 
   ! send diagnostics to post_data
   if (CS%id_N2 > 0) call post_data(CS%id_N2, CS%N2, CS%diag)
-  if (CS%id_kd_conv > 0) call post_data(CS%id_kd_conv, CS%kd_conv_3d, CS%diag)
-  if (CS%id_kv_conv > 0) call post_data(CS%id_kv_conv, CS%kv_conv_3d, CS%diag)
+  if (CS%id_kd_conv > 0) call post_data(CS%id_kd_conv, CS%kd_conv, CS%diag)
+  if (CS%id_kv_conv > 0) call post_data(CS%id_kv_conv, CS%kv_conv, CS%diag)
 
 end subroutine calculate_cvmix_conv
 
@@ -260,8 +260,8 @@ subroutine cvmix_conv_end(CS)
   type(cvmix_conv_cs), pointer :: CS ! Control structure
 
   deallocate(CS%N2)
-  deallocate(CS%kd_conv_3d)
-  deallocate(CS%kv_conv_3d)
+  deallocate(CS%kd_conv)
+  deallocate(CS%kv_conv)
   deallocate(CS)
 
 end subroutine cvmix_conv_end
