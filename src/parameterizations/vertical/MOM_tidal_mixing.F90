@@ -32,26 +32,30 @@ public calculate_tidal_mixing
 public post_tidal_diagnostics
 public tidal_mixing_end
 
-!> Control structure for tidal mixing diagnostics
+!> Containers for tidal mixing diagnostics
 type, public :: tidal_mixing_diags
   real, pointer, dimension(:,:,:) :: &
-    Kd_itidal      => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
-    Fl_itidal      => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
-    Kd_lowmode     => NULL(),& ! internal tide diffusivity at interfaces
-                               ! due to propagating low modes (m2/s) (BDM)
-    Fl_lowmode     => NULL(),& ! vertical flux of tidal turbulent dissipation
-                               ! due to propagating low modes (m3/s3) (BDM)
-    Kd_Niku        => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
-    Kd_Niku_work   => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
-    Kd_Itidal_Work => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
-    Kd_Lowmode_Work=> NULL()   ! layer integrated work by low mode driven mixing (W/m2) BDM
+    Kd_itidal         => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
+    Fl_itidal         => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
+    Kd_lowmode        => NULL(),& ! internal tide diffusivity at interfaces
+                                  ! due to propagating low modes (m2/s) (BDM)
+    Fl_lowmode        => NULL(),& ! vertical flux of tidal turbulent dissipation
+                                  ! due to propagating low modes (m3/s3) (BDM)
+    Kd_Niku           => NULL(),& ! lee-wave diffusivity at interfaces (m2/s)
+    Kd_Niku_work      => NULL(),& ! layer integrated work by lee-wave driven mixing (W/m2)
+    Kd_Itidal_Work    => NULL(),& ! layer integrated work by int tide driven mixing (W/m2)
+    Kd_Lowmode_Work   => NULL(),& ! layer integrated work by low mode driven mixing (W/m2) BDM
+    N2_int            => NULL(),&
+    vert_dep_3d       => NULL()
 
   real, pointer, dimension(:,:) :: &
     TKE_itidal_used           => NULL(),& ! internal tide TKE input at ocean bottom (W/m2)
     N2_bot                    => NULL(),& ! bottom squared buoyancy frequency (1/s2)
     N2_meanz                  => NULL(),& ! vertically averaged buoyancy frequency (1/s2)
     Polzin_decay_scale_scaled => NULL(),& ! vertical scale of decay for tidal dissipation
-    Polzin_decay_scale        => NULL()   ! vertical decay scale for tidal diss with Polzin (meter)
+    Polzin_decay_scale        => NULL(),& ! vertical decay scale for tidal diss with Polzin (meter)
+    Simmons_coeff_2d          => NULL()
+
 end type
 
 !> Control structure for tidal mixing module.
@@ -161,6 +165,9 @@ type, public :: tidal_mixing_cs
   integer :: id_Fl_lowmode                = -1
   integer :: id_Polzin_decay_scale        = -1
   integer :: id_Polzin_decay_scale_scaled = -1
+  integer :: id_N2_int                    = -1
+  integer :: id_Simmons_coeff             = -1
+  integer :: id_vert_dep                  = -1
 
 end type tidal_mixing_cs
 
@@ -567,6 +574,18 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     endif
 
   endif
+
+  ! CVMix tidal diagnostics
+  if (CS%use_cvmix_tidal) then
+
+    CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesT1,Time, &
+        'Bouyancy frequency squared, at interfaces', 's-2')
+    CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesTi,Time, &
+         'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
+    CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
+         'vertical deposition function needed for Simmons et al tidal  mixing', '')
+  endif
+
 end function tidal_mixing_init
 
 
@@ -611,7 +630,6 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd
 
   ! local
-  logical, parameter :: init_every_tstep = .true.
   real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
   real, dimension(SZK_(G)+1) :: Kv_tidal    !< tidal viscosity [m2/s]
   real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition needed for Simmons tidal mixing.
@@ -621,62 +639,77 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   integer :: isd, ied, jsd, jed
   real :: dh, hcorr, Simmons_coeff
   real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
+  type(tidal_mixing_diags), pointer :: dd
 
-  if (init_every_tstep) then
+  dd => CS%dd
 
-    select case (CS%int_tide_profile)
-    case (SIMMONS_04)
-      do i=is,ie
-        iFaceHeight = 0.0 ! BBL is all relative to the surface
-        hcorr = 0.0
-        do k=1,G%ke
-          ! cell center and cell bottom in meters (negative values in the ocean)
-          dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
-          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
-          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
-          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-          iFaceHeight(k+1) = iFaceHeight(k) - dh
-        enddo
-
-        if (G%mask2dT(i,j)<1) return
-
-        call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                &
-                                              energy_flux             = CS%tidal_qe_2d(i,j), &
-                                              rho                     = rho_fw,              &
-                                              SimmonsCoeff            = Simmons_coeff,       &
-                                              VertDep                 = vert_dep,            &
-                                              zw                      = iFaceHeight,         &
-                                              zt                      = cellHeight,          &
-                                              CVmix_tidal_params_user = CS%cvmix_tidal_params)
-
-        ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
-        ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
-        Simmons_coeff = Simmons_coeff / CS%Gamma_itides
-
-
-        call cvmix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
-                                 Tdiff_out               = Kd_tidal,            &
-                                 Nsqr                    = N2_int(i,:),         &
-                                 OceanDepth              = iFaceHeight(G%ke+1), &
-                                 SimmonsCoeff            = Simmons_coeff,       &
-                                 vert_dep                = vert_dep,            &
-                                 nlev                    = G%ke,                &
-                                 max_nlev                = G%ke,                &
-                                 CVmix_params            = CS%cvmix_glb_params, &
-                                 CVmix_tidal_params_user = CS%cvmix_tidal_params)
-
-        do k=1,G%ke
-          Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
-          !TODO: Kv(i,j,k) = ????????????
-        enddo
+  select case (CS%int_tide_profile)
+  case (SIMMONS_04)
+    do i=is,ie
+      iFaceHeight = 0.0 ! BBL is all relative to the surface
+      hcorr = 0.0
+      do k=1,G%ke
+        ! cell center and cell bottom in meters (negative values in the ocean)
+        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+        iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
-    ! TODO: case (SCHMITTNER)
-    case default
-      call MOM_error(FATAL, "tidal_mixing_init: The selected"// &
-          " INT_TIDE_PROFILE is unavailable in CVMix")
-    end select
-  endif
+
+      if (G%mask2dT(i,j)<1) return
+
+      call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                &
+                                            energy_flux             = CS%tidal_qe_2d(i,j), &
+                                            rho                     = rho_fw,              &
+                                            SimmonsCoeff            = Simmons_coeff,       &
+                                            VertDep                 = vert_dep,            &
+                                            zw                      = iFaceHeight,         &
+                                            zt                      = cellHeight,          &
+                                            CVmix_tidal_params_user = CS%cvmix_tidal_params)
+
+      ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
+      ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
+      Simmons_coeff = Simmons_coeff / CS%Gamma_itides
+
+
+      call cvmix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
+                               Tdiff_out               = Kd_tidal,            &
+                               Nsqr                    = N2_int(i,:),         &
+                               OceanDepth              = iFaceHeight(G%ke+1), &
+                               SimmonsCoeff            = Simmons_coeff,       &
+                               vert_dep                = vert_dep,            &
+                               nlev                    = G%ke,                &
+                               max_nlev                = G%ke,                &
+                               CVmix_params            = CS%cvmix_glb_params, &
+                               CVmix_tidal_params_user = CS%cvmix_tidal_params)
+
+      do k=1,G%ke
+        Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
+        !TODO: Kv(i,j,k) = ????????????
+      enddo
+
+      ! diagnostics
+      if (associated(dd%Kd_itidal)) then
+        dd%Kd_itidal(i,j,:) = Kd_tidal(:)
+      endif
+      if (associated(dd%N2_int)) then
+        dd%N2_int(i,j,:) = N2_int(i,:)
+      endif
+      if (associated(dd%Simmons_coeff_2d)) then
+        dd%Simmons_coeff_2d(i,j) = Simmons_coeff
+      endif
+      if (associated(dd%vert_dep_3d)) then
+        dd%vert_dep_3d(i,j,:) = vert_dep(:)
+      endif
+
+    enddo
+  ! TODO: case (SCHMITTNER)
+  case default
+    call MOM_error(FATAL, "tidal_mixing_init: The selected"// &
+        " INT_TIDE_PROFILE is unavailable in CVMix")
+  end select
 
 end subroutine calculate_cvmix_tidal
 
@@ -1137,6 +1170,16 @@ subroutine setup_tidal_diagnostics(G,CS)
   if (CS%id_TKE_itidal > 0) then
     allocate(dd%TKE_Itidal_used(isd:ied,jsd:jed)) ; dd%TKE_Itidal_used(:,:) = 0.
   endif
+  ! additional diags for CVMix
+  if (CS%id_N2_int > 0) then
+    allocate(dd%N2_int(isd:ied,jsd:jed,nz+1)) ; dd%N2_int(:,:,:) = 0.0
+  endif
+  if (CS%id_Simmons_coeff > 0) then
+    allocate(dd%Simmons_coeff_2d(isd:ied,jsd:jed)) ; dd%Simmons_coeff_2d(:,:) = 0.0
+  endif
+  if (CS%id_vert_dep > 0) then
+    allocate(dd%vert_dep_3d(isd:ied,jsd:jed,nz+1)) ; dd%vert_dep_3d(:,:,:) = 0.0
+  endif
 end subroutine setup_tidal_diagnostics
 
 subroutine post_tidal_diagnostics(G,GV,h,CS)
@@ -1167,6 +1210,10 @@ subroutine post_tidal_diagnostics(G,GV,h,CS)
     if (CS%id_Kd_Niku   > 0) call post_data(CS%id_Kd_Niku,   dd%Kd_Niku,   CS%diag)
     if (CS%id_Kd_lowmode> 0) call post_data(CS%id_Kd_lowmode, dd%Kd_lowmode, CS%diag)
     if (CS%id_Fl_lowmode> 0) call post_data(CS%id_Fl_lowmode, dd%Fl_lowmode, CS%diag)
+
+    if (CS%id_N2_int> 0)        call post_data(CS%id_N2_int, dd%N2_int, CS%diag)
+    if (CS%id_vert_dep> 0)      call post_data(CS%id_vert_dep, dd%vert_dep_3d, CS%diag)
+    if (CS%id_Simmons_coeff> 0) call post_data(CS%id_Simmons_coeff, dd%Simmons_coeff_2d, CS%diag)
 
     if (CS%id_Kd_Itidal_Work > 0) &
       call post_data(CS%id_Kd_Itidal_Work, dd%Kd_Itidal_Work, CS%diag)
@@ -1215,6 +1262,9 @@ subroutine post_tidal_diagnostics(G,GV,h,CS)
   if (associated(dd%Kd_Itidal_Work))  deallocate(dd%Kd_Itidal_Work)
   if (associated(dd%Kd_Lowmode_Work)) deallocate(dd%Kd_Lowmode_Work)
   if (associated(dd%TKE_itidal_used)) deallocate(dd%TKE_itidal_used)
+  if (associated(dd%N2_int)) deallocate(dd%N2_int)
+  if (associated(dd%vert_dep_3d)) deallocate(dd%vert_dep_3d)
+  if (associated(dd%Simmons_coeff_2d)) deallocate(dd%Simmons_coeff_2d)
 
 end subroutine post_tidal_diagnostics
 
