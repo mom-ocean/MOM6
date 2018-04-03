@@ -232,9 +232,9 @@ logical function cvmix_shear_init(Time, G, GV, param_file, diag, CS)
   if (CS%id_ri_grad > 0) & !Initialize w/ large Richardson value
      allocate( CS%ri_grad( SZI_(G), SZJ_(G), SZK_(G)+1 ));CS%ri_grad(:,:,:) = 1.e8
 
-  CS%id_kd = register_diag_field('ocean_model', 'kd_shear', diag%axesTi, Time, &
+  CS%id_kd = register_diag_field('ocean_model', 'kd_shear_cvmix', diag%axesTi, Time, &
       'Vertical diffusivity added by MOM_cvmix_shear module', 'm2/s')
-  CS%id_kv = register_diag_field('ocean_model', 'kv_shear', diag%axesTi, Time, &
+  CS%id_kv = register_diag_field('ocean_model', 'kv_shear_cvmix', diag%axesTi, Time, &
       'Vertical viscosity added by MOM_cvmix_shear module', 'm2/s')
 
 end function cvmix_shear_init
