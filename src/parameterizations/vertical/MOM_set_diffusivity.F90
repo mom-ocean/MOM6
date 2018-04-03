@@ -505,7 +505,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     ! add background mixing
-    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS%bkgnd_mixing_csp)
 
     ! GMM, the following will go into the MOM_cvmix_double_diffusion module
     if (CS%double_diffusion) then
