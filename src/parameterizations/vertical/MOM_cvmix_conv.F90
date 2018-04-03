@@ -26,8 +26,8 @@ public cvmix_conv_init, calculate_cvmix_conv, cvmix_conv_end, cvmix_conv_is_used
 type, public :: cvmix_conv_cs
 
   ! Parameters
-  real    :: kd_conv       !< diffusivity constant used in convective regime (m2/s)
-  real    :: kv_conv       !< viscosity constant used in convective regime (m2/s)
+  real    :: kd_conv_const !< diffusivity constant used in convective regime (m2/s)
+  real    :: kv_conv_const !< viscosity constant used in convective regime (m2/s)
   real    :: bv_sqr_conv   !< Threshold for squared buoyancy frequency
                            !! needed to trigger Brunt-Vaisala parameterization (1/s^2)
   real    :: min_thickness !< Minimum thickness allowed (m)
@@ -106,7 +106,7 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
                  "instabilities (i.e., used to convert KD_CONV into KV_CONV)", &
                  units="nondim", default=1.0)
 
-  call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv, &
+  call get_param(param_file, mdl, 'KD_CONV', CS%kd_conv_const, &
                  "Diffusivity used in convective regime. Corresponding viscosity \n" // &
                  "(KV_CONV) will be set to KD_CONV * PRANDTL_TURB.", &
                  units='m2/s', default=1.00)
@@ -118,8 +118,8 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   call closeParameterBlock(param_file)
 
-  ! set kv_conv based on kd_conv and prandtl_conv
-  CS%kv_conv = CS%kd_conv * prandtl_conv
+  ! set kv_conv_const based on kd_conv_const and prandtl_conv
+  CS%kv_conv_const = CS%kd_conv_const * prandtl_conv
 
   ! allocate arrays and set them to zero
   allocate(CS%N2(SZI_(G), SZJ_(G), SZK_(G)+1)); CS%N2(:,:,:) = 0.
@@ -135,8 +135,8 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   CS%id_kv_conv = register_diag_field('ocean_model', 'conv_kv', diag%axesTi, Time, &
       'Additional viscosity added by MOM_cvmix_conv module', 'm2/s')
 
-  call cvmix_init_conv(convect_diff=CS%kd_conv, &
-                       convect_visc=CS%kv_conv, &
+  call cvmix_init_conv(convect_diff=CS%kd_conv_const, &
+                       convect_visc=CS%kv_conv_const, &
                        lBruntVaisala=.true.,    &
                        BVsqr_convect=CS%bv_sqr_conv)
 
