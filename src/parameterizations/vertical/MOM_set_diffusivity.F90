@@ -505,7 +505,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
     ! add background mixing
-    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS%bkgnd_mixing_csp)
+    call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc%Kv_slow, j, G, GV, CS%bkgnd_mixing_csp)
 
     ! GMM, the following will go into the MOM_cvmix_double_diffusion module
     if (CS%double_diffusion) then
@@ -628,12 +628,6 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
 
   if (CS%debug) then
     call hchksum(Kd ,"Kd",G%HI,haloshift=0)
-
-    !!if (associated(CS%bkgnd_mixing_csp%kd_bkgnd)) &
-    !1  call hchksum(CS%bkgnd_mixing_csp%kd_bkgnd, "kd_bkgnd",G%HI,haloshift=0)
-
-    !!if (associated(CS%bkgnd_mixing_csp%kv_bkgnd)) &
-    !!  call hchksum(CS%bkgnd_mixing_csp%kv_bkgnd, "kv_bkgnd",G%HI,haloshift=0)
 
     if (CS%useKappaShear) call hchksum(visc%Kd_shear,"Turbulent Kd",G%HI,haloshift=0)
 

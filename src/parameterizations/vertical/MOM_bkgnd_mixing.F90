@@ -303,7 +303,7 @@ end subroutine sfc_bkgnd_mixing
 
 
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
 
   type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
@@ -311,10 +311,9 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
   type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay!< squared buoyancy frequency associated
                                                                  !! with layers (1/s2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd  !< Diapycnal diffusivity of each layer (m2/sec).
-  type(vertvisc_type),                      intent(inout) :: visc!< Structure containing vertical viscosities,
-                                                                 !! bottom boundary layer properies, and related
-                                                                 !! fields.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay!< Diapycnal diffusivity of each layer m2 s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The "slow" vertical viscosity at each interface
+                                                                 !! (not layer!) in m2 s-1.
   integer,                                   intent(in)   :: j   !< Meridional grid indice.
   type(bkgnd_mixing_cs),                          pointer :: CS  !< The control structure returned by
                                                                  !! a previous call to bkgnd_mixing_init.
@@ -365,7 +364,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
 
       ! Update Kd
       do k=1,nz
-        Kd(i,j,k) = Kd(i,j,k) + 0.5*(CS%kd_bkgnd(i,j,K) + CS%kd_bkgnd(i,j,K+1))
+        kd_lay(i,j,k) = kd_lay(i,j,k) + 0.5*(CS%kd_bkgnd(i,j,K) + CS%kd_bkgnd(i,j,K+1))
       enddo
     enddo ! i loop
 
@@ -378,7 +377,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
       if (depth_c <= CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kdml
       elseif (depth_c >= 2.0*CS%Hmix) then ; CS%kd_bkgnd(i,j,k) = CS%Kd_sfc(i,j)
       else
-        Kd(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
+        kd_lay(i,j,k) = ((CS%Kd_sfc(i,j) - CS%Kdml) * I_Hmix) * depth_c + &
                     (2.0*CS%Kdml - CS%Kd_sfc(i,j))
       endif
 
@@ -391,13 +390,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
       abs_sin = max(epsilon,abs(sin(G%geoLatT(i,j)*deg_to_rad)))
       N_2Omega = max(abs_sin,sqrt(N2_lay(i,k))*I_2Omega)
       N02_N2 = (CS%N0_2Omega/N_2Omega)**2
-      Kd(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
+      kd_lay(i,j,k) = max(CS%Kd_min, CS%Kd_sfc(i,j) * &
            ((abs_sin * invcosh(N_2Omega/abs_sin)) * I_x30)*N02_N2)
     enddo ; enddo
 
   else
     do k=1,nz ; do i=is,ie
-      Kd(i,j,k) = CS%Kd_sfc(i,j)
+      kd_lay(i,j,k) = CS%Kd_sfc(i,j)
     enddo ; enddo
   endif
 
@@ -407,20 +406,18 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
       CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
       CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(Kd(i,j,K-1) + Kd(i,j,K))
+        CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(kd_lay(i,j,K-1) + kd_lay(i,j,K))
         CS%kv_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
       enddo
     enddo
   endif
 
-  ! Update visc%Kv_slow, if associated
-  if (associated(visc%Kv_slow)) then
-    do i=is,ie
-      do k=1,nz+1
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%kv_bkgnd(i,j,k)
-      enddo
+  ! Update kv
+  do i=is,ie
+    do k=1,nz+1
+      kv(i,j,k) = kv(i,j,k) + CS%kv_bkgnd(i,j,k)
     enddo
-  endif
+  enddo
 
 end subroutine calculate_bkgnd_mixing
 
