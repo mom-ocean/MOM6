@@ -677,8 +677,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
       !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       do k=1,nz ; do j=js,je ; do i=is,ie
-        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv_3d(i,j,k)
-        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%cvmix_conv_csp%kv_conv_3d(i,j,k)
+        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv(i,j,k)
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%cvmix_conv_csp%kv_conv(i,j,k)
       enddo ; enddo ; enddo
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

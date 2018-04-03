@@ -1823,8 +1823,8 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
-    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due to slow" &
-                  " processes", hor_grid='h', z_grid='i')
+    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due \n" // &
+                  " to slow processes", hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
 
   endif

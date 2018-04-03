@@ -18,6 +18,7 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_verticalGrid,    only : verticalGrid_type
 use MOM_file_parser,     only : get_param, log_version, param_file_type
 use cvmix_background,    only : cvmix_init_bkgnd, cvmix_coeffs_bkgnd
+use MOM_variables,       only : vertvisc_type
 use MOM_intrinsic_functions, only : invcosh
 
 implicit none ; private
@@ -302,23 +303,26 @@ end subroutine sfc_bkgnd_mixing
 
 
 !> Calculates the vertical background diffusivities/viscosities
-subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS)
+subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc, j, G, GV, CS)
 
-  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
-  type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
-  type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
+  type(ocean_grid_type),                      intent(in)  :: G   !< Grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h   !< Layer thickness, in m or kg m-2.
+  type(thermo_var_ptrs),                      intent(in)  :: tv  !< Thermodynamics structure.
   real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay!< squared buoyancy frequency associated
-                                                                !! with layers (1/s2)
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd !< Diapycnal diffusivity of each layer (m2/sec).
-  integer,                                  intent(in)   :: j
-  type(bkgnd_mixing_cs),                          pointer :: CS !< The control structure returned by
-                                                                !! a previous call to bkgnd_mixing_init.
+                                                                 !! with layers (1/s2)
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: Kd  !< Diapycnal diffusivity of each layer (m2/sec).
+  type(vertvisc_type),                      intent(inout) :: visc!< Structure containing vertical viscosities,
+                                                                 !! bottom boundary layer properies, and related
+                                                                 !! fields.
+  integer,                                   intent(in)   :: j   !< Meridional grid indice.
+  type(bkgnd_mixing_cs),                          pointer :: CS  !< The control structure returned by
+                                                                 !! a previous call to bkgnd_mixing_init.
 
   ! local variables
-  real, dimension(SZI_(G), SZK_(G)+1) ::  depth_2d !< distance from surface of an interface (m)
+  real, dimension(SZI_(G), SZK_(G)+1) :: depth_2d  !< distance from surface of an interface (m)
   real, dimension(SZI_(G)) :: &
-    depth    !< distance from surface of an interface (meter)
+        depth        !< distance from surface of an interface (meter)
   real :: depth_c    !< depth of the center of a layer (meter)
   real :: I_Hmix     !< inverse of fixed mixed layer thickness (1/m)
   real :: I_2Omega   !< 1/(2 Omega) (sec)
@@ -359,15 +363,11 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS)
                               nlev=nz, &
                               max_nlev=nz)
 
-      do k=1,nz
       ! Update Kd
+      do k=1,nz
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(CS%kd_bkgnd(i,j,K) + CS%kd_bkgnd(i,j,K+1))
-      ! ######## CHECK ###############
-      ! GMM, we could update Kv here?????
-      ! Kv(i,j,k) = Kv(i,j,k) + 0.5*(CS%bkgnd_mixing_csp%kv_bkgnd(i,j,K) + &
-      !              CS%bkgnd_mixing_csp%kv_bkgnd(i,j,K+1))
       enddo
-    enddo
+    enddo ! i loop
 
   elseif ((.not. CS%Bryan_Lewis_diffusivity) .and. (.not.CS%bulkmixedlayer) .and. &
      (CS%Kd/= CS%Kdml)) then
@@ -401,17 +401,23 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd, j, G, GV, CS)
     enddo ; enddo
   endif
 
-  ! Update CS%kd_bkgnd
-  ! GMM, we could update CS%kv_bkgnd here?????
+  ! Update CS%kd_bkgnd and CS%kv_bkgnd for diagnostic purposes
   if (.not. CS%Bryan_Lewis_diffusivity) then
     do i=is,ie
-      CS%kd_bkgnd(i,j,1) = 0.0
-      CS%kd_bkgnd(i,j,nz+1) = 0.0
+      CS%kd_bkgnd(i,j,1) = 0.0; CS%kv_bkgnd(i,j,1) = 0.0
+      CS%kd_bkgnd(i,j,nz+1) = 0.0; CS%kv_bkgnd(i,j,nz+1) = 0.0
       do k=2,nz
-        ! Update CS%kd_bkgnd
         CS%kd_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) + 0.5*(Kd(i,j,K-1) + Kd(i,j,K))
-      ! ######## CHECK ###############
-      ! GMM, we could update CS%kv_bkgnd here?????
+        CS%kv_bkgnd(i,j,k) = CS%kd_bkgnd(i,j,k) * CS%prandtl_bkgnd
+      enddo
+    enddo
+  endif
+
+  ! Update visc%Kv_slow, if associated
+  if (associated(visc%Kv_slow)) then
+    do i=is,ie
+      do k=1,nz+1
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%kv_bkgnd(i,j,k)
       enddo
     enddo
   endif
