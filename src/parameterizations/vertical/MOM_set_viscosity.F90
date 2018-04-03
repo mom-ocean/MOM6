@@ -1811,7 +1811,7 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
     allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
-    ! GMM, allocate visc%Kv_slow here?
+    allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
 
     vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
@@ -1823,6 +1823,10 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
     vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
+    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due to slow" &
+                  " processes", hor_grid='h', z_grid='i')
+    call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
+
   endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
@@ -2094,6 +2098,7 @@ subroutine set_visc_end(visc, CS)
     deallocate(visc%nkml_visc_u) ; deallocate(visc%nkml_visc_v)
   endif
   if (associated(visc%Kd_shear)) deallocate(visc%Kd_shear)
+  if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
   if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
