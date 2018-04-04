@@ -119,7 +119,7 @@ type, public :: vertvisc_CS ; private
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
-  logical :: LagrangianMixing
+  logical :: StokesMixing
 end type vertvisc_CS
 
 contains
@@ -197,6 +197,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
                            ! units of m2 s-1.
 
   logical :: do_i(SZIB_(G))
+  logical :: DoStokesMixing
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec
@@ -214,15 +215,37 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   Rho0 = GV%Rho0
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt
+  
+  !Check if Stokes mixing allowed if requested (present and associated)
+  if (CS%StokesMixing) then
+    DoStokesMixing=(present(Waves) .and. associated(Waves))
+    if (.not.DoStokesMixing) then
+      call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
+                    "Waves Control Structure")
+    endif
+  else
+    DoStokesMixing=.false.
+  endif
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
+
   !   Update the zonal velocity component using a modification of a standard
   ! tridagonal solver.
+
   ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (CS%LagrangianMixing) then
-     u = u + Waves%Us_x
+  if (DoStokesMixing ) then
+    do j=G%jsc,G%jec
+      do I=Isq,Ieq  
+        if (G%mask2dCu(I,j) > 0) then
+          do k=1,nz
+            u(i,j,k) = u(i,j,k) + Waves%Us_x(i,j,k)
+          enddo
+        endif
+      enddo
+    enddo
   endif
+
 !$OMP parallel do default(none) shared(G,Isq,Ieq,ADp,nz,u,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  h_neglect,Hmix,I_Hmix,visc,dt_m_to_H,   &
 !$OMP                                  Idt,taux_bot,Rho0)                      &
@@ -322,15 +345,32 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   enddo ! end u-component j loop
 
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (CS%LagrangianMixing) then
-     u = u - Waves%Us_x
+  if (DoStokesMixing ) then
+    do j=G%jsc,G%jec
+      do I=Isq,Ieq  
+        if (G%mask2dCu(I,j) > 0) then
+          do k=1,nz
+            u(i,j,k) = u(i,j,k) - Waves%Us_x(i,j,k)
+          enddo
+        endif
+      enddo
+    enddo
   endif
 
   ! Now work on the meridional velocity component.
   ! When mixing down Eulerian current + Stokes drift add before calling solver
-  if (CS%LagrangianMixing) then
-     v = v + Waves%Us_y
+  if (DoStokesMixing ) then
+    do j=G%jsc,G%jec
+      do I=Isq,Ieq  
+        if (G%mask2dCv(I,j) > 0) then
+          do k=1,nz
+            v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+          enddo
+        endif
+      enddo
+    enddo
   endif
+
 !$OMP parallel do default(none) shared(G,Jsq,Jeq,ADp,nz,v,CS,dt_Rho0,fluxes,h, &
 !$OMP                                  Hmix,I_Hmix,visc,dt_m_to_H,Idt,Rho0,    &
 !$OMP                                  tauy_bot,is,ie)                         &
@@ -402,9 +442,18 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
       enddo ; enddo ; endif
     endif
   enddo ! end of v-component J loop
+
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
-  if (CS%LagrangianMixing) then
-     v = v - Waves%Us_y
+  if (DoStokesMixing ) then
+    do j=G%jsc,G%jec
+      do I=Isq,Ieq  
+        if (G%mask2dCv(I,j) > 0) then
+          do k=1,nz
+            v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
+          enddo
+        endif
+      enddo
+    enddo
   endif
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, CS)
@@ -1631,10 +1680,25 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The start value of the truncation CFL number used when\n"//&
                  "ramping up CFL_TRUNC.", &
                  units="nondim", default=0.)
-  call get_param(param_file, mdl, "LAGRANGIAN_MIXING", CS%LagrangianMixing, &
-       "Flag to use Lagrangian Mixing (with Stokes drift). \n"//&
-       "Still needs work and testing, so not recommended for use.", units="", &
-       Default=.false.)
+  call get_param(param_file, mdl, "STOKES_MIXING_COMBINED", CS%StokesMixing, &
+                 "Flag to use Stokes drift Mixing via the Lagrangian \n"//&
+                 " current (Eulerian plus Stokes drift). \n"//&
+                 " Still needs work and testing, so not recommended for use.",&
+                 Default=.false.)
+  !BGR 04/04/2018{
+  ! StokesMixing is required for MOM6 for some Langmuir mixing parameterization.
+  !   The code used here has not been developed for vanishing layers or in
+  !   conjunction with any bottom friction.  Therefore, the following line is
+  !   added so this functionality cannot be used without user intervention in
+  !   the code.  This will prevent general use of this functionality until proper
+  !   care is given to the previously mentioned issues.  Comment out the following
+  !   MOM_error to use, but do so at your own risk and with these points in mind.
+  !}
+  if (CS%StokesMixing) then
+    call MOM_error(FATAL, "Stokes mixing requires user interfention in the code.\n"//&
+                          "  Model now exiting.  See MOM_vert_friction.F90 for  \n"//&
+                          "  details (search 'BGR 04/04/2018' to locate comment).")
+  endif
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity \n"//&
                  "components are set to 0.  A reasonable value might be \n"//&
