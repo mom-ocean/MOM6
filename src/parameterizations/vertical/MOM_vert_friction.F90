@@ -215,7 +215,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   Rho0 = GV%Rho0
   h_neglect = GV%H_subroundoff
   Idt = 1.0 / dt
-  
+
   !Check if Stokes mixing allowed if requested (present and associated)
   if (CS%StokesMixing) then
     DoStokesMixing=(present(Waves) .and. associated(Waves))
@@ -236,7 +236,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! When mixing down Eulerian current + Stokes drift add before calling solver
   if (DoStokesMixing ) then
     do j=G%jsc,G%jec
-      do I=Isq,Ieq  
+      do I=Isq,Ieq
         if (G%mask2dCu(I,j) > 0) then
           do k=1,nz
             u(i,j,k) = u(i,j,k) + Waves%Us_x(i,j,k)
@@ -347,7 +347,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
   if (DoStokesMixing ) then
     do j=G%jsc,G%jec
-      do I=Isq,Ieq  
+      do I=Isq,Ieq
         if (G%mask2dCu(I,j) > 0) then
           do k=1,nz
             u(i,j,k) = u(i,j,k) - Waves%Us_x(i,j,k)
@@ -360,8 +360,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
   ! Now work on the meridional velocity component.
   ! When mixing down Eulerian current + Stokes drift add before calling solver
   if (DoStokesMixing ) then
-    do j=G%jsc,G%jec
-      do I=Isq,Ieq  
+    do j=Jsq,Jeq
+      do I=Is,Ie
         if (G%mask2dCv(I,j) > 0) then
           do k=1,nz
             v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
@@ -445,8 +445,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, CS, &
 
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
   if (DoStokesMixing ) then
-    do j=G%jsc,G%jec
-      do I=Isq,Ieq  
+    do j=Jsq,Jeq
+      do I=Is,Ie
         if (G%mask2dCv(I,j) > 0) then
           do k=1,nz
             v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
