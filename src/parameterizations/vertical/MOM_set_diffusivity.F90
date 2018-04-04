@@ -2957,6 +2957,8 @@ end subroutine set_diffusivity_init
 subroutine set_diffusivity_end(CS)
   type(set_diffusivity_CS), pointer :: CS !< Control structure for this module
 
+  if (.not.associated(CS)) return
+
   call bkgnd_mixing_end(CS%bkgnd_mixing_csp)
 
   if (CS%user_change_diff) &
