@@ -133,8 +133,10 @@ subroutine bkgnd_mixing_init(Time, G, GV, param_file, diag, CS)
                  units="m2 s-1", default=0.01*CS%Kd)
 
   ! The following is needed to set one of the choices of vertical background mixing
-  call get_param(param_file, mdl, "BULKMIXEDLAYER", CS%bulkmixedlayer, &
-                 do_not_log=.true.)
+
+  ! BULKMIXEDLAYER is not always defined (e.g., CM2G63L), so the following by pass
+  ! the need to include BULKMIXEDLAYER in MOM_input
+  CS%bulkmixedlayer = (GV%nkml > 0)
   if (CS%bulkmixedlayer) then
     ! Check that Kdml is not set when using bulk mixed layer
     call get_param(param_file, mdl, "KDML", CS%Kdml, default=-1.)
