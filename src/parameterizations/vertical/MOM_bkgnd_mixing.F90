@@ -314,7 +314,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
   real, dimension(SZI_(G),SZK_(G)),           intent(in)  :: N2_lay!< squared buoyancy frequency associated
                                                                  !! with layers (1/s2)
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: kd_lay!< Diapycnal diffusivity of each layer m2 s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), intent(out) :: kv  !< The "slow" vertical viscosity at each interface
+  real, dimension(:,:,:),                     pointer     :: kv  !< The "slow" vertical viscosity at each interface
                                                                  !! (not layer!) in m2 s-1.
   integer,                                   intent(in)   :: j   !< Meridional grid indice.
   type(bkgnd_mixing_cs),                          pointer :: CS  !< The control structure returned by
@@ -415,11 +415,13 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, kd_lay, kv, j, G, GV, CS)
   endif
 
   ! Update kv
-  do i=is,ie
-    do k=1,nz+1
-      kv(i,j,k) = kv(i,j,k) + CS%kv_bkgnd(i,j,k)
+  if (associated(kv)) then
+    do i=is,ie
+      do k=1,nz+1
+        kv(i,j,k) = kv(i,j,k) + CS%kv_bkgnd(i,j,k)
+      enddo
     enddo
-  enddo
+  endif
 
 end subroutine calculate_bkgnd_mixing
 
