@@ -178,7 +178,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
-  type(OBC_segment_type), pointer :: segment
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -274,31 +273,6 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       call set_up_sponge_field(temp, tr_ptr, G, nz, sponge_CSp)
     enddo
     deallocate(temp)
-  endif
-
-  if (associated(OBC)) then
-    call query_vardesc(CS%tr_desc(1), name, caller="initialize_DOME_tracer")
-    if (OBC%specified_v_BCs_exist_globally) then
-      segment => OBC%segment(1)
-      allocate(segment%field(NTR))
-      allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
-!     allocate(OBC_tr1_v(G%isd:G%ied,G%jsd:G%jed,nz))
-      do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
-        if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
-        else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
-      enddo ; enddo ; enddo
-      call register_segment_tracer(CS%tr_desc(1), param_file, GV, &
-                                   OBC%segment(1), OBC_array=.true.)
-    else
-      ! This is not expected in the DOME example.
-    endif
-    ! All tracers but the first have 0 concentration in their inflows. As this
-    ! is the default value, the following calls are unnecessary.
-    do m=2,NTR
-      call query_vardesc(CS%tr_desc(m), name, caller="initialize_DOME_tracer")
-      call register_segment_tracer(CS%tr_desc(m), param_file, GV, &
-                                   OBC%segment(1), OBC_scalar=0.0)
-    enddo
   endif
 
 end subroutine initialize_DOME_tracer
