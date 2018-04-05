@@ -585,7 +585,6 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   endif
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
   ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
   ! And sets visc%Kv_shear
@@ -2342,8 +2341,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
     allocate(CS%frazil_heat_diag(isd:ied,jsd:jed,nz) ) ; CS%frazil_heat_diag(:,:,:) = 0.
   endif
 
-  ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme
-  ! is to be used to drive diapycnal mixing.
+  ! CS%use_tidal_mixing is set to True if an internal tidal dissipation scheme is to be used.
   CS%use_tidal_mixing = tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp, CS%tidal_mixing_CSp)
 
   ! CS%use_cvmix_conv is set to True if CVMix convection will be used, otherwise
