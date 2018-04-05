@@ -112,7 +112,7 @@ subroutine channel6_initialize_topography(D, G, param_file, max_depth)
                 .or. ((y>=reentrantn+sdp/2 .or. y<=reentrants-sdp/2) .and. x>1.0-dx/1.5)) then 
         D(i,j) = 0.0
       endif
-
+      
     D(i,j) = D(i,j) * max_depth
   enddo
   enddo
