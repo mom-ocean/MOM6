@@ -705,6 +705,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         dd%vert_dep_3d(i,j,:) = vert_dep(:)
       endif
 
+    enddo ! i=is,ie
 
   ! TODO: case (SCHMITTNER)
   case default
@@ -1122,7 +1123,7 @@ subroutine setup_tidal_diagnostics(G,CS)
   integer :: isd, ied, jsd, jed, nz
   type(tidal_mixing_diags), pointer :: dd
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed; nz = G%ke
+  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke 
   dd => CS%dd
 
   if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_itidal_z > 0) .or. &
