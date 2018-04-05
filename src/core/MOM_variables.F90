@@ -173,7 +173,7 @@ end type cont_diag_ptrs
 !! coefficients, and related fields.
 type, public :: vertvisc_type
   real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
-                             !! that is captured in Kd_turb.
+                             !! that is captured in Kd_shear.
   real, pointer, dimension(:,:) :: &
     bbl_thick_u => NULL(), & !< The bottom boundary layer thickness at the
                              !! u-points, in m.
@@ -224,10 +224,13 @@ type, public :: vertvisc_type
                         ! Kd_extra_S is positive for salt fingering; Kd_extra_T
                         ! is positive for double diffusive convection.  These
                         ! are only allocated if DOUBLE_DIFFUSION is true.
-    Kd_turb => NULL(), &!< The turbulent diapycnal diffusivity at the interfaces
-                        !! between each layer, in m2 s-1.
-    Kv_turb => NULL(), &!< The turbulent vertical viscosity at the interfaces
-                        !! between each layer, in m2 s-1.
+    Kd_shear => NULL(), &!< The shear-driven turbulent diapycnal diffusivity
+                         !! at the interfaces between each layer, in m2 s-1.
+    Kv_shear => NULL(), &!< The shear-driven turbulent vertical viscosity
+                         !! at the interfaces between each layer, in m2 s-1.
+    Kv_slow  => NULL(), &!< The turbulent vertical viscosity component due to
+                         !! "slow" processes (e.g., tidal, background,
+                         !! convection etc).
     TKE_turb => NULL()  !< The turbulent kinetic energy per unit mass defined
                         !! at the interfaces between each layer, in m2 s-2.
 end type vertvisc_type
