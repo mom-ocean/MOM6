@@ -10,7 +10,6 @@ use MOM_diag_to_Z,           only : calc_Zint_diags
 use MOM_EOS,                 only : calculate_density
 use MOM_variables,           only : thermo_var_ptrs, p3d
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
-use MOM_coms,                only : PE_here
 use MOM_debugging,           only : hchksum
 use MOM_grid,                only : ocean_grid_type
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -706,16 +705,6 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         dd%vert_dep_3d(i,j,:) = vert_dep(:)
       endif
 
-      if (CS%debug) then
-        if (all(dd%Kd_itidal(i,j,:).eq.0.0) .and. .not. &
-            (all(dd%vert_dep_3d(i,j,:).eq.0.0) .or. &
-             all(dd%N2_int(i,j,:).eq.0.0) .or. &
-             Simmons_coeff.eq.0.0 ) )then
-          print *, "debug1 all zeros for ", i, j, iFaceHeight(G%ke+1)
-        endif
-      endif
-
-    enddo ! i=is,ie
 
   ! TODO: case (SCHMITTNER)
   case default
