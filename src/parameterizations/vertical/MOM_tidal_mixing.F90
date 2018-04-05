@@ -201,7 +201,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
   type(vardesc) :: vd
-  real :: utide, zbot, hamp, prandtl
+  real :: utide, zbot, hamp, prandtl_tidal
   real :: Niku_scale ! local variable for scaling the Nikurashin TKE flux data
   integer :: i, j, is, ie, js, je
   integer :: isd, ied, jsd, jed
@@ -482,9 +482,12 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                   ! TODO: list all available tidal energy types here
     call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, &
                    do_not_log=.True.)
-    call get_param(param_file, mdl, "PRANDTL_TURB", prandtl,units="nondim", default=1.0, &
+    call get_param(param_file, mdl, "PRANDTL_TIDAL", prandtl_tidal, &
+                   "Prandtl number used by CVMix tidal mixing schemes \n"//&
+                   "to convert vertical diffusivities into viscosities.", &
+                    units="nondim", default=1.0, &
                    do_not_log=.true.)
-    call cvmix_put(CS%cvmix_glb_params,'Prandtl',prandtl)
+    call cvmix_put(CS%cvmix_glb_params,'Prandtl',prandtl_tidal)
 
     int_tide_profile_str = lowercase(int_tide_profile_str)
 
@@ -672,6 +675,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
       ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
       ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
+      ! TODO: (CS%Gamma_itides)*tidal_energy_flux_2d is unnecessary, directly use tidal_energy_flux_2d
       Simmons_coeff = Simmons_coeff / CS%Gamma_itides
 
 
