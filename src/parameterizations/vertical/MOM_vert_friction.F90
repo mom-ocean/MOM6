@@ -1094,21 +1094,21 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
     endif
   endif ; enddo
 
-  if (associated(visc%Kv_turb)) then
-     ! BGR/ Add factor of 2. * the averaged Kv_turb.
+  if (associated(visc%Kv_shear)) then
+     ! BGR/ Add factor of 2. * the averaged Kv_shear.
      !      this is needed to reproduce the analytical solution to
      !      a simple diffusion problem, likely due to h_shear being
      !      equal to 2 x \delta z
     if (work_on_u) then
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i+1,j,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i+1,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i+1,j,k) ; enddo
           endif
         endif ; enddo
       endif
@@ -1117,14 +1117,14 @@ subroutine find_coupling_coef(a, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_m
       endif ; enddo ; enddo
     else
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
-        Kv_add(i,K) = (2.*0.5)*(visc%Kv_turb(i,j,k) + visc%Kv_turb(i,j+1,k))
+        Kv_add(i,K) = (2.*0.5)*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
         do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j,k) ; enddo
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_turb(i,j+1,k) ; enddo
+            do K=2,nz ; Kv_add(i,K) = 2.*visc%Kv_shear(i,j+1,k) ; enddo
           endif
         endif ; enddo
       endif

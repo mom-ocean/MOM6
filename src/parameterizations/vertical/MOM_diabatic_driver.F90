@@ -9,7 +9,7 @@ use MOM_debugging,           only : hchksum
 use MOM_checksum_packages,   only : MOM_state_chksum, MOM_state_stats
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,           only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_CVMix_shear,         only : CVMix_shear_is_used
+use MOM_CVMix_shear,         only : cvmix_shear_is_used
 use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabatic_aux_CS
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, insert_brine, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut
@@ -22,8 +22,8 @@ use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
 use MOM_diag_to_Z,           only : diag_to_Z_CS, register_Zint_diag, calc_Zint_diags
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
-use MOM_diffConvection,      only : diffConvection_CS, diffConvection_init
-use MOM_diffConvection,      only : diffConvection_calculate, diffConvection_end
+use MOM_cvmix_conv,          only : cvmix_conv_init, cvmix_conv_cs
+use MOM_cvmix_conv,          only : cvmix_conv_end, calculate_cvmix_conv
 use MOM_domains,             only : pass_var, To_West, To_South, To_All, Omit_Corners
 use MOM_domains,             only : create_group_pass, do_group_pass, group_pass_type
 use MOM_energetic_PBL,       only : energetic_PBL, energetic_PBL_init
@@ -47,7 +47,7 @@ use MOM_interface_heights,   only : find_eta
 use MOM_internal_tides,      only : propagate_int_tide
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
-use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end
+use MOM_KPP,                 only : KPP_CS, KPP_init, KPP_calculate, KPP_end, KPP_get_BLD
 use MOM_KPP,                 only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_opacity,             only : opacity_init, set_opacity, opacity_end, opacity_CS
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
@@ -90,6 +90,8 @@ type, public:: diabatic_CS ; private
                                      !! shear-driven diapycnal diffusivity.
   logical :: use_cvmix_shear         !< If true, use the CVMix module to find the
                                      !! shear-driven diapycnal diffusivity.
+  logical :: use_cvmix_conv          !< If true, use the CVMix module to get enhanced
+                                     !! mixing due to convection.
   logical :: use_sponge              !< If true, sponges may be applied anywhere in the
                                      !! domain.  The exact location and properties of
                                      !! those sponges are set by calls to
@@ -149,8 +151,6 @@ type, public:: diabatic_CS ; private
   logical :: useKPP                  !< use CVmix/KPP diffusivities and non-local transport
   logical :: salt_reject_below_ML    !< If true, add salt below mixed layer (layer mode only)
   logical :: KPPisPassive            !< If true, KPP is in passive mode, not changing answers.
-  logical :: useConvection           !< If true, calculate large diffusivities when column
-                                     !! is statically unstable.
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debugConservation       !< If true, monitor conservation and extrema.
   logical :: tracer_tridiag          !< If true, use tracer_vertdiff instead of tridiagTS for
@@ -220,7 +220,7 @@ type, public:: diabatic_CS ; private
   type(optics_type),            pointer :: optics                => NULL()
   type(diag_to_Z_CS),           pointer :: diag_to_Z_CSp         => NULL()
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL()
-  type(diffConvection_CS),      pointer :: Conv_CSp              => NULL()
+  type(cvmix_conv_cs),          pointer :: cvmix_conv_csp        => NULL()
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL()
 
   type(group_pass_type) :: pass_hold_eb_ea !< For group halo pass
@@ -522,7 +522,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   if (CS%debug) then
     call MOM_state_chksum("before find_uv_at_h", u, v, h, G, GV, haloshift=0)
   endif
-  if (CS%use_kappa_shear .or. CS%use_CVMix_shear) then
+  if (CS%use_kappa_shear .or. CS%use_cvmix_shear) then
     if ((CS%ML_mix_first > 0.0) .or. CS%use_geothermal) then
       call find_uv_at_h(u, v, h_orig, u_h, v_h, G, GV, eaml, ebml)
       if (CS%debug) then
@@ -582,8 +582,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   call cpu_clock_begin(id_clock_set_diffusivity)
   ! Sets: Kd, Kd_int, visc%Kd_extra_T, visc%Kd_extra_S
-  ! Also changes: visc%Kd_turb, visc%TKE_turb (not clear that TKE_turb is used as input ????)
-  ! And sets visc%Kv_turb
+  ! Also changes: visc%Kd_shear, visc%TKE_turb (not clear that TKE_turb is used as input ????
+  ! And sets visc%Kv_shear
   call set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, CS%optics, visc, dt, G, GV, CS%set_diff_CSp, Kd, Kd_int)
   call cpu_clock_end(id_clock_set_diffusivity)
   if (showCallTree) call callTree_waypoint("done with set_diffusivity (diabatic)")
@@ -632,8 +632,13 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 !$OMP end parallel
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
+      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
+
+    if (associated(Hml)) then
+      call KPP_get_BLD(CS%KPP_CSp, Hml(:,:), G)
+      call pass_var(Hml, G%domain, halo=1)
+    endif
 
     if (.not. CS%KPPisPassive) then
 !$OMP do
@@ -666,9 +671,18 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
   endif  ! endif for KPP
 
-  ! Check for static instabilities and increase Kd_int where unstable
-  if (CS%useConvection) call diffConvection_calculate(CS%Conv_CSp, &
-         G, GV, h, tv%T, tv%S, tv%eqn_of_state, Kd_int)
+  ! Add vertical diff./visc. due to convection (computed via CVMix)
+  if (CS%use_cvmix_conv) then
+    call calculate_cvmix_conv(h, tv, G, GV, CS%cvmix_conv_csp, Hml)
+
+      !!!!!!!! GMM, the following needs to be checked !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        Kd_int(i,j,k) = Kd_int(i,j,k) + CS%cvmix_conv_csp%kd_conv(i,j,k)
+        visc%Kv_slow(i,j,k) = visc%Kv_slow(i,j,k) + CS%cvmix_conv_csp%kv_conv(i,j,k)
+      enddo ; enddo ; enddo
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  endif
 
   if (CS%useKPP) then
 
@@ -813,10 +827,10 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
         if (CS%ePBL_is_additive) then
           Kd_add_here = Kd_ePBL(i,j,K)
-          visc%Kv_turb(i,j,K) = visc%Kv_turb(i,j,K) + Kd_ePBL(i,j,K)
+          visc%Kv_shear(i,j,K) = visc%Kv_shear(i,j,K) + Kd_ePBL(i,j,K)
         else
-          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_turb(i,j,K), 0.0)
-          visc%Kv_turb(i,j,K) = max(visc%Kv_turb(i,j,K), Kd_ePBL(i,j,K))
+          Kd_add_here = max(Kd_ePBL(i,j,K) - visc%Kd_shear(i,j,K), 0.0)
+          visc%Kv_shear(i,j,K) = max(visc%Kv_shear(i,j,K), Kd_ePBL(i,j,K))
         endif
         Ent_int = Kd_add_here * (GV%m_to_H**2 * dt) / &
                     (0.5*(h(i,j,k-1) + h(i,j,k)) + h_neglect)
@@ -1349,9 +1363,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   call create_group_pass(CS%pass_hold_eb_ea, eb, G%Domain, dir_flag, halo=1)
   call create_group_pass(CS%pass_hold_eb_ea, ea, G%Domain, dir_flag, halo=1)
   call do_group_pass(CS%pass_hold_eb_ea, G%Domain)
-  ! visc%Kv_turb is not in the group pass because it has larger vertical extent.
-  if (associated(visc%Kv_turb)) &
-    call pass_var(visc%Kv_turb, G%Domain, To_All+Omit_Corners, halo=1)
+  ! visc%Kv_shear is not in the group pass because it has larger vertical extent.
+  if (associated(visc%Kv_shear)) &
+    call pass_var(visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
@@ -1905,7 +1919,7 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  "If true, apply parameterization of double-diffusion.", &
                  default=.false. )
   CS%use_kappa_shear = kappa_shear_is_used(param_file)
-  CS%use_CVMix_shear = cvmix_shear_is_used(param_file)
+  CS%use_cvmix_shear = cvmix_shear_is_used(param_file)
   if (CS%bulkmixedlayer) then
     call get_param(param_file, mod, "ML_MIX_FIRST", CS%ML_mix_first, &
                  "The fraction of the mixed layer mixing that is applied \n"//&
@@ -2324,9 +2338,9 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
   endif
 
 
-  ! CS%useConvection is set to True IF convection will be used, otherwise False.
-  ! CS%Conv_CSp is allocated by diffConvection_init()
-  CS%useConvection = diffConvection_init(param_file, G, diag, Time, CS%Conv_CSp)
+  ! CS%use_cvmix_conv is set to True if CVMix convection will be used, otherwise
+  ! False.
+  CS%use_cvmix_conv = cvmix_conv_init(Time, G, GV, param_file, diag, CS%cvmix_conv_csp)
 
   call entrain_diffusive_init(Time, G, GV, param_file, diag, CS%entrain_diffusive_CSp)
 
@@ -2414,7 +2428,9 @@ subroutine diabatic_driver_end(CS)
     deallocate( CS%KPP_NLTscalar )
     call KPP_end(CS%KPP_CSp)
   endif
-  if (CS%useConvection) call diffConvection_end(CS%Conv_CSp)
+
+  if (CS%use_cvmix_conv) call cvmix_conv_end(CS%cvmix_conv_csp)
+
   if (CS%use_energetic_PBL) &
     call energetic_PBL_end(CS%energetic_PBL_CSp)
   if (CS%debug_energy_req) &
