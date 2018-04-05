@@ -59,7 +59,7 @@ use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 ! use MOM_EOS, only : calculate_density, calculate_density_derivs
 use cvmix_energetic_pbl, only : energetic_PBL_CS=>cvmix_energetic_PBL_CS, cvmix_epbl_column, cvmix_epbl_end
- 
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -192,7 +192,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
     u, &            !   The zonal velocity, in m s-1.
     v               !   The meridional velocity, in m s-1.
   real, dimension(SZI_(G),SZJ_(G)) ::   Hsfc_used     !   The thickness of the surface region after buffer layer
-  real    :: U_Star,U_Star_Mean 
+  real    :: U_Star,U_Star_Mean
 ! The following is only used as a diagnostic.
   real :: dt__diag  ! A copy of dt_diag (if present) or dt, in s.
   real :: IdtdR0    !  = 1.0 / (dt__diag * Rho0), in m3 kg-1 s-1.
@@ -242,7 +242,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, CS, &
      dT_expected(:,:,:) = 0.0
   endif
   if (present(dS_expected)) then
-     dS_expected(:,:,:) = 0.0 
+     dS_expected(:,:,:) = 0.0
   endif
 
   do j=js,je

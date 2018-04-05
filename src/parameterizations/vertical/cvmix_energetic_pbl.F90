@@ -49,7 +49,7 @@ module cvmix_energetic_pbl
 
 implicit none ; private
 
-type :: cvmix_energetic_PBL_CS 
+type :: cvmix_energetic_PBL_CS
   real    :: mstar           ! The ratio of the friction velocity cubed to the
                              ! TKE available to drive entrainment, nondimensional.
                              ! This quantity is the vertically integrated
@@ -201,7 +201,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
 
 
   integer , intent(in) :: NZ
-  real, dimension(NZ+1), intent(inout) :: Kd   !< The diapycnal diffusivity, in m2 s-1. 
+  real, dimension(NZ+1), intent(inout) :: Kd   !< The diapycnal diffusivity, in m2 s-1.
 
   real, dimension(NZ), intent(in)    :: h    !< Layer thickness, in m or kg m-2.
   real, dimension(NZ), intent(in)    :: u    !< Zonal velocities interpolated to h points, m s-1.
@@ -449,7 +449,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
   vonKar = 0.41
   mstar_mix=CS%MSTAR!Initialize to mstar
   I_dtrho = 0.0 ; if (dt*Rho0 > 0.0) I_dtrho = 1.0 / (dt*Rho0)
-    
+
       ! Computing Bf w/ limiters.
       Bf_Stable = max(0.0,buoy_flux) ! Positive for stable
       Bf_Unstable = min(0.0,buoy_flux) ! Negative for unstable
@@ -459,12 +459,6 @@ subroutine cvmix_epbl_column(NZ, Kd, &
       ! Inverse of Ekman and Obukhov
       iL_Ekman   = absf/U_star
       iL_Obukhov = buoy_flux*vonkar/U_Star**3
-
-
-
-!    endif ; enddo
-
-!    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
 
       h_sum = H_neglect ; do k=1,nz ; h_sum = h_sum + h(k) ; enddo
       I_hs = 0.0 ; if (h_sum > 0.0) I_hs = 1.0 / h_sum
@@ -486,12 +480,6 @@ subroutine cvmix_epbl_column(NZ, Kd, &
 
         pres(K+1) = pres(K) + dPres
       enddo
-
-!    endif ; enddo
-
-    ! Note the outer i-loop and inner k-loop loop order!!!
-!    do i=is,ie ; if (G%mask2dT(i,j) > 0.5) then
-!      do k=1,nz ; T0(k) = T(i,k) ; S0(k) = S(i,k) ; enddo
 
       ! Store the initial mechanical TKE and convectively released PE to
       ! enable multiple iterations.
@@ -1265,7 +1253,7 @@ subroutine cvmix_epbl_column(NZ, Kd, &
       if (allocated(CS%Ekman_Obukhov)) CS%Ekman_Obukhov(ii,jj) = (iL_Obukhov/(iL_Ekman+1.e-10))
       if (allocated(CS%La)) CS%La(ii,jj) = LA
       if (allocated(CS%La_mod)) CS%La_mod(ii,jj) = LAmod
-      
+
 end subroutine cvmix_epbl_column
 
 !> This subroutine calculates the change in potential energy and or derivatives
