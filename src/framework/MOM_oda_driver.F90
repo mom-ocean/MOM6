@@ -404,7 +404,7 @@ contains
 
      !! switch to global pelist
      call set_current_pelist(CS%filter_pelist)
-    if(is_root_pe()) print *, 'Getting posterior'
+     if(is_root_pe()) print *, 'Getting posterior'
 
      get_inc = .true.
      if(present(increment)) get_inc = increment
@@ -465,11 +465,8 @@ contains
        !! switch to global pelist
        call set_current_pelist(CS%filter_pelist)
 
-       if(is_root_pe()) print *, 'Get current profiles'
        call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
-       call get_date(Time, yr, mon, day, hr, min, sec)
-       if(is_root_pe()) print *, 'Assimilation at model Time: ', yr, mon, day, hr, min, sec
        call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
 
@@ -518,20 +515,19 @@ contains
 
     integer :: yr, mon, day, hr, min, sec
 
-    call get_date(Time, yr, mon, day, hr, min, sec)
-    if(pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
-    
     if (Time >= CS%Time) then
       CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
+
+      call get_date(Time, yr, mon, day, hr, min, sec)
+      if(pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      call get_date(CS%time, yr, mon, day, hr, min, sec)
+      if(pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
     endif
     if (CS%Time < Time) then
         call MOM_error(FATAL, " set_analysis_time: " // &
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
     endif
-
-    call get_date(CS%time, yr, mon, day, hr, min, sec)
-    if(pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
     
     return
 
