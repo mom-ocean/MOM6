@@ -10,6 +10,7 @@ use MOM_diag_to_Z,           only : calc_Zint_diags
 use MOM_EOS,                 only : calculate_density
 use MOM_variables,           only : thermo_var_ptrs, p3d
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
+use MOM_coms,                only : PE_here
 use MOM_debugging,           only : hchksum
 use MOM_grid,                only : ocean_grid_type
 use MOM_verticalGrid,        only : verticalGrid_type
@@ -508,53 +509,64 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
 
   ! Register Diagnostics fields
 
-  if (CS%Lee_wave_dissipation) then
-    CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
-        'Lee wave Driven Turbulent Kinetic Energy', 'W m-2')
-    CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
-         'Lee Wave Driven Diffusivity', 'm2 s-1')
-  endif
-
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. &
       CS%Lowmode_itidal_dissipation) then
-
-    CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
-        'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
-    CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
-         'Bottom Buoyancy Frequency', 's-1')
 
     CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
          'Internal Tide Driven Diffusivity', 'm2 s-1')
 
-    CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
-         'Internal Tide Driven Diffusivity (from propagating low modes)', 'm2 s-1')
+    if (CS%use_cvmix_tidal) then
+      CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
+          'Bouyancy frequency squared, at interfaces', 's-2')
+      ! TODO: add units
+      CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesT1,Time, &
+           'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
+      CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
+           'vertical deposition function needed for Simmons et al tidal  mixing', '')
 
-    CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
-        'Vertical flux of tidal turbulent dissipation', 'm3 s-3')
+    else
+      CS%id_TKE_itidal = register_diag_field('ocean_model','TKE_itidal',diag%axesT1,Time, &
+          'Internal Tide Driven Turbulent Kinetic Energy', 'W m-2')
+      CS%id_Nb = register_diag_field('ocean_model','Nb',diag%axesT1,Time, &
+           'Bottom Buoyancy Frequency', 's-1')
 
-    CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
-         'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'm3 s-3')
+      CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
+           'Internal Tide Driven Diffusivity (from propagating low modes)', 'm2 s-1')
 
-    CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
-         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
+      CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
+          'Vertical flux of tidal turbulent dissipation', 'm3 s-3')
 
-    CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
-         'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
+      CS%id_Fl_lowmode = register_diag_field('ocean_model','Fl_lowmode',diag%axesTi,Time, &
+           'Vertical flux of tidal turbulent dissipation (from propagating low modes)', 'm3 s-3')
 
-    CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
-         'Bottom Buoyancy frequency squared', 's-2')
+      CS%id_Polzin_decay_scale = register_diag_field('ocean_model','Polzin_decay_scale',diag%axesT1,Time, &
+           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme', 'm')
 
-    CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
-         'Buoyancy frequency squared averaged over the water column', 's-2')
+      CS%id_Polzin_decay_scale_scaled = register_diag_field('ocean_model','Polzin_decay_scale_scaled',diag%axesT1,Time, &
+           'Vertical decay scale for the tidal turbulent dissipation with Polzin scheme, scaled by N2_bot/N2_meanz', 'm')
 
-    CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
-         'Work done by Internal Tide Diapycnal Mixing', 'W m-2')
+      CS%id_N2_bot = register_diag_field('ocean_model','N2_b',diag%axesT1,Time, &
+           'Bottom Buoyancy frequency squared', 's-2')
 
-    CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
-         'Work done by Nikurashin Lee Wave Drag Scheme', 'W m-2')
+      CS%id_N2_meanz = register_diag_field('ocean_model','N2_meanz',diag%axesT1,Time, &
+           'Buoyancy frequency squared averaged over the water column', 's-2')
 
-    CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
-         'Work done by Internal Tide Diapycnal Mixing (low modes)', 'W m-2')
+      CS%id_Kd_Itidal_Work = register_diag_field('ocean_model','Kd_Itidal_Work',diag%axesTL,Time, &
+           'Work done by Internal Tide Diapycnal Mixing', 'W m-2')
+
+      CS%id_Kd_Niku_Work = register_diag_field('ocean_model','Kd_Nikurashin_Work',diag%axesTL,Time, &
+           'Work done by Nikurashin Lee Wave Drag Scheme', 'W m-2')
+
+      CS%id_Kd_Lowmode_Work = register_diag_field('ocean_model','Kd_Lowmode_Work',diag%axesTL,Time, &
+           'Work done by Internal Tide Diapycnal Mixing (low modes)', 'W m-2')
+
+      if (CS%Lee_wave_dissipation) then
+        CS%id_TKE_leewave = register_diag_field('ocean_model','TKE_leewave',diag%axesT1,Time, &
+            'Lee wave Driven Turbulent Kinetic Energy', 'W m-2')
+        CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
+             'Lee Wave Driven Diffusivity', 'm2 s-1')
+      endif
+    endif ! S%use_cvmix_tidal
 
     if (associated(CS%diag_to_Z_CSp)) then
       vd = var_desc("Kd_itides","m2 s-1", &
@@ -573,17 +585,6 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       endif
     endif
 
-  endif
-
-  ! CVMix tidal diagnostics
-  if (CS%use_cvmix_tidal) then
-
-    CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesT1,Time, &
-        'Bouyancy frequency squared, at interfaces', 's-2')
-    CS%id_Simmons_coeff = register_diag_field('ocean_model','Simmons_coeff',diag%axesTi,Time, &
-         'time-invariant portion of the tidal mixing coefficient using the Simmons', '')
-    CS%id_vert_dep = register_diag_field('ocean_model','vert_dep',diag%axesTi,Time, &
-         'vertical deposition function needed for Simmons et al tidal  mixing', '')
   endif
 
 end function tidal_mixing_init
@@ -635,17 +636,20 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition needed for Simmons tidal mixing.
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
-  integer :: i, k, is, ie, js, je
-  integer :: isd, ied, jsd, jed
+  integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
   real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
   type(tidal_mixing_diags), pointer :: dd
 
+  is  = G%isc ; ie  = G%iec
   dd => CS%dd
 
   select case (CS%int_tide_profile)
   case (SIMMONS_04)
     do i=is,ie
+
+      if (G%mask2dT(i,j)<1) cycle
+
       iFaceHeight = 0.0 ! BBL is all relative to the surface
       hcorr = 0.0
       do k=1,G%ke
@@ -657,8 +661,6 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
-
-      if (G%mask2dT(i,j)<1) return
 
       call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                &
                                             energy_flux             = CS%tidal_qe_2d(i,j), &
@@ -677,7 +679,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
       call cvmix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
                                Tdiff_out               = Kd_tidal,            &
                                Nsqr                    = N2_int(i,:),         &
-                               OceanDepth              = iFaceHeight(G%ke+1), &
+                               OceanDepth              = -iFaceHeight(G%ke+1),&
                                SimmonsCoeff            = Simmons_coeff,       &
                                vert_dep                = vert_dep,            &
                                nlev                    = G%ke,                &
@@ -704,7 +706,17 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         dd%vert_dep_3d(i,j,:) = vert_dep(:)
       endif
 
-    enddo
+      if (CS%debug) then
+        if (all(dd%Kd_itidal(i,j,:).eq.0.0) .and. .not. &
+            (all(dd%vert_dep_3d(i,j,:).eq.0.0) .or. &
+             all(dd%N2_int(i,j,:).eq.0.0) .or. &
+             Simmons_coeff.eq.0.0 ) )then
+          print *, "debug1 all zeros for ", i, j, iFaceHeight(G%ke+1)
+        endif
+      endif
+
+    enddo ! i=is,ie
+
   ! TODO: case (SCHMITTNER)
   case default
     call MOM_error(FATAL, "tidal_mixing_init: The selected"// &
@@ -1275,11 +1287,10 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
   character(len=200),     intent(in)  :: tidal_energy_file
   type(tidal_mixing_cs),  pointer     :: CS
   ! local
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: isd, ied, jsd, jed
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
 
   if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
   allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
@@ -1308,7 +1319,6 @@ subroutine tidal_mixing_end(CS)
   deallocate(CS%dd)
   deallocate(CS)
 
-  ! TODO: check why ptrs allocated with MOM_safe_alloc are not deallocated?
 end subroutine tidal_mixing_end
 
 
