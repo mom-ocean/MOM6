@@ -40,7 +40,7 @@ module MOM_oda_driver_mod
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
   use oda_core_mod, only : oda_core_init, get_profiles
-  use eakf_oda_mod, only : ensemble_filter
+  !use eakf_oda_mod, only : ensemble_filter
   use write_ocean_data_mod, only : open_profile_file
   use write_ocean_data_mod, only : write_profile,close_profile_file
   use kdtree, only : kd_root !# JEDI
@@ -467,11 +467,11 @@ contains
 
        if(is_root_pe()) print *, 'Get current profiles'
        call get_profiles(Time, CS%Profiles, CS%CProfiles)
-!#ifdef ENABLE_ECDA
+#ifdef ENABLE_ECDA
        call get_date(Time, yr, mon, day, hr, min, sec)
        if(is_root_pe()) print *, 'Assimilation at model Time: ', yr, mon, day, hr, min, sec
        call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
-!#endif
+#endif
 
        !! switch back to ensemble member pelist
        call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
