@@ -1937,7 +1937,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     if (local_open_BC) then
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_E .or. &
             segment%direction == OBC_DIRECTION_W) then
           I=segment%HI%IsdB
@@ -1965,7 +1965,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   if (local_open_BC) then
     do n=1, OBC%number_of_segments
       segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_E) then
         I=segment%HI%IsdB
         do j=segment%HI%jsd,segment%HI%jed
@@ -2076,7 +2076,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     if (local_open_BC) then
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_S .or. &
             segment%direction == OBC_DIRECTION_N) then
           J=segment%HI%JsdB
@@ -2102,7 +2102,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   if (local_open_BC) then
     do n=1, OBC%number_of_segments
       segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
         do i=segment%HI%isd,segment%HI%ied
