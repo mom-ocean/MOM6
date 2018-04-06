@@ -70,7 +70,7 @@ program MOM_main
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-  use MOM_wave_interface, only: MOM_wave_interface_lite, Update_Surface_Waves
+  use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
   implicit none
 
