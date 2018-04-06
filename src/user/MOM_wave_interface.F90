@@ -48,7 +48,8 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public MOM_wave_interface_init ! Public interface to initialize the wave routines.
+public MOM_wave_interface_init ! Public interface to fully initialize the wave routines.
+public MOM_wave_interface_init_lite ! Public interface to quick initialize this module. 
 public Update_Surface_Waves ! Public interface to update wave information at the
                             ! coupler/driver level.
 public Update_Stokes_Drift ! Public interface to update the Stokes drift profiles
@@ -177,7 +178,7 @@ integer, parameter :: TESTPROF = 0, SURFBANDS = 1, &
 Real    :: TP_STKX0, TP_STKY0, TP_WVL
 logical :: WaveAgePeakFreq  !> Flag to use W
 real    :: WaveAge, WaveWind
-real, parameter :: PI=3.14159265358979
+real    :: PI
 
 CONTAINS
 
@@ -211,6 +212,8 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
                              "control structure.")
      return
   endif
+
+  PI=4.0*atan(1.0)
 
   !/ Allocate CS and set pointers
   allocate(CS)
@@ -341,7 +344,7 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
   call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
          "The depth (normalized by BLD) to average Stokes drift over in \n"//&
          " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
-         units="nondim",default=0.2)
+         units="nondim",default=0.04)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", LA_Misalignment,    &
          "Flag (logical) if using misalignment bt shear and waves in LA",&
          default=.false.)
@@ -378,6 +381,30 @@ subroutine MOM_wave_interface_init(time,G,GV,param_file, CS, diag )
 
 end subroutine MOM_wave_interface_init
 
+
+subroutine MOM_wave_interface_init_lite(param_file)
+  !It is possible to estimate Stokes drift without the Wave data (if WaveMethod=LF17).
+  ! In this case there are still a couple inputs we need to read in, which is done
+  ! here in a reduced wave_interface_init that doesn't allocate the CS.
+
+  !Arguments
+  type(param_file_type), intent(in)      :: param_file !< Input parameter structure
+
+
+  ! Langmuir number Options
+  call get_param(param_file, mdl, "LA_DEPTH_RATIO", LA_FracHBL,              &
+       "The depth (normalized by BLD) to average Stokes drift over in \n"//&
+       " Lanmguir number calculation, where La = sqrt(ust/Stokes).",       &
+       units="nondim",default=0.04)
+
+  if (WaveMethod==NULL_WaveMethod) then
+    ! Wave not initialized.  Check for WaveMethod.  Only allow LF17.
+    WaveMethod=LF17
+    PI=4.0*atan(1.0)
+  endif
+
+  return
+end subroutine MOM_wave_interface_init_lite
 
 ! Place to add update of surface wave parameters.
 subroutine Update_Surface_Waves(G,GV,Day,DT,CS)
@@ -820,11 +847,6 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
  ! Compute averaging depth for Stokes drift (negative)
   Dpt_LASL = min(-0.1, -LA_FracHBL*HBL)
 
-  if (WaveMethod==NULL_WaveMethod) then
-    ! Wave not initialized.  Check for WaveMethod.  Only allow LF17.
-    WaveMethod=LF17
-  endif
-
   !/ If requesting to use misalignment in the Langmuir number compute the Shear Direction
   if (LA_Misalignment .and. (.not.(present(H).and.present(U_H).and.present(V_H)))) then
     call MOM_error(Fatal,'Get_LA_waves requested to consider misalignment.')
@@ -868,10 +890,12 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
     call Get_SL_Average_Prof( GV, Dpt_LASL, H, VS_H, LA_STKy)
     LA_STK = sqrt(LA_STKX*LA_STKX+LA_STKY*LA_STKY)
   elseif (WaveMethod==LF17) then
-    call get_StokesSL_LiFoxKemper(ustar,hbl, GV, LA_STK)
+    call get_StokesSL_LiFoxKemper(ustar,hbl*LA_FracHBL, GV, LA_STK, LA)
   endif
 
-  LA = max(0.1,sqrt(USTAR/(LA_STK+1.e-10)))
+  if (.not.(WaveMethod==LF17)) then
+    LA = max(0.1,sqrt(USTAR/(LA_STK+1.e-8)))
+  end if
 
   if (LA_Misalignment) then
     WaveDirection = atan2(LA_STKy,LA_STKx)
@@ -881,7 +905,7 @@ subroutine get_Langmuir_Number( LA, G, GV, HBL, USTAR, I, J, &
 end subroutine get_Langmuir_Number
 
 ! Get SL averaged Stokes drift from Li/FK 17 method
-subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL)
+subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL, LA)
 ! Original description:
 ! This function returns the enhancement factor, given the 10-meter
 ! wind (m/s), friction velocity (m/s) and the boundary layer depth (m).
@@ -902,7 +926,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL)
        ! boundary layer depth (m)
        hbl
   type(verticalGrid_type), intent(in) :: GV
-  real, intent(out) :: US_SL
+  real, intent(out) :: US_SL, LA
 ! Local variables
   ! parameters
   real, parameter :: &
@@ -920,10 +944,9 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL)
   real :: u10
 
 
-  ! Computing u10 based on u_star and COARE 3.5 relationships
-  call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
-
-  if (u10 .gt. 0.0 .and. ustar .gt. 0.0) then
+  if (ustar .gt. 0.0) then
+    ! Computing u10 based on u_star and COARE 3.5 relationships
+    call ust_2_u10_coare3p5(ustar*sqrt(GV%Rho0/1.225),U10,GV)
     ! surface Stokes drift
     us = us_to_u10*u10
     !
@@ -954,7 +977,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL)
     ! is also included
     kstar = kphil * 2.56
     ! surface layer
-    z0 = 0.2 * abs(hbl)
+    z0 = abs(hbl)
     z0i = 1.0 / z0
     ! term 1 to 4
     r1 = ( 0.151 / kphil * z0i -0.84 ) &
@@ -968,8 +991,10 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US_SL)
          *sqrt( 2.0 * PI *kstar * z0) &
          *erfc( sqrt( 2.0 * kstar * z0 ) )
     us_sl = us * (0.715 + r1 + r2 + r3 + r4)
+    LA = sqrt(ustar/us_sl)
   else
     us_sl = 0.0
+    LA=1.e8
   endif
 
 endsubroutine Get_StokesSL_LiFoxKemper

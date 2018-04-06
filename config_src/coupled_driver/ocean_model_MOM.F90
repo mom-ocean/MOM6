@@ -64,8 +64,8 @@ use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-use MOM_wave_interface, only: Update_Surface_Waves
+use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init 
+use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
 #include <MOM_memory.h>
 
@@ -398,6 +398,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
        "If true, enables surface wave modules.",default=.false.)
   if (OS%use_waves) then
     call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
+  else
+    call MOM_wave_interface_init_lite(param_file)
   endif
 
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
