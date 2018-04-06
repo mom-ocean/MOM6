@@ -49,7 +49,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_wave_interface_init ! Public interface to fully initialize the wave routines.
-public MOM_wave_interface_init_lite ! Public interface to quick initialize this module. 
+public MOM_wave_interface_init_lite ! Public interface to quick initialize this module.
 public Update_Surface_Waves ! Public interface to update wave information at the
                             ! coupler/driver level.
 public Update_Stokes_Drift ! Public interface to update the Stokes drift profiles

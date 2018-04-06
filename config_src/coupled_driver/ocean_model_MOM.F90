@@ -64,7 +64,7 @@ use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
-use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init 
+use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
 #include <MOM_memory.h>
