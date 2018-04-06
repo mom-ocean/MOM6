@@ -70,7 +70,7 @@ program MOM_main
 ! , add_shelf_flux_forcing, add_shelf_flux_IOB
 
   use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
-  use MOM_wave_interface, only: Update_Surface_Waves
+  use MOM_wave_interface, only: MOM_wave_interface_lite, Update_Surface_Waves
 
   implicit none
 
@@ -335,6 +335,8 @@ program MOM_main
        "If true, enables surface wave modules.",default=.false.)
   if (use_waves) then
     call MOM_wave_interface_init(Time,grid,GV,param_file,Waves_CSp,diag)
+  else
+    call MOM_wave_interface_init_lite(param_file)
   endif
 
   segment_start_time = Time
