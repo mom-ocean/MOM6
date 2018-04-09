@@ -1972,9 +1972,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  default=.true.)
 
   call get_param(param_file, mod, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
-                 "If true, monitor conservation and extrema.", default=.false.)
+                 "If true, monitor conservation and extrema.", &
+                 default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mod, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
                  "If true, debug the energy requirements.", default=.false., do_not_log=.true.)
