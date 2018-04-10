@@ -32,21 +32,22 @@ module MOM_oda_driver_mod
   use mpp_domains_mod, only : mpp_redistribute, mpp_broadcast_domain
   use mpp_domains_mod, only : set_domains_stack_size=>mpp_domains_set_stack_size
   use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
-  use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size, get_ensemble_pelist
+  use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size
+  use ensemble_manager_mod, only : get_ensemble_pelist, get_ensemble_filter_pelist
   use time_manager_mod, only : time_type, decrement_time, increment_time
   use time_manager_mod, only : get_date, get_time, operator(>=),operator(/=),operator(==),operator(<)
   use constants_mod, only : radius, epsln
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
   use oda_core_mod, only : oda_core_init, get_profiles
-!  use eakf_oda_mod, only : ensemble_filter
+  !use eakf_oda_mod, only : ensemble_filter
   use write_ocean_data_mod, only : open_profile_file
   use write_ocean_data_mod, only : write_profile,close_profile_file
   use kdtree, only : kd_root !# JEDI
   ! MOM Modules
   use MOM_io, only : slasher, MOM_read_data
   use MOM_diag_mediator, only : diag_ctrl, set_axes_info
-  use MOM_error_handler, only : FATAL, WARNING, MOM_error
+  use MOM_error_handler, only : FATAL, WARNING, MOM_error, is_root_pe
   use MOM_get_input, only : get_MOM_input, directories
   use MOM_variables, only : thermo_var_ptrs
   use MOM_grid, only : ocean_grid_type, MOM_grid_init
@@ -95,6 +96,7 @@ module MOM_oda_driver_mod
      integer :: ensemble_size !< Size of the ensemble
      integer :: ensemble_id = 0 !< id of the current ensemble member
      integer, pointer, dimension(:,:) :: ensemble_pelist !< PE list for ensemble members
+     integer, pointer, dimension(:) :: filter_pelist !< PE list for ensemble members
      integer :: assim_frequency !< analysis interval in hours
      ! Profiles local to the analysis domain
      type(ocean_profile_type), pointer :: Profiles => NULL() !< pointer to linked list of all available profiles
@@ -193,12 +195,16 @@ contains
 
     ens_info = get_ensemble_size()
     CS%ensemble_size = ens_info(1)
-    npes_pm=ens_info(2)
+    npes_pm=ens_info(3)
     CS%ensemble_id = get_ensemble_id()
     !! Switch to global pelist
-    call set_current_pelist()
     allocate(CS%ensemble_pelist(CS%ensemble_size,npes_pm))
-    call get_ensemble_pelist(CS%ensemble_pelist)
+    allocate(CS%filter_pelist(CS%ensemble_size*npes_pm))
+    call get_ensemble_pelist(CS%ensemble_pelist,'ocean')
+    call get_ensemble_filter_pelist(CS%filter_pelist,'ocean')
+
+    call set_current_pelist(CS%filter_pelist)
+
     allocate(CS%domains(CS%ensemble_size))
     CS%domains(CS%ensemble_id)%mpp_domain => G%Domain%mpp_domain
     do n=1,CS%ensemble_size
@@ -206,7 +212,7 @@ contains
       call set_root_pe(CS%ensemble_pelist(n,1))
       call mpp_broadcast_domain(CS%domains(n)%mpp_domain)
     enddo
-    call set_root_pe(CS%ensemble_pelist(1,1))
+    call set_root_pe(CS%filter_pelist(1))
     allocate(CS%Grid)
     ! params NIHALO_ODA, NJHALO_ODA set the DA halo size
     call MOM_domains_init(CS%Grid%Domain,PF,param_suffix='_ODA')
@@ -250,9 +256,6 @@ contains
     allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
     allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
 
-    !call set_current_pelist(global_pelist)
-    !call set_root_pe(global_pelist(1))
-
     call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
     do n=1,CS%ensemble_size
       write(fldnam,'(a,i2.2)') 'temp_prior_',n
@@ -270,13 +273,22 @@ contains
    CS%oda_grid%x => CS%Grid%geolonT
    CS%oda_grid%y => CS%Grid%geolatT
 
+   call get_param(PF, 'oda_driver', "BASIN_FILE", basin_file, &
+           "A file in which to find the basin masks, in variable 'basin'.", &
+           default="basin.nc")
+   basin_file = trim(inputdir) // trim(basin_file)
+   allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
+   CS%oda_grid%basin_mask(:,:) = 0.0
+   call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
 
 !    get global grid information from ocean_model
    allocate(T_grid)
    allocate(T_grid%x(CS%ni,CS%nj))
    allocate(T_grid%y(CS%ni,CS%nj))
+   allocate(T_grid%basin_mask(CS%ni,CS%nj))
    call mpp_global_field(CS%mpp_domain, CS%Grid%geolonT, T_grid%x)
    call mpp_global_field(CS%mpp_domain, CS%Grid%geolatT, T_grid%y)
+   call mpp_global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
    T_grid%ni = CS%ni
    T_grid%nj = CS%nj
    T_grid%nk = CS%nk
@@ -307,7 +319,6 @@ contains
    CS%Time=Time
    !! switch back to ensemble member pelist
    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
-   call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
   end subroutine init_oda
 
   subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
@@ -328,14 +339,14 @@ contains
     logical :: used
 
     ! return if not time for analysis
-    if (Time/=CS%Time) return
+    if (Time < CS%Time) return
 
     if (.not. ASSOCIATED(CS%Grid)) call MOM_ERROR(FATAL,'ODA_CS ensemble horizontal grid not associated')
     if (.not. ASSOCIATED(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
 
     !! switch to global pelist
-    call set_current_pelist()
-    call set_root_pe(CS%ensemble_pelist(1,1))
+    call set_current_pelist(CS%filter_pelist)
+    if(is_root_pe()) print *, 'Setting prior'
 
     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
     call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
@@ -362,7 +373,6 @@ contains
 
     !! switch back to ensemble member pelist
     call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
-    call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
 
     return
 
@@ -389,12 +399,12 @@ contains
      logical :: used, get_inc
 
      ! return if not analysis time (retain pointers for h and tv)
-     if (Time/=CS%Time) return
+     if (Time < CS%Time) return
 
 
-    !! switch to global pelist
-    call set_current_pelist()
-    call set_root_pe(CS%ensemble_pelist(1,1))
+     !! switch to global pelist
+     call set_current_pelist(CS%filter_pelist)
+     if(is_root_pe()) print *, 'Getting posterior'
 
      get_inc = .true.
      if(present(increment)) get_inc = increment
@@ -439,7 +449,6 @@ contains
      h => CS%h
      !! switch back to ensemble member pelist
      call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
-     call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
 
    end subroutine get_posterior_tracer
 
@@ -449,12 +458,12 @@ contains
 
      integer :: i, j
      integer :: m
+    integer :: yr, mon, day, hr, min, sec
 
-     if ( Time == CS%Time ) then
+     if ( Time >= CS%Time ) then
 
        !! switch to global pelist
-       call set_current_pelist()
-       call set_root_pe(CS%ensemble_pelist(1,1))
+       call set_current_pelist(CS%filter_pelist)
 
        call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
@@ -463,7 +472,6 @@ contains
 
        !! switch back to ensemble member pelist
        call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
-       call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
 
      end if
 
@@ -505,14 +513,22 @@ contains
     type(time_type), intent(in) :: Time
     type(ODA_CS), pointer, intent(inout) :: CS
 
-    if (CS%Time < Time) then
-      CS%Time=increment_time(Time,CS%assim_frequency*3600)
+    integer :: yr, mon, day, hr, min, sec
+
+    if (Time >= CS%Time) then
+      CS%Time=increment_time(CS%Time,CS%assim_frequency*3600)
+
+      call get_date(Time, yr, mon, day, hr, min, sec)
+      if(pe() .eq. mpp_root_pe()) print *, 'Model Time: ', yr, mon, day, hr, min, sec
+      call get_date(CS%time, yr, mon, day, hr, min, sec)
+      if(pe() .eq. mpp_root_pe()) print *, 'Assimilation Time: ', yr, mon, day, hr, min, sec
     endif
     if (CS%Time < Time) then
         call MOM_error(FATAL, " set_analysis_time: " // &
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
     endif
+    
     return
 
   end subroutine set_analysis_time
@@ -525,11 +541,10 @@ contains
     type(ocean_profile_type), pointer :: Prof=>NULL()
 
     fid = open_profile_file(trim(filename), nvar=2, thread=MPP_SINGLE, fset=MPP_SINGLE)
-    Prof=>CS%Cprofiles
+    Prof=>CS%CProfiles
 
     !! switch to global pelist
-    call set_current_pelist()
-    call set_root_pe(CS%ensemble_pelist(1,1))
+    !call set_current_pelist(CS%filter_pelist)
 
     do while (associated(Prof))
       call write_profile(fid,Prof)
@@ -538,8 +553,7 @@ contains
     call close_profile_file(fid)
 
     !! switch back to ensemble member pelist
-    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
-    call set_root_pe(CS%ensemble_pelist(CS%ensemble_id,1))
+    !call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
     return
   end subroutine save_obs_diff
