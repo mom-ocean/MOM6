@@ -1674,9 +1674,9 @@ integer function pseudo_bitcount( scalar )
    integer*8 :: mantissa_int
    integer   :: bit
 
-   bitcount = 0
+   pseudo_bitcount = 0
    ! Add a bit if the number is negative
-   if ( scalar<0 ) bitcount = bitcount + 1
+   if ( scalar<0 ) pseudo_bitcount = pseudo_bitcount + 1
    real_exponent = EXPONENT(scalar)
    real_mantissa = FRACTION(ABS(scalar))
 
@@ -1687,11 +1687,11 @@ integer function pseudo_bitcount( scalar )
 
    ! Loop over the exponent, declared as INTEGER*2, so 2*8=16 bits to check, starting from 0
    do bit=0,16
-     if ( btest(real_exponent, bit) ) bitcount = bitcount + 1
+     if ( btest(real_exponent, bit) ) pseudo_bitcount = pseudo_bitcount + 1
    enddo
    ! loop over the integer representing the mantissa
    do bit=0,64
-     if ( btest(mantissa_int, bit) ) bitcount = bitcount + 1
+     if ( btest(mantissa_int, bit) ) pseudo_bitcount = pseudo_bitcount + 1
    enddo
 
 end function pseudo_bitcount
