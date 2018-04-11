@@ -528,7 +528,6 @@ contains
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
     endif
-    
     return
 
   end subroutine set_analysis_time
