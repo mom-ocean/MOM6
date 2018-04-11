@@ -320,16 +320,17 @@ subroutine open_boundary_config(G, param_file, OBC)
     if (debug_OBC .or. debug) &
       call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
                  "If true, do additional calls to help debug the performance \n"//&
-                 "of the open boundary condition code.", default=.false.)
+                 "of the open boundary condition code.", default=.false., &
+                 debuggingParam=.true.)
 
     call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
                  "A silly value of thicknesses used outside of open boundary \n"//&
                  "conditions for debugging.", units="m", default=0.0, &
-                 do_not_log=.not.debug_OBC)
+                 do_not_log=.not.debug_OBC, debuggingParam=.true.)
     call get_param(param_file, mdl, "OBC_SILLY_VEL", OBC%silly_u, &
                  "A silly value of velocities used outside of open boundary \n"//&
                  "conditions for debugging.", units="m/s", default=0.0, &
-                 do_not_log=.not.debug_OBC)
+                 do_not_log=.not.debug_OBC, debuggingParam=.true.)
 
     ! Allocate everything
     ! Note the 0-segment is needed when %segnum_u/v(:,:) = 0

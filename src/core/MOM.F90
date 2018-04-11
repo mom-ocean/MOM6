@@ -1527,10 +1527,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "Integer controlling level of messaging\n" // &
                  "\t0 = Only FATAL messages\n" // &
                  "\t2 = Only FATAL, WARNING, NOTE [default]\n" // &
-                 "\t9 = All)", default=2)
+                 "\t9 = All)", default=2, debuggingParam=.true.)
   call get_param(param_file, "MOM", "DO_UNIT_TESTS", do_unit_tests, &
                  "If True, exercises unit tests at model start up.", &
-                 default=.false.)
+                 default=.false., debuggingParam=.true.)
   if (do_unit_tests) then
     call unit_tests(verbosity)
   endif
@@ -1626,10 +1626,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  default=.false.)
 
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, "MOM", "DEBUG_TRUNCATIONS", debug_truncations, &
                  "If true, calculate all diagnostics that are useful for \n"//&
-                 "debugging truncations.", default=.false.)
+                 "debugging truncations.", default=.false., debuggingParam=.true.)
 
   call get_param(param_file, "MOM", "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.  The time-step that \n"//&

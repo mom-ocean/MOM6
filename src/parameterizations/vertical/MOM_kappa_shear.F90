@@ -1839,7 +1839,8 @@ logical function kappa_shear_init(Time, G, GV, param_file, diag, CS)
   call get_param(param_file, mdl, "DEBUG_KAPPA_SHEAR", CS%debug, &
                  "If true, write debugging data for the kappa-shear code. \n"//&
                  "Caution: this option is _very_ verbose and should only \n"//&
-                 "be used in single-column mode!", default=.false.)
+                 "be used in single-column mode!", &
+                 default=.false., debuggingParam=.true.)
 
 !    id_clock_KQ = cpu_clock_id('Ocean KS kappa_shear',grain=CLOCK_ROUTINE)
 !    id_clock_avg = cpu_clock_id('Ocean KS avg',grain=CLOCK_ROUTINE)

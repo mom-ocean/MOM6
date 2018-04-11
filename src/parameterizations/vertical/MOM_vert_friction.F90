@@ -1532,12 +1532,12 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to zonal velocity truncations are written.  \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
-                 "needed.", default=" ")
+                 "needed.", default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "V_TRUNC_FILE", CS%v_trunc_file, &
                  "The absolute path to a file into which the accelerations \n"//&
                  "leading to meridional velocity truncations are written. \n"//&
                  "Undefine this for efficiency if this diagnostic is not \n"//&
-                 "needed.", default=" ")
+                 "needed.", default=" ", debuggingParam=.true.)
   call get_param(param_file, mdl, "HARMONIC_VISC", CS%harmonic_visc, &
                  "If true, use the harmonic mean thicknesses for \n"//&
                  "calculating the vertical viscosity.", default=.false.)

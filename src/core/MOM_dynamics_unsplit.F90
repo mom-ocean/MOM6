@@ -681,7 +681,8 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, param_file, diag, CS, &
   CS%diag => diag
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 
