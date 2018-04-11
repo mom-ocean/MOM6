@@ -408,7 +408,8 @@ program MOM_main
                  "the segment run-length can not be set via an elapsed CPU time.", &
                  default=1000)
   call get_param(param_file, "MOM", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   call log_param(param_file, mod_name, "ELAPSED TIME AS MASTER", elapsed_time_master)
 
