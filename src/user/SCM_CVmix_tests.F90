@@ -4,13 +4,14 @@ module SCM_CVmix_tests
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_domains,       only : pass_var, pass_vector, TO_ALL
 use MOM_error_handler, only : MOM_error, FATAL
-use MOM_file_parser, only : get_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing, mech_forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_verticalgrid, only: verticalGrid_type
-use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), get_time,&
+use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing, mech_forcing
+use MOM_grid,          only : ocean_grid_type
+use MOM_verticalgrid,  only: verticalGrid_type
+use MOM_safe_alloc,    only : safe_alloc_ptr
+use MOM_time_manager,  only : time_type, operator(+), operator(/), get_time,&
                              time_type_to_real
 use MOM_variables, only : thermo_var_ptrs, surface
 implicit none ; private
@@ -207,10 +208,14 @@ subroutine SCM_CVmix_tests_wind_forcing(state, forces, day, G, CS)
   do J=Jsq,Jeq ; do i=is,ie
     forces%tauy(i,J) = CS%tau_y
   enddo ; enddo
+  call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
+
+
   mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     forces%ustar(i,j) = sqrt(  mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
+
 
 end subroutine SCM_CVmix_tests_wind_forcing
 
