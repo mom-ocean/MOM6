@@ -1410,8 +1410,6 @@ subroutine tracer_hor_diff_init(Time, G, param_file, diag, EOS, CS)
                  "The minimum passivity which is the ratio between \n"//&
                  "along isopycnal mxiing of tracers to thickness mixing. \n", &
                  units="nondim", default=0.5)
-  call get_param(param_file, mdl, "DT", CS%dt, fail_if_missing=.true., &
-                 desc="The (baroclinic) dynamics time step.", units="s")
   call get_param(param_file, mdl, "DIFFUSE_ML_TO_INTERIOR", CS%Diffuse_ML_interior, &
                  "If true, enable epipycnal mixing between the surface \n"//&
                  "boundary layer and the interior.", default=.false.)
