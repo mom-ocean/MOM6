@@ -1663,4 +1663,37 @@ end subroutine chksum_error
 
 ! =====================================================================
 
+!> Calculates the bitcount of real number by summing the number of bits set for exponent
+!! and an integer representation of the fractional part. Note this code also appears in the
+!! Canadian Centre for Climate Modeling and Analysis version of NEMO covered under the CeCILL license
+integer function pseudo_bitcount( scalar )
+   real      :: scalar !< scalar to be bit-counted
+
+   integer*2 :: real_exponent
+   real      :: real_mantissa
+   integer*8 :: mantissa_int
+   integer   :: bit
+
+   pseudo_bitcount = 0
+   ! Add a bit if the number is negative
+   if ( scalar<0 ) pseudo_bitcount = pseudo_bitcount + 1
+   real_exponent = EXPONENT(scalar)
+   real_mantissa = FRACTION(ABS(scalar))
+
+   ! Multiply the mantissa by 10^18 so that it becomes a number that can be truncated into an integer
+   ! while retaining all the digits. Note that if there are more significant digits than this, then
+   ! some changes will be lost
+   mantissa_int = INT(real_mantissa*1.e18)
+
+   ! Loop over the exponent, declared as INTEGER*2, so 2*8=16 bits to check, starting from 0
+   do bit=0,16
+     if ( btest(real_exponent, bit) ) pseudo_bitcount = pseudo_bitcount + 1
+   enddo
+   ! loop over the integer representing the mantissa
+   do bit=0,64
+     if ( btest(mantissa_int, bit) ) pseudo_bitcount = pseudo_bitcount + 1
+   enddo
+
+end function pseudo_bitcount
+
 end module MOM_checksums
