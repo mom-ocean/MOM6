@@ -4065,11 +4065,13 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  units="m", default=min(10.0,0.05*G%max_depth))
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_BT", CS%debug_bt, &
                  "If true, write out verbose debugging data within the \n"//&
                  "barotropic time-stepping loop. The data volume can be \n"//&
-                 "quite large if this is true.", default=CS%debug)
+                 "quite large if this is true.", default=CS%debug, &
+                 debuggingParam=.true.)
 
   CS%linearized_BT_PV = .true.
   call get_param(param_file, mdl, "BEBT", CS%bebt, &

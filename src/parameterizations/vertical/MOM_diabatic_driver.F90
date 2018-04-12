@@ -66,6 +66,7 @@ use MOM_variables,           only : cont_diag_ptrs, MOM_thermovar_chksum, p3d
 use MOM_verticalGrid,        only : verticalGrid_type
 use MOM_wave_speed,          only : wave_speeds
 use time_manager_mod,        only : increment_time ! for testing itides (BDM)
+use MOM_wave_interface,      only : wave_parameters_CS
 
 
 implicit none ; private
@@ -246,7 +247,7 @@ contains
 
 !>  This subroutine imposes the diapycnal mass fluxes and the
 !!  accompanying diapycnal advection of momentum and tracers.
-subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, GV, CS)
+subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, GV, CS, WAVES)
   type(ocean_grid_type),                     intent(inout) :: G         !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u         !< zonal velocity (m/s)
@@ -265,6 +266,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   real,                                      intent(in)    :: dt        !< time increment (seconds)
   type(time_type),                           intent(in)    :: Time_end  !< Time at the end of the interval
   type(diabatic_CS),                         pointer       :: CS        !< module control structure
+  type(Wave_parameters_CS), pointer, optional              :: Waves     !< Surface gravity waves
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     ea,     &    ! amount of fluid entrained from the layer above within
@@ -632,7 +634,8 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 !$OMP end parallel
 
     call KPP_calculate(CS%KPP_CSp, G, GV, h, tv%T, tv%S, u, v, tv%eqn_of_state, &
-      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, CS%KPP_NLTscalar)
+      fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, Kd_salt, visc%Kv_turb, CS%KPP_NLTheat, &
+      CS%KPP_NLTscalar, Waves=Waves)
 !$OMP parallel default(none) shared(is,ie,js,je,nz,Kd_salt,Kd_int,visc,CS,Kd_heat)
 
     if (.not. CS%KPPisPassive) then
@@ -799,7 +802,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
 
       call find_uv_at_h(u, v, h, u_h, v_h, G, GV)
       call energetic_PBL(h, u_h, v_h, tv, fluxes, dt, Kd_ePBL, G, GV, &
-           CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux)
+           CS%energetic_PBL_CSp, dSV_dT, dSV_dS, cTKE, SkinBuoyFlux, waves=waves)
 
       ! If visc%MLD exists, copy the ePBL's MLD into it
       if (associated(visc%MLD)) then
@@ -1972,9 +1975,11 @@ subroutine diabatic_driver_init(Time, G, GV, param_file, useALEalgorithm, diag, 
                  default=.true.)
 
   call get_param(param_file, mod, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mod, "DEBUG_CONSERVATION", CS%debugConservation, &
-                 "If true, monitor conservation and extrema.", default=.false.)
+                 "If true, monitor conservation and extrema.", &
+                 default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mod, "DEBUG_ENERGY_REQ", CS%debug_energy_req, &
                  "If true, debug the energy requirements.", default=.false., do_not_log=.true.)

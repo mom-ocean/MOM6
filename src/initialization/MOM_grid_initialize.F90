@@ -119,7 +119,8 @@ subroutine set_grid_metrics(G, param_file)
                  " \t mercator - use a Mercator spherical grid.", &
                  fail_if_missing=.true.)
   call get_param(param_file, "MOM_grid_init", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
@@ -1339,14 +1340,12 @@ subroutine initialize_masks(G, PF)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
-    G%dy_Cu_obc(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
-    G%dx_Cv_obc(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))
   enddo ; enddo
