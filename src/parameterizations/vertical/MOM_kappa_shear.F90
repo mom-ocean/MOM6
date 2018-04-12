@@ -90,7 +90,7 @@ type, public :: Kappa_shear_CS ; private
   integer :: id_Kd_shear = -1, id_TKE = -1
   integer :: id_ILd2 = -1, id_dz_Int = -1
   logical :: use_cvmix_kappa_shear_column
-  type(cvmix_kappa_shear_CS), pointer  :: cvmix_CS ! A structure that is used to drive the cvmix kernel for kappa_shear
+  type(cvmix_kappa_shear_CS), pointer  :: cvmix_CS => null() ! A structure that is used to drive the cvmix kernel for kappa_shear
 end type Kappa_shear_CS
 
 ! integer :: id_clock_project, id_clock_KQ, id_clock_avg, id_clock_setup
