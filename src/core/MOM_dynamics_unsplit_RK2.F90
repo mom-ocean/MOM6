@@ -644,7 +644,8 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, param_file, diag, CS
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
 

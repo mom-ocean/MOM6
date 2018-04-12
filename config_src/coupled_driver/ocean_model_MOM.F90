@@ -64,6 +64,8 @@ use fms_mod, only : stdout
 use mpp_mod, only : mpp_chksum
 use MOM_domains, only : pass_var, pass_vector, TO_ALL, CGRID_NE, BGRID_NE
 use MOM_EOS, only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
+use MOM_wave_interface, only: MOM_wave_interface_init_lite, Update_Surface_Waves
 
 #include <MOM_memory.h>
 
@@ -149,6 +151,7 @@ type, public :: ocean_state_type ; private
 
   integer :: nstep = 0        !< The number of calls to update_ocean.
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
+  logical :: use_waves = .false.! If true use wave coupling.
 
   ! Many of the following variables do not appear to belong here. -RWH
   logical :: icebergs_apply_rigid_boundary  ! If true, the icebergs can change ocean bd condition.
@@ -207,6 +210,8 @@ type, public :: ocean_state_type ; private
     Ice_shelf_CSp => NULL()   !< A pointer to the control structure for the
                               !! ice shelf model that couples with MOM6.  This
                               !! is null if there is no ice shelf.
+  type(wave_parameters_cs), pointer :: &
+    Waves !< A structure containing pointers to the surface wave fields
   type(surface_forcing_CS), pointer :: &
     forcing_CSp => NULL()     !< A pointer to the MOM forcing control structure
   type(MOM_restart_CS), pointer :: &
@@ -389,6 +394,14 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn)
       call allocate_forcing_type(OS%grid, OS%fluxes, shelf=.true.)
   endif
 
+  call get_param(param_file,mdl,"USE_WAVES",OS%Use_Waves,&
+       "If true, enables surface wave modules.",default=.false.)
+  if (OS%use_waves) then
+    call MOM_wave_interface_init(OS%Time,OS%grid,OS%GV,param_file,OS%Waves,OS%diag)
+  else
+    call MOM_wave_interface_init_lite(param_file)
+  endif
+
   if (ASSOCIATED(OS%grid%Domain%maskmap)) then
     call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
                                       OS%diag, maskmap=OS%grid%Domain%maskmap, &
@@ -567,6 +580,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_derived_forcing_fields(OS%forces, OS%fluxes, OS%grid, OS%GV%Rho0)
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
+  if (OS%use_waves) then
+    call Update_Surface_Waves(OS%grid,OS%GV,OS%time,ocean_coupling_time_step,OS%waves)
+  endif
+
   if (OS%nstep==0) then
     call finish_MOM_initialization(OS%Time, OS%dirs, OS%MOM_CSp, OS%fluxes, &
                                    OS%restart_CSp)
@@ -578,7 +595,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   if(OS%offline_tracer_mode) then
     call step_offline(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
   elseif (OS%single_step_call) then
-    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp)
+    call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dt_coupling, OS%MOM_CSp, Waves=OS%Waves)
   else
     n_max = 1 ; if (dt_coupling > OS%dt) n_max = ceiling(dt_coupling/OS%dt - 0.001)
     dt_dyn = dt_coupling / real(n_max)

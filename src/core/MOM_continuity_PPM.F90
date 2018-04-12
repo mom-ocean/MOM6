@@ -455,7 +455,8 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, CS, LB, uhbt, OBC, &
             if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
           do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
-            if (abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) &
+            if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
+                (OBC%segment(OBC%segnum_u(I,j))%specified)) &
               FAuI(I) = FAuI(I) + OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
                                   OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
@@ -1279,7 +1280,8 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, CS, LB, vhbt, OBC, &
             if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
           do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
-            if (abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) &
+            if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
+                (OBC%segment(OBC%segnum_v(i,J))%specified)) &
               FAvi(i) = FAvi(i) + &
                    OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
                    OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
@@ -1935,7 +1937,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     if (local_open_BC) then
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_E .or. &
             segment%direction == OBC_DIRECTION_W) then
           I=segment%HI%IsdB
@@ -1963,7 +1965,7 @@ subroutine PPM_reconstruction_x(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   if (local_open_BC) then
     do n=1, OBC%number_of_segments
       segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_E) then
         I=segment%HI%IsdB
         do j=segment%HI%jsd,segment%HI%jed
@@ -2074,7 +2076,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
     if (local_open_BC) then
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
-        if (.not. segment%on_pe .or. segment%specified) cycle
+        if (.not. segment%on_pe) cycle
         if (segment%direction == OBC_DIRECTION_S .or. &
             segment%direction == OBC_DIRECTION_N) then
           J=segment%HI%JsdB
@@ -2100,7 +2102,7 @@ subroutine PPM_reconstruction_y(h_in, h_L, h_R, G, LB, h_min, monotonic, simple_
   if (local_open_BC) then
     do n=1, OBC%number_of_segments
       segment => OBC%segment(n)
-      if (.not. segment%on_pe .or. segment%specified) cycle
+      if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
         do i=segment%HI%isd,segment%HI%ied

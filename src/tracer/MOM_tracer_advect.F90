@@ -518,10 +518,11 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             if (j>=segment%HI%jsd .and. j<=segment%HI%jed) then
               I = segment%HI%IsdB
               ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
-              if ((uhr(I,j,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
-                 (uhr(I,j,k) < 0.0) .and. (G%mask2dT(i+1,j) < 0.5)) then
+              ! Now changing to simply fixed inflows.
+              if ((uhr(I,j,k) > 0.0) .and. (segment%direction == OBC_DIRECTION_W) .or. &
+                 (uhr(I,j,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_E)) then
                 uhh(I) = uhr(I,j,k)
-              ! should the reservoir evolve for this case Kate ??
+              ! should the reservoir evolve for this case Kate ?? - Nope
                 do m=1,ntr
                   if (associated(segment%tr_Reg%Tr(m)%tres)) then
                     flux_x(I,m) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
@@ -848,8 +849,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
             if (J >= segment%HI%JsdB .and. J<= segment%HI%JedB) then
               do i=segment%HI%isd,segment%HI%ied
                 ! Tracer fluxes are set to prescribed values only for inflows from masked areas.
-                if ((vhr(i,J,k) > 0.0) .and. (G%mask2dT(i,j) < 0.5) .or. &
-                  (vhr(i,J,k) < 0.0) .and. (G%mask2dT(i,j+1) < 0.5)) then
+                ! Now changing to simply fixed inflows.
+                if ((vhr(i,J,k) > 0.0) .and. (segment%direction == OBC_DIRECTION_S) .or. &
+                   (vhr(i,J,k) < 0.0) .and. (segment%direction == OBC_DIRECTION_N)) then
                   vhh(i,J) = vhr(i,J,k)
                   do m=1,ntr
                     if (associated(segment%tr_Reg%Tr(m)%t)) then
