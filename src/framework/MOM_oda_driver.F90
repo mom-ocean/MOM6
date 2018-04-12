@@ -256,17 +256,17 @@ contains
     allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
     allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
 
-    call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
-    do n=1,CS%ensemble_size
-      write(fldnam,'(a,i2.2)') 'temp_prior_',n
-      CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
-      write(fldnam,'(a,i2.2)') 'salt_prior_',n
-      CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
-      write(fldnam,'(a,i2.2)') 'temp_posterior_',n
-      CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
-      write(fldnam,'(a,i2.2)') 'salt_posterior_',n
-      CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
-    enddo
+    !call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
+    !do n=1,CS%ensemble_size
+      !write(fldnam,'(a,i2.2)') 'temp_prior_',n
+      !CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
+      !write(fldnam,'(a,i2.2)') 'salt_prior_',n
+      !CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
+      !write(fldnam,'(a,i2.2)') 'temp_posterior_',n
+      !CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
+      !write(fldnam,'(a,i2.2)') 'salt_posterior_',n
+      !CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
+    !enddo
 
    call mpp_get_data_domain(CS%mpp_domain,isd,ied,jsd,jed)
    allocate(CS%oda_grid)
@@ -316,7 +316,8 @@ contains
 
    call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
 
-   CS%Time=Time
+   !CS%Time=Time
+   CS%Time=increment_time(Time,CS%assim_frequency*3600)
    !! switch back to ensemble member pelist
    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
   end subroutine init_oda
@@ -366,8 +367,8 @@ contains
            CS%mpp_domain, CS%Ocean_prior%T(:,:,:,m), complete=.true.)
       call mpp_redistribute(CS%domains(m)%mpp_domain, S,&
            CS%mpp_domain, CS%Ocean_prior%S(:,:,:,m), complete=.true.)
-      if (CS%Ocean_prior%id_t(m)>0) used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
-      if (CS%Ocean_prior%id_s(m)>0) used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
+      !if (CS%Ocean_prior%id_t(m)>0) used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
+      !if (CS%Ocean_prior%id_s(m)>0) used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
     enddo
     deallocate(T,S)
 
@@ -429,20 +430,20 @@ contains
                  CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
        endif
 
-       if (CS%Ocean_posterior%id_t(m)>0) then
-         if(get_inc) then
-           used=send_data(CS%Ocean_posterior%id_t(m), Ocean_increment%T(isc:iec,jsc:jec,:,m), CS%Time)
-         else
-           used=send_data(CS%Ocean_posterior%id_t(m), CS%Ocean_posterior%T(isc:iec,jsc:jec,:,m), CS%Time)
-         endif
-       endif
-       if (CS%Ocean_posterior%id_s(m)>0) then
-         if(get_inc) then
-           used=send_data(CS%Ocean_posterior%id_s(m), Ocean_increment%S(isc:iec,jsc:jec,:,m), CS%Time)
-         else
-           used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
-         endif
-       endif
+       !if (CS%Ocean_posterior%id_t(m)>0) then
+         !if(get_inc) then
+           !used=send_data(CS%Ocean_posterior%id_t(m), Ocean_increment%T(isc:iec,jsc:jec,:,m), CS%Time)
+         !else
+           !used=send_data(CS%Ocean_posterior%id_t(m), CS%Ocean_posterior%T(isc:iec,jsc:jec,:,m), CS%Time)
+         !endif
+       !endif
+       !if (CS%Ocean_posterior%id_s(m)>0) then
+         !if(get_inc) then
+           !used=send_data(CS%Ocean_posterior%id_s(m), Ocean_increment%S(isc:iec,jsc:jec,:,m), CS%Time)
+         !else
+           !used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
+         !endif
+       !endif
      end do
 
      tv => CS%tv
