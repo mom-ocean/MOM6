@@ -38,8 +38,6 @@ type, public :: cvmix_shear_cs
   real, allocatable, dimension(:,:,:) :: N2 !< Squared Brunt-Vaisala frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: S2 !< Squared shear frequency (1/s2)
   real, allocatable, dimension(:,:,:) :: ri_grad !< Gradient Richardson number
-!  real, allocatable, dimension(:,:,:) :: kv !< vertical viscosity at interface (m2/s)
-!  real, allocatable, dimension(:,:,:) :: kd !< vertical diffusivity at interface (m2/s)
   character(10) :: Mix_Scheme               !< Mixing scheme name (string)
   ! Daignostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
@@ -72,7 +70,8 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
   real :: pref, DU, DV, DRHO, DZ, N2, S2, dummy
   real, dimension(2*(G%ke)) :: pres_1d, temp_1d, salt_1d, rho_1d
   real, dimension(G%ke+1) ::  Ri_Grad !< Gradient Richardson number
-
+  real, parameter         :: epsln = 1.e-10 !< Threshold to identify
+                                            !! vanished layers
   ! some constants
   GoRho = GV%g_Earth / GV%Rho0
 
@@ -125,8 +124,17 @@ subroutine calculate_cvmix_shear(u_H, v_H, h, tv, kd,  &
 
       enddo
 
-      ! vertically smooth Ri with 1-2-1 weighting
+      Ri_grad(G%ke+1) = Ri_grad(G%ke)
+
       if (CS%smooth_ri) then
+        ! 1) fill Ri_grad in vanished layers with adjacent value
+        do k = 2, G%ke
+          if (h(i,j,k) .le. epsln) Ri_grad(k) = Ri_grad(k-1)
+        enddo
+
+        Ri_grad(G%ke+1) = Ri_grad(G%ke)
+
+        ! 2) vertically smooth Ri with 1-2-1 filter
         dummy =  0.25 * Ri_grad(1)
         Ri_grad(G%ke+1) = Ri_grad(G%ke)
         do k = 1, G%ke
