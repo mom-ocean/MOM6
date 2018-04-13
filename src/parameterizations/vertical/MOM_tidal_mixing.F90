@@ -34,6 +34,7 @@ public tidal_mixing_end
 
 !> Containers for tidal mixing diagnostics
 type, public :: tidal_mixing_diags
+  ! TODO: private
   real, pointer, dimension(:,:,:) :: &
     Kd_itidal         => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
     Fl_itidal         => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
@@ -61,6 +62,7 @@ end type
 !> Control structure for tidal mixing module.
 type, public :: tidal_mixing_cs
   logical :: debug = .true.
+  ! TODO: private
 
   ! Parameters
   logical :: int_tide_dissipation ! Internal tide conversion (from barotropic) with
@@ -128,9 +130,10 @@ type, public :: tidal_mixing_cs
   real :: min_thickness       ! Minimum thickness allowed [m]
 
   ! CVMix-specific parameters
+  integer                         :: cvmix_tidal_scheme = -1  ! 1 for Simmons, 2 for Schmittner
   type(cvmix_tidal_params_type)   :: cvmix_tidal_params
-  type(cvmix_global_params_type)  :: cvmix_glb_params ! for Prandtl number only
-  real                            :: tidal_max_coef   ! maximum allowable tidal diffusivity. [m^2/s]
+  type(cvmix_global_params_type)  :: cvmix_glb_params         ! for Prandtl number only
+  real                            :: tidal_max_coef           ! maximum allowable tidal diffusivity. [m^2/s]
 
   ! Data containers
   real, pointer, dimension(:,:)     :: TKE_Niku    => NULL()
@@ -139,7 +142,7 @@ type, public :: tidal_mixing_cs
   real, pointer, dimension(:,:)     :: mask_itidal => NULL()
   real, pointer, dimension(:,:)     :: h2          => NULL()
   real, pointer, dimension(:,:)     :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
-  real, allocatable,dimension(:,:)  :: tidal_qe_2d   ! q*E(x,y)
+  real, allocatable,dimension(:,:)  :: tidal_qe_2d   ! q*E(x,y) ! TODO: make this E(x,y) only
 
   ! Diagnostics
   type(diag_ctrl),          pointer :: diag => NULL() ! structure to regulate diagn output timing
@@ -174,12 +177,12 @@ end type tidal_mixing_cs
 character(len=40)         :: mdl = "MOM_tidal_mixing"     !< This module's name.
 character*(20), parameter :: STLAURENT_PROFILE_STRING   = "STLAURENT_02"
 character*(20), parameter :: POLZIN_PROFILE_STRING      = "POLZIN_09"
-character*(20), parameter :: SIMMONS_PROFILE_STRING     = "SIMMONS"
-character*(20), parameter :: SCHMITTNER_PROFILE_STRING  = "SCHMITTNER"
 integer,        parameter :: STLAURENT_02 = 1
 integer,        parameter :: POLZIN_09    = 2
-integer,        parameter :: SIMMONS_04   = 3
-integer,        parameter :: SCHMITTNER   = 4
+character*(20), parameter :: SIMMONS_SCHEME_STRING      = "SIMMONS"
+character*(20), parameter :: SCHMITTNER_SCHEME_STRING   = "SCHMITTNER"
+integer,        parameter :: SIMMONS_04   = 1
+integer,        parameter :: SCHMITTNER   = 2
 
 contains
 
@@ -197,7 +200,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   ! Local variables
   logical :: read_tideamp
   character(len=20)  :: tmpstr, int_tide_profile_str
-  character(len=20)  :: default_profile_string, tidal_energy_type
+  character(len=20)  :: cvmix_tidal_scheme_str, tidal_energy_type
   character(len=200) :: filename, h2_file, Niku_TKE_input_file
   character(len=200) :: tidal_energy_file, tideamp_file
   type(vardesc) :: vd
@@ -239,40 +242,47 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
   if (CS%int_tide_dissipation) then
-    default_profile_string = STLAURENT_PROFILE_STRING
-    if (CS%use_cvmix_tidal) default_profile_string = SIMMONS_PROFILE_STRING
-    call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
-                 "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
-                 "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
-                 "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
-                 "\t                decay profile.\n"//&
-                 "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
-                 "\t                decay profile.", &
-                 default=default_profile_string)
-                 ! TODO: list the newly available profile selections
-    int_tide_profile_str = uppercase(int_tide_profile_str)
-    select case (int_tide_profile_str)
-      case (STLAURENT_PROFILE_STRING)   ; CS%int_tide_profile = STLAURENT_02
-      case (POLZIN_PROFILE_STRING)      ; CS%int_tide_profile = POLZIN_09
-      case (SIMMONS_PROFILE_STRING)     ; CS%int_tide_profile = SIMMONS_04
-      case (SCHMITTNER_PROFILE_STRING)  ; CS%int_tide_profile = SCHMITTNER
-      case default
-        call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
-            "#define INT_TIDE_PROFILE "//trim(int_tide_profile_str)//" found in input file.")
-    end select
 
-    ! Check profile consistency
-    if (CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.STLAURENT_02 .or. &
-                                  CS%int_tide_profile.eq.POLZIN_09)) then
-      call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profile"// &
-        " "//trim(int_tide_profile_str)//" unavailable in CVMix. Available "//&
-        "profiles in CVMix are "//trim(SIMMONS_PROFILE_STRING)//" and "//&
-        trim(SCHMITTNER_PROFILE_STRING)//".")
-    else if (.not.CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.SIMMONS_04.or. &
-                                            CS%int_tide_profile.eq.SCHMITTNER)) then
-      call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profiles "// &
-        trim(SIMMONS_PROFILE_STRING)//" and "//trim(SCHMITTNER_PROFILE_STRING)//&
-        " are available only when USE_CVMIX_TIDAL is True.")
+    ! Read in CVMix tidal scheme if CVMix tidal mixing is on
+    if (CS%use_cvmix_tidal) then
+      call get_param(param_file, mdl, "CVMIX_TIDAL_SCHEME", cvmix_tidal_scheme_str, &
+                 "CVMIX_TIDAL_SCHEME selects the CVMix tidal mixing\n"//&
+                 "scheme with INT_TIDE_DISSIPATION. Valid values are:\n"//&
+                 "\t SIMMONS - Use the Simmons et al (2004) tidal \n"//&
+                 "\t                mixing scheme.\n"//&
+                 "\t SCHMITTNER - Use the Schmittner et al (2014) tidal \n"//&
+                 "\t                mixing scheme.", &
+                 default=SIMMONS_SCHEME_STRING)
+      cvmix_tidal_scheme_str = uppercase(cvmix_tidal_scheme_str)
+
+      select case (cvmix_tidal_scheme_str)
+        case (SIMMONS_SCHEME_STRING)    ; CS%cvmix_tidal_scheme = SIMMONS_04
+        case (SCHMITTNER_SCHEME_STRING) ; CS%cvmix_tidal_scheme = SCHMITTNER
+        case default
+        call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
+            "#define CVMIX_TIDAL_SCHEME "//trim(cvmix_tidal_scheme_str)//" found in input file.")
+      end select
+    endif ! CS%use_cvmix_tidal
+
+    ! Read in vertical profile of tidal energy dissipation
+    if ( CS%cvmix_tidal_scheme.eq.SCHMITTNER .or. .not. CS%use_cvmix_tidal) then
+      call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
+                   "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
+                   "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
+                   "\t STLAURENT_02 - Use the St. Laurent et al exponential \n"//&
+                   "\t                decay profile.\n"//&
+                   "\t POLZIN_09 - Use the Polzin WKB-streched algebraic \n"//&
+                   "\t                decay profile.", &
+                   default=STLAURENT_PROFILE_STRING)
+      int_tide_profile_str = uppercase(int_tide_profile_str)
+
+      select case (int_tide_profile_str)
+        case (STLAURENT_PROFILE_STRING)   ; CS%int_tide_profile = STLAURENT_02
+        case (POLZIN_PROFILE_STRING)      ; CS%int_tide_profile = POLZIN_09
+        case default
+          call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
+              "#define INT_TIDE_PROFILE "//trim(int_tide_profile_str)//" found in input file.")
+      end select
     endif
 
   else if (CS%use_cvmix_tidal) then
@@ -317,10 +327,6 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
       (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09))) then
-    if (CS%use_cvmix_tidal) then
-        call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
-            "be used when CVMix tidal mixing scheme is active.")
-    end if
     call get_param(param_file, mdl, "NU_POLZIN", CS%Nu_Polzin, &
                  "When the Polzin decay profile is used, this is a \n"//&
                  "non-dimensional constant in the expression for the \n"//&
@@ -489,14 +495,14 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                    do_not_log=.true.)
     call cvmix_put(CS%cvmix_glb_params,'Prandtl',prandtl_tidal)
 
-    int_tide_profile_str = lowercase(int_tide_profile_str)
+    cvmix_tidal_scheme_str = lowercase(cvmix_tidal_scheme_str)
 
 
     ! TODO: check parameter consistency. (see POP::tidal_mixing.F90::tidal_check)
 
     ! Set up CVMix
     call cvmix_init_tidal(CVmix_tidal_params_user = CS%cvmix_tidal_params,    &
-                          mix_scheme              = int_tide_profile_str,     &
+                          mix_scheme              = cvmix_tidal_scheme_str,   &
                           efficiency              = CS%Mu_itides,             &
                           vertical_decay_scale    = CS%int_tide_decay_scale,  &
                           max_coefficient         = CS%tidal_max_coef,        &
@@ -646,7 +652,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   is  = G%isc ; ie  = G%iec
   dd => CS%dd
 
-  select case (CS%int_tide_profile)
+  select case (CS%cvmix_tidal_scheme)
   case (SIMMONS_04)
     do i=is,ie
 
@@ -713,8 +719,8 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
   ! TODO: case (SCHMITTNER)
   case default
-    call MOM_error(FATAL, "tidal_mixing_init: The selected"// &
-        " INT_TIDE_PROFILE is unavailable in CVMix")
+     call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
+         "#define CVMIX_TIDAL_SCHEME found in input file.")
   end select
 
 end subroutine calculate_cvmix_tidal
