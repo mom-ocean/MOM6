@@ -2292,6 +2292,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   if (associated(CS%visc%Kv_shear)) &
     call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
 
+  if (associated(CS%visc%Kv_slow)) &
+    call pass_var(CS%visc%Kv_slow, G%Domain, To_All+Omit_Corners, halo=1)
+
   call cpu_clock_end(id_clock_pass_init)
 
   call register_obsolete_diagnostics(param_file, CS%diag)
