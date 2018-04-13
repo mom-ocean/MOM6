@@ -401,12 +401,15 @@ module mom_cap_mod
 #endif
 #ifdef CESMCOUPLED
   use mom_cap_methods,          only: ocn_export, ocn_import
-  use shr_nuopc_flds_mod,       only: flds_scalar_name
-  use shr_nuopc_flds_mod,       only: flds_x2o, flds_o2x, flds_x2o_map, flds_o2x_map
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_SetScalarField, shr_nuopc_fldList_type
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Advertise, shr_nuopc_fldList_Realize
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Zero, shr_nuopc_fldList_Add
-  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_fromflds
+  use esmFlds,                  only: flds_scalar_name, flds_scalar_num
+  use esmFlds,                  only: fldListFr, fldListTo, compocn, compname
+  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Realize
+  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Concat
+  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Getnumflds
+  use shr_nuopc_fldList_mod,    only: shr_nuopc_fldList_Getfldinfo
+  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_SetScalar
+  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_GetScalar
+  use shr_nuopc_methods_mod,    only: shr_nuopc_methods_State_Diagnose
 #endif
 
   use ESMF
@@ -434,8 +437,8 @@ module mom_cap_mod
   end type
 
 #ifdef CESMCOUPLED
-  type (shr_nuopc_fldList_Type) :: fldsToOcn
-  type (shr_nuopc_fldList_Type) :: fldsFrOcn
+  character(len=4096) :: flds_o2x = ''
+  character(len=4096) :: flds_x2o = ''
 #else
   type fld_list_type
     character(len=64) :: stdname
@@ -465,7 +468,8 @@ module mom_cap_mod
   integer(ESMF_KIND_I8)   :: restart_interval
   logical                 :: sw_decomp
   real(ESMF_KIND_R8)      :: c1, c2, c3, c4
-  character(len=*),parameter :: u_file_u = __FILE__
+  character(len=*),parameter :: u_file_u = &
+       __FILE__
 
   contains
   !-----------------------------------------------------------------------
@@ -680,6 +684,9 @@ module mom_cap_mod
     type(directories)     :: dirs_tmp             !< A structure containing several relevant directory paths
     character(len=384) :: pointer_filename
     integer                                :: npet, npet_x, npet_y
+    integer       :: n,nflds       
+    logical       :: activefld
+    character(80) :: stdname, shortname
     character(len=*),parameter  :: subname='(mom_cap:InitializeAdvertise)'
 
     rc = ESMF_SUCCESS
@@ -755,20 +762,41 @@ module mom_cap_mod
       file=__FILE__)) &
       return  ! bail out
 
+#ifdef CESMCOUPLED
+    ! WARNING tcx tcraig
+    ! tcraig this is just a starting point, the fields are not complete or correct here
+
+    ! create import and export field list needed by data models
+    call shr_nuopc_fldList_Concat(fldListFr(compocn), fldListTo(compocn), flds_o2x, flds_x2o, flds_scalar_name)
+
+    ! advertise import and export fields
+    nflds = shr_nuopc_fldList_Getnumflds(fldListFr(compocn))
+    do n = 1,nflds
+       call shr_nuopc_fldList_Getfldinfo(fldListFr(compocn), n, activefld, stdname, shortname)
+       if (activefld) then
+          call NUOPC_Advertise(exportState, standardName=stdname, shortname=shortname, name=shortname, &
+               TransferOfferGeomObject='will provide', rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
+       end if
+       call ESMF_LogWrite(subname//':Fr_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
+    end do
+
+    nflds = shr_nuopc_fldList_Getnumflds(fldListTo(compocn))
+    do n = 1,nflds
+       call shr_nuopc_fldList_Getfldinfo(fldListTo(compocn), n, activefld, stdname, shortname)
+       if (activefld) then
+          call NUOPC_Advertise(importState, standardName=stdname, shortname=shortname, name=shortname, &
+               TransferOfferGeomObject='will provide', rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return  
+       end if
+       call ESMF_LogWrite(subname//':To_'//trim(compname(compocn))//': '//trim(shortname), ESMF_LOGMSG_INFO)
+    end do
+#else
     call MOM_FieldsSetup(ice_ocean_boundary, ocean_public)
 
-#ifdef CESMCOUPLED
-    call shr_nuopc_fldList_Advertise(importState, fldsToOcn, subname//':MOM6Import', rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_Advertise(exportState, fldsFrOcn, subname//':MOM6Export', rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-#else
     call MOM_AdvertiseFields(importState, fldsToOcn_num, fldsToOcn, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_file_u)) return  ! bail out
+
     call MOM_AdvertiseFields(exportState, fldsFrOcn_num, fldsFrOcn, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -1275,11 +1303,13 @@ module mom_cap_mod
     !---------------------------------
 
 #ifdef CESMCOUPLED
-    call shr_nuopc_fldList_Realize(importState, grid=gridIn, fldlist=fldsToOcn, tag=subname//':MOM6Import', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+    call shr_nuopc_fldList_Realize(importState, fldListTo(compocn), flds_scalar_name, flds_scalar_num, &
+         grid=gridIn, tag=subname//':MOM6Import', rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
 
-    call shr_nuopc_fldList_Realize(exportState, grid=gridOut, fldlist=fldsFrOcn, tag=subname//':MOM6Export', rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
+    call shr_nuopc_fldList_Realize(exportState, fldListFr(compocn), flds_scalar_name, flds_scalar_num, &
+         grid=gridOut, tag=subname//':MOM6Export', rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return  
 #else
     call MOM_RealizeFields(importState, gridIn , fldsToOcn_num, fldsToOcn, "Ocn import", rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -2205,7 +2235,7 @@ module mom_cap_mod
     enddo
 
   end subroutine MOM_RealizeFields
-#endif
+
   !-----------------------------------------------------------------------------
 
   subroutine MOM_FieldsSetup(ice_ocean_boundary,ocean_public)
@@ -2215,46 +2245,11 @@ module mom_cap_mod
     integer :: rc
     character(len=*),parameter  :: subname='(mom_cap:MOM_FieldsSetup)'
 
-  !!! fld_list_add(num, fldlist, stdname, transferOffer, data(optional), shortname(optional))
+    ! fld_list_add(num, fldlist, stdname, transferOffer, data(optional), shortname(optional))
 
-#ifdef CESMCOUPLED
-
-! WARNING tcx tcraig
-! tcraig this is just a starting point, the fields are not complete or correct here
-
-    !--------------------------------
-    ! create import fields list      
-    !--------------------------------
-
-    call shr_nuopc_fldList_Zero(fldsToOcn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_fromflds(fldsToOcn, flds_x2o, flds_x2o_map, "will provide", subname//":flds_x2o", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_Add(fldsToOcn, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    ! convert to fldsToOcn
-
-    !--------------------------------
-    ! create export fields list      
-    !--------------------------------
-
-    call shr_nuopc_fldList_Zero(fldsFrOcn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_fromflds(fldsFrOcn, flds_o2x, flds_o2x_map, "will provide", subname//":flds_o2x", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-    call shr_nuopc_fldList_Add(fldsFrOcn, trim(flds_scalar_name), "will provide", subname//":flds_scalar_name", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=u_FILE_u)) return
-
-#else
-!--------- import fields -------------
-
-! tcraig, don't point directly into mom data YET (last field is optional in interface)
-! instead, create space for the field when it's "realized".
+    !--------- import fields -------------
+    ! tcraig, don't point directly into mom data YET (last field is optional in interface)
+    ! instead, create space for the field when it's "realized".
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_zonal_moment_flx", "will provide", data=Ice_ocean_boundary%u_flux)
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_merid_moment_flx", "will provide", data=Ice_ocean_boundary%v_flux)
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sensi_heat_flx"  , "will provide", data=Ice_ocean_boundary%t_flux)
@@ -2274,7 +2269,7 @@ module mom_cap_mod
     call fld_list_add(fldsToOcn_num, fldsToOcn, "inst_pres_height_surface" , "will provide", data=Ice_ocean_boundary%p )
     call fld_list_add(fldsToOcn_num, fldsToOcn, "mass_of_overlying_sea_ice", "will provide", data=Ice_ocean_boundary%mi)
 
-!--------- export fields -------------
+    !--------- export fields -------------
 
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocean_mask", "will provide")
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature", "will provide", data=ocean_public%t_surf)
@@ -2286,12 +2281,10 @@ module mom_cap_mod
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_lev"   , "will provide", data=ocean_public%sea_lev)
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"   , "will provide", data=ocean_public%frazil)
 
-#endif
-
   end subroutine MOM_FieldsSetup
 
   !-----------------------------------------------------------------------------
-#ifndef CESMCOUPLED
+
   subroutine fld_list_add(num, fldlist, stdname, transferOffer, data, shortname)
     ! ----------------------------------------------
     ! Set up a list of field information
