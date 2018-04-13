@@ -370,8 +370,9 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   CS%id_Vsurf = register_diag_field('ocean_model', 'KPP_Vsurf', diag%axesCv1, Time, &
       'j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
 
-  if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
-  if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
+  ! CS%OBLdepth should always be allocated, since it may used by other modules
+  allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) ); CS%OBLdepth(:,:) = 0.
+
   if (CS%id_BulkDrho > 0) allocate( CS%dRho( SZI_(G), SZJ_(G), SZK_(G) ) )
   if (CS%id_BulkDrho > 0) CS%dRho(:,:,:) = 0.
   if (CS%id_BulkUz2 > 0)  allocate( CS%Uz2( SZI_(G), SZJ_(G), SZK_(G) ) )
@@ -864,7 +865,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       endif
 
       ! Copy 1d data into 3d diagnostic arrays
-      if (CS%id_OBLdepth > 0) CS%OBLdepth(i,j) = OBLdepth_0d
+      CS%OBLdepth(i,j) = OBLdepth_0d
       if (CS%id_BulkDrho > 0) CS%dRho(i,j,:)   = deltaRho(:)
       if (CS%id_BulkUz2 > 0)  CS%Uz2(i,j,:)    = deltaU2(:)
       if (CS%id_BulkRi > 0)   CS%BulkRi(i,j,:) = BulkRi_1d(:)
@@ -942,7 +943,7 @@ subroutine KPP_get_BLD(CS, BLD, G)
   type(KPP_CS),                     pointer     :: CS  !< Control structure for
                                                        !! this module
   type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BLD!< bnd. layer depth (m)
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: BLD!< bnd. layer depth (m)
   ! Local variables
   integer :: i,j
   do j = G%jsc, G%jec ; do i = G%isc, G%iec
