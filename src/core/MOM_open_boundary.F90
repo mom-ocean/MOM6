@@ -145,6 +145,8 @@ type, public :: OBC_segment_type
                                                             !! for normal velocity
   real, pointer, dimension(:,:,:) :: nudged_normal_vel=>NULL() !< The layer velocity normal to the OB segment
                                                             !! that values should be nudged towards (m s-1).
+  real, pointer, dimension(:,:,:) :: nudged_tangential_vel=>NULL() !< The layer velocity tangential to the OB segment
+                                                            !! that values should be nudged towards (m s-1).
   type(segment_tracer_registry_type), pointer  :: tr_Reg=> NULL()!< A pointer to the tracer registry for the segment.
   type(hor_index_type) :: HI !< Horizontal index ranges
   real :: Tr_InvLscale3_out                                     !< An effective inverse length scale cubed (m-3)
@@ -581,9 +583,17 @@ subroutine initialize_segment_data(G, OBC, PF)
           siz2(3)=siz(3)
 
           if (segment%is_E_or_W) then
-            allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz2(3)))
+            if (segment%field(m)%name == 'V') then
+              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+            else
+              allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz2(3)))
+            endif
           else
-            allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
+            if (segment%field(m)%name == 'V') then
+              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
+            else
+              allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
+            endif
           endif
           segment%field(m)%buffer_src(:,:,:)=0.0
           segment%field(m)%fid = init_external_field(trim(filename),&
@@ -592,9 +602,17 @@ subroutine initialize_segment_data(G, OBC, PF)
             fieldname = 'dz_'//trim(fieldname)
             call field_size(filename,fieldname,siz,no_domain=.true.)
             if (segment%is_E_or_W) then
-              allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)))
+              if (segment%field(m)%name == 'V') then
+                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
+              else
+                allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)))
+              endif
             else
-              allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)))
+              if (segment%field(m)%name == 'V') then
+                allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
+              else
+                allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)))
+              endif
             endif
             segment%field(m)%dz_src(:,:,:)=0.0
             segment%field(m)%nk_src=siz(3)
@@ -1892,6 +1910,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%normal_trans(IsdB:IedB,jsd:jed,OBC%ke)); segment%normal_trans(:,:,:)=0.0
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(IsdB:IedB,jsd:jed,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
+      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
     endif
     if (segment%oblique) then
       allocate(segment%grad_normal(JsdB:JedB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
@@ -1913,6 +1932,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%normal_trans(isd:ied,JsdB:JedB,OBC%ke)); segment%normal_trans(:,:,:)=0.0
     if (segment%nudged) then
       allocate(segment%nudged_normal_vel(isd:ied,JsdB:JedB,OBC%ke)); segment%nudged_normal_vel(:,:,:)=0.0
+      allocate(segment%nudged_tangential_vel(IsdB:IedB,JsdB:JedB,OBC%ke)); segment%nudged_tangential_vel(:,:,:)=0.0
     endif
     if (segment%oblique) then
       allocate(segment%grad_normal(IsdB:IedB,2,OBC%ke)); segment%grad_normal(:,:,:) = 0.0
@@ -1940,6 +1960,7 @@ subroutine deallocate_OBC_segment_data(OBC, segment)
   if (associated (segment%normal_vel_bt)) deallocate(segment%normal_vel_bt)
   if (associated (segment%normal_trans)) deallocate(segment%normal_trans)
   if (associated (segment%nudged_normal_vel)) deallocate(segment%nudged_normal_vel)
+  if (associated (segment%nudged_tangential_vel)) deallocate(segment%nudged_tangential_vel)
   if (associated (segment%tr_Reg)) call segment_tracer_registry_end(segment%tr_Reg)
 
 
