@@ -2,7 +2,7 @@
 module MOM_vert_friction
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-use MOM_domains,       only : pass_var
+use MOM_domains,       only : pass_var, To_All, Omit_corners
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
@@ -585,8 +585,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
   real, allocatable, dimension(:,:,:) :: Kv_h !< Total vertical viscosity at h-points
-  real :: av_h    !< v-drag coefficient at h-points, in m s-1
-  real :: au_h    !< u-drag coefficient at h-points, in m s-1
+  real, dimension(SZI_(G),SZJ_(G)) :: av_h, & !< v-drag coefficient at h-points, in m s-1
+                                      au_h    !< u-drag coefficient at h-points, in m s-1
   real :: dh      !< average thickness between layers k and k+1, in m or kg m-2.
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
@@ -966,25 +966,29 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
 
   ! Total Kv at h points
   if (CS%id_Kv > 0) then
-    do j = js, je
-      do i = is, ie
-        ! set surface and bottom values to zero
-        Kv_h(i,j,1) = 0.0; Kv_h(i,j,nz+1) = 0.0
-        do k=2,nz
-          av_h = 0.5 * (CS%a_v(i,J,k) + CS%a_v(i,J+1,k))
-          au_h = 0.5 * (CS%a_u(I,J,k) + CS%a_u(I+1,j,k))
-          dh = 0.5 * (h(i,j,K)+h(i,j,K+1))
-          if (dh .le. h_neglect) then
-            Kv_h(i,j,k) = 0.0
-          else
-            Kv_h(i,j,k) = sqrt(av_h**2 + au_h**2) * dh
-            if (Kv_h(i,j,k) .lt. 0.0) Kv_h(i,j,k) = 0.0
-          endif
-        enddo
-      enddo
-    enddo
-  ! update halos
-  call pass_var(Kv_h, G%Domain)
+    !$OMP parallel do default(shared)
+    do k=2,nz
+      ! set surface and bottom values to zero
+      Kv_h(i,j,1) = 0.0; Kv_h(i,j,nz+1) = 0.0
+      do j=js,je ; do I=is-1,ie
+        au_h(I,j) = CS%a_u(I,J,k)
+      enddo ; enddo
+      do J=js-1,je ; do i=is,ie
+        av_h(i,J) = CS%a_v(i,J,k)
+      enddo ; enddo
+      do j = js, je; do i = is, ie
+        dh = 0.5 * (h(i,j,K)+h(i,j,K+1))
+        if (dh .le. h_neglect) then
+          Kv_h(i,j,k) = 0.0
+        else
+          Kv_h(i,j,k) = sqrt((0.5 * (au_h(I,j)+au_h(I-1,j)))**2 + &
+                       (0.5 * (av_h(i,J) + av_h(i,J-1)))**2) * dh
+          if (Kv_h(i,j,k) .lt. 0.0) Kv_h(i,j,k) = 0.0
+        endif
+       enddo ; enddo
+    enddo ! k
+    ! update halos
+    call pass_var(Kv_h, G%Domain, To_All+Omit_Corners, halo=1)
   endif
 
   if (CS%debug) then
