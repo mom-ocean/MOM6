@@ -2,7 +2,7 @@
 module MOM_vert_friction
 
 ! This file is part of MOM6. See LICENSE.md for the license.
-
+use MOM_domains,       only : pass_var
 use MOM_diag_mediator, only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_debugging, only : uvchksum, hchksum
@@ -116,6 +116,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
+  integer :: id_Kv_slow = -1, id_Kv = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
@@ -583,6 +584,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
                   ! based on harmonic mean thicknesses, in m or kg m-2.
     h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
+  real, allocatable, dimension(:,:,:) :: Kv_h !< Total vertical viscosity at h-points
+  real :: av_h    !< v-drag coefficient at h-points, in m s-1
+  real :: au_h    !< u-drag coefficient at h-points, in m s-1
+  real :: dh      !< average thickness between layers k and k+1, in m or kg m-2.
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
@@ -614,6 +619,10 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   H_to_m = GV%H_to_m ; m_to_H = GV%m_to_H
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
+
+  if (CS%id_Kv > 0) then
+    allocate(Kv_h(SZI_(G), SZJ_(G), SZK_(G)+1)) ; Kv_h(:,:,:) = 0.0
+  endif
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
     allocate(hML_u(G%IsdB:G%IedB,G%jsd:G%jed)) ; hML_u(:,:) = 0.0
@@ -955,6 +964,29 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
     endif
   enddo ! end of v-point j loop
 
+  ! Total Kv at h points
+  if (CS%id_Kv > 0) then
+    do j = js, je
+      do i = is, ie
+        ! set surface and bottom values to zero
+        Kv_h(i,j,1) = 0.0; Kv_h(i,j,nz+1) = 0.0
+        do k=2,nz
+          av_h = 0.5 * (CS%a_v(i,J,k) + CS%a_v(i,J+1,k))
+          au_h = 0.5 * (CS%a_u(I,J,k) + CS%a_u(I+1,j,k))
+          dh = 0.5 * (h(i,j,K)+h(i,j,K+1))
+          if (dh .le. h_neglect) then
+            Kv_h(i,j,k) = 0.0
+          else
+            Kv_h(i,j,k) = sqrt(av_h**2 + au_h**2) * dh
+            if (Kv_h(i,j,k) .lt. 0.0) Kv_h(i,j,k) = 0.0
+          endif
+        enddo
+      enddo
+    enddo
+  ! update halos
+  call pass_var(Kv_h, G%Domain)
+  endif
+
   if (CS%debug) then
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, &
                   CS%h_v, G%HI,haloshift=0, scale=GV%H_to_m)
@@ -966,6 +998,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   endif
 
 ! Offer diagnostic fields for averaging.
+  if (CS%id_Kv_slow > 0) call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
+  if (CS%id_Kv > 0) call post_data(CS%id_Kv, Kv_h, CS%diag)
   if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
   if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
   if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
@@ -1660,17 +1694,27 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   ALLOC_(CS%a_v(isd:ied,JsdB:JedB,nz+1)) ; CS%a_v(:,:,:) = 0.0
   ALLOC_(CS%h_v(isd:ied,JsdB:JedB,nz))   ; CS%h_v(:,:,:) = 0.0
 
+  CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
+     'Slow varying vertical viscosity', 'm2 s-1')
+
+  CS%id_Kv = register_diag_field('ocean_model', 'Kv', diag%axesTi, Time, &
+     'Total vertical viscosity', 'm2 s-1')
+
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1')
+
   CS%id_av_vv = register_diag_field('ocean_model', 'av_visc', diag%axesCvi, Time, &
      'Meridional Viscous Vertical Coupling Coefficient', 'm s-1')
 
   CS%id_h_u = register_diag_field('ocean_model', 'Hu_visc', diag%axesCuL, Time, &
      'Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_h_v = register_diag_field('ocean_model', 'Hv_visc', diag%axesCvL, Time, &
      'Thickness at Meridional Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_u = register_diag_field('ocean_model', 'HMLu_visc', diag%axesCu1, Time, &
      'Mixed Layer Thickness at Zonal Velocity Points for Viscosity', thickness_units)
+
   CS%id_hML_v = register_diag_field('ocean_model', 'HMLv_visc', diag%axesCv1, Time, &
      'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', thickness_units)
 
