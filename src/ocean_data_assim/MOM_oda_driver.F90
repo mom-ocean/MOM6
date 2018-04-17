@@ -25,13 +25,13 @@ module MOM_oda_driver_mod
   use mpp_mod, only : set_root_pe => mpp_set_root_pe
   use mpp_mod, only : mpp_sync_self, mpp_sum, get_pelist=>mpp_get_current_pelist, mpp_root_pe
   use mpp_mod, only : set_stack_size=>mpp_set_stack_size, broadcast=>mpp_broadcast
+  use mpp_mod, only : mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_io_mod, only : io_set_stack_size=>mpp_io_set_stack_size
   use mpp_io_mod, only : MPP_SINGLE,MPP_MULTI
   use mpp_domains_mod, only : domain2d, mpp_global_field
   use mpp_domains_mod, only : mpp_get_compute_domain, mpp_get_data_domain
   use mpp_domains_mod, only : mpp_redistribute, mpp_broadcast_domain
   use mpp_domains_mod, only : set_domains_stack_size=>mpp_domains_set_stack_size
-  use diag_manager_mod, only : register_diag_field, diag_axis_init, send_data
   use ensemble_manager_mod, only : get_ensemble_id, get_ensemble_size
   use ensemble_manager_mod, only : get_ensemble_pelist, get_ensemble_filter_pelist
   use time_manager_mod, only : time_type, decrement_time, increment_time
@@ -46,7 +46,6 @@ module MOM_oda_driver_mod
   use kdtree, only : kd_root !# JEDI
   ! MOM Modules
   use MOM_io, only : slasher, MOM_read_data
-  use MOM_diag_mediator, only : diag_ctrl, set_axes_info
   use MOM_error_handler, only : FATAL, WARNING, MOM_error, is_root_pe
   use MOM_get_input, only : get_MOM_input, directories
   use MOM_variables, only : thermo_var_ptrs
@@ -107,13 +106,14 @@ module MOM_oda_driver_mod
      type(regridding_CS) :: regridCS !< ALE control structure for regridding
      type(remapping_CS) :: remapCS !< ALE control structure for remapping
      type(time_type) :: Time !< Current Analysis time
-     type(diag_ctrl) :: diag_cs !<Diagnostics control structure
   end type ODA_CS
 
   type :: pointer_mpp_domain
      type(domain2d), pointer :: mpp_domain => NULL()
   end type pointer_mpp_domain
 
+  real, dimension(:,:,:), allocatable :: T, S
+  type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
 
   integer, parameter :: NO_ASSIM = 0, OI_ASSIM=1, EAKF_ASSIM=2
 
@@ -139,7 +139,7 @@ contains
     real, dimension(:,:), allocatable :: global2D, global2D_old
     real, dimension(:), allocatable :: lon1D, lat1D, glon1D, glat1D
     type(param_file_type) :: PF
-    integer :: n, m, k, i, j, nk
+    integer :: n, m, k, i, j, nk, id_oda_init
     integer :: is,ie,js,je,isd,ied,jsd,jed
     integer :: stdout_unit
     character(len=32) :: assim_method
@@ -204,21 +204,23 @@ contains
     call get_ensemble_filter_pelist(CS%filter_pelist,'ocean')
 
     call set_current_pelist(CS%filter_pelist)
+    if(is_root_pe()) print *, 'Initialize ODA'
+
+    id_oda_init = mpp_clock_id('(ODA initialization computation)')
+    call mpp_clock_begin(id_oda_init)
 
     allocate(CS%domains(CS%ensemble_size))
     CS%domains(CS%ensemble_id)%mpp_domain => G%Domain%mpp_domain
     do n=1,CS%ensemble_size
       if(.not. associated(CS%domains(n)%mpp_domain)) allocate(CS%domains(n)%mpp_domain)
-      call set_root_pe(CS%ensemble_pelist(n,1))
       call mpp_broadcast_domain(CS%domains(n)%mpp_domain)
     enddo
-    call set_root_pe(CS%filter_pelist(1))
+
     allocate(CS%Grid)
     ! params NIHALO_ODA, NJHALO_ODA set the DA halo size
     call MOM_domains_init(CS%Grid%Domain,PF,param_suffix='_ODA')
     allocate(HI)
-    call hor_index_init(CS%Grid%Domain, HI, PF, &
-         local_indexing=.false.)  ! Use global indexing for DA
+    call hor_index_init(CS%Grid%Domain, HI, PF)
     call verticalGridInit( PF, CS%GV )
     allocate(dG)
     call create_dyn_horgrid(dG,HI)
@@ -228,7 +230,7 @@ contains
     call MOM_initialize_coord(CS%GV, PF, .false., &
          dirs%output_directory, tv_dummy, dG%max_depth)
     call ALE_init(PF, CS%GV, dG%max_depth, CS%ALE_CS)
-    call MOM_grid_init(CS%Grid, PF, global_indexing=.true.)
+    call MOM_grid_init(CS%Grid, PF)
     call ALE_updateVerticalGridType(CS%ALE_CS,CS%GV)
     call copy_dyngrid_to_MOM_grid(dG, CS%Grid)
     CS%mpp_domain => CS%Grid%Domain%mpp_domain
@@ -245,81 +247,72 @@ contains
          "Coordinate mode for vertical regridding.", &
          default="ZSTAR", fail_if_missing=.false.)
     call initialize_regridding(CS%regridCS, CS%GV, dG%max_depth,PF,'oda_driver',coord_mode,'','')
-    call initialize_remapping(CS%remapCS,'PLM')
+    call initialize_remapping(CS%remapCS,'PCM')
     call set_regrid_params(CS%regridCS, min_thickness=0.)
-    call mpp_get_data_domain(G%Domain%mpp_domain,isd,ied,jsd,jed)
+    isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
     if(.not. associated(CS%h)) then
-        allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:)=0.0
+        allocate(CS%h(isd:ied,jsd:jed,CS%GV%ke)); CS%h(:,:,:) = CS%GV%Angstrom
 ! assign thicknesses
         call ALE_initThicknessToCoord(CS%ALE_CS,G,CS%GV,CS%h)
     endif
     allocate(CS%tv%T(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%T(:,:,:)=0.0
     allocate(CS%tv%S(isd:ied,jsd:jed,CS%GV%ke)); CS%tv%S(:,:,:)=0.0
+    allocate(T(isd:ied,jsd:jed,CS%nk)); T = 0.0
+    allocate(S(isd:ied,jsd:jed,CS%nk)); S = 0.0
 
-    !call set_axes_info(CS%Grid,CS%GV,PF,CS%diag_cs,set_vertical=.true.)
-    !do n=1,CS%ensemble_size
-      !write(fldnam,'(a,i2.2)') 'temp_prior_',n
-      !CS%Ocean_prior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
-      !write(fldnam,'(a,i2.2)') 'salt_prior_',n
-      !CS%Ocean_prior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
-      !write(fldnam,'(a,i2.2)') 'temp_posterior_',n
-      !CS%Ocean_posterior%id_t(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean potential temperature','degC')
-      !write(fldnam,'(a,i2.2)') 'salt_posterior_',n
-      !CS%Ocean_posterior%id_s(n)=register_diag_field('ODA',trim(fldnam),CS%diag_cs%axesTL%handles,Time,'ocean salinity','psu')
-    !enddo
+    isd = CS%Grid%isd; ied = CS%Grid%ied; jsd = CS%Grid%jsd; jed = CS%Grid%jed
+    allocate(CS%oda_grid)
+    CS%oda_grid%x => CS%Grid%geolonT
+    CS%oda_grid%y => CS%Grid%geolatT
 
-   call mpp_get_data_domain(CS%mpp_domain,isd,ied,jsd,jed)
-   allocate(CS%oda_grid)
-   CS%oda_grid%x => CS%Grid%geolonT
-   CS%oda_grid%y => CS%Grid%geolatT
-
-   call get_param(PF, 'oda_driver', "BASIN_FILE", basin_file, &
-           "A file in which to find the basin masks, in variable 'basin'.", &
-           default="basin.nc")
-   basin_file = trim(inputdir) // trim(basin_file)
-   allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
-   CS%oda_grid%basin_mask(:,:) = 0.0
-   call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
+    call get_param(PF, 'oda_driver', "BASIN_FILE", basin_file, &
+            "A file in which to find the basin masks, in variable 'basin'.", &
+            default="basin.nc")
+    basin_file = trim(inputdir) // trim(basin_file)
+    allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed))
+    CS%oda_grid%basin_mask(:,:) = 0.0
+    call MOM_read_data(basin_file,'basin',CS%oda_grid%basin_mask,CS%Grid%domain, timelevel=1)
 
 !    get global grid information from ocean_model
-   allocate(T_grid)
-   allocate(T_grid%x(CS%ni,CS%nj))
-   allocate(T_grid%y(CS%ni,CS%nj))
-   allocate(T_grid%basin_mask(CS%ni,CS%nj))
-   call mpp_global_field(CS%mpp_domain, CS%Grid%geolonT, T_grid%x)
-   call mpp_global_field(CS%mpp_domain, CS%Grid%geolatT, T_grid%y)
-   call mpp_global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
-   T_grid%ni = CS%ni
-   T_grid%nj = CS%nj
-   T_grid%nk = CS%nk
-   allocate(T_grid%mask(CS%ni,CS%nj,CS%nk))
-   allocate(T_grid%z(CS%ni,CS%nj,CS%nk))
-   allocate(global2D(CS%ni,CS%nj))
-   allocate(global2D_old(CS%ni,CS%nj))
-   T_grid%mask(:,:,:) = 0.0
-   T_grid%z(:,:,:) = 0.0
-
-   do k = 1, CS%nk
-     call mpp_global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
-     do i=1, CS%ni; do j=1, CS%nj
-       if ( global2D(i,j) > 1 ) then
-         T_grid%mask(i,j,k) = 1.0
-       end if
-     end do; end do
-     if (k .eq. 1) then
-       T_grid%z(:,:,k) = global2D/2
-     else
-       T_grid%z(:,:,k) = T_grid%z(:,:,k-1) + (global2D + global2D_old)/2
-     end if
-     global2D_old = global2D
-   end do
-
-   call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
-
-   !CS%Time=Time
-   CS%Time=increment_time(Time,CS%assim_frequency*3600)
-   !! switch back to ensemble member pelist
-   call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+    allocate(T_grid)
+    allocate(T_grid%x(CS%ni,CS%nj))
+    allocate(T_grid%y(CS%ni,CS%nj))
+    allocate(T_grid%basin_mask(CS%ni,CS%nj))
+    call mpp_global_field(CS%mpp_domain, CS%Grid%geolonT, T_grid%x)
+    call mpp_global_field(CS%mpp_domain, CS%Grid%geolatT, T_grid%y)
+    call mpp_global_field(CS%mpp_domain, CS%oda_grid%basin_mask, T_grid%basin_mask)
+    T_grid%ni = CS%ni
+    T_grid%nj = CS%nj
+    T_grid%nk = CS%nk
+    allocate(T_grid%mask(CS%ni,CS%nj,CS%nk))
+    allocate(T_grid%z(CS%ni,CS%nj,CS%nk))
+    allocate(global2D(CS%ni,CS%nj))
+    allocate(global2D_old(CS%ni,CS%nj))
+    T_grid%mask(:,:,:) = 0.0
+    T_grid%z(:,:,:) = 0.0
+ 
+    do k = 1, CS%nk
+      call mpp_global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
+      do i=1, CS%ni; do j=1, CS%nj
+        if ( global2D(i,j) > 1 ) then
+          T_grid%mask(i,j,k) = 1.0
+        end if
+      end do; end do
+      if (k .eq. 1) then
+        T_grid%z(:,:,k) = global2D/2
+      else
+        T_grid%z(:,:,k) = T_grid%z(:,:,k-1) + (global2D + global2D_old)/2
+      end if
+      global2D_old = global2D
+    end do
+ 
+    call oda_core_init(CS%mpp_domain, T_grid, CS%Profiles, Time)
+ 
+    !CS%Time=Time
+    CS%Time=increment_time(Time,CS%assim_frequency*3600)
+    !! switch back to ensemble member pelist
+    call mpp_clock_end(id_oda_init)
+    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
   end subroutine init_oda
 
   subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
@@ -328,15 +321,11 @@ contains
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses, in H (usually m or kg m-2)
     type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
-
     type(ODA_CS), pointer :: CS !< ocean DA control structure
-    real, dimension(:,:,:), allocatable :: T, S
-    type(ocean_grid_type), pointer :: Grid=>NULL()
-    integer :: i,j, m, n, ss
-    integer :: is, ie, js, je
+
+    integer :: i, j, m, n, ss
     integer :: isc, iec, jsc, jec
-    integer :: isd, ied, jsd, jed
-    integer :: id
+    integer :: id, id_oda_prior
     logical :: used
 
     ! return if not time for analysis
@@ -345,17 +334,15 @@ contains
     if (.not. ASSOCIATED(CS%Grid)) call MOM_ERROR(FATAL,'ODA_CS ensemble horizontal grid not associated')
     if (.not. ASSOCIATED(CS%GV)) call MOM_ERROR(FATAL,'ODA_CS ensemble vertical grid not associated')
 
-    !! switch to global pelist
     call set_current_pelist(CS%filter_pelist)
+    id_oda_prior = mpp_clock_id('(ODA setting prior)')
+    call mpp_clock_begin(id_oda_prior)
+
+    !! switch to global pelist
     if(is_root_pe()) print *, 'Setting prior'
 
-    isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
-    call mpp_get_compute_domain(CS%domains(CS%ensemble_id)%mpp_domain,is,ie,js,je)
-    call mpp_get_data_domain(CS%domains(CS%ensemble_id)%mpp_domain,isd,ied,jsd,jed)
-    allocate(T(isd:ied,jsd:jed,CS%nk))
-    allocate(S(isd:ied,jsd:jed,CS%nk))
-
-    do j=js,je; do i=is,ie
+    isc=G%isc; iec=G%iec; jsc=G%jsc; jec=G%jec
+    do j=jsc,jec; do i=isc,iec
       call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
            CS%nk, CS%h(i,j,:), T(i,j,:))
       call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
@@ -367,12 +354,10 @@ contains
            CS%mpp_domain, CS%Ocean_prior%T(:,:,:,m), complete=.true.)
       call mpp_redistribute(CS%domains(m)%mpp_domain, S,&
            CS%mpp_domain, CS%Ocean_prior%S(:,:,:,m), complete=.true.)
-      !if (CS%Ocean_prior%id_t(m)>0) used=send_data(CS%Ocean_prior%id_t(m), CS%Ocean_prior%T(isc:iec,jsc:jec,:,m), CS%Time)
-      !if (CS%Ocean_prior%id_s(m)>0) used=send_data(CS%Ocean_prior%id_s(m), CS%Ocean_prior%S(isc:iec,jsc:jec,:,m), CS%Time)
     enddo
-    deallocate(T,S)
 
     !! switch back to ensemble member pelist
+    call mpp_clock_end(id_oda_prior)
     call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
     return
@@ -382,101 +367,86 @@ contains
   !> Returns posterior adjustments or full state
   !!Note that only those PEs associated with an ensemble member receive data
   subroutine get_posterior_tracer(Time, CS, G, GV, h, tv, increment)
-     type(time_type), intent(in) :: Time !< the current model time
-     type(ODA_CS), pointer :: CS !< ocean DA control structure
-     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
-     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
-     real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H (usually m or kg m-2)
-     type(thermo_var_ptrs), pointer :: tv   !< A structure pointing to various thermodynamic variables
+    type(time_type), intent(in) :: Time !< the current model time
+    type(ODA_CS), pointer :: CS !< ocean DA control structure
+    type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
+    type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
+    real, dimension(:,:,:), pointer :: h    !< Layer thicknesses, in H (usually m or kg m-2)
+    type(thermo_var_ptrs), pointer :: tv   !< A structure pointing to various thermodynamic variables
 
-     logical, optional, intent(in) :: increment
+    logical, optional, intent(in) :: increment
 
-     type(ocean_grid_type), pointer :: Grid=>NULL()
-     type(ocean_control_struct), pointer :: Ocean_increment=>NULL()
-     integer :: is, ie, js, je
-     integer :: isd, ied, jsd, jed
-     integer :: isc, iec, jsc, jec
-     integer :: i, j, m
-     logical :: used, get_inc
+    integer :: i, j, m, id_oda_posterior
+    logical :: used, get_inc
 
-     ! return if not analysis time (retain pointers for h and tv)
-     if (Time < CS%Time) return
+    ! return if not analysis time (retain pointers for h and tv)
+    if (Time < CS%Time) return
 
+    !! switch to global pelist
+    call set_current_pelist(CS%filter_pelist)
 
-     !! switch to global pelist
-     call set_current_pelist(CS%filter_pelist)
-     if(is_root_pe()) print *, 'Getting posterior'
+    id_oda_posterior = mpp_clock_id('(ODA getting posterior)')
+    call mpp_clock_begin(id_oda_posterior)
+    if(is_root_pe()) print *, 'Getting posterior'
 
-     get_inc = .true.
-     if(present(increment)) get_inc = increment
+    get_inc = .true.
+    if(present(increment)) get_inc = increment
 
-     if(get_inc) then
-       allocate(Ocean_increment)
-       call init_ocean_ensemble(Ocean_increment,CS%Grid,CS%GV,CS%ensemble_size)
-       Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
-       Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
-     endif
-     isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
-     do m=1,CS%ensemble_size
-       if(get_inc) then
-         call mpp_redistribute(CS%mpp_domain, Ocean_increment%T(:,:,:,m), &
-                 CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
-         call mpp_redistribute(CS%mpp_domain, Ocean_increment%S(:,:,:,m), &
-                 CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
-       else
-         call mpp_redistribute(CS%mpp_domain, CS%Ocean_posterior%T(:,:,:,m), &
-                 CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
-         call mpp_redistribute(CS%mpp_domain, CS%Ocean_posterior%S(:,:,:,m), &
-                 CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
-       endif
+    if(get_inc) then
+      if( .not. associated(Ocean_increment) ) then
+        allocate(Ocean_increment)
+        call init_ocean_ensemble(Ocean_increment,CS%Grid,CS%GV,CS%ensemble_size)
+      endif
+      Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
+      Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
+    endif
+    do m=1,CS%ensemble_size
+      if(get_inc) then
+        call mpp_redistribute(CS%mpp_domain, Ocean_increment%T(:,:,:,m), &
+                CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
+        call mpp_redistribute(CS%mpp_domain, Ocean_increment%S(:,:,:,m), &
+                CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
+      else
+        call mpp_redistribute(CS%mpp_domain, CS%Ocean_posterior%T(:,:,:,m), &
+                CS%domains(m)%mpp_domain, CS%tv%T, complete=.true.)
+        call mpp_redistribute(CS%mpp_domain, CS%Ocean_posterior%S(:,:,:,m), &
+                CS%domains(m)%mpp_domain, CS%tv%S, complete=.true.)
+      endif
 
-       !if (CS%Ocean_posterior%id_t(m)>0) then
-         !if(get_inc) then
-           !used=send_data(CS%Ocean_posterior%id_t(m), Ocean_increment%T(isc:iec,jsc:jec,:,m), CS%Time)
-         !else
-           !used=send_data(CS%Ocean_posterior%id_t(m), CS%Ocean_posterior%T(isc:iec,jsc:jec,:,m), CS%Time)
-         !endif
-       !endif
-       !if (CS%Ocean_posterior%id_s(m)>0) then
-         !if(get_inc) then
-           !used=send_data(CS%Ocean_posterior%id_s(m), Ocean_increment%S(isc:iec,jsc:jec,:,m), CS%Time)
-         !else
-           !used=send_data(CS%Ocean_posterior%id_s(m), CS%Ocean_posterior%S(isc:iec,jsc:jec,:,m), CS%Time)
-         !endif
-       !endif
-     end do
+    end do
 
-     tv => CS%tv
-     h => CS%h
-     !! switch back to ensemble member pelist
-     call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+    tv => CS%tv
+    h => CS%h
+    !! switch back to ensemble member pelist
+    call mpp_clock_end(id_oda_posterior)
+    call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
    end subroutine get_posterior_tracer
 
   subroutine oda(Time, CS)
-     type(time_type), intent(in) :: Time
-     type(oda_CS), intent(inout) :: CS
+    type(time_type), intent(in) :: Time
+    type(oda_CS), intent(inout) :: CS
 
-     integer :: i, j
-     integer :: m
+    integer :: i, j
+    integer :: m
     integer :: yr, mon, day, hr, min, sec
 
-     if ( Time >= CS%Time ) then
+    if ( Time >= CS%Time ) then
 
-       !! switch to global pelist
-       call set_current_pelist(CS%filter_pelist)
+      !! switch to global pelist
+      call set_current_pelist(CS%filter_pelist)
 
-       call get_profiles(Time, CS%Profiles, CS%CProfiles)
+      call get_profiles(Time, CS%Profiles, CS%CProfiles)
 #ifdef ENABLE_ECDA
-       call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
+      call ensemble_filter(CS%Ocean_prior, CS%Ocean_posterior, CS%CProfiles, CS%kdroot, CS%mpp_domain, CS%oda_grid)
 #endif
 
-       !! switch back to ensemble member pelist
-       call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
+      !! switch back to ensemble member pelist
+      call set_current_pelist(CS%ensemble_pelist(CS%ensemble_id,:))
 
-     end if
+    end if
 
-     return
+    return
   end subroutine oda
 
   subroutine oda_end(CS)
@@ -498,14 +468,14 @@ contains
     CS%ensemble_size=ens_size
     allocate(CS%T(is:ie,js:je,nk,ens_size))
     allocate(CS%S(is:ie,js:je,nk,ens_size))
-    allocate(CS%SSH(is:ie,js:je,ens_size))
-    allocate(CS%id_t(ens_size));CS%id_t(:)=-1
-    allocate(CS%id_s(ens_size));CS%id_s(:)=-1
-!   allocate(CS%U(is:ie,js:je,nk,ens_size))
-!   allocate(CS%V(is:ie,js:je,nk,ens_size))
-!    allocate(CS%id_u(ens_size));CS%id_u(:)=-1
-!    allocate(CS%id_v(ens_size));CS%id_v(:)=-1
-    allocate(CS%id_ssh(ens_size));CS%id_ssh(:)=-1
+    !allocate(CS%SSH(is:ie,js:je,ens_size))
+    !allocate(CS%id_t(ens_size));CS%id_t(:)=-1
+    !allocate(CS%id_s(ens_size));CS%id_s(:)=-1
+    !allocate(CS%U(is:ie,js:je,nk,ens_size))
+    !allocate(CS%V(is:ie,js:je,nk,ens_size))
+    !allocate(CS%id_u(ens_size));CS%id_u(:)=-1
+    !allocate(CS%id_v(ens_size));CS%id_v(:)=-1
+    !allocate(CS%id_ssh(ens_size));CS%id_ssh(:)=-1
 
     return
   end subroutine init_ocean_ensemble
@@ -529,6 +499,7 @@ contains
              "assimilation interval appears to be shorter than " // &
              "the model timestep")
     endif
+    
     return
 
   end subroutine set_analysis_time
