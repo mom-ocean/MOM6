@@ -128,11 +128,11 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   ! Register diagnostics
   CS%diag => diag
-  CS%id_N2 = register_diag_field('ocean_model', 'conv_N2', diag%axesTi, Time, &
+  CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
       'Square of Brunt-Vaisala frequency used by MOM_cvmix_conv module', '1/s2')
-  CS%id_kd_conv = register_diag_field('ocean_model', 'conv_kd', diag%axesTi, Time, &
+  CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
       'Additional diffusivity added by MOM_cvmix_conv module', 'm2/s')
-  CS%id_kv_conv = register_diag_field('ocean_model', 'conv_kv', diag%axesTi, Time, &
+  CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
       'Additional viscosity added by MOM_cvmix_conv module', 'm2/s')
 
   call cvmix_init_conv(convect_diff=CS%kd_conv_const, &
