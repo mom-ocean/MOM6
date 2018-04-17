@@ -132,8 +132,9 @@ type, public :: tidal_mixing_cs
   ! CVMix-specific parameters
   integer                         :: cvmix_tidal_scheme = -1  ! 1 for Simmons, 2 for Schmittner
   type(cvmix_tidal_params_type)   :: cvmix_tidal_params
-  type(cvmix_global_params_type)  :: cvmix_glb_params         ! for Prandtl number only
-  real                            :: tidal_max_coef           ! maximum allowable tidal diffusivity. [m^2/s]
+  type(cvmix_global_params_type)  :: cvmix_glb_params   ! for Prandtl number only
+  real                            :: tidal_max_coef     ! maximum allowable tidal diffusivity. [m^2/s]
+  real                            :: tidal_diss_lim_tc  ! dissipation limit for tidal-energy-constituent data
 
   ! Data containers
   real, pointer, dimension(:,:)     :: TKE_Niku    => NULL()
@@ -477,6 +478,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
                    "largest acceptable value for tidal diffusivity", &
                    units="m^2/s", default=50e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
+    call get_param(param_file, mdl, "TIDAL_DISS_LIM_TC", CS%tidal_diss_lim_tc, &
+                   "Min allowable depth for dissipation for tidal-energy-constituent data. \n"//&
+                   "No dissipation contribution is applied above TIDAL_DISS_LIM_TC.", &
+                   units="m", default=0.0)
     call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
                  "The path to the file containing tidal energy \n"//&
                  "dissipation. Used with CVMix tidal mixing schemes.", &
@@ -1133,7 +1138,7 @@ subroutine setup_tidal_diagnostics(G,CS)
   integer :: isd, ied, jsd, jed, nz
   type(tidal_mixing_diags), pointer :: dd
 
-  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke 
+  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke
   dd => CS%dd
 
   if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_itidal_z > 0) .or. &
@@ -1293,21 +1298,99 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
-  allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
 
   select case (uppercase(tidal_energy_type(1:4)))
-  case ('JAYN') ! Jayne 2009 input tidal energy flux
+  case ('JAYN') ! Jayne 2009
+    allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
     call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
     CS%tidal_qe_2d = (CS%Gamma_itides) * tidal_energy_flux_2d
+    deallocate(tidal_energy_flux_2d)
+  case ('ER03') ! Egbert & Ray 2003
+    call read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
-  ! TODO: add more tidal energy file types, e.g., Arbic, ER03, GN13, LGM0, etc.
-  ! see POP::tidal_mixing.F90
   end select
 
-  deallocate(tidal_energy_flux_2d)
-
 end subroutine read_tidal_energy
+
+
+subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
+  type(ocean_grid_type),  intent(in)  :: G    !< The ocean's grid structure
+  character(len=20),      intent(in)  :: tidal_energy_type
+  character(len=200),     intent(in)  :: tidal_energy_file
+  type(tidal_mixing_cs),  pointer     :: CS
+
+  ! local
+  integer :: k, isd, ied, jsd, jed, nz
+  real, parameter  :: p33 = 1.0/3.0
+  real, dimension(SZK_(G)) :: &
+    z_t, &        ! depth from surface to midpoint of input layer
+    z_w           ! depth from surface to top of input layer
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    tidal_qk1, &  ! qk1 coefficient used in Schmittner & Egbert
+    tidal_qo1     ! qo1 coefficient used in Schmittner & Egbert
+  real, allocatable, dimension(:,:,:) :: &
+    tc_m2, &      ! input lunar semidiurnal tidal energy flux [W/m^2]
+    tc_s2, &      ! input solar semidiurnal tidal energy flux [W/m^2]
+    tc_k1, &      ! input lunar diurnal tidal energy flux [W/m^2]
+    tc_o1, &      ! input lunar diurnal tidal energy flux [W/m^2]
+    tidal_qe_3d   ! sum_tc(q_tc*TC(x,y,z)) = q*E(x,y,z)
+
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
+
+  allocate(tc_m2(isd:ied,jsd:jed,nz), &
+           tc_s2(isd:ied,jsd:jed,nz), &
+           tc_k1(isd:ied,jsd:jed,nz), &
+           tc_o1(isd:ied,jsd:jed,nz), &
+           tidal_qe_3d(isd:ied,jsd:jed,nz) )
+
+  ! read in tidal constituents
+  ! (NOTE: input z coordinates may differ from the model coordinates, which is fine.)
+  call MOM_read_data(tidal_energy_file, 'M2', tc_m2, G%domain)
+  call MOM_read_data(tidal_energy_file, 'S2', tc_s2, G%domain)
+  call MOM_read_data(tidal_energy_file, 'K1', tc_k1, G%domain)
+  call MOM_read_data(tidal_energy_file, 'O1', tc_o1, G%domain)
+  call MOM_read_data(tidal_energy_file, 'z_t', z_t)
+  call MOM_read_data(tidal_energy_file, 'z_w', z_w)
+
+  ! form tidal_qe_3d from weighted tidal constituents
+  tidal_qe_3d = 0.0
+
+  where (abs(G%geoLatT(:,:)) < 30.0)
+    tidal_qk1(:,:) = p33
+    tidal_qo1(:,:) = p33
+  elsewhere
+    tidal_qk1(:,:) = 1.0
+    tidal_qo1(:,:) = 1.0
+  endwhere
+
+  do k=1,nz
+    where (z_t(k) <= G%bathyT(:,:) .and. z_w(k) > CS%tidal_diss_lim_tc)
+      tidal_qe_3d(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
+                           tidal_qk1*tc_k1(:,:,k) + tidal_qo1*tc_o1(:,:,k)
+    endwhere
+  enddo
+
+  ! test if qE is positive
+  if (any(tidal_qe_3d<0)) then
+        call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d terms.")
+  endif
+
+  ! collapse 3D q*E to 2D q*E
+  CS%tidal_qe_2d = 0.0
+  do k=1,nz
+    where (z_t(k) <= G%bathyT(:,:))
+      CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + tidal_qe_3d(:,:,k)
+    endwhere
+  enddo
+
+  deallocate(tc_m2)
+  deallocate(tc_s2)
+  deallocate(tc_k1)
+  deallocate(tc_o1)
+  deallocate(tidal_qe_3d)
+
+end subroutine read_tidal_constituents
 
 
 !> Clear pointers and deallocate memory
