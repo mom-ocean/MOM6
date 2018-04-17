@@ -19,6 +19,7 @@ use MOM_string_functions,    only : uppercase, lowercase
 use MOM_io,                  only : slasher, MOM_read_data, vardesc, var_desc
 use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,             only : cvmix_coeffs_tidal, cvmix_tidal_params_type
+use cvmix_tidal,             only : cvmix_compute_Schmittner_invariant
 use cvmix_kinds_and_types,   only : cvmix_global_params_type
 use cvmix_put_get,           only : cvmix_put
 
@@ -182,7 +183,7 @@ integer,        parameter :: STLAURENT_02 = 1
 integer,        parameter :: POLZIN_09    = 2
 character*(20), parameter :: SIMMONS_SCHEME_STRING      = "SIMMONS"
 character*(20), parameter :: SCHMITTNER_SCHEME_STRING   = "SCHMITTNER"
-integer,        parameter :: SIMMONS_04   = 1
+integer,        parameter :: SIMMONS   = 1
 integer,        parameter :: SCHMITTNER   = 2
 
 contains
@@ -257,7 +258,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
       cvmix_tidal_scheme_str = uppercase(cvmix_tidal_scheme_str)
 
       select case (cvmix_tidal_scheme_str)
-        case (SIMMONS_SCHEME_STRING)    ; CS%cvmix_tidal_scheme = SIMMONS_04
+        case (SIMMONS_SCHEME_STRING)    ; CS%cvmix_tidal_scheme = SIMMONS
         case (SCHMITTNER_SCHEME_STRING) ; CS%cvmix_tidal_scheme = SCHMITTNER
         case default
         call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
@@ -646,9 +647,12 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   ! local
   real, dimension(SZK_(G)+1) :: Kd_tidal    !< tidal diffusivity [m2/s]
   real, dimension(SZK_(G)+1) :: Kv_tidal    !< tidal viscosity [m2/s]
-  real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition needed for Simmons tidal mixing.
+  real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
+
+  real, allocatable, dimension(:,:) :: exp_hab_zetar
+
   integer :: i, k, is, ie
   real :: dh, hcorr, Simmons_coeff
   real, parameter :: rho_fw = 1000.0 ! fresh water density [kg/m^3] ! TODO: when coupled, get this from CESM (SHR_CONST_RHOFW)
@@ -658,7 +662,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   dd => CS%dd
 
   select case (CS%cvmix_tidal_scheme)
-  case (SIMMONS_04)
+  case (SIMMONS)
     do i=is,ie
 
       if (G%mask2dT(i,j)<1) cycle
@@ -722,7 +726,47 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
     enddo ! i=is,ie
 
-  ! TODO: case (SCHMITTNER)
+  case (SCHMITTNER)
+
+    allocate(exp_hab_zetar(G%ke+1,G%ke+1))
+
+    do i=is,ie
+
+      if (G%mask2dT(i,j)<1) cycle
+
+      iFaceHeight = 0.0 ! BBL is all relative to the surface
+      hcorr = 0.0
+      do k=1,G%ke
+        ! cell center and cell bottom in meters (negative values in the ocean)
+        dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+        dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
+        hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+        iFaceHeight(k+1) = iFaceHeight(k) - dh
+      enddo
+
+      ! form the time-invariant part of Schmittner coefficient term
+      call cvmix_compute_Schmittner_invariant(nlev                    = G%ke,           &
+                                              VertDep                 = vert_dep,       &
+                                              rho                     = rho_fw,         &
+                                              exp_hab_zetar           = exp_hab_zetar,  &
+                                              zw                      = iFaceHeight,    &
+                                              CVmix_tidal_params_user = CS%cvmix_tidal_params)
+
+      ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
+      ! summing q_i*TidalConstituent_i over the number of constituents.
+      !call cvmix_compute_SchmittnerCoeff( nlev                    = G%ke, &
+      !                                    energy_flux             = , &
+      !                                    rho                     = rho_fw, &
+      !                                    SchmittnerCoeff         = , &
+      !                                    exp_hab_zetar           = , &
+      !                                    CVmix_tidal_params_user = CS%cvmix_tidal_params)
+
+    enddo ! i=is,ie
+
+    deallocate(exp_hab_zetar)
+
   case default
      call MOM_error(FATAL, "tidal_mixing_init: Unrecognized setting "// &
          "#define CVMIX_TIDAL_SCHEME found in input file.")
