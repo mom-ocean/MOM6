@@ -116,7 +116,7 @@ type, public :: vertvisc_CS ; private
   integer :: id_du_dt_visc = -1, id_dv_dt_visc = -1, id_au_vv = -1, id_av_vv = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
   integer :: id_Ray_u = -1, id_Ray_v = -1, id_taux_bot = -1, id_tauy_bot = -1
-  integer :: id_Kv_slow = -1, id_Kv = -1
+  integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   !>@}
 
   type(PointAccel_CS), pointer :: PointAccel_CSp => NULL()
@@ -584,10 +584,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
                   ! based on harmonic mean thicknesses, in m or kg m-2.
     h_ml          ! The mixed layer depth, in m or kg m-2.
   real, allocatable, dimension(:,:) :: hML_u, hML_v
-  real, allocatable, dimension(:,:,:) :: Kv_h !< Total vertical viscosity at h-points
-  real, dimension(SZI_(G),SZJ_(G)) :: av_h, & !< v-drag coefficient at h-points, in m s-1
-                                      au_h    !< u-drag coefficient at h-points, in m s-1
-  real :: dh      !< average thickness between layers k and k+1, in m or kg m-2.
+  real, allocatable, dimension(:,:,:) :: Kv_v, & !< Total vertical viscosity at u-points
+                                         Kv_u    !< Total vertical viscosity at v-points
   real :: zcol(SZI_(G)) ! The height of an interface at h-points, in m or kg m-2.
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior.
@@ -620,8 +618,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
   I_Hbbl(:) = 1.0 / (CS%Hbbl * GV%m_to_H + h_neglect)
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
-  if (CS%id_Kv > 0) then
-    allocate(Kv_h(SZI_(G), SZJ_(G), SZK_(G)+1)) ; Kv_h(:,:,:) = 0.0
+  if (CS%id_Kv_u > 0) then
+    allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,G%ke)) ; Kv_u(:,:,:) = 0.0
+  endif
+
+  if (CS%id_Kv_v > 0) then
+    allocate(Kv_v(G%isd:G%ied,G%JsdB:G%JedB,G%ke)) ; Kv_v(:,:,:) = 0.0
   endif
 
   if (CS%debug .or. (CS%id_hML_u > 0)) then
@@ -799,6 +801,13 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do k=1,nz ; do I=Isq,Ieq ; if (do_i(I)) CS%h_u(I,j,k) = hvel(I,k) ; enddo ; enddo
     endif
 
+    ! Diagnose total Kv at u-points
+    if (CS%id_Kv_u > 0) then
+      do k=1,nz ; do I=Isq,Ieq
+        if (do_i(I)) Kv_u(I,j,k) = 0.5 * (CS%a_u(I,j,K)+CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
+      enddo ; enddo
+    endif
+
   enddo
 
 
@@ -962,34 +971,15 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
       do K=1,nz+1 ; do i=is,ie ; if (do_i(i)) CS%a_v(i,J,K) = a(i,K) ; enddo ; enddo
       do k=1,nz ; do i=is,ie ; if (do_i(i)) CS%h_v(i,J,k) = hvel(i,k) ; enddo ; enddo
     endif
-  enddo ! end of v-point j loop
 
-  ! Total Kv at h points
-  if (CS%id_Kv > 0) then
-    !$OMP parallel do default(shared)
-    do k=2,nz
-      ! set surface and bottom values to zero
-      Kv_h(i,j,1) = 0.0; Kv_h(i,j,nz+1) = 0.0
-      do j=js,je ; do I=is-1,ie
-        au_h(I,j) = CS%a_u(I,J,k)
+    ! Diagnose total Kv at v-points
+    if (CS%id_Kv_v > 0) then
+      do k=1,nz ; do i=is,ie
+        if (do_i(I)) Kv_v(i,J,k) = 0.5 * (CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
       enddo ; enddo
-      do J=js-1,je ; do i=is,ie
-        av_h(i,J) = CS%a_v(i,J,k)
-      enddo ; enddo
-      do j = js, je; do i = is, ie
-        dh = 0.5 * (h(i,j,K)+h(i,j,K+1))
-        if (dh .le. h_neglect) then
-          Kv_h(i,j,k) = 0.0
-        else
-          Kv_h(i,j,k) = sqrt((0.5 * (au_h(I,j)+au_h(I-1,j)))**2 + &
-                       (0.5 * (av_h(i,J) + av_h(i,J-1)))**2) * dh
-          if (Kv_h(i,j,k) .lt. 0.0) Kv_h(i,j,k) = 0.0
-        endif
-       enddo ; enddo
-    enddo ! k
-    ! update halos
-    call pass_var(Kv_h, G%Domain, To_All+Omit_Corners, halo=1)
-  endif
+    endif
+
+  enddo ! end of v-point j loop
 
   if (CS%debug) then
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, &
@@ -1003,7 +993,8 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, CS, OBC)
 
 ! Offer diagnostic fields for averaging.
   if (CS%id_Kv_slow > 0) call post_data(CS%id_Kv_slow, visc%Kv_slow, CS%diag)
-  if (CS%id_Kv > 0) call post_data(CS%id_Kv, Kv_h, CS%diag)
+  if (CS%id_Kv_u > 0) call post_data(CS%id_Kv_u, Kv_u, CS%diag)
+  if (CS%id_Kv_v > 0) call post_data(CS%id_Kv_v, Kv_v, CS%diag)
   if (CS%id_au_vv > 0) call post_data(CS%id_au_vv, CS%a_u, CS%diag)
   if (CS%id_av_vv > 0) call post_data(CS%id_av_vv, CS%a_v, CS%diag)
   if (CS%id_h_u > 0) call post_data(CS%id_h_u, CS%h_u, CS%diag)
@@ -1701,8 +1692,11 @@ subroutine vertvisc_init(MIS, Time, G, GV, param_file, diag, ADp, dirs, &
   CS%id_Kv_slow = register_diag_field('ocean_model', 'Kv_slow', diag%axesTi, Time, &
      'Slow varying vertical viscosity', 'm2 s-1')
 
-  CS%id_Kv = register_diag_field('ocean_model', 'Kv', diag%axesTi, Time, &
-     'Total vertical viscosity', 'm2 s-1')
+  CS%id_Kv_u = register_diag_field('ocean_model', 'Kv_u', diag%axesCuL, Time, &
+     'Total vertical viscosity at u-points', 'm2 s-1')
+
+  CS%id_Kv_v = register_diag_field('ocean_model', 'Kv_v', diag%axesCvL, Time, &
+     'Total vertical viscosity at v-points', 'm2 s-1')
 
   CS%id_au_vv = register_diag_field('ocean_model', 'au_visc', diag%axesCui, Time, &
      'Zonal Viscous Vertical Coupling Coefficient', 'm s-1')
