@@ -212,6 +212,7 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
+      ! gets index of the level and interface above hbl
       kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
       call cvmix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
@@ -224,7 +225,7 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
                                OBL_ind=kOBL)
 
     ! Do not apply mixing due to convection within the boundary layer
-    do k=1,NINT(hbl(i,j))
+    do k=1,kOBL
       CS%kv_conv(i,j,k) = 0.0
       CS%kd_conv(i,j,k) = 0.0
     enddo
