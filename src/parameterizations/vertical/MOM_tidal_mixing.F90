@@ -238,6 +238,11 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "If true, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
+
+  ! return if tidal mixing is inactive
+  tidal_mixing_init = CS%int_tide_dissipation
+  if (.not. tidal_mixing_init) return
+
   if (CS%int_tide_dissipation) then
     default_profile_string = STLAURENT_PROFILE_STRING
     if (CS%use_cvmix_tidal) default_profile_string = SIMMONS_PROFILE_STRING
