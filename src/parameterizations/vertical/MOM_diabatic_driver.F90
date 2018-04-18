@@ -2425,13 +2425,13 @@ subroutine diabatic_driver_end(CS)
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
   if (CS%useKPP) then
-    deallocate( CS%KPP_buoy_flux )
-    deallocate( CS%KPP_temp_flux )
-    deallocate( CS%KPP_salt_flux )
+    if (allocated(CS%KPP_buoy_flux)) deallocate( CS%KPP_buoy_flux )
+    if (allocated(CS%KPP_temp_flux)) deallocate( CS%KPP_temp_flux )
+    if (allocated(CS%KPP_salt_flux)) deallocate( CS%KPP_salt_flux )
   endif
   if (CS%useKPP) then
-    deallocate( CS%KPP_NLTheat )
-    deallocate( CS%KPP_NLTscalar )
+    if (allocated(CS%KPP_NLTheat)) deallocate( CS%KPP_NLTheat )
+    if (allocated(CS%KPP_NLTscalar)) deallocate( CS%KPP_NLTscalar )
     call KPP_end(CS%KPP_CSp)
   endif
 
