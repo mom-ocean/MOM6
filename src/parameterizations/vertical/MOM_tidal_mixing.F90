@@ -1132,7 +1132,7 @@ subroutine setup_tidal_diagnostics(G,CS)
   integer :: isd, ied, jsd, jed, nz
   type(tidal_mixing_diags), pointer :: dd
 
-  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke 
+  isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed; nz = G%ke
   dd => CS%dd
 
   if ((CS%id_Kd_itidal > 0) .or. (CS%id_Kd_itidal_z > 0) .or. &
