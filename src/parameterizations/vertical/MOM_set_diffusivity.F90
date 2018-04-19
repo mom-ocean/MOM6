@@ -886,7 +886,8 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
     z_from_bot(i) = 0.5*GV%H_to_m*h(i,j,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.5)
 
-    if (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) then
+    if ( (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) .and. &
+          .not. CS%tm_csp%use_cvmix_tidal ) then
       h_amp(i) = sqrt(CS%tm_csp%h2(i,j)) ! for computing Nb
     else
       h_amp(i) = 0.0

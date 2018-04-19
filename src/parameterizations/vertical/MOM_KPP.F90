@@ -1073,7 +1073,10 @@ end subroutine KPP_NonLocalTransport_saln
 subroutine KPP_end(CS)
   type(KPP_CS), pointer :: CS !< Control structure
 
+  if (.not.associated(CS)) return
+
   deallocate(CS)
+
 end subroutine KPP_end
 
 !> \namespace mom_kpp
