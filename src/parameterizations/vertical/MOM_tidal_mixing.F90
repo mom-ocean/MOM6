@@ -63,15 +63,15 @@ type, public :: tidal_mixing_cs
   logical :: debug = .true.
 
   ! Parameters
-  logical :: int_tide_dissipation ! Internal tide conversion (from barotropic) with
-                              ! the schemes of St Laurent et al (2002)/
+  logical :: int_tide_dissipation = .false. ! Internal tide conversion (from barotropic)
+                              ! with the schemes of St Laurent et al (2002)/
                               ! Simmons et al (2004)
 
   integer :: Int_tide_profile ! A coded integer indicating the vertical profile
                               ! for dissipation of the internal waves.  Schemes that
                               ! are currently encoded are St Laurent et al (2002) and
                               ! Polzin (2009).
-  logical :: Lee_wave_dissipation ! Enable lee-wave driven mixing, following
+  logical :: Lee_wave_dissipation = .false. ! Enable lee-wave driven mixing, following
                               ! Nikurashin (2010), with a vertical energy
                               ! deposition profile specified by Lee_wave_profile.
                               ! St Laurent et al (2002) or
@@ -94,8 +94,8 @@ type, public :: tidal_mixing_cs
                               ! wave energy dissipation (nondimensional)
 
   real :: min_zbot_itides     ! minimum depth for internal tide conversion (meter)
-  logical :: Lowmode_itidal_dissipation ! Internal tide conversion (from low modes) with
-                              ! the schemes of St Laurent et al (2002)/
+  logical :: Lowmode_itidal_dissipation = .false. ! Internal tide conversion (from low modes)
+                              ! with the schemes of St Laurent et al (2002)/
                               ! Simmons et al (2004) !BDM
 
   real :: Nu_Polzin           ! The non-dimensional constant used in Polzin form of
@@ -122,8 +122,8 @@ type, public :: tidal_mixing_cs
   real :: kappa_h2_factor     ! factor for the product of wavenumber * rms sgs height
   character(len=200) :: inputdir
 
-  logical :: use_cvmix_tidal  ! true if cvmix is to be used for determining diffusivity
-                              ! due to tidal mixing
+  logical :: use_cvmix_tidal = .false. ! true if cvmix is to be used for determining
+                              ! diffusivity due to tidal mixing
 
   real :: min_thickness       ! Minimum thickness allowed [m]
 
@@ -372,6 +372,10 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     call get_param(param_file, mdl, "MIN_ZBOT_ITIDES", CS%min_zbot_itides, &
                  "Turn off internal tidal dissipation when the total \n"//&
                  "ocean depth is less than this value.", units="m", default=0.0)
+  endif
+
+  if ( (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) .and. &
+        .not. CS%use_cvmix_tidal) then
 
     call safe_alloc_ptr(CS%Nb,isd,ied,jsd,jed)
     call safe_alloc_ptr(CS%h2,isd,ied,jsd,jed)
