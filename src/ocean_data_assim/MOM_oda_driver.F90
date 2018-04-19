@@ -40,7 +40,9 @@ module MOM_oda_driver_mod
   ! ODA Modules
   use oda_types_mod, only : grid_type, ocean_profile_type, ocean_control_struct
   use oda_core_mod, only : oda_core_init, get_profiles
-  !use eakf_oda_mod, only : ensemble_filter
+#ifdef ENABLE_ECDA
+  use eakf_oda_mod, only : ensemble_filter
+#endif
   use write_ocean_data_mod, only : open_profile_file
   use write_ocean_data_mod, only : write_profile,close_profile_file
   use kdtree, only : kd_root !# JEDI
