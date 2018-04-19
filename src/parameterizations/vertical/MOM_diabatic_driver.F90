@@ -2425,18 +2425,16 @@ subroutine diabatic_driver_end(CS)
   call entrain_diffusive_end(CS%entrain_diffusive_CSp)
   call set_diffusivity_end(CS%set_diff_CSp)
 
- ! GMM, commeting the following because it fails on Travis (gfortran)
-
- ! if (CS%useKPP) then
- !   if (allocated(CS%KPP_buoy_flux)) deallocate( CS%KPP_buoy_flux )
- !   if (allocated(CS%KPP_temp_flux)) deallocate( CS%KPP_temp_flux )
- !   if (allocated(CS%KPP_salt_flux)) deallocate( CS%KPP_salt_flux )
- ! endif
- ! if (CS%useKPP) then
- !   if (allocated(CS%KPP_NLTheat)) deallocate( CS%KPP_NLTheat )
- !   if (allocated(CS%KPP_NLTscalar)) deallocate( CS%KPP_NLTscalar )
- !   call KPP_end(CS%KPP_CSp)
- ! endif
+ if (CS%useKPP) then
+    deallocate( CS%KPP_buoy_flux )
+    deallocate( CS%KPP_temp_flux )
+    deallocate( CS%KPP_salt_flux )
+ endif
+  if (CS%useKPP) then
+    deallocate( CS%KPP_NLTheat )
+    deallocate( CS%KPP_NLTscalar )
+    call KPP_end(CS%KPP_CSp)
+  endif
 
   if (CS%use_tidal_mixing) call tidal_mixing_end(CS%tidal_mixing_CSp)
 
