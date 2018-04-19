@@ -245,7 +245,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
 
-  ! check if tidal mixing is active
+  ! return if tidal mixing is inactive
   tidal_mixing_init = CS%int_tide_dissipation
   if (.not. tidal_mixing_init) return
 
