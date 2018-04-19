@@ -19,7 +19,7 @@ use MOM_string_functions,    only : uppercase, lowercase
 use MOM_io,                  only : slasher, MOM_read_data, vardesc, var_desc
 use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,             only : cvmix_coeffs_tidal, cvmix_tidal_params_type
-use cvmix_tidal,             only : cvmix_compute_Schmittner_invariant
+use cvmix_tidal,             only : cvmix_compute_Schmittner_invariant, cvmix_compute_SchmittnerCoeff
 use cvmix_kinds_and_types,   only : cvmix_global_params_type
 use cvmix_put_get,           only : cvmix_put
 
@@ -138,13 +138,14 @@ type, public :: tidal_mixing_cs
   real                            :: tidal_diss_lim_tc  ! dissipation limit for tidal-energy-constituent data
 
   ! Data containers
-  real, pointer, dimension(:,:)     :: TKE_Niku    => NULL()
-  real, pointer, dimension(:,:)     :: TKE_itidal  => NULL()
-  real, pointer, dimension(:,:)     :: Nb          => NULL()
-  real, pointer, dimension(:,:)     :: mask_itidal => NULL()
-  real, pointer, dimension(:,:)     :: h2          => NULL()
-  real, pointer, dimension(:,:)     :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
-  real, allocatable,dimension(:,:)  :: tidal_qe_2d   ! q*E(x,y) ! TODO: make this E(x,y) only
+  real, pointer, dimension(:,:)       :: TKE_Niku    => NULL()
+  real, pointer, dimension(:,:)       :: TKE_itidal  => NULL()
+  real, pointer, dimension(:,:)       :: Nb          => NULL()
+  real, pointer, dimension(:,:)       :: mask_itidal => NULL()
+  real, pointer, dimension(:,:)       :: h2          => NULL()
+  real, pointer, dimension(:,:)       :: tideamp     => NULL() ! RMS tidal amplitude (m/s)
+  real, allocatable ,dimension(:,:)   :: tidal_qe_2d    ! q*E(x,y) ! TODO: make this E(x,y) only
+  real, allocatable ,dimension(:,:,:) :: tidal_qe_3d_in ! q*E(x,y) ! TODO: make this E(x,y) only
 
   ! Diagnostics
   type(diag_ctrl),          pointer :: diag => NULL() ! structure to regulate diagn output timing
@@ -243,6 +244,11 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "If true, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
                  "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
+
+  ! check if tidal mixing is active
+  tidal_mixing_init = CS%int_tide_dissipation
+  if (.not. tidal_mixing_init) return
+
   if (CS%int_tide_dissipation) then
 
     ! Read in CVMix tidal scheme if CVMix tidal mixing is on
@@ -651,6 +657,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
 
+  real, allocatable, dimension(:)   :: Schmittner_coeff
   real, allocatable, dimension(:,:) :: exp_hab_zetar
 
   integer :: i, k, is, ie
@@ -728,7 +735,11 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
   case (SCHMITTNER)
 
+    ! TODO: correct exp_hab_zetar shapes in cvmix_compute_Schmittner_invariant
+    ! and cvmix_compute_SchmittnerCoeff low subroutines
+
     allocate(exp_hab_zetar(G%ke+1,G%ke+1))
+    allocate(Schmittner_coeff(G%ke))
 
     do i=is,ie
 
@@ -756,12 +767,12 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
-      !call cvmix_compute_SchmittnerCoeff( nlev                    = G%ke, &
-      !                                    energy_flux             = , &
-      !                                    rho                     = rho_fw, &
-      !                                    SchmittnerCoeff         = , &
-      !                                    exp_hab_zetar           = , &
-      !                                    CVmix_tidal_params_user = CS%cvmix_tidal_params)
+      call cvmix_compute_SchmittnerCoeff( nlev                    = G%ke, &
+                                          energy_flux             = CS%tidal_qe_3d_in(i,j,:), & ! todo!!!: vertical interpolation
+                                          rho                     = rho_fw, &
+                                          SchmittnerCoeff         = Schmittner_coeff, &
+                                          exp_hab_zetar           = exp_hab_zetar, &
+                                          CVmix_tidal_params_user = CS%cvmix_tidal_params)
 
     enddo ! i=is,ie
 
@@ -1336,20 +1347,20 @@ subroutine read_tidal_energy(G, tidal_energy_type, tidal_energy_file, CS)
   character(len=200),     intent(in)  :: tidal_energy_file
   type(tidal_mixing_cs),  pointer     :: CS
   ! local
-  integer :: isd, ied, jsd, jed
+  integer :: isd, ied, jsd, jed, nz
   real, allocatable, dimension(:,:) :: tidal_energy_flux_2d ! input tidal energy flux at T-grid points (W/m^2)
 
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-
-  if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
   select case (uppercase(tidal_energy_type(1:4)))
   case ('JAYN') ! Jayne 2009
+    if (.not. allocated(CS%tidal_qe_2d)) allocate(CS%tidal_qe_2d(isd:ied,jsd:jed))
     allocate(tidal_energy_flux_2d(isd:ied,jsd:jed))
     call MOM_read_data(tidal_energy_file,'wave_dissipation',tidal_energy_flux_2d, G%domain)
     CS%tidal_qe_2d = (CS%Gamma_itides) * tidal_energy_flux_2d
     deallocate(tidal_energy_flux_2d)
   case ('ER03') ! Egbert & Ray 2003
+    if (.not. allocated(CS%tidal_qe_3d_in)) allocate(CS%tidal_qe_3d_in(isd:ied,jsd:jed,nz))
     call read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
@@ -1377,16 +1388,14 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
     tc_m2, &      ! input lunar semidiurnal tidal energy flux [W/m^2]
     tc_s2, &      ! input solar semidiurnal tidal energy flux [W/m^2]
     tc_k1, &      ! input lunar diurnal tidal energy flux [W/m^2]
-    tc_o1, &      ! input lunar diurnal tidal energy flux [W/m^2]
-    tidal_qe_3d   ! sum_tc(q_tc*TC(x,y,z)) = q*E(x,y,z)
+    tc_o1         ! input lunar diurnal tidal energy flux [W/m^2]
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = G%ke
 
   allocate(tc_m2(isd:ied,jsd:jed,nz), &
            tc_s2(isd:ied,jsd:jed,nz), &
            tc_k1(isd:ied,jsd:jed,nz), &
-           tc_o1(isd:ied,jsd:jed,nz), &
-           tidal_qe_3d(isd:ied,jsd:jed,nz) )
+           tc_o1(isd:ied,jsd:jed,nz) )
 
   ! read in tidal constituents
   ! (NOTE: input z coordinates may differ from the model coordinates, which is fine.)
@@ -1397,8 +1406,8 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
   call MOM_read_data(tidal_energy_file, 'z_t', z_t)
   call MOM_read_data(tidal_energy_file, 'z_w', z_w)
 
-  ! form tidal_qe_3d from weighted tidal constituents
-  tidal_qe_3d = 0.0
+  ! form tidal_qe_3d_in from weighted tidal constituents
+  CS%tidal_qe_3d_in = 0.0
 
   where (abs(G%geoLatT(:,:)) < 30.0)
     tidal_qk1(:,:) = p33
@@ -1410,29 +1419,28 @@ subroutine read_tidal_constituents(G, tidal_energy_type, tidal_energy_file, CS)
 
   do k=1,nz
     where (z_t(k) <= G%bathyT(:,:) .and. z_w(k) > CS%tidal_diss_lim_tc)
-      tidal_qe_3d(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
+      CS%tidal_qe_3d_in(:,:,k) = p33*tc_m2(:,:,k) + p33*tc_s2(:,:,k) + &
                            tidal_qk1*tc_k1(:,:,k) + tidal_qo1*tc_o1(:,:,k)
     endwhere
   enddo
 
   ! test if qE is positive
-  if (any(tidal_qe_3d<0)) then
-        call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d terms.")
+  if (any(CS%tidal_qe_3d_in<0)) then
+        call MOM_error(FATAL, "read_tidal_constituents: Negative tidal_qe_3d_in terms.")
   endif
 
-  ! collapse 3D q*E to 2D q*E
-  CS%tidal_qe_2d = 0.0
-  do k=1,nz
-    where (z_t(k) <= G%bathyT(:,:))
-      CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + tidal_qe_3d(:,:,k)
-    endwhere
-  enddo
+  !! collapse 3D q*E to 2D q*E
+  !CS%tidal_qe_2d = 0.0
+  !do k=1,nz
+  !  where (z_t(k) <= G%bathyT(:,:))
+  !    CS%tidal_qe_2d(:,:) = CS%tidal_qe_2d(:,:) + CS%tidal_qe_3d_in(:,:,k)
+  !  endwhere
+  !enddo
 
   deallocate(tc_m2)
   deallocate(tc_s2)
   deallocate(tc_k1)
   deallocate(tc_o1)
-  deallocate(tidal_qe_3d)
 
 end subroutine read_tidal_constituents
 
@@ -1442,7 +1450,8 @@ subroutine tidal_mixing_end(CS)
   type(tidal_mixing_cs), pointer :: CS ! This module's control structure
 
   !TODO deallocate all the dynamically allocated members here ...
-  if (allocated(CS%tidal_qe_2d)) deallocate(CS%tidal_qe_2d)
+  if (allocated(CS%tidal_qe_2d))    deallocate(CS%tidal_qe_2d)
+  if (allocated(CS%tidal_qe_3d_in)) deallocate(CS%tidal_qe_3d_in)
   deallocate(CS%dd)
   deallocate(CS)
 
