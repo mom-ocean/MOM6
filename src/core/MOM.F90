@@ -2,7 +2,6 @@ module MOM
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-
 ! Infrastructure modules
 use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
@@ -10,7 +9,6 @@ use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,            only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,            only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
-use MOM_coms,                 only : reproducing_sum
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_diag_mediator,        only : diag_mediator_init, enable_averaging
 use MOM_diag_mediator,        only : diag_mediator_infrastructure_init
@@ -41,7 +39,7 @@ use MOM_io,                   only : slasher, file_exists, MOM_read_data
 use MOM_obsolete_params,      only : find_obsolete_params
 use MOM_restart,              only : register_restart_field, query_initialized, save_restart
 use MOM_restart,              only : restart_init, is_new_run, MOM_restart_CS
-use MOM_spatial_means,        only : global_area_mean, global_area_integral, global_mass_integral
+use MOM_spatial_means,        only : global_mass_integral
 use MOM_state_initialization, only : MOM_initialize_state
 use MOM_time_manager,         only : time_type, set_time, time_type_to_real, operator(+)
 use MOM_time_manager,         only : operator(-), operator(>), operator(*), operator(/)
@@ -54,8 +52,6 @@ use MOM_ALE,                   only : ALE_init, ALE_end, ALE_main, ALE_CS, adjus
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, ALE_register_diags
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
-use MOM_continuity,            only : continuity, continuity_init, continuity_CS, continuity_stencil
-use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
@@ -76,12 +72,10 @@ use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unspli
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
 use MOM_dyn_horgrid,           only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_EOS,                   only : EOS_init, calculate_density
-use MOM_EOS,                   only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type, set_first_direction
 use MOM_grid,                  only : MOM_grid_init, MOM_grid_end
 use MOM_hor_index,             only : hor_index_type, hor_index_init
-use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_init
 use MOM_interface_heights,     only : find_eta
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, VarMix_CS
@@ -89,12 +83,10 @@ use MOM_MEKE,                  only : MEKE_init, MEKE_alloc_register_restart, st
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
-use MOM_neutral_diffusion,     only : neutral_diffusion_CS
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts
-use MOM_PressureForce,         only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_init
 use MOM_set_visc,              only : set_visc_register_restarts, set_visc_CS
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
@@ -102,7 +94,6 @@ use MOM_sum_output,            only : write_energy, accumulate_net_input
 use MOM_sum_output,            only : MOM_sum_output_init, sum_output_CS
 use MOM_ALE_sponge,            only : init_ALE_sponge_diags, ALE_sponge_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse, thickness_diffuse_init, thickness_diffuse_CS
-use MOM_tidal_forcing,         only : tidal_forcing_init, tidal_forcing_CS
 use MOM_tracer_advect,         only : advect_tracer, tracer_advect_init
 use MOM_tracer_advect,         only : tracer_advect_end, tracer_advect_CS
 use MOM_tracer_hor_diff,       only : tracer_hordiff, tracer_hor_diff_init
@@ -119,8 +110,6 @@ use MOM_transcribe_grid,       only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to
 use MOM_variables,             only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables,             only : thermo_var_ptrs, vertvisc_type
 use MOM_variables,             only : accel_diag_ptrs, cont_diag_ptrs, ocean_internal_state
-use MOM_vert_friction,         only : vertvisc, vertvisc_remnant
-use MOM_vert_friction,         only : vertvisc_limit_vel, vertvisc_init
 use MOM_verticalGrid,          only : verticalGrid_type, verticalGridInit, verticalGridEnd
 use MOM_verticalGrid,          only : get_thickness_units, get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, waves_end
@@ -134,7 +123,6 @@ use MOM_offline_main,          only : offline_redistribute_residual, offline_dia
 use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_fluxes_out_ocean
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ALE,                   only : ale_offline_tracer_final, ALE_main_offline
-
 
 implicit none ; private
 
@@ -152,28 +140,28 @@ end type MOM_diag_IDs
 !! the state of the ocean.
 type, public :: MOM_control_struct ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_) :: &
-    h, &      !< layer thickness (m or kg/m2 (H))
-    T, &      !< potential temperature (degrees C)
-    S         !< salinity (ppt)
+    h, &            !< layer thickness (m or kg/m2 (H))
+    T, &            !< potential temperature (degrees C)
+    S               !< salinity (ppt)
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: &
-    u,  &     !< zonal velocity component (m/s)
-    uh, &     !< uh = u * h * dy at u grid points (m3/s or kg/s)
-    uhtr      !< accumulated zonal thickness fluxes to advect tracers (m3 or kg)
+    u,  &           !< zonal velocity component (m/s)
+    uh, &           !< uh = u * h * dy at u grid points (m3/s or kg/s)
+    uhtr            !< accumulated zonal thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: &
-    v,  &     !< meridional velocity (m/s)
-    vh, &     !< vh = v * h * dx at v grid points (m3/s or kg/s)
-    vhtr      !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
+    v,  &           !< meridional velocity (m/s)
+    vh, &           !< vh = v * h * dx at v grid points (m3/s or kg/s)
+    vhtr            !< accumulated meridional thickness fluxes to advect tracers (m3 or kg)
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    ssh_rint, &    !< A running time integral of the sea surface height, in s m.
-    ave_ssh_ibc, & !< time-averaged (over a forcing time step) sea surface height
-              !! with a correction for the inverse barometer (meter)
-    eta_av_bc !< free surface height or column mass time averaged over the last
-              !! baroclinic dynamics time step (m or kg/m2)
+    ssh_rint, &     !< A running time integral of the sea surface height, in s m.
+    ave_ssh_ibc, &  !< time-averaged (over a forcing time step) sea surface height
+                    !! with a correction for the inverse barometer (meter)
+    eta_av_bc       !< free surface height or column mass time averaged over the last
+                    !! baroclinic dynamics time step (m or kg/m2)
   real, pointer, dimension(:,:) :: &
-    Hml => NULL() !< active mixed layer depth, in m
+    Hml => NULL()   !< active mixed layer depth, in m
   real :: time_in_cycle !< The running time of the current time-stepping cycle
-              !! in calls that step the dynamics, and also the length of the
-              !! time integral of ssh_rint, in s.
+                    !! in calls that step the dynamics, and also the length of
+                    !! the time integral of ssh_rint, in s.
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
@@ -196,11 +184,11 @@ type, public :: MOM_control_struct ; private
   integer :: ndyn_per_adv = 0 !< Number of calls to dynamics since the last call to advection
                               !! Must be saved if thermo spans coupling?
 
-  type(diag_ctrl)       :: diag    !< structure to regulate diagnostic output timing
-  type(vertvisc_type)   :: visc    !< structure containing vertical viscosities,
-                                   !! bottom drag viscosities, and related fields
-  type(MEKE_type), pointer :: MEKE => NULL()  !<  structure containing fields
-                                   !! related to the Mesoscale Eddy Kinetic Energy
+  type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
+  type(vertvisc_type) :: visc !< structure containing vertical viscosities,
+                              !! bottom drag viscosities, and related fields
+  type(MEKE_type), pointer :: MEKE => NULL() !<  structure containing fields
+                              !! related to the Mesoscale Eddy Kinetic Energy
 
   logical :: adiabatic               !< If true, there are no diapycnal mass fluxes, and no calls
                                      !! to routines to calculate or apply diapycnal fluxes.
@@ -250,54 +238,52 @@ type, public :: MOM_control_struct ; private
   type(time_type) :: Z_diag_time     !< next time to compute Z-space diagnostics
 
   real, pointer, dimension(:,:,:) :: &
-    h_pre_dyn => NULL(), & !< The thickness before the transports, in H.
-    T_pre_dyn => NULL(), & !< Temperature before the transports, in degC.
-    S_pre_dyn => NULL()    !< Salinity before the transports, in psu.
-  type(accel_diag_ptrs) :: ADp     !< structure containing pointers to accelerations,
-                                   !! for derived diagnostics (e.g., energy budgets)
-  type(cont_diag_ptrs)  :: CDp     !< structure containing pointers to continuity equation
-                                   !! terms, for derived diagnostics (e.g., energy budgets)
+    h_pre_dyn => NULL(), &      !< The thickness before the transports, in H.
+    T_pre_dyn => NULL(), &      !< Temperature before the transports, in degC.
+    S_pre_dyn => NULL()         !< Salinity before the transports, in psu.
+  type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
+                                !! for derived diagnostics (e.g., energy budgets)
+  type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
+                                !! terms, for derived diagnostics (e.g., energy budgets)
   real, pointer, dimension(:,:,:) :: &
-    u_prev => NULL(), &  !< previous value of u stored for diagnostics
-    v_prev => NULL()     !< previous value of v stored for diagnostics
+    u_prev => NULL(), &         !< previous value of u stored for diagnostics
+    v_prev => NULL()            !< previous value of v stored for diagnostics
 
-  logical :: interp_p_surf           !< If true, linearly interpolate surface pressure
-                                     !! over the coupling time step, using specified value
-                                     !! at the end of the coupling step. False by default.
-  logical :: p_surf_prev_set         !< If true, p_surf_prev has been properly set from
-                                     !! a previous time-step or the ocean restart file.
-                                     !! This is only valid when interp_p_surf is true.
+  logical :: interp_p_surf      !< If true, linearly interpolate surface pressure
+                                !! over the coupling time step, using specified value
+                                !! at the end of the coupling step. False by default.
+  logical :: p_surf_prev_set    !< If true, p_surf_prev has been properly set from
+                                !! a previous time-step or the ocean restart file.
+                                !! This is only valid when interp_p_surf is true.
   real, pointer, dimension(:,:) :: &
-    p_surf_prev  => NULL(), & !< surface pressure (Pa) at end  previous call to step_MOM
-    p_surf_begin => NULL(), & !< surface pressure (Pa) at start of step_MOM_dyn_...
-    p_surf_end   => NULL()    !< surface pressure (Pa) at end   of step_MOM_dyn_...
-
-  ! Not needed in CS?
-  real :: missing=-1.0e34            !< missing data value for masked fields
+    p_surf_prev  => NULL(), &   !< surface pressure (Pa) at end  previous call to step_MOM
+    p_surf_begin => NULL(), &   !< surface pressure (Pa) at start of step_MOM_dyn_...
+    p_surf_end   => NULL()      !< surface pressure (Pa) at end   of step_MOM_dyn_...
 
   ! Variables needed to reach between start and finish phases of initialization
-  logical :: write_IC                !< If true, then the initial conditions will be written to file
-  character(len=120) :: IC_file      !< A file into which the initial conditions are
-                                     !! written in a new run if SAVE_INITIAL_CONDS is true.
+  logical :: write_IC           !< If true, then the initial conditions will be written to file
+  character(len=120) :: IC_file !< A file into which the initial conditions are
+                                !! written in a new run if SAVE_INITIAL_CONDS is true.
 
-  logical :: calc_rho_for_sea_lev    !< If true, calculate rho to convert pressure to sea level
+  logical :: calc_rho_for_sea_lev !< If true, calculate rho to convert pressure to sea level
 
   ! These elements are used to control the calculation and error checking of the surface state
-  real :: Hmix                       !< Diagnostic mixed layer thickness over which to
-                                     !! average surface tracer properties (in meter) when
-                                     !! bulk mixed layer is not used, or a negative value
-                                     !! if a bulk mixed layer is being used.
-  real :: Hmix_UV                    !< Depth scale over which to average surface flow to
-                                     !! feedback to the coupler/driver (m) when
-                                     !! bulk mixed layer is not used, or a negative value
-                                     !! if a bulk mixed layer is being used.
-  logical :: check_bad_surface_vals  !< If true, scan surface state for ridiculous values.
-  real    :: bad_val_ssh_max         !< Maximum SSH before triggering bad value message
-  real    :: bad_val_sst_max         !< Maximum SST before triggering bad value message
-  real    :: bad_val_sst_min         !< Minimum SST before triggering bad value message
-  real    :: bad_val_sss_max         !< Maximum SSS before triggering bad value message
-  real    :: bad_val_column_thickness!< Minimum column thickness before triggering bad value message
+  real :: Hmix                  !< Diagnostic mixed layer thickness over which to
+                                !! average surface tracer properties (in meter) when
+                                !! bulk mixed layer is not used, or a negative value
+                                !! if a bulk mixed layer is being used.
+  real :: Hmix_UV               !< Depth scale over which to average surface flow to
+                                !! feedback to the coupler/driver (m) when
+                                !! bulk mixed layer is not used, or a negative value
+                                !! if a bulk mixed layer is being used.
+  logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
+  real    :: bad_val_ssh_max    !< Maximum SSH before triggering bad value message
+  real    :: bad_val_sst_max    !< Maximum SST before triggering bad value message
+  real    :: bad_val_sst_min    !< Minimum SST before triggering bad value message
+  real    :: bad_val_sss_max    !< Maximum SSS before triggering bad value message
+  real    :: bad_vol_col_thick  !< Minimum column thickness before triggering bad value message
 
+  ! Structures and handles used for diagnostics.
   type(MOM_diag_IDs) :: IDs
   type(transport_diag_IDs) :: transport_IDs
   type(surface_diag_IDs) :: sfc_IDs
@@ -363,7 +349,6 @@ integer :: id_clock_offline_tracer
 
 contains
 
-
 !> This subroutine orchestrates the time stepping of MOM.  The adiabatic
 !! dynamics are stepped by calls to one of the step_MOM_dyn_...routines.
 !! The action of lateral processes on tracers occur in calls to
@@ -371,26 +356,26 @@ contains
 !! occur inside of diabatic.
 subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Waves, &
                     do_dynamics, do_thermodynamics, start_cycle, end_cycle, cycle_length)
-  type(mech_forcing), intent(inout)  :: forces        !< A structure with the driving mechanical forces
-  type(forcing),      intent(inout)  :: fluxes        !< pointers to forcing fields
-  type(surface),      intent(inout)  :: sfc_state     !< surface ocean state
-  type(time_type),    intent(in)     :: Time_start    !< starting time of a segment, as a time type
-  real,               intent(in)     :: time_interval !< time interval covered by this run segment, in s.
-  type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
-  type(Wave_parameters_CS), pointer, optional, intent(in) :: &
-       Waves                                          !< point CS with waves
-  logical,  optional, intent(in)     :: do_dynamics   !< Present and false, do not do updates due
-                                                      !! to the dynamics.
-  logical,  optional, intent(in)     :: do_thermodynamics  !< Present and false, do not do updates due
-                                                      !! to the thermodynamics or remapping.
-  logical,  optional, intent(in)     :: start_cycle   !< This indicates whether this call is to be
-                                                      !! treated as the first call to step_MOM in a
-                                                      !! time-stepping cycle; missing is like true.
-  logical,  optional, intent(in)     :: end_cycle     !< This indicates whether this call is to be
-                                                      !! treated as the last call to step_MOM in a
-                                                      !! time-stepping cycle; missing is like true.
-  real,     optional, intent(in)     :: cycle_length  !< The amount of time in a coupled time
-                                                      !! stepping cycle, in s.
+  type(mech_forcing), intent(inout) :: forces        !< A structure with the driving mechanical forces
+  type(forcing),      intent(inout) :: fluxes        !< pointers to forcing fields
+  type(surface),      intent(inout) :: sfc_state     !< surface ocean state
+  type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
+  real,               intent(in)    :: time_interval !< time interval covered by this run segment, in s.
+  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
+  type(Wave_parameters_CS), pointer, &
+            optional, intent(in)    :: Waves         !< An optional pointer to a wave proptery CS
+  logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
+                                                     !! to the dynamics.
+  logical,  optional, intent(in)    :: do_thermodynamics  !< Present and false, do not do updates due
+                                                     !! to the thermodynamics or remapping.
+  logical,  optional, intent(in)    :: start_cycle   !< This indicates whether this call is to be
+                                                     !! treated as the first call to step_MOM in a
+                                                     !! time-stepping cycle; missing is like true.
+  logical,  optional, intent(in)    :: end_cycle     !< This indicates whether this call is to be
+                                                     !! treated as the last call to step_MOM in a
+                                                     !! time-stepping cycle; missing is like true.
+  real,     optional, intent(in)    :: cycle_length  !< The amount of time in a coupled time
+                                                     !! stepping cycle, in s.
 
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
@@ -568,6 +553,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     ! Set the local time to the end of the time step.
     Time_local = Time_start + set_time(int(floor(CS%rel_time+0.5)))
 
+    !### Update_Stokes_Drift must be behind a do_dyn or a do_thermo test.
     if (CS%UseWaves) then
     ! Update wave information, which is presently kept static over each call to step_mom
       !bgr 3/15/18: Need to enable_averaging here to enable output of Stokes drift from the
@@ -727,6 +713,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
+      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
                           CS%CDp, fluxes, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, CS%diagnostics_CSp)
@@ -1232,12 +1219,12 @@ end subroutine step_MOM_thermo
 !! the work is very preliminary. Some more detail about this capability along with some of the subroutines
 !! called here can be found in tracers/MOM_offline_control.F90
 subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS)
-  type(mech_forcing), intent(in)     :: forces        !< A structure with the driving mechanical forces
-  type(forcing),    intent(inout)    :: fluxes        !< pointers to forcing fields
-  type(surface),    intent(inout)    :: sfc_state     !< surface ocean state
-  type(time_type),  intent(in)       :: Time_start    !< starting time of a segment, as a time type
-  real,             intent(in)       :: time_interval !< time interval
-  type(MOM_control_struct), pointer  :: CS            !< control structure from initialize_MOM
+  type(mech_forcing), intent(in)    :: forces        !< A structure with the driving mechanical forces
+  type(forcing),      intent(inout) :: fluxes        !< pointers to forcing fields
+  type(surface),      intent(inout) :: sfc_state     !< surface ocean state
+  type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
+  real,               intent(in)    :: time_interval !< time interval
+  type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
 
   ! Local pointers
   type(ocean_grid_type),      pointer :: G  => NULL() ! Pointer to a structure containing
@@ -1762,11 +1749,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "updates, with even numbers (or 0) used for x- first \n"//&
                  "and odd numbers used for y-first.", default=0)
 
-  call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", &
-                 CS%check_bad_surface_vals, &
+  call get_param(param_file, "MOM", "CHECK_BAD_SURFACE_VALS", CS%check_bad_sfc_vals, &
                  "If true, check the surface state for ridiculous values.", &
                  default=.false.)
-  if (CS%check_bad_surface_vals) then
+  if (CS%check_bad_sfc_vals) then
     call get_param(param_file, "MOM", "BAD_VAL_SSH_MAX", CS%bad_val_ssh_max, &
                  "The value of SSH above which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
@@ -1783,10 +1769,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
                  "The value of SST below which a bad value message is \n"//&
                  "triggered, if CHECK_BAD_SURFACE_VALS is true.", &
                  units="deg C", default=-2.1)
-    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_val_column_thickness, &
-         "The value of column thickness below which a bad value message is \n"//&
-         "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
-                          default=0.0)
+    call get_param(param_file, "MOM", "BAD_VAL_COLUMN_THICKNESS", CS%bad_vol_col_thick, &
+                 "The value of column thickness below which a bad value message is \n"//&
+                 "triggered, if CHECK_BAD_SURFACE_VALS is true.", units="m", &
+                 default=0.0)
   endif
 
   call get_param(param_file, "MOM", "SAVE_INITIAL_CONDS", save_IC, &
@@ -2793,14 +2779,14 @@ subroutine extract_surface_state(CS, sfc_state)
     call call_tracer_surface_state(sfc_state, h, G, CS%tracer_flow_CSp)
   endif
 
-  if (CS%check_bad_surface_vals) then
+  if (CS%check_bad_sfc_vals) then
     numberOfErrors=0 ! count number of errors
     do j=js,je; do i=is,ie
       if (G%mask2dT(i,j)>0.) then
         localError = sfc_state%sea_lev(i,j)<=-G%bathyT(i,j)       &
                 .or. sfc_state%sea_lev(i,j)>= CS%bad_val_ssh_max  &
                 .or. sfc_state%sea_lev(i,j)<=-CS%bad_val_ssh_max  &
-                .or. sfc_state%sea_lev(i,j)+G%bathyT(i,j) < CS%bad_val_column_thickness
+                .or. sfc_state%sea_lev(i,j)+G%bathyT(i,j) < CS%bad_vol_col_thick
         if (use_temperature) localError = localError &
                 .or. sfc_state%SSS(i,j)<0.                        &
                 .or. sfc_state%SSS(i,j)>=CS%bad_val_sss_max       &
