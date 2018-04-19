@@ -276,6 +276,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     call MOM_error(FATAL, "set_diffusivity: visc%Kd_extra_T and "//&
          "visc%Kd_extra_S must be associated when DOUBLE_DIFFUSION is true.")
 
+  ! Set Kd, Kd_int and Kv_slow to constant values.
+  ! If nothing else is specified, this will be the value used.
+  Kd(:,:,:) = CS%Kd
+  Kd_int(:,:,:) = CS%Kd
+  visc%Kv_slow(:,:,:) = CS%Kv
+
   ! Set up arrays for diagnostics.
 
   if ((CS%id_N2 > 0) .or. (CS%id_N2_z > 0)) then
