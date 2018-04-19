@@ -1317,6 +1317,8 @@ end subroutine read_tidal_energy
 subroutine tidal_mixing_end(CS)
   type(tidal_mixing_cs), pointer :: CS ! This module's control structure
 
+  if (.not.associated(CS)) return
+
   !TODO deallocate all the dynamically allocated members here ...
   if (allocated(CS%tidal_qe_2d)) deallocate(CS%tidal_qe_2d)
   deallocate(CS%dd)
