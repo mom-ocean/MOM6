@@ -1372,6 +1372,9 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, G, G
   ! visc%Kv_shear is not in the group pass because it has larger vertical extent.
   if (associated(visc%Kv_shear)) &
     call pass_var(visc%Kv_shear, G%Domain, To_All+Omit_Corners, halo=1)
+  if (associated(visc%Kv_slow)) &
+    call pass_var(visc%Kv_slow, G%Domain, To_All+Omit_Corners, halo=1)
+
   call cpu_clock_end(id_clock_pass)
 
   if (.not. CS%useALEalgorithm) then
