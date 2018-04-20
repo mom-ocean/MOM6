@@ -449,38 +449,27 @@ end subroutine ocean_model_init
 !! returning the publicly visible ocean surface properties in Ocean_sfc and
 !! storing the new ocean properties in Ocean_state.
 subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
-                              time_start_update, Ocean_coupling_time_step)
+                              time_start_update, Ocean_coupling_time_step, &
+                              update_dyn, update_thermo)
   type(ice_ocean_boundary_type), &
-                           intent(in)    :: Ice_ocean_boundary !< A structure containing the
-                                                    !! various forcing fields coming from the ice.
-  type(ocean_state_type),  pointer       :: OS      !< A pointer to a private structure containing
-                                                    !! the internal ocean state.
-  type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing all the
-                                                    !! publicly visible ocean surface fields after
-                                                    !! a coupling time step.  The data in this type is
-                                                    !! intent out.
-  type(time_type),         intent(in)    :: time_start_update  !< The time at the beginning of the update step.
-  type(time_type),         intent(in)    :: Ocean_coupling_time_step !< The amount of time over
-                                                    !! which to advance the ocean.
-!   This subroutine uses the forcing in Ice_ocean_boundary to advance the
-! ocean model's state from the input value of Ocean_state (which must be for
-! time time_start_update) for a time interval of Ocean_coupling_time_step,
-! returning the publicly visible ocean surface properties in Ocean_sfc and
-! storing the new ocean properties in Ocean_state.
+                     intent(in)    :: Ice_ocean_boundary !< A structure containing the
+                                              !! various forcing fields coming from the ice.
+  type(ocean_state_type), &
+                     pointer       :: OS      !< A pointer to a private structure containing
+                                              !! the internal ocean state.
+  type(ocean_public_type), &
+                     intent(inout) :: Ocean_sfc !< A structure containing all the
+                                              !! publicly visible ocean surface fields after
+                                              !! a coupling time step.  The data in this type is
+                                              !! intent out.
+  type(time_type),   intent(in)    :: time_start_update  !< The time at the beginning of the update step.
+  type(time_type),   intent(in)    :: Ocean_coupling_time_step !< The amount of time over
+                                              !! which to advance the ocean.
+  logical, optional, intent(in)    :: update_dyn !< If present and false, do not do updates
+                                              !! due to the ocean dynamics.
+  logical, optional, intent(in)    :: update_thermo !< If present and false, do not do updates
+                                              !! due to the ocean thermodynamics or remapping.
 
-! Arguments: Ice_ocean_boundary - A structure containing the various forcing
-!                                 fields coming from the ice. It is intent in.
-!  (inout)   Ocean_state - A structure containing the internal ocean state.
-!  (out)     Ocean_sfc - A structure containing all the publicly visible ocean
-!                        surface fields after a coupling time step.
-!  (in)      time_start_update - The time at the beginning of the update step.
-!  (in)      Ocean_coupling_time_step - The amount of time over which to advance
-!                                       the ocean.
-
-! Note: although several types are declared intent(inout), this is to allow for
-!   the possibility of halo updates and to keep previously allocated memory.
-!   In practice, Ice_ocean_boundary is intent in, Ocean_state is private to
-!   this module and intent inout, and Ocean_sfc is intent out.
   type(time_type) :: Master_time ! This allows step_MOM to temporarily change
                                  ! the time that is seen by internal modules.
   type(time_type) :: Time1       ! The value of the ocean model's time at the
@@ -499,6 +488,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   type(time_type) :: Time2  ! A temporary time.
   logical :: thermo_does_span_coupling ! If true, thermodynamic forcing spans
                                        ! multiple dynamic timesteps.
+  logical :: do_dyn, do_thermo
   logical :: step_thermo           ! If true, take a thermodynamic step.
   integer :: secs, days
   integer :: is, ie, js, je
@@ -517,6 +507,9 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                     "called first to allocate this structure.")
     return
   endif
+
+  do_dyn = .true. ; if (present(update_dyn)) do_dyn = update_dyn
+  do_thermo = .true. ; if (present(update_thermo)) do_thermo = update_thermo
 
   ! This is benign but not necessary if ocean_model_init_sfc was called or if
   ! OS%sfc_state%tr_fields was spawned in ocean_model_init.  Consider removing it.
@@ -581,7 +574,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
   call set_net_mass_forcing(OS%fluxes, OS%forces, OS%grid)
 
   if (OS%use_waves) then
-    call Update_Surface_Waves(OS%grid,OS%GV,OS%time,ocean_coupling_time_step,OS%waves)
+    call Update_Surface_Waves(OS%grid, OS%GV, OS%time, ocean_coupling_time_step, OS%waves)
   endif
 
   if (OS%nstep==0) then
@@ -708,7 +701,9 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
 ! Arguments:
 !  (in)      fluxes - A structure of surface fluxes that may be used.
 !  (in)      G - The ocean's grid structure.
-  real :: fraz          ! refreezing rate in kg m-2 s-1
+  real :: fraz      ! refreezing rate in kg m-2 s-1
+  real :: I_dt_LHF  ! The inverse of the timestep times the latent heat of fusion, in kg J-1 s-1.
+  real :: kv_rho_ice ! The viscosity of ice divided by its density, in m5 kg-1 s-1.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -733,6 +728,8 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
     forces%rigidity_ice_v(:,:) = 0.
   endif
 
+  kv_rho_ice = kv_ice / density_ice
+
   do j=jsd,jed ; do i=isd,ied
     if (G%areaT(i,j) > 0.0) &
       fluxes%frac_shelf_h(i,j) = fluxes%frac_shelf_h(i,j) +  fluxes%area_berg(i,j)
@@ -742,26 +739,27 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
     forces%frac_shelf_u(I,j) = 0.0
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + (fluxes%area_berg(i+1,j)*G%areaT(i+1,j))) / &
+          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
+            (fluxes%area_berg(i+1,j)*G%areaT(i+1,j))) / &
            (G%areaT(i,j) + G%areaT(i+1,j)) )
-    !### Either the min here or the max below must be wrong, but is either right? -RWH
-    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) +((kv_ice / density_ice) * &
-                                  min(fluxes%mass_berg(i,j), fluxes%mass_berg(i+1,j)))
+    forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
+                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i+1,j))
   enddo ; enddo
   do J=jsd,jed-1 ; do i=isd,ied
     forces%frac_shelf_v(i,J) = 0.0
     if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
       forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + (fluxes%area_berg(i,j+1)*G%areaT(i,j+1))) / &
+          (((fluxes%area_berg(i,j)*G%areaT(i,j)) + &
+            (fluxes%area_berg(i,j+1)*G%areaT(i,j+1))) / &
            (G%areaT(i,j) + G%areaT(i,j+1)) )
-    !### Either the max here or the min above must be wrong, but is either right? -RWH
-    forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) +((kv_ice / density_ice) * &
-                                  max(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1)))
+    forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
+                         min(fluxes%mass_berg(i,j), fluxes%mass_berg(i,j+1))
   enddo ; enddo
   call pass_vector(forces%frac_shelf_u, forces%frac_shelf_v, G%domain, TO_ALL, CGRID_NE)
 
   !Zero'ing out other fluxes under the tabular icebergs
   if (berg_area_threshold >= 0.) then
+    I_dt_LHF = 1.0 / (time_step * latent_heat_fusion)
     do j=jsd,jed ; do i=isd,ied
       if (fluxes%frac_shelf_h(i,j) > berg_area_threshold) then  !Only applying for ice shelf covering most of cell
 
@@ -775,7 +773,7 @@ subroutine add_berg_flux_to_shelf(G, forces, fluxes, use_ice_shelf, density_ice,
         ! control structure for diagnostic purposes.
 
         if (associated(sfc_state%frazil)) then
-          fraz = sfc_state%frazil(i,j) / time_step / latent_heat_fusion
+          fraz = sfc_state%frazil(i,j) * I_dt_LHF
           if (associated(fluxes%evap)) fluxes%evap(i,j) = fluxes%evap(i,j) - fraz
           !CS%lprec(i,j)=CS%lprec(i,j) - fraz
           sfc_state%frazil(i,j) = 0.0
