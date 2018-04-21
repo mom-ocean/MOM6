@@ -914,7 +914,7 @@ end subroutine register_restarts_dyn_split_RK2
 subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_file, &
                       diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, OBC, update_OBC_CSp, ALE_CSp, setVisc_CSp, &
-                      visc, dirs, ntrunc)
+                      visc, dirs, ntrunc, calc_dtbt)
   type(ocean_grid_type),                     intent(inout) :: G           !< ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV          !< ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: u           !< zonal velocity (m/s)
@@ -942,6 +942,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   type(directories),                         intent(in)    :: dirs        !< contains directory paths
   integer, target,                           intent(inout) :: ntrunc      !< A target for the variable that records the number of times
                                                                           !! the velocity is truncated (this should be 0).
+  logical,                                   intent(out)   :: calc_dtbt   !< If true, recalculate the barotropic time step
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_tmp
   character(len=40) :: mdl = "MOM_dynamics_split_RK2" ! This module's name.
@@ -1074,7 +1075,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, param_fil
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
   call barotropic_init(u, v, h, CS%eta, Time, G, GV, param_file, diag, &
-                       CS%barotropic_CSp, restart_CS, CS%BT_cont, CS%tides_CSp)
+                       CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
+                       CS%tides_CSp)
 
   if (.not. query_initialized(CS%diffu,"diffu",restart_CS) .or. &
       .not. query_initialized(CS%diffv,"diffv",restart_CS)) &
