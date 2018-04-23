@@ -4248,7 +4248,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   endif
 
   CS%dtbt_fraction = 0.98 ; if (dtbt_input < 0.0) CS%dtbt_fraction = -dtbt_input
-  
+
   dtbt_tmp = -1.0
   if (query_initialized(CS%dtbt, "DTBT", restart_CS)) dtbt_tmp = CS%dtbt
 
