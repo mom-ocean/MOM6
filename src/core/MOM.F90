@@ -649,7 +649,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
-                             Time_local, n, WAVES=Waves)
+                             Time_local, WAVES=Waves)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -795,7 +795,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 end subroutine step_MOM
 
 subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
-                             bbl_time_int, CS, Time_local, dyn_call, WAVES)
+                             bbl_time_int, CS, Time_local, WAVES)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
@@ -811,8 +811,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! in s, or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< Starting time of a segment, as a time type
-  integer,            intent(in)    :: dyn_call   !< A count of the calls to step_MOM_dynamics
-                                                  !! within this forcing timestep.
   type(wave_parameters_CS), pointer, intent(in), optional :: &
        WAVES                                      !<Container for wave related parameters
 
@@ -885,7 +883,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
         calc_dtbt = .true.
         CS%dtbt_reset_time = CS%dtbt_reset_time + CS%dtbt_reset_interval
       endif
-      if (dyn_call==1) then ; calc_dtbt = .true. ; endif
     endif
 
     call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
@@ -1691,10 +1688,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
     call get_param(param_file, "MOM", "DTBT_RESET_PERIOD", CS%dtbt_reset_period, &
                  "The period between recalculations of DTBT (if DTBT <= 0). \n"//&
                  "If DTBT_RESET_PERIOD is negative, DTBT is set based \n"//&
-                 "only on information available at initialization.  If \n"//&
-                 "dynamic, DTBT will be set at least every forcing time \n"//&
-                 "step, and if 0, every dynamics time step.  The default is \n"//&
-                 "set by DT_THERM.  This is only used if SPLIT is true.", &
+                 "only on information available at initialization.  If 0, \n"//&
+                 "DTBT will be set every dynamics time step. The default \n"//&
+                 "is set by DT_THERM.  This is only used if SPLIT is true.", &
                  units="s", default=default_val, do_not_read=(dtbt > 0.0))
   endif
 
