@@ -162,6 +162,8 @@ type, public :: MOM_control_struct ; private
   real :: time_in_cycle !< The running time of the current time-stepping cycle
                     !! in calls that step the dynamics, and also the length of
                     !! the time integral of ssh_rint, in s.
+  real :: time_in_thermo_cycle !< The running time of the current time-stepping
+                    !! cycle in calls that step the thermodynamics, in s.
 
   type(ocean_grid_type) :: G  !< structure containing metrics and grid info
   type(verticalGrid_type), pointer :: &
@@ -353,8 +355,9 @@ contains
 !! The action of lateral processes on tracers occur in calls to
 !! advect_tracer and tracer_hordiff.  Vertical mixing and possibly remapping
 !! occur inside of diabatic.
-subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Waves, &
-                    do_dynamics, do_thermodynamics, start_cycle, end_cycle, cycle_length)
+subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, &
+                    Waves, do_dynamics, do_thermodynamics, start_cycle, &
+                    end_cycle, cycle_length, reset_therm)
   type(mech_forcing), intent(inout) :: forces        !< A structure with the driving mechanical forces
   type(forcing),      intent(inout) :: fluxes        !< pointers to forcing fields
   type(surface),      intent(inout) :: sfc_state     !< surface ocean state
@@ -375,6 +378,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
                                                      !! time-stepping cycle; missing is like true.
   real,     optional, intent(in)    :: cycle_length  !< The amount of time in a coupled time
                                                      !! stepping cycle, in s.
+  logical,  optional, intent(in)    :: reset_therm   !< This indicates whether the running sums of
+                                                     !! thermodynamic quantities should be reset.
+                                                     !! If missing, this is like start_cycle.
 
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
@@ -411,6 +417,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
                         ! a stepping cycle (whatever that may mean).
   logical :: cycle_end  ! If true, do calculations and diagnostics that are only done at
                         ! the end of a stepping cycle (whatever that may mean).
+  logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
   real :: cycle_time    ! The length of the coupled time-stepping cycle, in s.
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     ssh         ! sea surface height, which may be based on eta_av (meter)
@@ -441,6 +448,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
   cycle_start = .true. ; if (present(start_cycle)) cycle_start = start_cycle
   cycle_end = .true. ; if (present(end_cycle)) cycle_end = end_cycle
   cycle_time = time_interval ; if (present(cycle_length)) cycle_time = cycle_length
+  therm_reset = cycle_start ; if (present(reset_therm)) therm_reset = reset_therm
 
   call cpu_clock_begin(id_clock_ocean)
   call cpu_clock_begin(id_clock_other)
@@ -454,11 +462,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
   ! First determine the time step that is consistent with this call and an
   ! integer fraction of time_interval.
-
   if (do_dyn) then
     n_max = 1
     if (time_interval > CS%dt) n_max = ceiling(time_interval/CS%dt - 0.001)
-
     dt = time_interval / real(n_max)
     thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
                                 (CS%dt_therm > 1.5*cycle_time))
@@ -474,27 +480,16 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
       dt_therm = dt*ntstep
     endif
+
     if (associated(forces%p_surf)) p_surf => forces%p_surf
-  else
-    n_max = 1
-    if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
-      n_max = ceiling(time_interval/CS%dt_therm - 0.001)
+    if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
 
-    dt = time_interval / real(n_max)
-    dt_therm = dt ; ntstep = 1
-    thermo_does_span_coupling = .true. ! This is never used in this case?
-    if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
-  endif
-
-  if (do_dyn) then
-    if (.not.ASSOCIATED(forces%p_surf)) CS%interp_p_surf = .false.
-
-    !---------- Initiate group halo pass
+    !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
-    if (ASSOCIATED(forces%ustar)) &
+    if (associated(forces%ustar)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%ustar, G%Domain)
-    if (ASSOCIATED(forces%p_surf)) &
+    if (associated(forces%p_surf)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%p_surf, G%Domain)
     if (G%nonblocking_updates) then
       call start_group_pass(pass_tau_ustar_psurf, G%Domain)
@@ -502,14 +497,26 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       call do_group_pass(pass_tau_ustar_psurf, G%Domain)
     endif
     call cpu_clock_end(id_clock_pass)
+  else
+    ! This step only updates the thermodynamics so setting timesteps is simpler.
+    n_max = 1
+    if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
+      n_max = ceiling(time_interval/CS%dt_therm - 0.001)
+
+    dt = time_interval / real(n_max)
+    dt_therm = dt ; ntstep = 1
+    if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
+  endif
+
+  if (therm_reset) then
+    CS%time_in_thermo_cycle = 0.0
+    if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
+    if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
+    if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
+    if (associated(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
   endif
 
   if (cycle_start) then
-    if (ASSOCIATED(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
-    if (ASSOCIATED(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
-    if (ASSOCIATED(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
-    if (ASSOCIATED(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
-
     CS%time_in_cycle = 0.0
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
@@ -526,8 +533,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       call complete_group_pass(pass_tau_ustar_psurf, G%Domain, clock=id_clock_pass)
 
     if (CS%interp_p_surf) then
-      if (.not.ASSOCIATED(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
-      if (.not.ASSOCIATED(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
+      if (.not.associated(CS%p_surf_end))   allocate(CS%p_surf_end(isd:ied,jsd:jed))
+      if (.not.associated(CS%p_surf_begin)) allocate(CS%p_surf_begin(isd:ied,jsd:jed))
       if (.not.CS%p_surf_prev_set) then
         do j=jsd,jed ; do i=isd,ied
           CS%p_surf_prev(i,j) = forces%p_surf(i,j)
@@ -598,6 +605,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
                            end_time_thermo, .true., Waves=Waves)
+      CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -691,6 +699,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
+      CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
       CS%t_dyn_rel_thermo = 0.0
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
@@ -776,8 +785,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
     call cpu_clock_begin(id_clock_diagnostics)
-    call enable_averaging(CS%time_in_cycle, Time_local, CS%diag)
-    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_cycle, &
+    call enable_averaging(CS%time_in_thermo_cycle, Time_local, CS%diag)
+    call post_surface_diagnostics(CS%sfc_IDs, G, GV, CS%diag, CS%time_in_thermo_cycle, &
                                   sfc_state, CS%tv, ssh, CS%ave_ssh_ibc)
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
@@ -1983,7 +1992,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, restart_CSp, &
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
   ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0
-  CS%time_in_cycle = 0.0
+  CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -2539,8 +2548,8 @@ subroutine adjust_ssh_for_p_atm(tv, G, GV, ssh, p_atm, use_EOS)
   integer :: i, j, is, ie, js, je
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
-  if (present(p_atm)) then ; if (ASSOCIATED(p_atm)) then
-    calc_rho = ASSOCIATED(tv%eqn_of_state)
+  if (present(p_atm)) then ; if (associated(p_atm)) then
+    calc_rho = associated(tv%eqn_of_state)
     if (present(use_EOS) .and. calc_rho) calc_rho = use_EOS
     ! Correct the output sea surface height for the contribution from the
     ! atmospheric pressure
