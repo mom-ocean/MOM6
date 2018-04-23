@@ -77,7 +77,7 @@ use Rossby_front_2d_initialization, only : Rossby_front_initialize_thickness
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_temperature_salinity
 use Rossby_front_2d_initialization, only : Rossby_front_initialize_velocity
 use SCM_idealized_hurricane, only : SCM_idealized_hurricane_TS_init
-use SCM_CVmix_tests, only: SCM_CVmix_tests_TS_init
+use SCM_CVMix_tests, only: SCM_CVMix_tests_TS_init
 use dyed_channel_initialization, only : dyed_channel_set_OBC_tracer_data
 use dyed_obcs_initialization, only : dyed_obcs_set_OBC_data
 use supercritical_initialization, only : supercritical_set_OBC_data
@@ -336,7 +336,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
              " \t dumbbell - sloshing channel ICs. \n"//&
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t SCM_ideal_hurr - used in the SCM idealized hurricane test.\n"//&
-             " \t SCM_CVmix_tests - used in the SCM CVmix tests.\n"//&
+             " \t SCM_CVMix_tests - used in the SCM CVMix tests.\n"//&
              " \t USER - call a user modified routine.", &
              fail_if_missing=new_sim, do_not_log=just_read)
 !              " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
@@ -369,7 +369,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, PF, dirs, &
                                         tv%S, h, G, GV, PF, eos, just_read_params=just_read)
         case ("SCM_ideal_hurr"); call SCM_idealized_hurricane_TS_init ( tv%T, &
                                           tv%S, h, G, GV, PF, just_read_params=just_read)
-        case ("SCM_CVmix_tests"); call SCM_CVmix_tests_TS_init (tv%T, &
+        case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init (tv%T, &
                                            tv%S, h, G, GV, PF, just_read_params=just_read)
         case ("dense"); call dense_water_initialize_TS(G, GV, PF, eos, tv%T, tv%S, &
                                  h, just_read_params=just_read)

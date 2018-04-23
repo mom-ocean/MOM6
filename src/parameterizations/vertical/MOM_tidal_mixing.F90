@@ -17,10 +17,10 @@ use MOM_file_parser,         only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase, lowercase
 use MOM_io,                  only : slasher, MOM_read_data, vardesc, var_desc
-use cvmix_tidal,             only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
-use cvmix_tidal,             only : cvmix_coeffs_tidal, cvmix_tidal_params_type
-use cvmix_kinds_and_types,   only : cvmix_global_params_type
-use cvmix_put_get,           only : cvmix_put
+use CVMix_tidal,             only : CVMix_init_tidal, CVMix_compute_Simmons_invariant
+use CVMix_tidal,             only : CVMix_coeffs_tidal, CVMix_tidal_params_type
+use CVMix_kinds_and_types,   only : CVMix_global_params_type
+use CVMix_put_get,           only : CVMix_put
 
 implicit none ; private
 
@@ -122,14 +122,14 @@ type, public :: tidal_mixing_cs
   real :: kappa_h2_factor     ! factor for the product of wavenumber * rms sgs height
   character(len=200) :: inputdir
 
-  logical :: use_cvmix_tidal = .false. ! true if cvmix is to be used for determining
+  logical :: use_CVMix_tidal = .false. ! true if CVMix is to be used for determining
                               ! diffusivity due to tidal mixing
 
   real :: min_thickness       ! Minimum thickness allowed [m]
 
   ! CVMix-specific parameters
-  type(cvmix_tidal_params_type)   :: cvmix_tidal_params
-  type(cvmix_global_params_type)  :: cvmix_glb_params ! for Prandtl number only
+  type(CVMix_tidal_params_type)   :: CVMix_tidal_params
+  type(CVMix_global_params_type)  :: CVMix_glb_params ! for Prandtl number only
   real                            :: tidal_max_coef   ! maximum allowable tidal diffusivity. [m^2/s]
 
   ! Data containers
@@ -228,7 +228,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   ! Read parameters
   call log_version(param_file, mdl, version, &
     "Vertical Tidal Mixing Parameterization")
-  call get_param(param_file, mdl, "USE_CVMIX_TIDAL", CS%use_cvmix_tidal, &
+  call get_param(param_file, mdl, "USE_CVMix_TIDAL", CS%use_CVMix_tidal, &
                  "If true, turns on tidal mixing via CVMix", &
                  default=.false.)
 
@@ -237,7 +237,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%int_tide_dissipation, &
                  "If true, use an internal tidal dissipation scheme to \n"//&
                  "drive diapycnal mixing, along the lines of St. Laurent \n"//&
-                 "et al. (2002) and Simmons et al. (2004).", default=CS%use_cvmix_tidal)
+                 "et al. (2002) and Simmons et al. (2004).", default=CS%use_CVMix_tidal)
 
   ! return if tidal mixing is inactive
   tidal_mixing_init = CS%int_tide_dissipation
@@ -245,7 +245,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
 
   if (CS%int_tide_dissipation) then
     default_profile_string = STLAURENT_PROFILE_STRING
-    if (CS%use_cvmix_tidal) default_profile_string = SIMMONS_PROFILE_STRING
+    if (CS%use_CVMix_tidal) default_profile_string = SIMMONS_PROFILE_STRING
     call get_param(param_file, mdl, "INT_TIDE_PROFILE", int_tide_profile_str, &
                  "INT_TIDE_PROFILE selects the vertical profile of energy \n"//&
                  "dissipation with INT_TIDE_DISSIPATION. Valid values are:\n"//&
@@ -267,22 +267,22 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     end select
 
     ! Check profile consistency
-    if (CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.STLAURENT_02 .or. &
+    if (CS%use_CVMix_tidal .and. (CS%int_tide_profile.eq.STLAURENT_02 .or. &
                                   CS%int_tide_profile.eq.POLZIN_09)) then
       call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profile"// &
         " "//trim(int_tide_profile_str)//" unavailable in CVMix. Available "//&
         "profiles in CVMix are "//trim(SIMMONS_PROFILE_STRING)//" and "//&
         trim(SCHMITTNER_PROFILE_STRING)//".")
-    else if (.not.CS%use_cvmix_tidal .and. (CS%int_tide_profile.eq.SIMMONS_04.or. &
+    else if (.not.CS%use_CVMix_tidal .and. (CS%int_tide_profile.eq.SIMMONS_04.or. &
                                             CS%int_tide_profile.eq.SCHMITTNER)) then
       call MOM_error(FATAL, "tidal_mixing_init: Tidal mixing profiles "// &
         trim(SIMMONS_PROFILE_STRING)//" and "//trim(SCHMITTNER_PROFILE_STRING)//&
-        " are available only when USE_CVMIX_TIDAL is True.")
+        " are available only when USE_CVMix_TIDAL is True.")
     endif
 
-  else if (CS%use_cvmix_tidal) then
+  else if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Cannot set INT_TIDE_DISSIPATION to False "// &
-            "when USE_CVMIX_TIDAL is set to True.")
+            "when USE_CVMix_TIDAL is set to True.")
   endif
 
   call get_param(param_file, mdl, "LEE_WAVE_DISSIPATION", CS%Lee_wave_dissipation, &
@@ -291,7 +291,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "(2010) and using the St. Laurent et al. (2002) \n"//&
                  "and Simmons et al. (2004) vertical profile", default=.false.)
   if (CS%lee_wave_dissipation) then
-    if (CS%use_cvmix_tidal) then
+    if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Lee wave driven dissipation scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
     end if
@@ -322,7 +322,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
 
   if ((CS%Int_tide_dissipation .and. (CS%int_tide_profile == POLZIN_09)) .or. &
       (CS%lee_wave_dissipation .and. (CS%lee_wave_profile == POLZIN_09))) then
-    if (CS%use_cvmix_tidal) then
+    if (CS%use_CVMix_tidal) then
         call MOM_error(FATAL, "tidal_mixing_init: Polzin scheme cannot "// &
             "be used when CVMix tidal mixing scheme is active.")
     end if
@@ -375,7 +375,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   endif
 
   if ( (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation) .and. &
-        .not. CS%use_cvmix_tidal) then
+        .not. CS%use_CVMix_tidal) then
 
     call safe_alloc_ptr(CS%Nb,isd,ied,jsd,jed)
     call safe_alloc_ptr(CS%h2,isd,ied,jsd,jed)
@@ -404,7 +404,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                  "If true, read a file (given by TIDEAMP_FILE) containing \n"//&
                  "the tidal amplitude with INT_TIDE_DISSIPATION.", default=.false.)
     if (read_tideamp) then
-      if (CS%use_cvmix_tidal) then
+      if (CS%use_CVMix_tidal) then
           call MOM_error(FATAL, "tidal_mixing_init: Tidal amplitude files are "// &
               "not compatible with CVMix tidal mixing. ")
       end if
@@ -419,7 +419,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     call get_param(param_file, mdl, "H2_FILE", h2_file, &
                  "The path to the file containing the sub-grid-scale \n"//&
                  "topographic roughness amplitude with INT_TIDE_DISSIPATION.", &
-                 fail_if_missing=(.not.CS%use_cvmix_tidal))
+                 fail_if_missing=(.not.CS%use_CVMix_tidal))
     filename = trim(CS%inputdir) // trim(h2_file)
     call log_param(param_file, mdl, "INPUTDIR/H2_FILE", filename)
     call MOM_read_data(filename, 'h2', CS%h2, G%domain, timelevel=1)
@@ -473,13 +473,13 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
   endif
 
   ! Configure CVMix
-  if (CS%use_cvmix_tidal) then
+  if (CS%use_CVMix_tidal) then
 
     ! Read in CVMix params
-    !call openParameterBlock(param_file,'CVMIX_TIDAL')
+    !call openParameterBlock(param_file,'CVMix_TIDAL')
     call get_param(param_file, mdl, "TIDAL_MAX_COEF", CS%tidal_max_coef, &
                    "largest acceptable value for tidal diffusivity", &
-                   units="m^2/s", default=50e-4) ! the default is 50e-4 in CVMIX, 100e-4 in POP.
+                   units="m^2/s", default=50e-4) ! the default is 50e-4 in CVMix, 100e-4 in POP.
     call get_param(param_file, mdl, "TIDAL_ENERGY_FILE",tidal_energy_file, &
                  "The path to the file containing tidal energy \n"//&
                  "dissipation. Used with CVMix tidal mixing schemes.", &
@@ -496,7 +496,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
                    "to convert vertical diffusivities into viscosities.", &
                     units="nondim", default=1.0, &
                    do_not_log=.true.)
-    call cvmix_put(CS%cvmix_glb_params,'Prandtl',prandtl_tidal)
+    call CVMix_put(CS%CVMix_glb_params,'Prandtl',prandtl_tidal)
 
     int_tide_profile_str = lowercase(int_tide_profile_str)
 
@@ -504,7 +504,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     ! TODO: check parameter consistency. (see POP::tidal_mixing.F90::tidal_check)
 
     ! Set up CVMix
-    call cvmix_init_tidal(CVmix_tidal_params_user = CS%cvmix_tidal_params,    &
+    call CVMix_init_tidal(CVMix_tidal_params_user = CS%CVMix_tidal_params,    &
                           mix_scheme              = int_tide_profile_str,     &
                           efficiency              = CS%Mu_itides,             &
                           vertical_decay_scale    = CS%int_tide_decay_scale,  &
@@ -516,7 +516,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
 
     !call closeParameterBlock(param_file)
 
-  endif ! cvmix on
+  endif ! CVMix on
 
   ! Register Diagnostics fields
 
@@ -526,7 +526,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
     CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
          'Internal Tide Driven Diffusivity', 'm2 s-1')
 
-    if (CS%use_cvmix_tidal) then
+    if (CS%use_CVMix_tidal) then
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
           'Bouyancy frequency squared, at interfaces', 's-2')
       ! TODO: add units
@@ -577,7 +577,7 @@ logical function tidal_mixing_init(Time, G, GV, param_file, diag, diag_to_Z_CSp,
         CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
              'Lee Wave Driven Diffusivity', 'm2 s-1')
       endif
-    endif ! S%use_cvmix_tidal
+    endif ! S%use_CVMix_tidal
 
     if (associated(CS%diag_to_Z_CSp)) then
       vd = var_desc("Kd_itides","m2 s-1", &
@@ -620,8 +620,8 @@ subroutine calculate_tidal_mixing(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
   real,                                     intent(inout) :: Kd_max
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
-    if (CS%use_cvmix_tidal) then
-      call calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
+    if (CS%use_CVMix_tidal) then
+      call calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
     else
       call add_int_tide_diffusivity(h, N2_bot, j, TKE_to_Kd, max_TKE, G, GV, CS, &
                                     N2_lay, Kd, Kd_int, Kd_max)
@@ -632,7 +632,7 @@ end subroutine
 
 !> Calls the CVMix routines to compute tidal dissipation and to add the effect of internal-tide-driven
 !! mixing to the interface diffusivities.
-subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
+subroutine calculate_CVMix_tidal(h, j, G, GV, CS, N2_int, Kd)
   integer,                                  intent(in)    :: j
   type(ocean_grid_type),                    intent(in)    :: G     !< Grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV    !< ocean vertical grid structure
@@ -673,14 +673,14 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
-      call cvmix_compute_Simmons_invariant( nlev                    = G%ke,                &
+      call CVMix_compute_Simmons_invariant( nlev                    = G%ke,                &
                                             energy_flux             = CS%tidal_qe_2d(i,j), &
                                             rho                     = rho_fw,              &
                                             SimmonsCoeff            = Simmons_coeff,       &
                                             VertDep                 = vert_dep,            &
                                             zw                      = iFaceHeight,         &
                                             zt                      = cellHeight,          &
-                                            CVmix_tidal_params_user = CS%cvmix_tidal_params)
+                                            CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
       ! Since we pass tidal_qe_2d=(CS%Gamma_itides)*tidal_energy_flux_2d, and not tidal_energy_flux_2d in
       ! above subroutine call, we divide Simmons_coeff by CS%Gamma_itides as a corrective step:
@@ -688,7 +688,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
       Simmons_coeff = Simmons_coeff / CS%Gamma_itides
 
 
-      call cvmix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
+      call CVMix_coeffs_tidal( Mdiff_out               = Kv_tidal,            &
                                Tdiff_out               = Kd_tidal,            &
                                Nsqr                    = N2_int(i,:),         &
                                OceanDepth              = -iFaceHeight(G%ke+1),&
@@ -696,8 +696,8 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
                                vert_dep                = vert_dep,            &
                                nlev                    = G%ke,                &
                                max_nlev                = G%ke,                &
-                               CVmix_params            = CS%cvmix_glb_params, &
-                               CVmix_tidal_params_user = CS%cvmix_tidal_params)
+                               CVMix_params            = CS%CVMix_glb_params, &
+                               CVMix_tidal_params_user = CS%CVMix_tidal_params)
 
       do k=1,G%ke
         Kd(i,j,k) = Kd(i,j,k) + 0.5*(Kd_tidal(k) + Kd_tidal(k+1) )
@@ -726,7 +726,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         " INT_TIDE_PROFILE is unavailable in CVMix")
   end select
 
-end subroutine calculate_cvmix_tidal
+end subroutine calculate_CVMix_tidal
 
 
 !> This subroutine adds the effect of internal-tide-driven mixing to the layer diffusivities.
