@@ -1,5 +1,5 @@
 !> Interface to CVMix convection scheme.
-module MOM_cvmix_conv
+module MOM_CVMix_conv
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -13,17 +13,17 @@ use MOM_debugging,      only : hchksum
 use MOM_grid,           only : ocean_grid_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_file_parser,    only : get_param, log_version, param_file_type
-use cvmix_convection,   only : cvmix_init_conv, cvmix_coeffs_conv
-use cvmix_kpp,          only : CVmix_kpp_compute_kOBL_depth
+use CVMix_convection,   only : CVMix_init_conv, CVMix_coeffs_conv
+use CVMix_kpp,          only : CVMix_kpp_compute_kOBL_depth
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public cvmix_conv_init, calculate_cvmix_conv, cvmix_conv_end, cvmix_conv_is_used
+public CVMix_conv_init, calculate_CVMix_conv, CVMix_conv_end, CVMix_conv_is_used
 
 !> Control structure including parameters for CVMix convection.
-type, public :: cvmix_conv_cs
+type, public :: CVMix_conv_cs
 
   ! Parameters
   real    :: kd_conv_const !< diffusivity constant used in convective regime (m2/s)
@@ -42,21 +42,21 @@ type, public :: cvmix_conv_cs
   real, allocatable, dimension(:,:,:) :: kd_conv !< Diffusivity added by convection (m2/s)
   real, allocatable, dimension(:,:,:) :: kv_conv !< Viscosity added by convection (m2/s)
 
-end type cvmix_conv_cs
+end type CVMix_conv_cs
 
-character(len=40)  :: mdl = "MOM_cvmix_conv"     !< This module's name.
+character(len=40)  :: mdl = "MOM_CVMix_conv"     !< This module's name.
 
 contains
 
-!> Initialized the cvmix convection mixing routine.
-logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
+!> Initialized the CVMix convection mixing routine.
+logical function CVMix_conv_init(Time, G, GV, param_file, diag, CS)
 
   type(time_type),         intent(in)    :: Time       !< The current time.
   type(ocean_grid_type),   intent(in)    :: G          !< Grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure.
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
-  type(cvmix_conv_cs),    pointer        :: CS         !< This module's control structure.
+  type(CVMix_conv_cs),    pointer        :: CS         !< This module's control structure.
 
   ! Local variables
   real    :: prandtl_conv !< Turbulent Prandtl number used in convective instabilities.
@@ -66,7 +66,7 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 #include "version_variable.h"
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "cvmix_conv_init called with an associated "// &
+    call MOM_error(WARNING, "CVMix_conv_init called with an associated "// &
                             "control structure.")
     return
   endif
@@ -75,14 +75,14 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   ! Read parameters
   call log_version(param_file, mdl, version, &
     "Parameterization of enhanced mixing due to convection via CVMix")
-  call get_param(param_file, mdl, "USE_CVMIX_CONVECTION", cvmix_conv_init, &
+  call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_init, &
                  "If true, turns on the enhanced mixing due to convection  \n"// &
                  "via CVMix. This scheme increases diapycnal diffs./viscs. \n"// &
                  " at statically unstable interfaces. Relevant parameters are \n"// &
-                 "contained in the CVMIX_CONVECTION% parameter block.", &
+                 "contained in the CVMix_CONVECTION% parameter block.", &
                  default=.false.)
 
-  if (.not. cvmix_conv_init) return
+  if (.not. CVMix_conv_init) return
 
   call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, default=.false., &
                 do_not_log=.true.)
@@ -90,7 +90,7 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   ! Warn user if EPBL is being used, since in this case mixing due to convection will
   ! be aplied in the boundary layer
   if (useEPBL) then
-     call MOM_error(WARNING, 'MOM_cvmix_conv_init: '// &
+     call MOM_error(WARNING, 'MOM_CVMix_conv_init: '// &
            'CVMix convection may not be properly applied when ENERGETICS_SFC_PBL = True'//&
            'as convective mixing might occur in the boundary layer.')
   endif
@@ -99,7 +99,7 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, do_not_log=.True.)
 
-  call openParameterBlock(param_file,'CVMIX_CONVECTION')
+  call openParameterBlock(param_file,'CVMix_CONVECTION')
 
   call get_param(param_file, mdl, "PRANDTL_CONV", prandtl_conv, &
                  "The turbulent Prandtl number applied to convective \n"//&
@@ -129,28 +129,28 @@ logical function cvmix_conv_init(Time, G, GV, param_file, diag, CS)
   ! Register diagnostics
   CS%diag => diag
   CS%id_N2 = register_diag_field('ocean_model', 'N2_conv', diag%axesTi, Time, &
-      'Square of Brunt-Vaisala frequency used by MOM_cvmix_conv module', '1/s2')
+      'Square of Brunt-Vaisala frequency used by MOM_CVMix_conv module', '1/s2')
   CS%id_kd_conv = register_diag_field('ocean_model', 'kd_conv', diag%axesTi, Time, &
-      'Additional diffusivity added by MOM_cvmix_conv module', 'm2/s')
+      'Additional diffusivity added by MOM_CVMix_conv module', 'm2/s')
   CS%id_kv_conv = register_diag_field('ocean_model', 'kv_conv', diag%axesTi, Time, &
-      'Additional viscosity added by MOM_cvmix_conv module', 'm2/s')
+      'Additional viscosity added by MOM_CVMix_conv module', 'm2/s')
 
-  call cvmix_init_conv(convect_diff=CS%kd_conv_const, &
+  call CVMix_init_conv(convect_diff=CS%kd_conv_const, &
                        convect_visc=CS%kv_conv_const, &
                        lBruntVaisala=.true.,    &
                        BVsqr_convect=CS%bv_sqr_conv)
 
-end function cvmix_conv_init
+end function CVMix_conv_init
 
 !> Subroutine for calculating enhanced diffusivity/viscosity
 !! due to convection via CVMix
-subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
+subroutine calculate_CVMix_conv(h, tv, G, GV, CS, hbl)
 
   type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV !< Vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   intent(in)  :: h  !< Layer thickness, in m or kg m-2.
   type(thermo_var_ptrs),                      intent(in)  :: tv !< Thermodynamics structure.
-  type(cvmix_conv_cs),                            pointer :: CS !< The control structure returned
+  type(CVMix_conv_cs),                            pointer :: CS !< The control structure returned
                                                                 !! by a previous call to CVMix_conv_init.
   real, dimension(:,:),                 optional, pointer :: hbl!< Depth of ocean boundary layer (m)
 
@@ -212,9 +212,9 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
-      kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
+      kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
 
-      call cvmix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
+      call CVMix_coeffs_conv(Mdiff_out=CS%kv_conv(i,j,:), &
                                Tdiff_out=CS%kd_conv(i,j,:), &
                                Nsqr=CS%N2(i,j,:), &
                                dens=rho_1d(:), &
@@ -233,9 +233,9 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
   enddo
 
   if (CS%debug) then
-    call hchksum(CS%N2, "MOM_cvmix_conv: N2",G%HI,haloshift=0)
-    call hchksum(CS%kd_conv, "MOM_cvmix_conv: kd_conv",G%HI,haloshift=0)
-    call hchksum(CS%kv_conv, "MOM_cvmix_conv: kv_conv",G%HI,haloshift=0)
+    call hchksum(CS%N2, "MOM_CVMix_conv: N2",G%HI,haloshift=0)
+    call hchksum(CS%kd_conv, "MOM_CVMix_conv: kd_conv",G%HI,haloshift=0)
+    call hchksum(CS%kv_conv, "MOM_CVMix_conv: kv_conv",G%HI,haloshift=0)
   endif
 
   ! send diagnostics to post_data
@@ -243,28 +243,28 @@ subroutine calculate_cvmix_conv(h, tv, G, GV, CS, hbl)
   if (CS%id_kd_conv > 0) call post_data(CS%id_kd_conv, CS%kd_conv, CS%diag)
   if (CS%id_kv_conv > 0) call post_data(CS%id_kv_conv, CS%kv_conv, CS%diag)
 
-end subroutine calculate_cvmix_conv
+end subroutine calculate_CVMix_conv
 
-!> Reads the parameter "USE_CVMIX_CONVECTION" and returns state.
+!> Reads the parameter "USE_CVMix_CONVECTION" and returns state.
 !! This function allows other modules to know whether this parameterization will
 !! be used without needing to duplicate the log entry.
-logical function cvmix_conv_is_used(param_file)
+logical function CVMix_conv_is_used(param_file)
   type(param_file_type), intent(in) :: param_file !< A structure to parse for run-time parameters
-  call get_param(param_file, mdl, "USE_CVMIX_CONVECTION", cvmix_conv_is_used, &
+  call get_param(param_file, mdl, "USE_CVMix_CONVECTION", CVMix_conv_is_used, &
                  default=.false., do_not_log = .true.)
 
-end function cvmix_conv_is_used
+end function CVMix_conv_is_used
 
 !> Clear pointers and dealocate memory
-subroutine cvmix_conv_end(CS)
-  type(cvmix_conv_cs), pointer :: CS ! Control structure
+subroutine CVMix_conv_end(CS)
+  type(CVMix_conv_cs), pointer :: CS ! Control structure
 
   deallocate(CS%N2)
   deallocate(CS%kd_conv)
   deallocate(CS%kv_conv)
   deallocate(CS)
 
-end subroutine cvmix_conv_end
+end subroutine CVMix_conv_end
 
 
-end module MOM_cvmix_conv
+end module MOM_CVMix_conv
