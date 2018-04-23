@@ -361,8 +361,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
   type(time_type),    intent(in)    :: Time_start    !< starting time of a segment, as a time type
   real,               intent(in)    :: time_interval !< time interval covered by this run segment, in s.
   type(MOM_control_struct), pointer :: CS            !< control structure from initialize_MOM
-  type(Wave_parameters_CS), pointer, &
-            optional, intent(in)    :: Waves         !< An optional pointer to a wave proptery CS
+  type(Wave_parameters_CS), &
+            optional, pointer       :: Waves         !< An optional pointer to a wave proptery CS
   logical,  optional, intent(in)    :: do_dynamics   !< Present and false, do not do updates due
                                                      !! to the dynamics.
   logical,  optional, intent(in)    :: do_thermodynamics  !< Present and false, do not do updates due
@@ -596,7 +596,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       end_time_thermo = Time_local + set_time(int(floor(dtdia-dt+0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, end_time_thermo, .true., WAVES=Waves)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                           end_time_thermo, .true., Waves=Waves)
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
       CS%t_dyn_rel_thermo = -dtdia
@@ -607,9 +608,9 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
-      ! Store pre-dynamics grids for proper diagnostic remapping for transports or advective tendencies
-      ! If there are more dynamics steps per advective steps (i.e DT_THERM /= DT), this needs to be the
-      ! stored at the first call
+      ! Store pre-dynamics grids for proper diagnostic remapping for transports
+      ! or advective tendencies.  If there are more dynamics steps per advective
+      ! steps (i.e DT_THERM /= DT), this needs to be stored at the first call.
       if (CS%ndyn_per_adv == 0 .and. CS%t_dyn_rel_adv == 0.) then
         call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
         CS%ndyn_per_adv = CS%ndyn_per_adv + 1
@@ -653,7 +654,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_therm_here, bbl_time_int, CS, &
-                             Time_local, WAVES=Waves)
+                             Time_local, Waves=Waves)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -688,7 +689,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       if (dtdia > dt) CS%Time = CS%Time - set_time(int(floor(0.5*(dtdia-dt) + 0.5)))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, Time_local, .false.,  WAVES=waves)
+      call step_MOM_thermo(CS, G, GV, u, v, h, CS%tv, fluxes, dtdia, &
+                           Time_local, .false., Waves=Waves)
       CS%t_dyn_rel_thermo = 0.0
 
       if (dtdia > dt) & ! Reset CS%Time to its previous value.
@@ -799,7 +801,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
 end subroutine step_MOM
 
 subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
-                             bbl_time_int, CS, Time_local, WAVES)
+                             bbl_time_int, CS, Time_local, Waves)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
                                                   !! pressure at the beginning of this dynamic
@@ -815,8 +817,9 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! in s, or zero not to update the properties.
   type(MOM_control_struct), pointer :: CS         !< control structure from initialize_MOM
   type(time_type),    intent(in)    :: Time_local !< Starting time of a segment, as a time type
-  type(wave_parameters_CS), pointer, intent(in), optional :: &
-       WAVES                                      !<Container for wave related parameters
+  type(wave_parameters_CS), &
+            optional, pointer       :: Waves      !< Container for wave related parameters; the
+                                                  !! fields in Waves are intent(in) here.
 
   ! local
   type(ocean_grid_type), pointer :: G ! pointer to a structure containing
@@ -1047,7 +1050,8 @@ end subroutine step_MOM_tracer_dyn
 
 !> MOM_step_thermo orchestrates the thermodynamic time stepping and vertical
 !! remapping, via calls to diabatic (or adiabatic) and ALE_main.
-subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_thermo, update_BBL,waves)
+subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, &
+                           Time_end_thermo, update_BBL, Waves)
   type(MOM_control_struct), intent(inout) :: CS     !< Master MOM control structure
   type(ocean_grid_type),    intent(inout) :: G      !< ocean grid structure
   type(verticalGrid_type),  intent(inout) :: GV     !< ocean vertical grid structure
@@ -1062,8 +1066,9 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
   real,                     intent(in)    :: dtdia  !< The time interval over which to advance, in s
   type(time_type),          intent(in)    :: Time_end_thermo !< End of averaging interval for thermo diags
   logical,                  intent(in)    :: update_BBL !< If true, calculate the bottom boundary layer properties.
-  type(wave_parameters_CS), pointer, optional, intent(in) :: &
-       WAVES !<Container for wave related parameters
+  type(wave_parameters_CS), &
+                  optional, pointer       :: Waves  !< Container for wave related parameters;
+                                                    !! the fields in Waves are intent(in) here.
 
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
