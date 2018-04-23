@@ -598,27 +598,34 @@ subroutine update_offline_from_files(G, GV, nk_input, mean_file, sum_file, snap_
     uhtr, vhtr, temp_mean, salt_mean, mld, Kd, fluxes, ridx_sum, ridx_snap, read_mld, read_sw, &
     read_ts_uvh, do_ale_in)
 
-  type(ocean_grid_type), pointer,                   intent(inout) :: G         !< Horizontal grid type
-  type(verticalGrid_type), pointer,                   intent(in   ) :: GV        !< Vertical grid type
-  integer,                                   intent(in   ) :: nk_input  !< Number of levels in input file
-  character(len=*),                          intent(in   ) :: mean_file !< Name of file with averages fields
-  character(len=*),                          intent(in   ) :: sum_file  !< Name of file with summed fields
-  character(len=*),                          intent(in   ) :: snap_file !< Name of file with snapshot fields
-  character(len=*),                          intent(in   ) :: surf_file !< Name of file with surface fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(inout) :: uhtr      !< Zonal mass fluxes
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(inout) :: vhtr      !< Meridional mass fluxes
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: h_end     !< End of timestep layer thickness
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: temp_mean !< Averaged temperature
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(inout) :: salt_mean !< Averaged salinity
-  real, dimension(SZI_(G),SZJ_(G)),          intent(inout) :: mld       !< Averaged mixed layer depth
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1),intent(inout) :: Kd       !< Averaged mixed layer depth
-  type(forcing),                             intent(inout) :: fluxes    !< Fields with surface fluxes
-  integer,                                   intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
-  integer,                                   intent(in   ) :: ridx_snap !< Read index for snapshot file
-  logical,                                   intent(in   ) :: read_mld  !< True if reading in MLD
-  logical,                                   intent(in   ) :: read_sw   !< True if reading in radiative fluxes
-  logical,                                   intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
-  logical, optional,                         intent(in   ) :: do_ale_in !< True if using ALE algorithms
+  type(ocean_grid_type),   intent(inout) :: G         !< Horizontal grid type
+  type(verticalGrid_type), intent(in   ) :: GV        !< Vertical grid type
+  integer,                 intent(in   ) :: nk_input  !< Number of levels in input file
+  character(len=*),        intent(in   ) :: mean_file !< Name of file with averages fields
+  character(len=*),        intent(in   ) :: sum_file  !< Name of file with summed fields
+  character(len=*),        intent(in   ) :: snap_file !< Name of file with snapshot fields
+  character(len=*),        intent(in   ) :: surf_file !< Name of file with surface fields
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: uhtr      !< Zonal mass fluxes
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(inout) :: vhtr      !< Meridional mass fluxes
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: h_end     !< End of timestep layer thickness
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: temp_mean !< Averaged temperature
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(inout) :: salt_mean !< Averaged salinity
+  real, dimension(SZI_(G),SZJ_(G)),          &
+                           intent(inout) :: mld       !< Averaged mixed layer depth
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), &
+                           intent(inout) :: Kd        !< Diapycnal diffusivities at interfaces
+  type(forcing),           intent(inout) :: fluxes    !< Fields with surface fluxes
+  integer,                 intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
+  integer,                 intent(in   ) :: ridx_snap !< Read index for snapshot file
+  logical,                 intent(in   ) :: read_mld  !< True if reading in MLD
+  logical,                 intent(in   ) :: read_sw   !< True if reading in radiative fluxes
+  logical,                 intent(in   ) :: read_ts_uvh !< True if reading in uh, vh, and h
+  logical,       optional, intent(in   ) :: do_ale_in !< True if using ALE algorithms
 
   logical :: do_ale
   integer :: i, j, k, is, ie, js, je, nz

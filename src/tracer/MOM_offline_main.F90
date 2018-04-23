@@ -802,7 +802,7 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, CS, h_pre,
   type(forcing),              intent(inout)    :: fluxes        !< pointers to forcing fields
   type(time_type),            intent(in)       :: Time_start    !< starting time of a segment, as a time type
   real,                       intent(in)       :: time_interval !< Offline transport time interval
-  type(offline_transport_CS), pointer  :: CS                    !< control structure from initialize_MOM
+  type(offline_transport_CS), pointer          :: CS            !< Control structure for offline module
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: h_pre !< layer thicknesses before advection
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: eatr !< Entrainment from layer above
   real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%G)),  intent(inout) :: ebtr !< Entrainment from layer below
@@ -1061,9 +1061,9 @@ end subroutine update_offline_fields
 !> Initialize additional diagnostics required for offline tracer transport
 subroutine register_diags_offline_transport(Time, diag, CS)
 
-  type(offline_transport_CS), pointer :: CS         !< control structure for MOM
-  type(time_type), intent(in) :: Time               !< current model time
-  type(diag_ctrl)             :: diag
+  type(offline_transport_CS), pointer :: CS !< Control structure for offline module
+  type(time_type), intent(in) :: Time       !< current model time
+  type(diag_ctrl), intent(in) :: diag
 
   ! U-cell fields
   CS%id_uhr = register_diag_field('ocean_model', 'uhr', diag%axesCuL, Time, &
@@ -1148,19 +1148,19 @@ end subroutine post_offline_convergence_diags
 
 !> Extracts members of the offline main control structure. All arguments are optional except
 !! the control structure itself
-subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, dt_offline, dt_offline_vertical, &
-                                skip_diffusion)
-  type(offline_transport_CS), target, intent(in   )  :: CS !< Offline control structure
+subroutine extract_offline_main(CS, uhtr, vhtr, eatr, ebtr, h_end, accumulated_time, &
+                                dt_offline, dt_offline_vertical, skip_diffusion)
+  type(offline_transport_CS), target, intent(in   ) :: CS !< Offline control structure
   ! Returned optional arguments
-  real, dimension(:,:,:), pointer, optional, intent(  out) :: uhtr
-  real, dimension(:,:,:), pointer, optional, intent(  out) :: vhtr
-  real, dimension(:,:,:), pointer, optional, intent(  out) :: eatr
-  real, dimension(:,:,:), pointer, optional, intent(  out) :: ebtr
-  real, dimension(:,:,:), pointer, optional, intent(  out) :: h_end
-  integer,                pointer, optional, intent(  out) :: accumulated_time
-  integer,                         optional, intent(  out) :: dt_offline
-  integer,                         optional, intent(  out) :: dt_offline_vertical
-  logical,                         optional, intent(  out) :: skip_diffusion
+  real, dimension(:,:,:),   optional, pointer       :: uhtr !< Remaining zonal mass transport
+  real, dimension(:,:,:),   optional, pointer       :: vhtr !< Remaining meridional mass transport
+  real, dimension(:,:,:),   optional, pointer       :: eatr
+  real, dimension(:,:,:),   optional, pointer       :: ebtr
+  real, dimension(:,:,:),   optional, pointer       :: h_end
+  integer,                  optional, pointer       :: accumulated_time
+  integer,                  optional, intent(  out) :: dt_offline
+  integer,                  optional, intent(  out) :: dt_offline_vertical
+  logical,                  optional, intent(  out) :: skip_diffusion
 
   ! Pointers to 3d members
   if (present(uhtr)) uhtr => CS%uhtr
@@ -1183,7 +1183,7 @@ end subroutine extract_offline_main
 !! are optional except for the CS itself
 subroutine insert_offline_main(CS, ALE_CSp, diabatic_CSp, diag, OBC, tracer_adv_CSp, &
                                tracer_flow_CSp, tracer_Reg, tv, G, GV, x_before_y, debug)
-  type(offline_transport_CS), intent(inout) :: CS
+  type(offline_transport_CS),                     intent(inout) :: CS  !< Offline control structure
   ! Inserted optional arguments
   type(ALE_CS),                 target, optional, intent(in   ) :: ALE_CSp
   type(diabatic_CS),            target, optional, intent(in   ) :: diabatic_CSp
@@ -1193,8 +1193,8 @@ subroutine insert_offline_main(CS, ALE_CSp, diabatic_CSp, diag, OBC, tracer_adv_
   type(tracer_flow_control_CS), target, optional, intent(in   ) :: tracer_flow_CSp
   type(tracer_registry_type),   target, optional, intent(in   ) :: tracer_Reg
   type(thermo_var_ptrs),        target, optional, intent(in   ) :: tv
-  type(ocean_grid_type),        target, optional, intent(in   ) :: G
-  type(verticalGrid_type),      target, optional, intent(in   ) :: GV
+  type(ocean_grid_type),        target, optional, intent(in   ) :: G  !< ocean grid structure
+  type(verticalGrid_type),      target, optional, intent(in   ) :: GV !< ocean vertical grid structure
   logical,                              optional, intent(in   ) :: x_before_y
   logical,                              optional, intent(in   ) :: debug
 
@@ -1218,11 +1218,11 @@ end subroutine insert_offline_main
 ! run time parameters from MOM_input
 subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV)
 
-  type(param_file_type),               intent(in)     :: param_file
-  type(offline_transport_CS), pointer, intent(inout)  :: CS
-  type(diabatic_CS),          pointer, intent(in)     :: diabatic_CSp
-  type(ocean_grid_type),      pointer, intent(in)     :: G
-  type(verticalGrid_type),    pointer, intent(in)     :: GV
+  type(param_file_type),           intent(in) :: param_file
+  type(offline_transport_CS),      pointer    :: CS !< Offline control structure
+  type(diabatic_CS),               intent(in) :: diabatic_CSp
+  type(ocean_grid_type),   target, intent(in) :: G  !< ocean grid structure
+  type(verticalGrid_type), target, intent(in) :: GV !< ocean vertical grid structure
 
   character(len=40)  :: mdl = "offline_transport"
   character(len=20)  :: redistribute_method
@@ -1387,7 +1387,7 @@ end subroutine offline_transport_init
 !> Coordinates the allocation and reading in all time levels of uh, vh, hend, temp, and salt from files. Used
 !! when read_all_ts_uvh
 subroutine read_all_input(CS)
-  type(offline_transport_CS), pointer, intent(inout)  :: CS
+  type(offline_transport_CS), intent(inout)  :: CS !< Control structure for offline module
 
   integer :: is, ie, js, je, isd, ied, jsd, jed, nz, t, ntime
   integer :: IsdB, IedB, JsdB, JedB
@@ -1427,7 +1427,7 @@ end subroutine read_all_input
 
 !> Deallocates (if necessary) arrays within the offline control structure
 subroutine offline_transport_end(CS)
-  type(offline_transport_CS), pointer, intent(inout)  :: CS
+  type(offline_transport_CS), pointer :: CS !< Control structure for offline module
 
   ! Explicitly allocate all allocatable arrays
   deallocate(CS%uhtr)

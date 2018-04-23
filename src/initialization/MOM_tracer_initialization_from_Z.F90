@@ -38,29 +38,24 @@ real, parameter :: epsln=1.e-10
 
 contains
 
+!> MOM_initialize_tracer_from_Z initializes a tracer from a z-space data file.
 subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam, &
-                                src_var_unit_conversion, src_var_record, &
-                                homogenize, useALEremapping, remappingScheme, src_var_gridspec )
+                          src_var_unit_conversion, src_var_record, homogenize, &
+                          useALEremapping, remappingScheme, src_var_gridspec )
 
-! Arguments:
-!  (in)     h  - Layer thickness, in m.
-!  (inout)  tr - pointer to array containing field to be initialized.
-!  (in)      G  - The ocean's grid structure.
-!  (in)      GV - The ocean's vertical grid structure.
-
-  type(ocean_grid_type),       intent(inout) :: G   !< Ocean grid structure.
-  type(verticalGrid_type),     intent(in)    :: GV  !< Ocean vertical grid structure.
+  type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
+  type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                               intent(in)    :: h   !< Layer thickness, in m.
-  real, dimension(:,:,:), pointer, intent(inout) :: tr  !< Pointer to array to be initialized
-  type(param_file_type),       intent(in)    :: PF  !< parameter file
-  character(len=*),            intent(in)    :: src_file, src_var_nam !< source filename and variable name on disk
-  real, optional,              intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion
-  integer, optional,           intent(in)    :: src_var_record  !< record to read for multiple time-level files
-  logical, optional,           intent(in)    :: homogenize !< optionally homogenize to mean value
-  logical, optional,           intent(in)    :: useALEremapping !< to remap or not (optional)
-  character(len=*),  optional, intent(in)    :: remappingScheme !< remapping scheme to use.
-  character(len=*),  optional, intent(in)    :: src_var_gridspec ! Not implemented yet.
+                              intent(in)    :: h   !< Layer thickness, in m.
+  real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
+  type(param_file_type),      intent(in)    :: PF  !< parameter file
+  character(len=*),           intent(in)    :: src_file, src_var_nam !< source filename and variable name on disk
+  real,             optional, intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion
+  integer,          optional, intent(in)    :: src_var_record  !< record to read for multiple time-level files
+  logical,          optional, intent(in)    :: homogenize !< optionally homogenize to mean value
+  logical,          optional, intent(in)    :: useALEremapping !< to remap or not (optional)
+  character(len=*), optional, intent(in)    :: remappingScheme !< remapping scheme to use.
+  character(len=*), optional, intent(in)    :: src_var_gridspec ! Not implemented yet.
 
   real :: land_fill = 0.0
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
@@ -204,16 +199,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, PF, src_file, src_var_nam,
     endif
   enddo ; enddo ; enddo
 
-
   call callTree_leave(trim(mdl)//'()')
   call cpu_clock_end(id_clock_routine)
 
-
 end subroutine MOM_initialize_tracer_from_Z
-
-
-
-
 
 
 end module MOM_tracer_initialization_from_Z

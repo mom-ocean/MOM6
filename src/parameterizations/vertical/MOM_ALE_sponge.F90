@@ -764,21 +764,22 @@ end subroutine set_up_ALE_sponge_vel_field_varying
 
 !> This subroutine applies damping to the layers thicknesses, temp, salt and a variety of tracers for every column where there is damping.
 subroutine apply_ALE_sponge(h, dt, G, CS, Time)
-  type(ocean_grid_type),                    intent(inout) :: G !< The ocean's grid structure (in).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h !< Layer thickness, in m (in)
-  real,                                     intent(in)    :: dt !< The amount of time covered by this call, in s (in).
-  type(ALE_sponge_CS),                      pointer       :: CS !<A pointer to the control structure for this module that is set by a previous call to initialize_sponge (in).
-  type(time_type), pointer, optional,       intent(in)    :: Time
+  type(ocean_grid_type),     intent(inout) :: G  !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                             intent(inout) :: h  !< Layer thickness, in m (in)
+  real,                      intent(in)    :: dt !< The amount of time covered by this call, in s (in).
+  type(ALE_sponge_CS),       pointer       :: CS !<A pointer to the control structure for this module that is set by a previous call to initialize_sponge (in).
+  type(time_type), optional, intent(in)    :: Time !< The current model date
 
-  real :: damp                                               !< The timestep times the local damping  coefficient.  ND.
-  real :: I1pdamp                                            !< I1pdamp is 1/(1 + damp).  Nondimensional.
-  real :: Idt                                                !< 1.0/dt, in s-1.
-  real, allocatable, dimension(:) :: tmp_val2                             !< data values on the original grid
-  real, dimension(SZK_(G)) :: tmp_val1                       ! data values remapped to model grid
-  real :: hu(SZIB_(G), SZJ_(G), SZK_(G))                     !> A temporary array for h at u pts
-  real :: hv(SZI_(G), SZJB_(G), SZK_(G))                     !> A temporary array for h at v pts
-  real, allocatable, dimension(:,:,:) :: sp_val              !> A temporary array for fields
-  real, allocatable, dimension(:,:,:) :: mask_z              !> A temporary array for field mask at h pts
+  real :: damp                                  ! The timestep times the local damping coefficient.  ND.
+  real :: I1pdamp                               ! I1pdamp is 1/(1 + damp).  Nondimensional.
+  real :: Idt                                   ! 1.0/dt, in s-1.
+  real, allocatable, dimension(:) :: tmp_val2   ! data values on the original grid
+  real, dimension(SZK_(G)) :: tmp_val1          ! data values remapped to model grid
+  real :: hu(SZIB_(G), SZJ_(G), SZK_(G))        ! A temporary array for h at u pts
+  real :: hv(SZI_(G), SZJB_(G), SZK_(G))        ! A temporary array for h at v pts
+  real, allocatable, dimension(:,:,:) :: sp_val ! A temporary array for fields
+  real, allocatable, dimension(:,:,:) :: mask_z ! A temporary array for field mask at h pts
   integer :: c, m, nkmb, i, j, k, is, ie, js, je, nz, nz_data
   real, allocatable, dimension(:), target :: z_in, z_edges_in
   real :: missing_value
@@ -825,9 +826,7 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
     nz_data = CS%nz_data
   endif
 
-
   allocate(tmp_val2(nz_data))
-
 
   do m=1,CS%fldno
     do c=1,CS%num_col
@@ -908,7 +907,6 @@ subroutine apply_ALE_sponge(h, dt, G, CS, Time)
       enddo
 
       deallocate (sp_val, mask_z)
-
 
     else
       nz_data = CS%nz_data

@@ -624,18 +624,23 @@ end subroutine ALE_build_grid
 !> For a state-based coordinate, accelerate the process of regridding by
 !! repeatedly applying the grid calculation algorithm
 subroutine ALE_regrid_accelerated(CS, G, GV, h, tv, n, u, v, Reg, dt, dzRegrid, initial)
-  type(ALE_CS),                      pointer, intent(in)    :: CS     !< ALE control structure
-  type(ocean_grid_type),                      intent(inout) :: G      !< Ocean grid
-  type(verticalGrid_type),                    intent(in)    :: GV     !< Vertical grid
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h !< Original thicknesses
-  type(thermo_var_ptrs),                      intent(inout) :: tv     !< Thermo vars (T/S/EOS)
-  integer,                                    intent(in)    :: n      !< Number of times to regrid
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: u      !< Zonal velocity
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: v      !< Meridional velocity
-  type(tracer_registry_type), pointer, optional, intent(in) :: Reg    !< Tracer registry to remap onto new grid
-  real, intent(in), optional :: dt !< Model timestep to provide a timescale for regridding
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout), optional :: dzRegrid !< Final change in interface positions
-  logical, intent(in), optional :: initial !< Whether we're being called from an initialization routine (and expect diagnostics to work)
+  type(ALE_CS),            pointer       :: CS     !< ALE control structure
+  type(ocean_grid_type),   intent(inout) :: G      !< Ocean grid
+  type(verticalGrid_type), intent(in)    :: GV     !< Vertical grid
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: h      !< Original thicknesses
+  type(thermo_var_ptrs),   intent(inout) :: tv     !< Thermo vars (T/S/EOS)
+  integer,                 intent(in)    :: n      !< Number of times to regrid
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: u      !< Zonal velocity
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(inout) :: v      !< Meridional velocity
+  type(tracer_registry_type), &
+                 optional, pointer       :: Reg    !< Tracer registry to remap onto new grid
+  real,          optional, intent(in)    :: dt     !< Model timestep to provide a timescale for regridding
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                 optional, intent(inout) :: dzRegrid !< Final change in interface positions
+  logical,       optional, intent(in)    :: initial !< Whether we're being called from an initialization routine (and expect diagnostics to work)
 
   ! Local variables
   integer :: i, j, k, nz
