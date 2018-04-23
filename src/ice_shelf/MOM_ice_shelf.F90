@@ -2198,10 +2198,10 @@ end subroutine ice_shelf_save_restart
 
 
 subroutine ice_shelf_advect(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),         pointer    :: CS
-  real,                       intent(in) :: time_step
-  real,pointer,dimension(:,:),intent(in) :: melt_rate
-  type(time_type)             :: Time
+  type(ice_shelf_CS),   pointer    :: CS
+  real,                 intent(in) :: time_step
+  real, dimension(:,:), pointer    :: melt_rate
+  type(time_type),      intent(in) :: Time
 
 ! time_step: time step in sec
 ! melt_rate: basal melt rate in kg/m^2/s
@@ -6040,10 +6040,10 @@ end subroutine solo_time_step
 
 !!! OVS !!!
 subroutine ice_shelf_temp(CS, time_step, melt_rate, Time)
-  type(ice_shelf_CS),         pointer    :: CS
-  real,                       intent(in) :: time_step
-  real,pointer,dimension(:,:),intent(in) :: melt_rate
-  type(time_type)             :: Time
+  type(ice_shelf_CS),   pointer    :: CS
+  real,                 intent(in) :: time_step
+  real, dimension(:,:), pointer    :: melt_rate
+  type(time_type),      intent(in) :: Time
 
 ! time_step: time step in sec
 ! melt_rate: basal melt rate in kg/m^2/s

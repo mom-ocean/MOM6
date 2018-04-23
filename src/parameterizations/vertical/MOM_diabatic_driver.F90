@@ -1537,12 +1537,12 @@ end subroutine diabatic
 !! each returned argument is an optional argument
 subroutine extract_diabatic_member(CS, opacity_CSp, optics_CSp, &
                                    evap_CFL_limit, minimum_forcing_depth)
-  type(diabatic_CS),  intent(in   ) :: CS
+  type(diabatic_CS),           intent(in   ) :: CS
   ! All output arguments are optional
-  type(opacity_CS),   pointer, optional, intent(  out) :: opacity_CSp
-  type(optics_type),  pointer, optional, intent(  out) :: optics_CSp
-  real,                        optional, intent(  out) :: evap_CFL_limit
-  real,                        optional, intent(  out) :: minimum_forcing_depth
+  type(opacity_CS),  optional, pointer       :: opacity_CSp
+  type(optics_type), optional, pointer       :: optics_CSp
+  real,              optional, intent(  out) :: evap_CFL_limit
+  real,              optional, intent(  out) :: minimum_forcing_depth
 
   ! Pointers to control structures
   if (present(opacity_CSp)) opacity_CSp => CS%opacity_CSp
@@ -1556,13 +1556,14 @@ end subroutine
 
 !> Routine called for adiabatic physics
 subroutine adiabatic(h, tv, fluxes, dt, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G      !< ocean grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
-  type(thermo_var_ptrs),                    intent(inout) :: tv     !< points to thermodynamic fields
-  type(forcing),                            intent(inout) :: fluxes !< boundary fluxes
-  real,                                     intent(in)    :: dt     !< time step (seconds)
-  type(verticalGrid_type),                  intent(in)    :: GV     !< ocean vertical grid structure
-  type(diabatic_CS),                        pointer       :: CS     !< module control structure
+  type(ocean_grid_type),   intent(inout) :: G      !< ocean grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(inout) :: h      !< thickness (m for Bouss or kg/m2 for non-Bouss)
+  type(thermo_var_ptrs),   intent(inout) :: tv     !< points to thermodynamic fields
+  type(forcing),           intent(inout) :: fluxes !< boundary fluxes
+  real,                    intent(in)    :: dt     !< time step (seconds)
+  type(verticalGrid_type), intent(in)    :: GV     !< ocean vertical grid structure
+  type(diabatic_CS),       pointer       :: CS     !< module control structure
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: zeros  ! An array of zeros.
 

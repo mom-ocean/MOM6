@@ -2859,10 +2859,10 @@ end subroutine flood_fill2
 
 !> Register OBC segment data for restarts
 subroutine open_boundary_register_restarts(HI, GV, OBC_CS,restart_CSp)
-  type(hor_index_type), intent(in) :: HI !< Horizontal indices
-  type(verticalGrid_type), pointer, intent(in) :: GV !< Container for vertical grid information
-  type(ocean_OBC_type), pointer, intent(inout) :: OBC_CS !< OBC data structure
-  type(MOM_restart_CS), pointer, intent(inout) :: restart_CSp !< Restart structure
+  type(hor_index_type),    intent(in) :: HI !< Horizontal indices
+  type(verticalGrid_type), pointer    :: GV !< Container for vertical grid information
+  type(ocean_OBC_type),    pointer    :: OBC_CS !< OBC data structure, data intent(inout)
+  type(MOM_restart_CS),    pointer    :: restart_CSp !< Restart structure, data intent(inout)
   ! Local variables
   type(vardesc) :: vd
 

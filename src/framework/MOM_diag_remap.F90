@@ -223,10 +223,10 @@ end function
 !! target grid whenever T/S change.
 subroutine diag_remap_update(remap_cs, G, GV, h, T, S, eqn_of_state)
   type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diagnostic coordinate control structure
-  type(ocean_grid_type),    pointer    :: G !< The ocean's grid type
+  type(ocean_grid_type),    pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type),  intent(in) :: GV !< ocean vertical grid structure
   real, dimension(:, :, :), intent(in) :: h, T, S !< New thickness, T and S
-  type(EOS_type),  pointer, intent(in) :: eqn_of_state !< A pointer to the equation of state
+  type(EOS_type),           pointer    :: eqn_of_state !< A pointer to the equation of state
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces
