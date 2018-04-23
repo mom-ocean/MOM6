@@ -419,6 +419,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     u, & ! u : zonal velocity component (m/s)
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
+  real, pointer, dimension(:,:) :: &
+    p_surf => NULL() ! A pointer to the ocean surface pressure, in Pa.
   real :: I_wt_ssh
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
@@ -472,6 +474,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ntstep = MAX(1,MIN(n_max,floor(CS%dt_therm/dt + 0.001)))
       dt_therm = dt*ntstep
     endif
+    if (associated(forces%p_surf)) p_surf => forces%p_surf
   else
     n_max = 1
     if ((time_interval > CS%dt_therm) .and. (CS%dt_therm > 0.0)) &
@@ -480,6 +483,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     dt = time_interval / real(n_max)
     dt_therm = dt ; ntstep = 1
     thermo_does_span_coupling = .true. ! This is never used in this case?
+    if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
   endif
 
   if (do_dyn) then
@@ -712,9 +716,8 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
       call enable_averaging(CS%t_dyn_rel_diag, Time_local, CS%diag)
-      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
       call calculate_diagnostic_fields(u, v, h, CS%uh, CS%vh, CS%tv, CS%ADp,  &
-                          CS%CDp, fluxes, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
+                          CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, CS%diagnostics_CSp)
       call post_tracer_diagnostics(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
@@ -726,6 +729,7 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       if (Time_local + set_time(int(0.5*dt_therm)) > CS%Z_diag_time) then
         call enable_averaging(real(time_type_to_real(CS%Z_diag_interval)), &
                               CS%Z_diag_time, CS%diag)
+      !### This is the one place where fluxes might used if do_thermo=.false. Is this correct?
         call calculate_Z_diag_fields(u, v, h, ssh, fluxes%frac_shelf_h, &
                                      G, GV, CS%diag_to_Z_CSp)
         CS%Z_diag_time = CS%Z_diag_time + CS%Z_diag_interval
