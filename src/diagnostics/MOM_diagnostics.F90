@@ -39,7 +39,6 @@ use MOM_EOS,               only : calculate_density, int_density_dz
 use MOM_EOS,               only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
-use MOM_forcing_type,      only : forcing
 use MOM_grid,              only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean
@@ -189,43 +188,38 @@ end type transport_diag_IDs
 
 contains
 !> Diagnostics not more naturally calculated elsewhere are computed here.
-subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
+subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
                                        dt, diag_pre_sync, G, GV, CS, eta_bt)
-  type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid
-                                                                   !! structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: u    !< The zonal velocity, in m s-1.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: v    !< The meridional velocity,
-                                                                   !! in m s-1.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in)    :: h    !< Layer thicknesses, in H
-                                                                   !! (usually m or kg m-2).
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(in)    :: uh   !< Transport through zonal faces
-                                                                   !! = u*h*dy, m3/s(Bouss)
-                                                                   !! kg/s(non-Bouss).
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(in)    :: vh   !< transport through meridional
-                                                                   !! faces = v*h*dx, m3/s(Bouss)
-                                                                   !! kg/s(non-Bouss).
-  type(thermo_var_ptrs),                     intent(in)    :: tv   !< A structure pointing to
-                                                                   !! various thermodynamic
-                                                                   !! variables.
-  type(accel_diag_ptrs),                     intent(in)    :: ADp  !< structure with pointers to
-                                                                   !! accelerations in momentum
-                                                                   !! equation.
-  type(cont_diag_ptrs),                      intent(in)    :: CDp  !< structure with pointers to
-                                                                   !! terms in continuity equation.
-  type(forcing),                             intent(in)    :: fluxes !< A structure containing the
-                                                                   !! surface fluxes.
-  real,                                      intent(in)    :: dt   !< The time difference in s since
-                                                                   !! the last call to this
-                                                                   !! subroutine.
-
-  type(diag_grid_storage),                   intent(in)    ::  diag_pre_sync
-                                                                   !< Target grids from previous
-                                                                   !! timestep
-  type(diagnostics_CS),                      intent(inout) :: CS   !< Control structure returned by
-                                                                   !! a previous call to
-                                                                   !! diagnostics_init.
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)   :: eta_bt !< An optional barotropic
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: uh   !< Transport through zonal faces = u*h*dy,
+                                                 !! in H m2 s-1, i.e. m3/s(Bouss) or kg/s(non-Bouss).
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: vh   !< Transport through meridional faces = v*h*dx,
+                                                 !! in H m2 s-1, i.e. m3/s(Bouss) or kg/s(non-Bouss).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
+                                                 !! thermodynamic variables.
+  type(accel_diag_ptrs),   intent(in)    :: ADp  !< structure with pointers to
+                                                 !! accelerations in momentum equation.
+  type(cont_diag_ptrs),    intent(in)    :: CDp  !< structure with pointers to
+                                                 !! terms in continuity equation.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+                                                 !! If p_surf is not associated, it is the same
+                                                 !! as setting the surface pressure to 0.
+  real,                    intent(in)    :: dt   !< The time difference in s since the last
+                                                 !! call to this subroutine.
+  type(diag_grid_storage), intent(in)    :: diag_pre_sync !< Target grids from previous timestep
+  type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
+                                                 !! previous call to diagnostics_init.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                  optional, intent(in)   :: eta_bt !< An optional barotropic
     !! variable that gives the "correct" free surface height (Boussinesq) or total water column
     !! mass per unit area (non-Boussinesq).  This is used to dilate the layer thicknesses when
     !! calculating interface heights, in m or kg m-2.
@@ -349,9 +343,9 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
       endif
     else ! thkcello = dp/(rho*g) for non-Boussinesq
       do j=js,je
-        if(ASSOCIATED(fluxes%p_surf)) then ! Pressure loading at top of surface layer (Pa)
+        if(ASSOCIATED(p_surf)) then ! Pressure loading at top of surface layer (Pa)
           do i=is,ie
-            pressure_1d(i) = fluxes%p_surf(i,j)
+            pressure_1d(i) = p_surf(i,j)
           enddo
         else
           do i=is,ie
@@ -459,7 +453,7 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, fluxes, &
     call post_data_1d_k(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
   endif
 
-  call calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
+  call calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
 
   if ((CS%id_Rml > 0) .or. (CS%id_Rcv > 0) .or. ASSOCIATED(CS%h_Rlay) .or. &
       ASSOCIATED(CS%uh_Rlay) .or. ASSOCIATED(CS%vh_Rlay) .or. &
@@ -760,34 +754,21 @@ subroutine find_weights(Rlist, R_in, k, nz, wt, wt_p)
 
 end subroutine find_weights
 
-!> Subroutine calculates vertical integrals of several tracers, along
+!> This subroutine calculates vertical integrals of several tracers, along
 !! with the mass-weight of these tracers, the total column mass, and the
 !! carefully calculated column height.
-subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
-  type(ocean_grid_type),                    intent(inout) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type),                  intent(in)    :: GV   !< The ocean's vertical grid
-                                                                  !! structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h    !< Layer thicknesses, in H
-                                                                  !! (usually m or kg m-2).
-  type(thermo_var_ptrs),                    intent(in)    :: tv   !< A structure pointing to various
-                                                                  !! thermodynamic variables.
-  type(forcing),                            intent(in)    :: fluxes !< A structure containing the
-                                                                  !! surface fluxes.
-  type(diagnostics_CS),                     intent(inout) :: CS   !< A control structure returned
-                                                                  !! by a previous call to
-                                                                  !! diagnostics_init.
-
-! Subroutine calculates vertical integrals of several tracers, along
-! with the mass-weight of these tracers, the total column mass, and the
-! carefully calculated column height.
-
-! Arguments:
-!  (in)      h  - layer thickness: metre (Bouss) or kg/ m2 (non-Bouss)
-!  (in)      tv - structure pointing to thermodynamic variables
-!  (in)      fluxes - a structure containing the surface fluxes.
-!  (in)      G  - ocean grid structure
-!  (in)      GV - The ocean's vertical grid structure.
-!  (in)      CS - control structure returned by a previous call to diagnostics_init
+subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, CS)
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< A structure pointing to various
+                                                 !! thermodynamic variables.
+  real, dimension(:,:),    pointer       :: p_surf !< A pointer to the surface pressure, in Pa.
+                                                 !! If p_surf is not associated, it is the same
+                                                 !! as setting the surface pressure to 0.
+  type(diagnostics_CS),    intent(inout) :: CS   !< Control structure returned by a
+                                                 !! previous call to diagnostics_init.
 
   real, dimension(SZI_(G), SZJ_(G)) :: &
     z_top, &  ! Height of the top of a layer or the ocean, in m.
@@ -875,13 +856,12 @@ subroutine calculate_vertical_integrals(h, tv, fluxes, G, GV, CS)
     if (CS%id_pbo > 0) then
       do j=js,je ; do i=is,ie ; btm_pres(i,j) = 0.0 ; enddo ; enddo
       ! 'pbo' is defined as the sea water pressure at the sea floor
-      !     pbo = (mass * g) + pso
-      ! where pso is the sea water pressure at sea water surface
-      ! note that pso is equivalent to fluxes%p_surf
+      !     pbo = (mass * g) + p_surf
+      ! where p_surf is the sea water pressure at sea water surface.
       do j=js,je ; do i=is,ie
         btm_pres(i,j) = mass(i,j) * GV%g_Earth
-        if (ASSOCIATED(fluxes%p_surf)) then
-          btm_pres(i,j) = btm_pres(i,j) + fluxes%p_surf(i,j)
+        if (ASSOCIATED(p_surf)) then
+          btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
         endif
       enddo ; enddo
       call post_data(CS%id_pbo, btm_pres, CS%diag)
