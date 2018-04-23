@@ -21,8 +21,8 @@ use MOM_tidal_mixing,        only : setup_tidal_diagnostics, post_tidal_diagnost
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, vardesc, var_desc, MOM_read_data
 use MOM_kappa_shear,         only : calculate_kappa_shear, kappa_shear_init, Kappa_shear_CS
-use MOM_cvmix_shear,         only : calculate_cvmix_shear, cvmix_shear_init, cvmix_shear_cs
-use MOM_cvmix_shear,         only : cvmix_shear_end
+use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVMix_shear_cs
+use MOM_CVMix_shear,         only : CVMix_shear_end
 use MOM_bkgnd_mixing,        only : calculate_bkgnd_mixing, bkgnd_mixing_init, bkgnd_mixing_cs
 use MOM_bkgnd_mixing,        only : bkgnd_mixing_end, sfc_bkgnd_mixing
 use MOM_string_functions,    only : uppercase
@@ -127,7 +127,7 @@ type, public :: set_diffusivity_CS ; private
   logical :: user_change_diff ! If true, call user-defined code to change diffusivity.
   logical :: useKappaShear    ! If true, use the kappa_shear module to find the
                               ! shear-driven diapycnal diffusivity.
-  logical :: use_cvmix_shear  ! If true, use one of the CVMix modules to find
+  logical :: use_CVMix_shear  ! If true, use one of the CVMix modules to find
                               ! shear-driven diapycnal diffusivity.
   logical :: double_diffusion ! If true, enable double-diffusive mixing.
   logical :: simple_TKE_to_Kd ! If true, uses a simple estimate of Kd/TKE that
@@ -140,7 +140,7 @@ type, public :: set_diffusivity_CS ; private
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL()
   type(diag_to_Z_CS),        pointer :: diag_to_Z_CSp        => NULL()
   type(Kappa_shear_CS),      pointer :: kappaShear_CSp       => NULL()
-  type(cvmix_shear_cs),      pointer :: cvmix_shear_csp      => NULL()
+  type(CVMix_shear_cs),      pointer :: CVMix_shear_csp      => NULL()
   type(bkgnd_mixing_cs),     pointer :: bkgnd_mixing_csp     => NULL()
   type(int_tide_CS),         pointer :: int_tide_CSp         => NULL()
   type(tidal_mixing_cs),     pointer :: tm_csp               => NULL()
@@ -338,9 +338,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
       call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb",G%HI)
     endif
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
-  elseif (CS%use_cvmix_shear) then
+  elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
-    call calculate_cvmix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%cvmix_shear_csp)
+    call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear,G,GV,CS%CVMix_shear_csp)
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0. ! needed if calculate_kappa_shear is not enabled
   endif
@@ -373,7 +373,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     ! add background mixing
     call calculate_bkgnd_mixing(h, tv, N2_lay, Kd, visc%Kv_slow, j, G, GV, CS%bkgnd_mixing_csp)
 
-    ! GMM, the following will go into the MOM_cvmix_double_diffusion module
+    ! GMM, the following will go into the MOM_CVMix_double_diffusion module
     if (CS%double_diffusion) then
       call double_diffusion(tv, h, T_f, S_f, j, G, GV, CS, KT_extra, KS_extra)
       do K=2,nz ; do i=is,ie
@@ -402,7 +402,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, &
     endif
 
   ! Add the input turbulent diffusivity.
-    if (CS%useKappaShear .or. CS%use_cvmix_shear) then
+    if (CS%useKappaShear .or. CS%use_CVMix_shear) then
       if (present(Kd_int)) then
         do K=2,nz ; do i=is,ie
           Kd_int(i,j,K) = visc%Kd_shear(i,j,K) + 0.5*(Kd(i,j,k-1) + Kd(i,j,k))
@@ -887,7 +887,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, CS, dRho_int, &
     do_i(i) = (G%mask2dT(i,j) > 0.5)
 
     if ( (CS%tm_csp%Int_tide_dissipation .or. CS%tm_csp%Lee_wave_dissipation) .and. &
-          .not. CS%tm_csp%use_cvmix_tidal ) then
+          .not. CS%tm_csp%use_CVMix_tidal ) then
       h_amp(i) = sqrt(CS%tm_csp%h2(i,j)) ! for computing Nb
     else
       h_amp(i) = 0.0
@@ -2127,7 +2127,7 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
     id_clock_kappaShear = cpu_clock_id('(Ocean kappa_shear)', grain=CLOCK_MODULE)
 
   ! CVMix shear-driven mixing
-  CS%use_cvmix_shear = cvmix_shear_init(Time, G, GV, param_file, CS%diag, CS%cvmix_shear_csp)
+  CS%use_CVMix_shear = CVMix_shear_init(Time, G, GV, param_file, CS%diag, CS%CVMix_shear_csp)
 
 end subroutine set_diffusivity_init
 
@@ -2142,8 +2142,8 @@ subroutine set_diffusivity_end(CS)
   if (CS%user_change_diff) &
     call user_change_diff_end(CS%user_change_diff_CSp)
 
-  if (CS%use_cvmix_shear) &
-    call cvmix_shear_end(CS%cvmix_shear_csp)
+  if (CS%use_CVMix_shear) &
+    call CVMix_shear_end(CS%CVMix_shear_csp)
 
   if (associated(CS)) deallocate(CS)
 
