@@ -128,7 +128,7 @@ use MOM_wave_interface,        only : Update_Stokes_Drift
 
 ! ODA modules
 use MOM_oda_driver_mod,        only : ODA_CS, oda, init_oda, oda_end
-use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, get_posterior_tracer
+use MOM_oda_driver_mod,        only : set_prior_tracer, set_analysis_time, apply_oda_tracer_increments
 ! Offline modules
 use MOM_offline_main,          only : offline_transport_CS, offline_transport_init, update_offline_fields
 use MOM_offline_main,          only : insert_offline_main, extract_offline_main, post_offline_convergence_diags
@@ -444,11 +444,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
     v, & ! v : meridional velocity component (m/s)
     h    ! h : layer thickness (meter (Bouss) or kg/m2 (non-Bouss))
   real :: I_wt_ssh
-
-  real, pointer, dimension(:,:,:) :: ha !< The layer thicknesses on the analysis grid
-                                        !! returned by call to get_posterior_tracer
-  type(thermo_var_ptrs), pointer :: tva !< A structure pointing to various thermodynamic variables
-                                        !! on the analysis grid returned by call to get_posterior_tracer
 
   type(time_type) :: Time_local, end_time_thermo, Time_temp
   type(group_pass_type) :: pass_tau_ustar_psurf
@@ -797,8 +792,6 @@ subroutine step_MOM(forces, fluxes, sfc_state, Time_start, time_interval, CS, Wa
       call set_prior_tracer(CS%Time, G, GV, CS%h, CS%tv, CS%odaCS)
       ! call DA interface
       call oda(CS%Time,CS%odaCS)
-      ! update increments to model state if needed
-      call get_posterior_tracer(CS%Time, CS%odaCS,G, GV, ha, tva,increment=.true.)
       ! update the time for the next analysis step if needed
       call set_analysis_time(CS%Time,CS%odaCS)
   endif
@@ -1118,6 +1111,8 @@ subroutine step_MOM_thermo(CS, G, GV, u, v, h, tv, fluxes, dtdia, Time_end_therm
   if (associated(fluxes%frac_shelf_h)) use_ice_shelf = .true.
 
   call enable_averaging(dtdia, Time_end_thermo, CS%diag)
+
+  call apply_oda_tracer_increments(dtdia,G,tv,h,CS%odaCS)
 
   if (update_BBL) then
     !   Calculate the BBL properties and store them inside visc (u,h).

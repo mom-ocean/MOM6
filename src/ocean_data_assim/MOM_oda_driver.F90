@@ -71,7 +71,7 @@ module MOM_oda_driver_mod
   private
 
   public :: init_oda, oda_end, set_prior_tracer, get_posterior_tracer
-  public :: set_analysis_time, oda, save_obs_diff
+  public :: set_analysis_time, oda, save_obs_diff, apply_oda_tracer_increments
 
 #include <MOM_memory.h>
 
@@ -531,5 +531,13 @@ contains
     return
   end subroutine save_obs_diff
 
+  subroutine apply_oda_tracer_increments(dt,G,tv,h,CS)
+    real, intent(in) :: dt ! the tracer timestep (seconds)
+    type(ocean_grid_type),    intent(in)    :: G      !< ocean grid structure
+    type(thermo_var_ptrs),    intent(inout) :: tv     !< A structure pointing to various thermodynamic variables
+    real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
+                              intent(in)    :: h      !< layer thickness (m or kg/m2)
+    type(ODA_CS),              intent(inout) :: CS     !< the data assimilation structure
 
+  end subroutine apply_oda_tracer_increments
 end module MOM_oda_driver_mod
