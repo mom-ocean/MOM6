@@ -21,6 +21,7 @@ use MOM_io,                 only : slasher, MOM_read_data, vardesc, var_desc
 use cvmix_tidal,            only : cvmix_init_tidal, cvmix_compute_Simmons_invariant
 use cvmix_tidal,            only : cvmix_coeffs_tidal, cvmix_tidal_params_type
 use cvmix_tidal,            only : cvmix_compute_Schmittner_invariant, cvmix_compute_SchmittnerCoeff
+use cvmix_tidal,            only : cvmix_coeffs_tidal_schmittner
 use cvmix_kinds_and_types,  only : cvmix_global_params_type
 use cvmix_put_get,          only : cvmix_put
 
@@ -36,7 +37,7 @@ public tidal_mixing_end
 
 !> Containers for tidal mixing diagnostics
 type, public :: tidal_mixing_diags
-  ! TODO: private
+  private
   real, pointer, dimension(:,:,:) :: &
     Kd_itidal         => NULL(),& ! internal tide diffusivity at interfaces (m2/s)
     Fl_itidal         => NULL(),& ! vertical flux of tidal turbulent dissipation (m3/s3)
@@ -662,6 +663,7 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
   real, dimension(SZK_(G)+1) :: Kv_tidal    !< tidal viscosity [m2/s]
   real, dimension(SZK_(G)+1) :: vert_dep    !< vertical deposition
   real, dimension(SZK_(G)+1) :: iFaceHeight !< Height of interfaces (m)
+  real, dimension(SZK_(G)+1) :: SchmittnerSocn 
   real, dimension(SZK_(G))   :: cellHeight  !< Height of cell centers (m)
   real, dimension(SZK_(G))   :: tidal_qe_md !< Tidal dissipation energy interpolated from 3d input to model coordinates
   real, dimension(SZK_(G))   :: Schmittner_coeff
@@ -772,6 +774,8 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
         iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
+      SchmittnerSocn = 0.0 ! TODO: compute this
+
       ! form the time-invariant part of Schmittner coefficient term
       call cvmix_compute_Schmittner_invariant(nlev                    = G%ke,           &
                                               VertDep                 = vert_dep,       &
@@ -786,11 +790,24 @@ subroutine calculate_cvmix_tidal(h, j, G, GV, CS, N2_int, Kd)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
-      call cvmix_compute_SchmittnerCoeff( nlev                    = G%ke, &
-                                          energy_flux             = tidal_qe_md(:), &
-                                          rho                     = rho_fw, &
-                                          SchmittnerCoeff         = Schmittner_coeff, &
-                                          exp_hab_zetar           = exp_hab_zetar, &
+      call cvmix_compute_SchmittnerCoeff( nlev                    = G%ke,               &
+                                          energy_flux             = tidal_qe_md(:),     &
+                                          rho                     = rho_fw,             &
+                                          SchmittnerCoeff         = Schmittner_coeff,   &
+                                          exp_hab_zetar           = exp_hab_zetar,      &
+                                          CVmix_tidal_params_user = CS%cvmix_tidal_params)
+
+
+      call cvmix_coeffs_tidal_schmittner( Mdiff_out               = Kv_tidal,             &
+                                          Tdiff_out               = Kd_tidal,             &
+                                          Nsqr                    = N2_int(i,:),          &
+                                          OceanDepth              = -iFaceHeight(G%ke+1), & 
+                                          vert_dep                = vert_dep,             &
+                                          nlev                    = G%ke,                 &
+                                          max_nlev                = G%ke,                 &
+                                          SchmittnerCoeff         = Schmittner_coeff,     &
+                                          SchmittnerSouthernOcean = SchmittnerSocn,       &
+                                          CVmix_params            = CS%cvmix_glb_params,  &
                                           CVmix_tidal_params_user = CS%cvmix_tidal_params)
 
     enddo ! i=is,ie
