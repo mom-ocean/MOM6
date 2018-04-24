@@ -14,14 +14,14 @@ use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_grid,          only : ocean_grid_type, isPointInCell
 use MOM_verticalGrid,  only : verticalGrid_type
 
-use CVmix_kpp, only : CVmix_init_kpp, CVmix_put_kpp, CVmix_get_kpp_real
-use CVmix_kpp, only : CVmix_coeffs_kpp
-use CVmix_kpp, only : CVmix_kpp_compute_OBL_depth
-use CVmix_kpp, only : CVmix_kpp_compute_turbulent_scales
-use CVmix_kpp, only : CVmix_kpp_compute_bulk_Richardson
-use CVmix_kpp, only : CVmix_kpp_compute_unresolved_shear
-use CVmix_kpp, only : CVmix_kpp_params_type
-use CVmix_kpp, only : CVmix_kpp_compute_kOBL_depth
+use CVMix_kpp, only : CVMix_init_kpp, CVMix_put_kpp, CVMix_get_kpp_real
+use CVMix_kpp, only : CVMix_coeffs_kpp
+use CVMix_kpp, only : CVMix_kpp_compute_OBL_depth
+use CVMix_kpp, only : CVMix_kpp_compute_turbulent_scales
+use CVMix_kpp, only : CVMix_kpp_compute_bulk_Richardson
+use CVMix_kpp, only : CVMix_kpp_compute_unresolved_shear
+use CVMix_kpp, only : CVMix_kpp_params_type
+use CVMix_kpp, only : CVMix_kpp_compute_kOBL_depth
 
 implicit none ; private
 
@@ -32,9 +32,10 @@ public :: KPP_calculate
 public :: KPP_end
 public :: KPP_NonLocalTransport_temp
 public :: KPP_NonLocalTransport_saln
+public :: KPP_get_BLD
 
 ! Enumerated constants
-integer, private, parameter :: NLT_SHAPE_CVMIX     = 0 !< Use the CVmix profile
+integer, private, parameter :: NLT_SHAPE_CVMix     = 0 !< Use the CVMix profile
 integer, private, parameter :: NLT_SHAPE_LINEAR    = 1 !< Linear, \f$ G(\sigma) = 1-\sigma \f$
 integer, private, parameter :: NLT_SHAPE_PARABOLIC = 2 !< Parabolic, \f$ G(\sigma) = (1-\sigma)^2 \f$
 integer, private, parameter :: NLT_SHAPE_CUBIC     = 3 !< Cubic, \f$ G(\sigma) = 1 + (2\sigma-3) \sigma^2\f$
@@ -78,8 +79,8 @@ type, public :: KPP_CS ; private
   ! smg: obsolete above
   integer :: SW_METHOD                 !<Sets method for using shortwave radiation in surface buoyancy flux
 
-  !> CVmix parameters
-  type(CVmix_kpp_params_type), pointer :: KPP_params => NULL()
+  !> CVMix parameters
+  type(CVMix_kpp_params_type), pointer :: KPP_params => NULL()
 
   ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL()
@@ -127,7 +128,7 @@ logical, parameter :: verbose = .False.
 
 contains
 
-!> Initialize the CVmix KPP module and set up diagnostics
+!> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
 logical function KPP_init(paramFile, G, diag, Time, CS, passive)
 
@@ -150,10 +151,10 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   allocate(CS)
 
   ! Read parameters
-  call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVmix:KPP\n' // &
-            'See http://code.google.com/p/cvmix/')
+  call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
+            'See http://cvmix.github.io/')
   call get_param(paramFile, mdl, "USE_KPP", KPP_init, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1994,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1994,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.",     &
                  default=.false.)
   ! Forego remainder of initialization if not using this scheme
@@ -237,14 +238,14 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call get_param(paramFile, mdl, 'NLT_SHAPE', string, &
                  'MOM6 method to set nonlocal transport profile.\n'//                          &
                  'Over-rides the result from CVMix.  Allowed values are: \n'//                 &
-                 '\t CVMIX     - Uses the profiles from CVmix specified by MATCH_TECHNIQUE\n'//&
+                 '\t CVMix     - Uses the profiles from CVMix specified by MATCH_TECHNIQUE\n'//&
                  '\t LINEAR    - A linear profile, 1-sigma\n'//                                &
                  '\t PARABOLIC - A parablic profile, (1-sigma)^2\n'//                          &
                  '\t CUBIC     - A cubic profile, (1-sigma)^2(1+2*sigma)\n'//                  &
                  '\t CUBIC_LMD - The original KPP profile',                                    &
-                 default='CVMIX')
+                 default='CVMix')
   select case ( trim(string) )
-    case ("CVMIX")     ; CS%NLT_shape = NLT_SHAPE_CVMIX
+    case ("CVMix")     ; CS%NLT_shape = NLT_SHAPE_CVMix
     case ("LINEAR")    ; CS%NLT_shape = NLT_SHAPE_LINEAR
     case ("PARABOLIC") ; CS%NLT_shape = NLT_SHAPE_PARABOLIC
     case ("CUBIC")     ; CS%NLT_shape = NLT_SHAPE_CUBIC
@@ -262,7 +263,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                  default='SimpleShapes')
   if (CS%MatchTechnique.eq.'ParabolicNonLocal') then
      ! This forces Cs2 (Cs in non-local computation) to equal 1 for parabolic non-local option.
-     !  May be used during CVmix initialization.
+     !  May be used during CVMix initialization.
      Cs_is_one=.true.
   endif
   call get_param(paramFile, mdl, 'KPP_ZERO_DIFFUSIVITY', CS%KPPzeroDiffusivity,            &
@@ -286,7 +287,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
     case default ; call MOM_error(FATAL,"KPP_init: "// &
                    "Unrecognized KPP_SHORTWAVE_METHOD option"//trim(string))
   end select
-  call get_param(paramFile, mdl, 'CVMIX_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
+  call get_param(paramFile, mdl, 'CVMix_ZERO_H_WORK_AROUND', CS%min_thickness,                           &
                  'A minimum thickness used to avoid division by small numbers in the vicinity\n'//       &
                  'of vanished layers. This is independent of MIN_THICKNESS used in other parts of MOM.', &
                  units='m', default=0.)
@@ -294,7 +295,7 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
   call closeParameterBlock(paramFile)
   call get_param(paramFile, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
-  call CVmix_init_kpp( Ri_crit=CS%Ri_crit,                 &
+  call CVMix_init_kpp( Ri_crit=CS%Ri_crit,                 &
                        minOBLdepth=CS%minOBLdepth,         &
                        minVtsqr=CS%minVtsqr,               &
                        vonKarman=CS%vonKarman,             &
@@ -305,69 +306,69 @@ logical function KPP_init(paramFile, G, diag, Time, CS, passive)
                        MatchTechnique=CS%MatchTechnique,   &
                        lenhanced_diff=CS%enhance_diffusion,&
                        lnonzero_surf_nonlocal=Cs_is_one   ,&
-                       CVmix_kpp_params_user=CS%KPP_params )
+                       CVMix_kpp_params_user=CS%KPP_params )
 
   ! Register diagnostics
   CS%diag => diag
   CS%id_OBLdepth = register_diag_field('ocean_model', 'KPP_OBLdepth', diag%axesT1, Time, &
-      'Thickness of the surface Ocean Boundary Layer calculated by [CVmix] KPP', 'meter', &
+      'Thickness of the surface Ocean Boundary Layer calculated by [CVMix] KPP', 'meter', &
       cmor_field_name='oml', cmor_long_name='ocean_mixed_layer_thickness_defined_by_mixing_scheme', &
       cmor_units='m', cmor_standard_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
       ! CMOR names are placeholders; must be modified by time period
       ! for CMOR compliance. Diag manager will be used for omlmax and
       ! omldamax.
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
-      'Bulk difference in density used in Bulk Richardson number, as used by [CVmix] KPP', 'kg/m3')
+      'Bulk difference in density used in Bulk Richardson number, as used by [CVMix] KPP', 'kg/m3')
   CS%id_BulkUz2 = register_diag_field('ocean_model', 'KPP_BulkUz2', diag%axesTL, Time, &
-      'Square of bulk difference in resolved velocity used in Bulk Richardson number via [CVmix] KPP', 'm2/s2')
+      'Square of bulk difference in resolved velocity used in Bulk Richardson number via [CVMix] KPP', 'm2/s2')
   CS%id_BulkRi = register_diag_field('ocean_model', 'KPP_BulkRi', diag%axesTL, Time, &
-      'Bulk Richardson number used to find the OBL depth used by [CVmix] KPP', 'nondim')
+      'Bulk Richardson number used to find the OBL depth used by [CVMix] KPP', 'nondim')
   CS%id_Sigma = register_diag_field('ocean_model', 'KPP_sigma', diag%axesTi, Time, &
-      'Sigma coordinate used by [CVmix] KPP', 'nondim')
+      'Sigma coordinate used by [CVMix] KPP', 'nondim')
   CS%id_Ws = register_diag_field('ocean_model', 'KPP_Ws', diag%axesTL, Time, &
-      'Turbulent vertical velocity scale for scalars used by [CVmix] KPP', 'm/s')
+      'Turbulent vertical velocity scale for scalars used by [CVMix] KPP', 'm/s')
   CS%id_N = register_diag_field('ocean_model', 'KPP_N', diag%axesTi, Time, &
-      '(Adjusted) Brunt-Vaisala frequency used by [CVmix] KPP', '1/s')
+      '(Adjusted) Brunt-Vaisala frequency used by [CVMix] KPP', '1/s')
   CS%id_N2 = register_diag_field('ocean_model', 'KPP_N2', diag%axesTi, Time, &
-      'Square of Brunt-Vaisala frequency used by [CVmix] KPP', '1/s2')
+      'Square of Brunt-Vaisala frequency used by [CVMix] KPP', '1/s2')
   CS%id_Vt2 = register_diag_field('ocean_model', 'KPP_Vt2', diag%axesTL, Time, &
-      'Unresolved shear turbulence used by [CVmix] KPP', 'm2/s2')
+      'Unresolved shear turbulence used by [CVMix] KPP', 'm2/s2')
   CS%id_uStar = register_diag_field('ocean_model', 'KPP_uStar', diag%axesT1, Time, &
-      'Friction velocity, u*, as used by [CVmix] KPP', 'm/s')
+      'Friction velocity, u*, as used by [CVMix] KPP', 'm/s')
   CS%id_buoyFlux = register_diag_field('ocean_model', 'KPP_buoyFlux', diag%axesTi, Time, &
-      'Surface (and penetrating) buoyancy flux, as used by [CVmix] KPP', 'm2/s3')
+      'Surface (and penetrating) buoyancy flux, as used by [CVMix] KPP', 'm2/s3')
   CS%id_QminusSW = register_diag_field('ocean_model', 'KPP_QminusSW', diag%axesT1, Time, &
-      'Net temperature flux ignoring short-wave, as used by [CVmix] KPP', 'K m/s')
+      'Net temperature flux ignoring short-wave, as used by [CVMix] KPP', 'K m/s')
   CS%id_netS = register_diag_field('ocean_model', 'KPP_netSalt', diag%axesT1, Time, &
-      'Effective net surface salt flux, as used by [CVmix] KPP', 'ppt m/s')
+      'Effective net surface salt flux, as used by [CVMix] KPP', 'ppt m/s')
   CS%id_Kt_KPP = register_diag_field('ocean_model', 'KPP_Kheat', diag%axesTi, Time, &
-      'Heat diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+      'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
       'Diffusivity passed to KPP', 'm2/s')
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
-      'Salt diffusivity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+      'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_Kv_KPP = register_diag_field('ocean_model', 'KPP_Kv', diag%axesTi, Time, &
-      'Vertical viscosity due to KPP, as calculated by [CVmix] KPP', 'm2/s')
+      'Vertical viscosity due to KPP, as calculated by [CVMix] KPP', 'm2/s')
   CS%id_NLTt = register_diag_field('ocean_model', 'KPP_NLtransport_heat', diag%axesTi, Time, &
-      'Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVmix] KPP', 'nondim')
+      'Non-local transport (Cs*G(sigma)) for heat, as calculated by [CVMix] KPP', 'nondim')
   CS%id_NLTs = register_diag_field('ocean_model', 'KPP_NLtransport_salt', diag%axesTi, Time, &
-      'Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVmix] KPP', 'nondim')
+      'Non-local tranpsort (Cs*G(sigma)) for scalars, as calculated by [CVMix] KPP', 'nondim')
   CS%id_NLT_dTdt = register_diag_field('ocean_model', 'KPP_NLT_dTdt', diag%axesTL, Time, &
-      'Temperature tendency due to non-local transport of heat, as calculated by [CVmix] KPP', 'K/s')
+      'Temperature tendency due to non-local transport of heat, as calculated by [CVMix] KPP', 'K/s')
   CS%id_NLT_dSdt = register_diag_field('ocean_model', 'KPP_NLT_dSdt', diag%axesTL, Time, &
-      'Salinity tendency due to non-local transport of salt, as calculated by [CVmix] KPP', 'ppt/s')
+      'Salinity tendency due to non-local transport of salt, as calculated by [CVMix] KPP', 'ppt/s')
   CS%id_NLT_temp_budget = register_diag_field('ocean_model', 'KPP_NLT_temp_budget', diag%axesTL, Time, &
-      'Heat content change due to non-local transport, as calculated by [CVmix] KPP', 'W/m^2')
+      'Heat content change due to non-local transport, as calculated by [CVMix] KPP', 'W/m^2')
   CS%id_NLT_saln_budget = register_diag_field('ocean_model', 'KPP_NLT_saln_budget', diag%axesTL, Time, &
-      'Salt content change due to non-local transport, as calculated by [CVmix] KPP', 'kg/(sec*m^2)')
+      'Salt content change due to non-local transport, as calculated by [CVMix] KPP', 'kg/(sec*m^2)')
   CS%id_Tsurf = register_diag_field('ocean_model', 'KPP_Tsurf', diag%axesT1, Time, &
-      'Temperature of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'C')
+      'Temperature of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'C')
   CS%id_Ssurf = register_diag_field('ocean_model', 'KPP_Ssurf', diag%axesT1, Time, &
-      'Salinity of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'ppt')
+      'Salinity of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'ppt')
   CS%id_Usurf = register_diag_field('ocean_model', 'KPP_Usurf', diag%axesCu1, Time, &
-      'i-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
+      'i-component flow of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'm/s')
   CS%id_Vsurf = register_diag_field('ocean_model', 'KPP_Vsurf', diag%axesCv1, Time, &
-      'j-component flow of surface layer (10% of OBL depth) as passed to [CVmix] KPP', 'm/s')
+      'j-component flow of surface layer (10% of OBL depth) as passed to [CVMix] KPP', 'm/s')
 
   if (CS%id_OBLdepth > 0) allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ) )
   if (CS%id_OBLdepth > 0) CS%OBLdepth(:,:) = 0.
@@ -622,19 +623,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       N_1d(G%ke+1 )  = 0.0
 
       ! turbulent velocity scales w_s and w_m computed at the cell centers.
-      ! Note that if sigma > CS%surf_layer_ext, then CVmix_kpp_compute_turbulent_scales
+      ! Note that if sigma > CS%surf_layer_ext, then CVMix_kpp_compute_turbulent_scales
       ! computes w_s and w_m velocity scale at sigma=CS%surf_layer_ext. So we only pass
       ! sigma=CS%surf_layer_ext for this calculation.
-      call CVmix_kpp_compute_turbulent_scales( &
+      call CVMix_kpp_compute_turbulent_scales( &
         CS%surf_layer_ext, & ! (in)  Normalized surface layer depth; sigma = CS%surf_layer_ext
         -cellHeight,       & ! (in)  Assume here that OBL depth (m) = -cellHeight(k)
         surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface (m2/s3)
         surfFricVel,       & ! (in)  Turbulent friction velocity at surface (m/s)
         w_s=Ws_1d,         & ! (out) Turbulent velocity scale profile (m/s)
-        CVmix_kpp_params_user=CS%KPP_params )
+        CVMix_kpp_params_user=CS%KPP_params )
 
       ! Calculate Bulk Richardson number from eq (21) of LMD94
-      BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+      BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
                   cellHeight(1:G%ke),                & ! Depth of cell center (m)
                   GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
                   deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
@@ -645,7 +646,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
                                      ! h to Monin-Obukov (default is false, ie. not used)
 
-      call CVmix_kpp_compute_OBL_depth( &
+      call CVMix_kpp_compute_OBL_depth( &
         BulkRi_1d,              & ! (in) Bulk Richardson number
         iFaceHeight,            & ! (in) Height of interfaces (m)
         OBLdepth_0d,            & ! (out) OBL depth (m)
@@ -654,7 +655,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
         surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
         Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-        CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+        CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
       ! A hack to avoid KPP reaching the bottom. It was needed during development
       ! because KPP was unable to handle vanishingly small layers near the bottom.
@@ -667,7 +668,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
       if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
       OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
       OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deeper than bottom
-      kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+      kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
 !*************************************************************************
 ! smg: remove code below
@@ -707,7 +708,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
         enddo
 
-        BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
+        BulkRi_1d = CVMix_kpp_compute_bulk_Richardson( &
                     cellHeight(1:G%ke),                & ! Depth of cell center (m)
                     GoRho*deltaRho,                    & ! Bulk buoyancy difference, Br-B(z) (1/s)
                     deltaU2,                           & ! Square of resolved velocity difference (m2/s2)
@@ -717,7 +718,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
         surfBuoyFlux = buoyFlux(i,j,1) ! This is only used in kpp_compute_OBL_depth to limit
                                        ! h to Monin-Obukov (default is false, ie. not used)
 
-        call CVmix_kpp_compute_OBL_depth( &
+        call CVMix_kpp_compute_OBL_depth( &
           BulkRi_1d,              & ! (in) Bulk Richardson number
           iFaceHeight,            & ! (in) Height of interfaces (m)
           OBLdepth_0d,            & ! (out) OBL depth (m)
@@ -726,19 +727,19 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
           surf_fric=surfFricVel,  & ! (in) Turbulent friction velocity at surface (m/s)
           surf_buoy=surfBuoyFlux, & ! (in) Buoyancy flux at surface (m2/s3)
           Coriolis=Coriolis,      & ! (in) Coriolis parameter (1/s)
-          CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+          CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
         if (CS%deepOBLoffset>0.) then
           zBottomMinusOffset = iFaceHeight(G%ke+1) + min(CS%deepOBLoffset,-0.1*iFaceHeight(G%ke+1))
           OBLdepth_0d = min( OBLdepth_0d, -zBottomMinusOffset )
-          kOBL = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+          kOBL = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
         endif
 
         ! apply some constraints on OBLdepth
         if(CS%fixedOBLdepth)  OBLdepth_0d = CS%fixedOBLdepth_value
         OBLdepth_0d = max( OBLdepth_0d, -iFaceHeight(2) )      ! no shallower than top layer
         OBLdepth_0d = min( OBLdepth_0d, -iFaceHeight(G%ke+1) ) ! no deep than bottom
-        kOBL        = CVmix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
+        kOBL        = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, OBLdepth_0d )
 
       endif   ! endif for "correction" step
 
@@ -770,7 +771,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
          Kviscosity(:)=Kv(i,j,:)
       endif
 
-      call cvmix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
+      call CVMix_coeffs_kpp(Kviscosity,        & ! (inout) Total viscosity (m2/s)
                             Kdiffusivity(:,1), & ! (inout) Total heat diffusivity (m2/s)
                             Kdiffusivity(:,2), & ! (inout) Total salt diffusivity (m2/s)
                             iFaceHeight,       & ! (in) Height of interfaces (m)
@@ -786,7 +787,7 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
                             surfBuoyFlux,      & ! (in) Buoyancy flux at surface (m2/s3)
                             G%ke,              & ! (in) Number of levels to compute coeffs for
                             G%ke,              & ! (in) Number of levels in array shape
-                            CVmix_kpp_params_user=CS%KPP_params )
+                            CVMix_kpp_params_user=CS%KPP_params )
 
 
       ! Over-write CVMix NLT shape function with one of the following choices.
@@ -841,24 +842,24 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
       if (CS%id_Ws > 0) then
-          call CVmix_kpp_compute_turbulent_scales( &
+          call CVMix_kpp_compute_turbulent_scales( &
             -CellHeight/OBLdepth_0d,               & ! (in)  Normalized boundary layer coordinate
             OBLdepth_0d,                           & ! (in)  OBL depth (m)
             surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface (m2/s3)
             surfFricVel,                           & ! (in)  Turbulent friction velocity at surface (m/s)
             w_s=Ws_1d,                             & ! (out) Turbulent velocity scale profile (m/s)
-            CVmix_kpp_params_user=CS%KPP_params    & !       KPP parameters
+            CVMix_kpp_params_user=CS%KPP_params    & !       KPP parameters
             )
           CS%Ws(i,j,:) = Ws_1d(:)
       endif
 
       ! compute unresolved squared velocity for diagnostics
       if (CS%id_Vt2 > 0) then
-        Vt2_1d(:) = CVmix_kpp_compute_unresolved_shear( &
+        Vt2_1d(:) = CVMix_kpp_compute_unresolved_shear( &
                     cellHeight(1:G%ke),                 & ! Depth of cell center (m)
                     ws_cntr=Ws_1d,                      & ! Turbulent velocity scale profile, at centers (m/s)
                     N_iface=N_1d,                       & ! Buoyancy frequency at interface (1/s)
-                    CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
+                    CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
         CS%Vt2(i,j,:) = Vt2_1d(:)
       endif
 
@@ -936,7 +937,18 @@ subroutine KPP_calculate(CS, G, GV, h, Temp, Salt, u, v, EOS, uStar, &
 
 end subroutine KPP_calculate
 
-
+!> Copies KPP surface boundary layer depth into BLD
+subroutine KPP_get_BLD(CS, BLD, G)
+  type(KPP_CS),                     pointer     :: CS  !< Control structure for
+                                                       !! this module
+  type(ocean_grid_type),            intent(in)  :: G   !< Grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BLD!< bnd. layer depth (m)
+  ! Local variables
+  integer :: i,j
+  do j = G%jsc, G%jec ; do i = G%isc, G%iec
+    BLD(i,j) = CS%OBLdepth(i,j)
+  enddo ; enddo
+end subroutine KPP_get_BLD
 
 !> Apply KPP non-local transport of surface fluxes for temperature.
 subroutine KPP_NonLocalTransport_temp(CS, G, GV, h, nonLocalTrans, surfFlux, &
@@ -1061,7 +1073,10 @@ end subroutine KPP_NonLocalTransport_saln
 subroutine KPP_end(CS)
   type(KPP_CS), pointer :: CS !< Control structure
 
+  if (.not.associated(CS)) return
+
   deallocate(CS)
+
 end subroutine KPP_end
 
 !> \namespace mom_kpp
@@ -1069,11 +1084,11 @@ end subroutine KPP_end
 !! \section section_KPP The K-Profile Parameterization
 !!
 !! The K-Profile Parameterization (KPP) of Large et al., 1994, (http://dx.doi.org/10.1029/94RG01872) is
-!! implemented via the Community Vertical Mixing package, [CVmix](https://code.google.com/p/cvmix),
+!! implemented via the Community Vertical Mixing package, [CVMix](http://cvmix.github.io/),
 !! which is called directly by this module.
 !!
 !! The formulation and implementation of KPP is described in great detail in the
-!! [CVMix manual](https://cvmix.googlecode.com/svn/trunk/manual/cvmix.pdf) (written by our own Stephen Griffies).
+!! [CVMix manual](https://github.com/CVMix/CVMix-description/raw/master/cvmix.pdf) (written by our own Stephen Griffies).
 !!
 !! \subsection section_KPP_nutshell KPP in a nutshell
 !!
@@ -1094,7 +1109,7 @@ end subroutine KPP_end
 !! In our implementation of KPP, we allow the shape functions used for \f$ K \f$ and for the non-local transport
 !! to be chosen independently.
 !!
-!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/cvmix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
+!! [google_thread_NLT]: https://groups.google.com/forum/#!msg/CVMix-dev/i6rF-eHOtKI/Ti8BeyksrhAJ "Extreme values of non-local transport"
 !!
 !! The particular shape function most widely used in the atmospheric community is
 !! \f[ G(\sigma) = \sigma (1-\sigma)^2 \f]

@@ -71,7 +71,7 @@ type, public :: Kappa_shear_CS ; private
   real    :: TKE_bg          !   The background level of TKE, in m2 s-2.
   real    :: kappa_0         !   The background diapycnal diffusivity, in m2 s-1.
   real    :: kappa_tol_err   !   The fractional error in kappa that is tolerated.
-  real    :: Prandtl_turb    ! Prandtl number used to convert Kd_turb into viscosity.
+  real    :: Prandtl_turb    ! Prandtl number used to convert Kd_shear into viscosity.
   integer :: nkml            !   The number of layers in the mixed layer, as
                              ! treated in this routine.  If the pieces of the
                              ! mixed layer are not to be treated collectively,
@@ -130,7 +130,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                            intent(inout) :: kv_io  !< The vertical viscosity at each interface
                                                    !! (not layer!) in m2 s-1. This discards any
                                                    !! previous value i.e. intent(out) and simply
-                                                   !! sets Kv = Prandtl * Kd_turb
+                                                   !! sets Kv = Prandtl * Kd_shear
   real,                    intent(in)    :: dt     !< Time increment, in s.
   type(Kappa_shear_CS),    pointer       :: CS     !< The control structure returned by a previous
                                                    !! call to kappa_shear_init.
@@ -156,7 +156,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 !                     the iteration toward convergence.
 !  (in/out)  kv_io - The vertical viscosity at each interface
 !                    (not layer!) in m2 s-1. This discards any previous value
-!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_turb
+!                    i.e. intent(out) and simply sets Kv = Prandtl * Kd_shear
 !  (in)      dt - Time increment, in s.
 !  (in)      G - The ocean's grid structure.
 !  (in)      GV - The ocean's vertical grid structure.
