@@ -1759,7 +1759,8 @@ subroutine thickness_diffuse_init(Time, G, GV, param_file, diag, CDp, CS)
                  default=7.2921e-5, do_not_log=.not.CS%use_FGNV_streamfn)
   if (CS%use_FGNV_streamfn) CS%N2_floor = (strat_floor*omega)**2
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
 
   if (GV%Boussinesq) then ; flux_to_kg_per_s = GV%Rho0

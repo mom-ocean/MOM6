@@ -79,13 +79,16 @@ subroutine MOM_debugging_init(param_file)
 
   call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_CHKSUMS", debug_chksums, &
                  "If true, checksums are performed on arrays in the \n"//&
-                 "various vec_chksum routines.", default=debug)
+                 "various vec_chksum routines.", default=debug, &
+                 debuggingParam=.true.)
   call get_param(param_file, mdl, "DEBUG_REDUNDANT", debug_redundant, &
                  "If true, debug redundant data points during calls to \n"//&
-                 "the various vec_chksum routines.", default=debug)
+                 "the various vec_chksum routines.", default=debug, &
+                 debuggingParam=.true.)
 
   call MOM_checksums_init(param_file)
 
