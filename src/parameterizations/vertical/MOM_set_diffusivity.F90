@@ -2821,7 +2821,8 @@ subroutine set_diffusivity_init(Time, G, GV, param_file, diag, CS, diag_to_Z_CSp
                  "mixed layer is not used.", units="m", fail_if_missing=.true.)
   endif
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   call get_param(param_file, mdl, "INT_TIDE_DISSIPATION", CS%Int_tide_dissipation, &
                  "If true, use an internal tidal dissipation scheme to \n"//&
