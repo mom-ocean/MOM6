@@ -49,56 +49,66 @@ module cvmix_energetic_pbl
 
 implicit none ; private
 
+!> cvmix_energetic_PBL_CS type contains the physical parameters that are used
+!! in implementing the energetic planetary boundary layer scheme of Jackson et. al.
+!! These parameters should  be initialized with sensible values before the scheme can be used.
+!! ****TO DO***
+!! We should set defaults for these parameters and provide a subroutine to reset them by the user.
 type :: cvmix_energetic_PBL_CS
-  real    :: mstar           ! The ratio of the friction velocity cubed to the
+  real    :: mstar = 1.2     ! The ratio of the friction velocity cubed to the
                              ! TKE available to drive entrainment, nondimensional.
                              ! This quantity is the vertically integrated
                              ! shear production minus the vertically integrated
                              ! dissipation of TKE produced by shear.
-  real    :: nstar           ! The fraction of the TKE input to the mixed layer
+  real    :: nstar = 0.2     ! The fraction of the TKE input to the mixed layer
                              ! available to drive entrainment, nondim.
                              ! This quantity is the vertically integrated
                              ! buoyancy production minus the vertically integrated
                              ! dissipation of TKE produced by buoyancy.
-  real    :: MixLenExponent  ! Exponent in the mixing length shape-function.
+  real    :: MixLenExponent = 2.0  ! Exponent in the mixing length shape-function.
                              ! 1 is law-of-the-wall at top and bottom,
                              ! 2 is more KPP like.
-  real    :: TKE_decay       ! The ratio of the natural Ekman depth to the TKE
+  real    :: TKE_decay = 2.5 ! The ratio of the natural Ekman depth to the TKE
                              ! decay scale, nondimensional.
-  real    :: MKE_to_TKE_effic ! The efficiency with which mean kinetic energy
+  real    :: MKE_to_TKE_effic = 0.0 ! The efficiency with which mean kinetic energy
                              ! released by mechanically forced entrainment of
                              ! the mixed layer is converted to TKE, nondim.
-!  real    :: Hmix_min        ! The minimum mixed layer thickness in m.
   real    :: ustar_min       ! A minimum value of ustar to avoid numerical
                              ! problems, in m s-1.  If the value is small enough,
                              ! this should not affect the solution.
-  real    :: omega           !   The Earth's rotation rate, in s-1.
-  real    :: omega_frac      !   When setting the decay scale for turbulence, use
+                             ! The (tiny) minimum friction velocity used within the
+                             ! ePBL code, derived from OMEGA and ANGSTROM.
+                             ! The following formula is used in MOM6 to estimate this parameter:
+                             ! CS%ustar_min = 2e-4*CS%omega*(GV%Angstrom_z + GV%H_to_m*GV%H_subroundoff)
+                             ! This gives a minimum decay scale that is typically much less than Angstrom.
+
+  real    :: omega = 7.2921e-5 !   The Earth's rotation rate, in s-1.
+  real    :: omega_frac = 0.0  !   When setting the decay scale for turbulence, use
                              ! this fraction of the absolute rotation rate blended
                              ! with the local value of f, as sqrt((1-of)*f^2 + of*4*omega^2).
-  real    :: wstar_ustar_coef ! A ratio relating the efficiency with which
+  real    :: wstar_ustar_coef = 1.0 ! A ratio relating the efficiency with which
                              ! convectively released energy is converted to a
                              ! turbulent velocity, relative to mechanically
                              ! forced turbulent kinetic energy, nondim. Making
                              ! this larger increases the diffusivity.
-  real    :: vstar_scale_fac ! An overall nondimensional scaling factor
+  real    :: vstar_scale_fac = 1.0 ! An overall nondimensional scaling factor
                              ! for vstar.  Making this larger increases the
                              ! diffusivity.
   real    :: Ekman_scale_coef ! A nondimensional scaling factor controlling
                              ! the inhibition of the diffusive length scale by
                              ! rotation.  Making this larger decreases the
                              ! diffusivity in the planetary boundary layer.
-  real    :: transLay_scale  ! A scale for the mixing length in the transition layer
+  real    :: transLay_scale = 0.1  ! A scale for the mixing length in the transition layer
                              ! at the edge of the boundary layer as a fraction of the
                              ! boundary layer thickness.  The default is 0, but a
                              ! value of 0.1 might be better justified by observations.
-  real    :: MLD_tol         ! A tolerance for determining the boundary layer
+  real    :: MLD_tol = 1.0   ! A tolerance for determining the boundary layer
                              ! thickness when Use_MLD_iteration is true, in m.
-  real    :: min_mix_len     ! The minimum mixing length scale that will be
+  real    :: min_mix_len = 0.0   ! The minimum mixing length scale that will be
                              ! used by ePBL, in m.  The default (0) does not
                              ! set a minimum.
-  real    :: N2_Dissipation_Scale_Neg
-  real    :: N2_Dissipation_Scale_Pos
+  real    :: N2_Dissipation_Scale_Neg = 0.0
+  real    :: N2_Dissipation_Scale_Pos = 0.0
                              ! A nondimensional scaling factor controlling the
                              ! loss of TKE due to enhanced dissipation in the presence
                              ! of stratification.  This dissipation is applied to the
@@ -108,34 +118,35 @@ type :: cvmix_energetic_PBL_CS
                              ! applies to in subsequent revisions of this code.
                              ! "_Neg" and "_Pos" refer to which scale is applied as a
                              ! function of negative or positive local buoyancy.
-  real    :: MSTAR_CAP       ! Since MSTAR is restoring undissipated energy to mixing,
+  real    :: MSTAR_CAP = -1.0      ! Since MSTAR is restoring undissipated energy to mixing,
                              ! there must be a cap on how large it can be.  This
                              ! is definitely a function of latitude (Ekman limit),
                              ! but will be taken as constant for now.
-  real    :: MSTAR_SLOPE     ! Slope of the function which relates the shear production
+  real    :: MSTAR_SLOPE = 0.85  ! Slope of the function which relates the shear production
                              ! to the mixing layer depth, Ekman depth, and Monin-Obukhov
                              ! depth.
-  real    :: MSTAR_XINT      ! Value where MSTAR function transitions from linear
+  real    :: MSTAR_XINT = -0.3   ! Value where MSTAR function transitions from linear
                              ! to decay toward MSTAR->0 at fully developed Ekman depth.
   real    :: MSTAR_XINT_UP   ! Similar but for transition to asymptotic cap.
-  real    :: MSTAR_AT_XINT   ! Intercept value of MSTAR at value where function
+  real    :: MSTAR_AT_XINT = 0.095 ! Intercept value of MSTAR at value where function
                              ! changes to linear transition.
-  real    :: LT_ENHANCE_COEF ! Coefficient in fit for Langmuir Enhancment
-  real    :: LT_ENHANCE_EXP  ! Exponent in fit for Langmuir Enhancement
+  real    :: LT_ENHANCE_COEF = 0.447 ! Coefficient in fit for Langmuir Enhancment
+  real    :: LT_ENHANCE_EXP = -1.33 ! Exponent in fit for Langmuir Enhancement
   real :: MSTAR_N = -2.      ! Exponent in decay at negative and positive limits of MLD_over_STAB
   real :: MSTAR_A,MSTAR_A2   ! MSTAR_A and MSTAR_B are coefficients in asymptote toward limits.
   real :: MSTAR_B,MSTAR_B2   !  These are computed to match the function value and slope at both
                              !  ends of the linear fit within the well constrained region.
-  real :: C_EK = 0.17        ! MSTAR Coefficient in rotation limit for mstar_mode=2
+  real :: C_EK = 0.085       ! MSTAR Coefficient in rotation limit for mstar_mode=2
   real :: MSTAR_COEF = 0.3   ! MSTAR coefficient in rotation/stabilizing balance for mstar_mode=2
-  real :: LaC_MLDoEK         ! Coefficients for Langmuir number modification based on
-  real :: LaC_MLDoOB_stab    !  length scale ratios, MLD is boundary, EK is Ekman,
-  real :: LaC_EKoOB_stab     !  and OB is Obukhov, the "o" in the name is for division.
-  real :: LaC_MLDoOB_un      !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
-  real :: LaC_EKoOB_un       !   ...
+  real :: LaC_MLDoEK =-0.87  ! Coefficients for Langmuir number modification based on
+  real :: LaC_MLDoOB_stab = 0.0 !  length scale ratios, MLD is boundary, EK is Ekman,
+  real :: LaC_EKoOB_stab = 0.95    !  and OB is Obukhov, the "o" in the name is for division.
+  real :: LaC_MLDoOB_un = 0.0     !  Stab/un are for stable (pos) and unstable (neg) Obukhov depths
+  real :: LaC_EKoOB_un = 0.95      ! Coefficient for modification of Langmuir number due to
+                                   ! ratio of Ekman to unstable Obukhov depth if LT_ENHANCE=2.
   real :: LaDepthRatio=0.04  ! The ratio of OBL depth to average Stokes drift over
   real :: Max_Enhance_M = 5. ! The maximum allowed LT enhancement to the mixing.
-  real :: CNV_MST_FAC        ! Factor to reduce mstar when statically unstable.
+  real :: CNV_MST_FAC = 0.0        ! Factor to reduce mstar when statically unstable.
   integer :: LT_Enhance_Form = 0 ! Option for Langmuir enhancement form
   integer :: MSTAR_MODE = 0  ! An integer to determine which formula is used to
                              !  set mstar
@@ -145,7 +156,7 @@ type :: cvmix_energetic_PBL_CS
   logical :: Use_LA_windsea = .false.
   logical :: orig_PE_calc = .true.
   logical :: Use_MLD_iteration=.false. ! False to use old ePBL method.
-  logical :: Orig_MLD_iteration=.false. ! False to use old MLD value
+  logical :: Orig_MLD_iteration=.true. ! False to use old MLD value
   logical :: MLD_iteration_guess=.false. ! False to default to guessing half the
                                          ! ocean depth for the iteration.
   logical :: Mixing_Diagnostics = .false. ! Will be true when outputing mixing
