@@ -45,6 +45,7 @@ use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_kappa_shear, only : kappa_shear_is_used
 use MOM_CVMix_shear, only : CVMix_shear_is_used
+use MOM_CVMix_conv,  only : CVMix_conv_is_used
 use MOM_io, only : vardesc, var_desc
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_variables, only : thermo_var_ptrs
@@ -1783,20 +1784,21 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
 !  (in)      restart_CS - A pointer to the restart control structure.
   type(vardesc) :: vd
   logical :: use_kappa_shear, adiabatic, useKPP, useEPBL
-  logical :: use_CVMix, MLE_use_PBL_MLD
+  logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
                  do_not_log=.true.)
-  use_kappa_shear = .false. ; use_CVMix = .false. ;
-  useKPP = .false. ; useEPBL = .false.
+  use_kappa_shear = .false. ; use_CVMix_shear = .false. ;
+  useKPP = .false. ; useEPBL = .false. ; use_CVMix_conv = .false. ;
   if (.not.adiabatic) then
     use_kappa_shear = kappa_shear_is_used(param_file)
-    use_CVMix = CVMix_shear_is_used(param_file)
+    use_CVMix_shear = CVMix_shear_is_used(param_file)
+    use_CVMix_conv = CVMix_conv_is_used(param_file)
     call get_param(param_file, mdl, "USE_KPP", useKPP, &
-                 "If true, turns on the [CVmix] KPP scheme of Large et al., 1984,\n"// &
+                 "If true, turns on the [CVMix] KPP scheme of Large et al., 1984,\n"// &
                  "to calculate diffusivities and non-local transport in the OBL.", &
                  default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "ENERGETICS_SFC_PBL", useEPBL, &
@@ -1805,21 +1807,26 @@ subroutine set_visc_register_restarts(HI, GV, param_file, visc, restart_CS)
                  "in the surface boundary layer.", default=.false., do_not_log=.true.)
   endif
 
-  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix) then
-    allocate(visc%Kd_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kd_turb(:,:,:) = 0.0
+  if (use_kappa_shear .or. useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv) then
+    allocate(visc%Kd_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kd_shear(:,:,:) = 0.0
     allocate(visc%TKE_turb(isd:ied,jsd:jed,nz+1)) ; visc%TKE_turb(:,:,:) = 0.0
-    allocate(visc%Kv_turb(isd:ied,jsd:jed,nz+1)) ; visc%Kv_turb(:,:,:) = 0.0
+    allocate(visc%Kv_shear(isd:ied,jsd:jed,nz+1)) ; visc%Kv_shear(:,:,:) = 0.0
+    allocate(visc%Kv_slow(isd:ied,jsd:jed,nz+1)) ; visc%Kv_slow(:,:,:) = 0.0
 
-    vd = var_desc("Kd_turb","m2 s-1","Turbulent diffusivity at interfaces", &
+    vd = var_desc("Kd_shear","m2 s-1","Shear-driven turbulent diffusivity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kd_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kd_shear, vd, .false., restart_CS)
 
     vd = var_desc("TKE_turb","m2 s-2","Turbulent kinetic energy per unit mass at interfaces", &
                   hor_grid='h', z_grid='i')
     call register_restart_field(visc%TKE_turb, vd, .false., restart_CS)
-    vd = var_desc("Kv_turb","m2 s-1","Turbulent viscosity at interfaces", &
+    vd = var_desc("Kv_shear","m2 s-1","Shear-driven turbulent viscosity at interfaces", &
                   hor_grid='h', z_grid='i')
-    call register_restart_field(visc%Kv_turb, vd, .false., restart_CS)
+    call register_restart_field(visc%Kv_shear, vd, .false., restart_CS)
+    vd = var_desc("Kv_slow","m2 s-1","Vertical turbulent viscosity at interfaces due \n" // &
+                  " to slow processes", hor_grid='h', z_grid='i')
+    call register_restart_field(visc%Kv_slow, vd, .false., restart_CS)
+
   endif
 
   ! visc%MLD is used to communicate the state of the (e)PBL to the rest of the model
@@ -2090,9 +2097,10 @@ subroutine set_visc_end(visc, CS)
   if (CS%dynamic_viscous_ML) then
     deallocate(visc%nkml_visc_u) ; deallocate(visc%nkml_visc_v)
   endif
-  if (associated(visc%Kd_turb)) deallocate(visc%Kd_turb)
+  if (associated(visc%Kd_shear)) deallocate(visc%Kd_shear)
+  if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)
-  if (associated(visc%Kv_turb)) deallocate(visc%Kv_turb)
+  if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
   if (associated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
   if (associated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
   if (associated(visc%taux_shelf)) deallocate(visc%taux_shelf)
