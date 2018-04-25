@@ -2496,7 +2496,7 @@ end subroutine forcing_diagnostics
 
 
 !> Conditionally allocate fields within the forcing type
-subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg)
+subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, iceberg, salt)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< Forcing fields structure
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -2505,6 +2505,7 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
   logical, optional,     intent(in) :: press   !< If present and true, allocate p_surf and related fields
   logical, optional,     intent(in) :: shelf   !< If present and true, allocate fluxes for ice-shelf
   logical, optional,     intent(in) :: iceberg !< If present and true, allocate fluxes for icebergs
+  logical, optional,     intent(in) :: salt    !< If present and true, allocate salt fluxes
 
   ! Local variables
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -2534,6 +2535,8 @@ subroutine allocate_forcing_type(G, fluxes, water, heat, ustar, press, shelf, ic
   call myAlloc(fluxes%latent_evap_diag,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%latent_fprec_diag,isd,ied,jsd,jed, heat)
   call myAlloc(fluxes%latent_frunoff_diag,isd,ied,jsd,jed, heat)
+
+  call myAlloc(fluxes%salt_flux,isd,ied,jsd,jed, salt)
 
   if (present(heat) .and. present(water)) then ; if (heat .and. water) then
     call myAlloc(fluxes%heat_content_cond,isd,ied,jsd,jed, .true.)
