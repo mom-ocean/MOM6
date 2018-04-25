@@ -119,7 +119,8 @@ subroutine set_grid_metrics(G, param_file)
                  " \t mercator - use a Mercator spherical grid.", &
                  fail_if_missing=.true.)
   call get_param(param_file, "MOM_grid_init", "DEBUG", debug, &
-                 "If true, write out verbose debugging data.", default=.false.)
+                 "If true, write out verbose debugging data.", &
+                 default=.false., debuggingParam=.true.)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"

@@ -188,13 +188,12 @@ subroutine chksum_h_2d(array, mesg, HI, haloshift, omit_corners, scale)
   endif
 
   contains
-
   integer function subchk(array, HI, di, dj, scale)
     type(hor_index_type), intent(in) :: HI
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j)))
@@ -378,7 +377,7 @@ subroutine chksum_B_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
@@ -562,7 +561,7 @@ subroutine chksum_u_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do j=HI%jsc+dj,HI%jec+dj; do I=HI%isc+di,HI%iec+di
@@ -705,7 +704,7 @@ subroutine chksum_v_2d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, bc
+    integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj; do i=HI%isc+di,HI%iec+di
@@ -831,7 +830,7 @@ subroutine chksum_h_3d(array, mesg, HI, haloshift, omit_corners, scale)
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
       bc = bitcount(abs(scale*array(i,j,k)))
@@ -971,7 +970,7 @@ subroutine chksum_B_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
@@ -1114,7 +1113,7 @@ subroutine chksum_u_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
@@ -1164,7 +1163,7 @@ integer function chksum_general_3d( array, scale_factor, istart, iend, jstart, j
   integer, optional :: jend          !< Ending index in the j-direction
   integer, optional :: kstart        !< Starting index in the k-direction
   integer, optional :: kend          !< Ending index in the k-direction
-  integer :: bitcount, i, j, k, bc, is, ie, js, je, ks, ke
+  integer :: i, j, k, bc, is, ie, js, je, ks, ke
   real :: scale
 
   ! By default do not scale
@@ -1329,7 +1328,7 @@ subroutine chksum_v_3d(array, mesg, HI, haloshift, symmetric, omit_corners, scal
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array
     integer, intent(in) :: di, dj
     real, intent(in) :: scale
-    integer :: bitcount, i, j, k, bc
+    integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
@@ -1384,7 +1383,6 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
                                                 !! and list the root_PE value (default true)
 
   integer :: is, ie, i, bc, sum1, sum_bc
-  integer :: bitcount
   real :: sum
   real, allocatable :: sum_here(:)
   logical :: compare
@@ -1440,7 +1438,6 @@ subroutine chksum2d(array, mesg)
   real, dimension(:,:) :: array
   character(len=*) :: mesg
 
-  integer :: bitcount
   integer :: xs,xe,ys,ye,i,j,sum1,bc
   real :: sum
 
@@ -1469,7 +1466,6 @@ subroutine chksum3d(array, mesg)
   real, dimension(:,:,:) :: array
   character(len=*) :: mesg
 
-  integer :: bitcount
   integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
   real :: sum
 
@@ -1661,6 +1657,24 @@ subroutine chksum_error(signal, message)
   call MOM_error(signal, message)
 end subroutine chksum_error
 
+!> Does a bitcount of a number by first casting to an integer and then using BTEST
+!! to check bit by bit
+integer function bitcount( x )
+  real :: x !< Number to be bitcount
+
+  ! Local variables
+  integer(kind(x)) :: y !< Store the integer representation of the memory used by x
+  integer :: bit
+
+  bitcount = 0
+  y = transfer(x,y)
+
+  ! Fortran standard says that bit indexing start at 0
+  do bit = 0, bit_size(y)-1
+    if (BTEST(y,bit)) bitcount = bitcount+1
+  enddo
+
+end function bitcount
 ! =====================================================================
 
 end module MOM_checksums
