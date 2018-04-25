@@ -3799,26 +3799,34 @@ end subroutine bt_mass_source
 !! barotropic calculation and initializes any barotropic fields that have not
 !! already been initialized.
 subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
-                           restart_CS, BT_cont, tides_CSp)
-  type(ocean_grid_type),            intent(inout) :: G          !< The ocean's grid structure.
-  type(verticalGrid_type),          intent(in)    :: GV         !< The ocean's vertical grid structure.
-  real, intent(in), dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: u    !< The zonal velocity, in m s-1.
-  real, intent(in), dimension(SZI_(G),SZJB_(G),SZK_(G)) :: v    !< The meridional velocity, in m s-1.
-  real, intent(in), dimension(SZI_(G),SZJ_(G),SZK_(G))  :: h    !< Layer thicknesses, in H (usually m or kg m-2).
-  real, intent(in), dimension(SZI_(G),SZJ_(G))    :: eta        !< Free surface height or column mass anomaly, in
-                                                                !! m or kg m-2.
-  type(time_type), target,          intent(in)    :: Time       !< The current model time.
-  type(param_file_type),            intent(in)    :: param_file !< A structure to parse for run-time parameters.
-  type(diag_ctrl), target,          intent(inout) :: diag       !< A structure that is used to regulate diagnostic
-                                                                !! output.
-  type(barotropic_CS),              pointer       :: CS         !< A pointer to the control structure for this module
-                                                                !! that is set in register_barotropic_restarts.
-  type(MOM_restart_CS),             pointer       :: restart_CS !< A pointer to the restart control structure.
-  type(BT_cont_type),     optional, pointer       :: BT_cont    !< A structure with elements that describe the
-                                                                !! effective open face areas as a function of
-                                                                !! barotropic flow.
-  type(tidal_forcing_CS), optional, pointer       :: tides_CSp  !< A pointer to the control structure of the tide
-                                                                !! module.
+                           restart_CS, calc_dtbt, BT_cont, tides_CSp)
+  type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: u    !< The zonal velocity, in m s-1.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                           intent(in)    :: v    !< The meridional velocity, in m s-1.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: h    !< Layer thicknesses, in H (usually m or kg m-2).
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)    :: eta  !< Free surface height or column mass anomaly, in
+                                                 !! m or kg m-2.
+  type(time_type), target, intent(in)    :: Time !< The current model time.
+  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters.
+  type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to regulate diagnostic
+                                                 !! output.
+  type(barotropic_CS),     pointer       :: CS   !< A pointer to the control structure for this module
+                                                 !! that is set in register_barotropic_restarts.
+  type(MOM_restart_CS),    pointer       :: restart_CS !< A pointer to the restart control structure.
+  logical,                 intent(out)   :: calc_dtbt  !< If true, the barotropic time step must
+                                                 !! be recalculated before stepping.
+  type(BT_cont_type), optional, &
+                           pointer       :: BT_cont    !< A structure with elements that describe the
+                                                 !! effective open face areas as a function of
+                                                 !! barotropic flow.
+  type(tidal_forcing_CS), optional, &
+                           pointer       :: tides_CSp  !< A pointer to the control structure of the
+                                                 !! tide module.
 
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
@@ -3828,7 +3836,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
   real :: gtot_estimate ! Summing GV%g_prime gives an upper-bound estimate for pbce.
   real :: SSH_extra     ! An estimate of how much higher SSH might get, for use
                         ! in calculating the safe external wave speed.
-  real :: dtbt_input
+  real :: dtbt_input, dtbt_tmp
   real :: wave_drag_scale ! A scaling factor for the barotropic linear wave drag
                           ! piston velocities.
   character(len=200) :: inputdir       ! The directory in which to find input files.
@@ -4082,7 +4090,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
                  "gravity waves) to 1 (for a backward Euler treatment). \n"//&
                  "In practice, BEBT must be greater than about 0.05.", &
                  units="nondim", default=0.1)
-  call get_param(param_file, mdl, "DTBT", CS%dtbt, &
+  call get_param(param_file, mdl, "DTBT", dtbt_input, &
                  "The barotropic time step, in s. DTBT is only used with \n"//&
                  "the split explicit time stepping. To set the time step \n"//&
                  "automatically based the maximum stable value use 0, or \n"//&
@@ -4239,13 +4247,22 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, param_file, diag, CS, &
     endif
   endif
 
+  CS%dtbt_fraction = 0.98 ; if (dtbt_input < 0.0) CS%dtbt_fraction = -dtbt_input
+
+  dtbt_tmp = -1.0
+  if (query_initialized(CS%dtbt, "DTBT", restart_CS)) dtbt_tmp = CS%dtbt
+
   ! Estimate the maximum stable barotropic time step.
-  dtbt_input = CS%dtbt
-  CS%dtbt_fraction = 0.98 ; if (CS%dtbt < 0.0) CS%dtbt_fraction = -CS%dtbt
   gtot_estimate = 0.0
   do k=1,G%ke ; gtot_estimate = gtot_estimate + GV%g_prime(K) ; enddo
   call set_dtbt(G, GV, CS, gtot_est = gtot_estimate, SSH_add = SSH_extra)
-  if (dtbt_input > 0.0) CS%dtbt = dtbt_input
+
+  if (dtbt_input > 0.0) then
+    CS%dtbt = dtbt_input
+  elseif (dtbt_tmp > 0.0) then
+    CS%dtbt = dtbt_tmp
+  endif
+  if ((dtbt_tmp > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
 
   call log_param(param_file, mdl, "DTBT as used", CS%dtbt)
   call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max)
@@ -4524,6 +4541,9 @@ subroutine register_barotropic_restarts(HI, GV, param_file, CS, restart_CS)
   endif
   call register_restart_field(CS%uhbt_IC, vd(2), .false., restart_CS)
   call register_restart_field(CS%vhbt_IC, vd(3), .false., restart_CS)
+
+  call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
+                              longname="Barotropic timestep", units="seconds")
 
 end subroutine register_barotropic_restarts
 
